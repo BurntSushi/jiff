@@ -1,0 +1,115 @@
+---
+source: src/tz/zic.rs
+expression: zic
+---
+ZicP {
+    rules: {
+        "US": [
+            RuleP {
+                name: RuleNameP {
+                    name: "US",
+                },
+                from: RuleFromP {
+                    year: 1967,
+                },
+                to: Year {
+                    year: 2006,
+                },
+                inn: RuleInP {
+                    month: 10,
+                },
+                on: Last {
+                    weekday: Sunday,
+                },
+                at: RuleAtP {
+                    span: PT2h,
+                    suffix: None,
+                },
+                save: RuleSaveP {
+                    span: PT0s,
+                    suffix: None,
+                },
+                letters: RuleLettersP {
+                    part: "S",
+                },
+            },
+            RuleP {
+                name: RuleNameP {
+                    name: "US",
+                },
+                from: RuleFromP {
+                    year: 1967,
+                },
+                to: Year {
+                    year: 1973,
+                },
+                inn: RuleInP {
+                    month: 4,
+                },
+                on: Last {
+                    weekday: Sunday,
+                },
+                at: RuleAtP {
+                    span: PT2h,
+                    suffix: None,
+                },
+                save: RuleSaveP {
+                    span: PT1h,
+                    suffix: None,
+                },
+                letters: RuleLettersP {
+                    part: "D",
+                },
+            },
+        ],
+    },
+    zones: {
+        "America/Menominee": ZoneP {
+            first: ZoneFirstP {
+                name: ZoneNameP {
+                    name: "America/Menominee",
+                },
+                stdoff: ZoneStdoffP {
+                    span: -PT5h,
+                },
+                rules: None,
+                format: Static {
+                    format: "EST",
+                },
+                until: Some(
+                    YearMonthDayTime {
+                        year: 1973,
+                        month: RuleInP {
+                            month: 4,
+                        },
+                        day: Day {
+                            day: 29,
+                        },
+                        duration: RuleAtP {
+                            span: PT2h,
+                            suffix: None,
+                        },
+                    },
+                ),
+            },
+            continuations: [
+                ZoneContinuationP {
+                    stdoff: ZoneStdoffP {
+                        span: -PT6h,
+                    },
+                    rules: Named(
+                        RuleNameP {
+                            name: "US",
+                        },
+                    ),
+                    format: Variable {
+                        before: "C",
+                        after: "T",
+                    },
+                    until: None,
+                },
+            ],
+        },
+    },
+    links: {},
+}

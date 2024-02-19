@@ -1,0 +1,33 @@
+[package]
+publish = false
+name = "jiff-bench"
+version = "0.0.1"
+authors = ["Andrew Gallant <jamslam@gmail.com>"]
+description = "Criterion benchmark suite for Jiff."
+homepage = "https://github.com/BurntSushi/jiff/tree/master/bench"
+repository = "https://github.com/BurntSushi/jiff"
+license = "Unlicense OR MIT"
+edition = "2021"
+
+[workspace]
+
+[lib]
+bench = false
+
+[[bench]]
+name = "jiff-bench"
+harness = false
+path = "src/bench.rs"
+
+[dependencies]
+criterion = "0.5.1"
+jiff = { version = "0.1.0", path = ".." }
+
+chrono = "0.4.38"
+chrono-tz = "0.9.0"
+tzfile = "0.1.3"
+
+time = { version = "0.3.36", features = ["macros", "parsing"] }
+
+[profile.release]
+debug = true

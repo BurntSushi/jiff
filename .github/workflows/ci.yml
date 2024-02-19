@@ -29,7 +29,6 @@ permissions:
 
 jobs:
   test:
-    name: test
     env:
       # For some builds, we use cross to test on 32-bit and big-endian
       # systems.
@@ -47,9 +46,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - build: pinned
-          os: ubuntu-latest
-          rust: 1.70.0
         - build: stable
           os: ubuntu-latest
           rust: stable
@@ -114,16 +110,95 @@ jobs:
       run: |
         echo "cargo command is: ${{ env.CARGO }}"
         echo "target flag is: ${{ env.TARGET }}"
-    - name: Show CPU info for debugging
-      if: matrix.os == 'ubuntu-latest'
-      run: lscpu
-    # See: https://github.com/rust-lang/regex/blob/a2887636930156023172e4b376a6febad4e49120/.github/workflows/ci.yml#L145-L163
     - run: ${{ env.CARGO }} build --verbose $TARGET
     - run: ${{ env.CARGO }} doc --verbose $TARGET
-    - run: ${{ env.CARGO }} test --verbose $TARGET
+    - if: matrix.build == 'pinned'
+      run: ${{ env.CARGO }} test
+    - if: matrix.build != 'pinned'
+      run: ${{ env.CARGO }} test --all --verbose $TARGET
+    - if: matrix.build != 'pinned'
+      run: ${{ env.CARGO }} test -p jiff-cli --verbose $TARGET
+    - if: matrix.target == ''
+      run: ./test
+
+  # This job runs a stripped down version of CI to test the MSRV. The specific
+  # reason for doing this is that Jiff dev-dependencies tend to evolve more
+  # quickly. Or if I want to use newer features in doc examples. There isn't as
+  # tight of a control on them because, well, they're only used in tests and
+  # their MSRV doesn't matter as much.
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: 1.70.0
+    # We would use `cargo build --all` here, but `jiff-cli` doesn't really
+    # track an MSRV and I don't want it to.
+    - name: Build jiff
+      run: cargo build -p jiff --verbose
+    - name: Build jiff-tzdb
+      run: cargo build -p jiff-tzdb --verbose
+    - name: Build jiff-tzdb-platform
+      run: cargo build -p jiff-tzdb-platform --verbose
+    - name: Build docs
+      run: cargo doc --verbose
+    - name: Run library tests
+      run: cargo test --lib
+    - name: Run integration tests
+      run: cargo test --test integration
+
+  # Setup and run tests on the wasm32-wasi target via wasmtime.
+  wasm:
+    runs-on: ubuntu-latest
+    env:
+      # The version of wasmtime to download and install.
+      WASMTIME_VERSION: 22.0.0
+      # Yes'um.
+      WASMTIME_BACKTRACE_DETAILS: 1
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+    - name: Add wasm32-wasip1 target
+      run: rustup target add wasm32-wasip1
+    - name: Download and install Wasmtime
+      run: |
+        echo "CARGO_BUILD_TARGET=wasm32-wasip1" >> $GITHUB_ENV
+        curl -LO https://github.com/bytecodealliance/wasmtime/releases/download/v$WASMTIME_VERSION/wasmtime-v$WASMTIME_VERSION-x86_64-linux.tar.xz
+        tar xvf wasmtime-v$WASMTIME_VERSION-x86_64-linux.tar.xz
+        echo `pwd`/wasmtime-v$WASMTIME_VERSION-x86_64-linux >> $GITHUB_PATH
+        echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime run --dir / --env INSTA_WORKSPACE_ROOT=$PWD --" >> $GITHUB_ENV
+    - name: Build jiff
+      run: cargo build -p jiff --verbose
+    - name: Build jiff-tzdb
+      run: cargo build -p jiff-tzdb --verbose
+    - name: Build jiff-tzdb-platform
+      run: cargo build -p jiff-tzdb-platform --verbose
+    - name: Run library tests
+      run: cargo test --lib -- --nocapture
+    - name: Run integration tests
+      run: cargo test --test integration -- --nocapture
+
+  testbench:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+    - name: Run benchmark tests
+      run: |
+        cargo bench --manifest-path bench/Cargo.toml -- --test
 
   rustfmt:
-    name: rustfmt
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository

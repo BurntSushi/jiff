@@ -1,7 +1,4 @@
 /Cargo.lock
 /target
-/tmp
-/ecma-test262
-/BREADCRUMBS
 # Criterion seems to vomit this out to CWD. wat.
 /profile.json

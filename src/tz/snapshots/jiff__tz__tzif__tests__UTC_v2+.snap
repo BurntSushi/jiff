@@ -1,0 +1,14 @@
+---
+source: src/tz/tzif.rs
+expression: tzif_to_human_readable(&tzif_test.parse())
+---
+TIME ZONE NAME
+  UTC
+TIME ZONE VERSION
+  2
+LOCAL TIME TYPES
+  000:  offset=+00  designation=UTC      indicator=local/wall
+TRANSITIONS
+  0000:  -009999-01-02T01:59:59Z  unix=-377705023201  wall=-009999-01-02T01:59:59  unambiguous  type=0  +00  UTC  
+POSIX TIME ZONE STRING
+  UTC0

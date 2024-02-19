@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# This is a script for printing the debug representation of some Jiff types.
+# Principally, this is for internal types. Ideally we might have a proper
+# jiff-cli for this, but doing so would require exporting internal types, which
+# I really don't want to do. Instead, we use unit tests as a sort of CLI target
+# and pass arguments via environment variables.
+
+script_dir="$(dirname "$0")"
+repo_dir="$(dirname "$script_dir")"
+# manifest="--manifest-path=$repo_dir/Cargo.toml"
+cargo_test="cargo test --manifest-path $repo_dir/Cargo.toml"
+
+if [ -z "$1" ]; then
+  echo "Usage: $(basename "$0") (posix-tz | iana-tz | tzif) ..." >&2
+  exit 1
+fi
+case "$1" in
+  posix-tz)
+    if [ -z "$2" ]; then
+      echo "Usage: $(basename "$0") posix-tz <time-zone-string>" >&2
+      exit 1
+    fi
+    JIFF_DEBUG_POSIX_TZ="$2" $cargo_test --quiet --lib --features logging \
+      tz::posix::tests::debug_posix_tz -- --nocapture \
+      > /dev/null
+    ;;
+  iana-tz)
+    if [ -z "$2" ]; then
+      echo "Usage: $(basename "$0") iana-tz <time-zone-string>" >&2
+      exit 1
+    fi
+    JIFF_DEBUG_IANA_TZ="$2" $cargo_test --quiet --lib --features logging \
+      tz::posix::tests::debug_iana_tz -- --nocapture \
+      2>&1 > /dev/null
+    ;;
+  tzif)
+    if [ -z "$2" ]; then
+      echo "Usage: $(basename "$0") tzif <path/to/tzif/file>" >&2
+      exit 1
+    fi
+    JIFF_DEBUG_TZIF_PATH="$2" $cargo_test --quiet --lib --features logging \
+      tz::tzif::tests::debug_tzif -- --nocapture \
+      2>&1 > /dev/null
+    ;;
+  zoneinfo-walk)
+    if [ -z "$2" ]; then
+      echo "Usage: $(basename "$0") zoneinfo-walk <path/to/zoneinfo/dir>" >&2
+      exit 1
+    fi
+    JIFF_DEBUG_ZONEINFO_DIR="$2" $cargo_test --quiet --lib --features logging \
+      tz::db::zoneinfo::tests::debug_zoneinfo_walk -- --nocapture \
+      2>&1 > /dev/null
+    ;;
+  *)
+    echo "unrecognized sub-command '$1'" >&2
+    exit 1
+    ;;
+esac
+

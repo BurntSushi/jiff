@@ -1,8 +1,113 @@
 [package]
 name = "jiff"
-version = "0.0.1"  #:version
+version = "0.1.0"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 description = "WIP"
 license = "Unlicense OR MIT"
+repository = "https://github.com/BurntSushi/jiff"
+documentation = "https://docs.rs/jiff"
+categories = ["date-and-time"]
 edition = "2021"
 exclude = ["/.github", "/tmp"]
+autotests = false
+autoexamples = false
+rust-version = "1.70"
+
+[workspace]
+members = [
+  "jiff-cli",
+  "jiff-tzdb",
+  "jiff-tzdb-platform",
+  "examples/*",
+]
+
+# Features are documented in the "Crate features" section of the crate docs:
+# https://docs.rs/jiff/*/#crate-features
+[features]
+default = ["std", "tz-system", "tzdb-bundle-platform", "tzdb-zoneinfo"]
+std = ["alloc"]
+alloc = []
+serde = ["dep:serde"]
+logging = ["dep:log"]
+
+# When enabled, Jiff will include code that attempts to determine the "system"
+# time zone. For example, on Unix systems, this is usually determined by
+# looking at the symlink information on /etc/localtime. But in general, it's
+# very platform specific and heuristic oriented. On some platforms, this may
+# require extra dependencies. (For example, `windows-sys` on Windows.)
+tz-system = ["std", "dep:windows-sys"]
+
+# This conditionally bundles tzdb into the binary depending on which platform
+# Jiff is being built for.
+tzdb-bundle-platform = ["dep:jiff-tzdb-platform", "alloc"]
+
+# This forces the jiff-tzdb crate to be included. If tzdb-zoneinfo is enabled,
+# then the system tzdb will take priority over the bundled database.
+tzdb-bundle-always = ["dep:jiff-tzdb", "alloc"]
+
+# This enables the system or "zoneinfo" time zone database. This is the
+# database that is typically found at /usr/share/zoneinfo on macOS and Linux.
+tzdb-zoneinfo = ["std"]
+
+[dependencies]
+jiff-tzdb = { version = "0.1.0", path = "jiff-tzdb", optional = true }
+log = { version = "0.4.21", optional = true }
+serde = { version = "1.0.203", optional = true }
+
+# Note that the `cfg` gate for the `tzdb-bundle-platform` must repeat the
+# target gate on this dependency. The intent is that `tzdb-bundle-platform`
+# is enabled by default, but that the `tzdb-bundle-platform` crate is only
+# actually used on platforms without a system tzdb (i.e., Windows).
+[target.'cfg(windows)'.dependencies]
+jiff-tzdb-platform = { version = "0.1.0", path = "jiff-tzdb-platform", optional = true }
+
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.52.0"
+default-features = false
+features = ["Win32_Foundation", "Win32_System_Time"]
+optional = true
+
+[dev-dependencies]
+anyhow = "1.0.81"
+chrono = { version = "0.4.38", features = ["serde"] }
+chrono-tz = "0.9.0"
+insta = "1.39.0"
+# We force `serde` to be enable in dev mode so that the docs render and test
+# correctly. This is highly suspicious.
+jiff = { path = "./", features = ["serde"] }
+quickcheck = { version = "1.0.3", default-features = false }
+serde = { version = "1.0.203", features = ["derive"] }
+serde_json = "1.0.117"
+tabwriter = "1.4.0"
+time = { version = "0.3.36", features = ["local-offset", "macros", "parsing"] }
+tzfile = "0.1.3"
+walkdir = "2.5.0"
+
+# hifitime doesn't build on wasm32-wasip1 for some reason, so only
+# depend on it on Unix or Windows.
+[target.'cfg(any(unix, windows))'.dev-dependencies.hifitime]
+version = "3.9.0"
+
+[[test]]
+path = "tests/lib.rs"
+name = "integration"
+
+[profile.test]
+opt-level = 3
+
+[profile.testrelease]
+inherits = "test"
+debug-assertions = false
+
+[package.metadata.docs.rs]
+# We want to document all features.
+all-features = true
+# Since this crate's feature setup is pretty complicated, it is worth opting
+# into a nightly unstable option to show the features that need to be enabled
+# for public API items. To do that, we set 'docsrs', and when that's enabled,
+# we enable the 'doc_auto_cfg' feature.
+#
+# To test this locally, run:
+#
+#     RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --all-features
+rustdoc-args = ["--cfg", "docsrs"]

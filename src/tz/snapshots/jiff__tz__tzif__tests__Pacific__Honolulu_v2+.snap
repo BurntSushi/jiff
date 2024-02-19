@@ -1,0 +1,26 @@
+---
+source: src/tz/tzif.rs
+expression: tzif_to_human_readable(&tzif_test.parse())
+---
+TIME ZONE NAME
+  Pacific/Honolulu
+TIME ZONE VERSION
+  2
+LOCAL TIME TYPES
+  000:  offset=-10:31:26  designation=LMT       indicator=local/wall
+  001:  offset=-10:30     designation=HST       indicator=local/wall
+  002:  offset=-09:30     designation=HDT  dst  indicator=local/wall
+  003:  offset=-09:30     designation=HWT  dst  indicator=local/wall
+  004:  offset=-09:30     designation=HPT  dst  indicator=ut/std
+  005:  offset=-10        designation=HST       indicator=local/wall
+TRANSITIONS
+  0000:  -009999-01-02T01:59:59Z  unix=-377705023201  wall=-009999-01-01T15:28:33  unambiguous                      type=0  -10:31:26  LMT  
+  0001:  1896-01-13T22:31:26Z     unix=-2334101314    wall=1896-01-13T12:00:00      gap-until(1896-01-13T12:01:26)  type=1  -10:30     HST  
+  0002:  1933-04-30T12:30:00Z     unix=-1157283000    wall=1933-04-30T02:00:00      gap-until(1933-04-30T03:00:00)  type=2  -09:30     HDT  dst
+  0003:  1933-05-21T21:30:00Z     unix=-1155436200    wall=1933-05-21T11:00:00     fold-until(1933-05-21T12:00:00)  type=1  -10:30     HST  
+  0004:  1942-02-09T12:30:00Z     unix=-880198200     wall=1942-02-09T02:00:00      gap-until(1942-02-09T03:00:00)  type=3  -09:30     HWT  dst
+  0005:  1945-08-14T23:00:00Z     unix=-769395600     wall=1945-08-14T13:30:00     unambiguous                      type=4  -09:30     HPT  dst
+  0006:  1945-09-30T11:30:00Z     unix=-765376200     wall=1945-09-30T01:00:00     fold-until(1945-09-30T02:00:00)  type=1  -10:30     HST  
+  0007:  1947-06-08T12:30:00Z     unix=-712150200     wall=1947-06-08T02:00:00      gap-until(1947-06-08T02:30:00)  type=5  -10        HST  
+POSIX TIME ZONE STRING
+  HST10

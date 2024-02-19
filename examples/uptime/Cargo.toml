@@ -1,0 +1,14 @@
+[package]
+publish = false
+name = "uptime"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.86"
+jiff = { path = "../.." }
+regex-lite = "0.1.6"
+
+[[bin]]
+name = "uptime"
+path = "main.rs"

@@ -1,0 +1,23 @@
+#!/bin/sh
+
+if [ $# = 0 ]; then
+  echo "Usage: ./test-wasm <cargo command>" >&2
+  echo "Example: ./test-wasm cargo test --lib -- --nocapture" >&2
+  exit 1
+fi
+if ! command -V rustup &> /dev/null; then
+  echo 'please install rustup' >&2
+  exit 1
+fi
+if ! rustup target list | grep installed | grep -q wasm32-wasip1; then
+  echo 'please run `rustup target add wasm32-wasip1` first' >&2
+  exit 1
+fi
+
+export WASMTIME_BACKTRACE_DETAILS=1
+export CARGO_BUILD_TARGET=wasm32-wasip1
+# Not sure exactly why this is needed, but without it,
+# `insta` tries to run `cargo`, and wasip1 doesn't like that.
+export INSTA_WORKSPACE_ROOT="$PWD"
+export CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmtime run --dir / -S inherit-env"
+"$@"

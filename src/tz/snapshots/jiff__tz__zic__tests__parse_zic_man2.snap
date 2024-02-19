@@ -1,0 +1,333 @@
+---
+source: src/tz/zic.rs
+expression: zic
+---
+ZicP {
+    rules: {
+        "EU": [
+            RuleP {
+                name: RuleNameP {
+                    name: "EU",
+                },
+                from: RuleFromP {
+                    year: 1977,
+                },
+                to: Year {
+                    year: 1980,
+                },
+                inn: RuleInP {
+                    month: 4,
+                },
+                on: OnOrAfter {
+                    weekday: Sunday,
+                    day: 1,
+                },
+                at: RuleAtP {
+                    span: PT1h,
+                    suffix: Some(
+                        Universal,
+                    ),
+                },
+                save: RuleSaveP {
+                    span: PT1h,
+                    suffix: None,
+                },
+                letters: RuleLettersP {
+                    part: "S",
+                },
+            },
+            RuleP {
+                name: RuleNameP {
+                    name: "EU",
+                },
+                from: RuleFromP {
+                    year: 1977,
+                },
+                to: Only,
+                inn: RuleInP {
+                    month: 9,
+                },
+                on: Last {
+                    weekday: Sunday,
+                },
+                at: RuleAtP {
+                    span: PT1h,
+                    suffix: Some(
+                        Universal,
+                    ),
+                },
+                save: RuleSaveP {
+                    span: PT0s,
+                    suffix: None,
+                },
+                letters: RuleLettersP {
+                    part: "",
+                },
+            },
+            RuleP {
+                name: RuleNameP {
+                    name: "EU",
+                },
+                from: RuleFromP {
+                    year: 1978,
+                },
+                to: Only,
+                inn: RuleInP {
+                    month: 10,
+                },
+                on: Day {
+                    day: 1,
+                },
+                at: RuleAtP {
+                    span: PT1h,
+                    suffix: Some(
+                        Universal,
+                    ),
+                },
+                save: RuleSaveP {
+                    span: PT0s,
+                    suffix: None,
+                },
+                letters: RuleLettersP {
+                    part: "",
+                },
+            },
+            RuleP {
+                name: RuleNameP {
+                    name: "EU",
+                },
+                from: RuleFromP {
+                    year: 1979,
+                },
+                to: Year {
+                    year: 1995,
+                },
+                inn: RuleInP {
+                    month: 9,
+                },
+                on: Last {
+                    weekday: Sunday,
+                },
+                at: RuleAtP {
+                    span: PT1h,
+                    suffix: Some(
+                        Universal,
+                    ),
+                },
+                save: RuleSaveP {
+                    span: PT0s,
+                    suffix: None,
+                },
+                letters: RuleLettersP {
+                    part: "",
+                },
+            },
+            RuleP {
+                name: RuleNameP {
+                    name: "EU",
+                },
+                from: RuleFromP {
+                    year: 1981,
+                },
+                to: Max,
+                inn: RuleInP {
+                    month: 3,
+                },
+                on: Last {
+                    weekday: Sunday,
+                },
+                at: RuleAtP {
+                    span: PT1h,
+                    suffix: Some(
+                        Universal,
+                    ),
+                },
+                save: RuleSaveP {
+                    span: PT1h,
+                    suffix: None,
+                },
+                letters: RuleLettersP {
+                    part: "S",
+                },
+            },
+            RuleP {
+                name: RuleNameP {
+                    name: "EU",
+                },
+                from: RuleFromP {
+                    year: 1996,
+                },
+                to: Max,
+                inn: RuleInP {
+                    month: 10,
+                },
+                on: Last {
+                    weekday: Sunday,
+                },
+                at: RuleAtP {
+                    span: PT1h,
+                    suffix: Some(
+                        Universal,
+                    ),
+                },
+                save: RuleSaveP {
+                    span: PT0s,
+                    suffix: None,
+                },
+                letters: RuleLettersP {
+                    part: "",
+                },
+            },
+        ],
+        "Swiss": [
+            RuleP {
+                name: RuleNameP {
+                    name: "Swiss",
+                },
+                from: RuleFromP {
+                    year: 1941,
+                },
+                to: Year {
+                    year: 1942,
+                },
+                inn: RuleInP {
+                    month: 5,
+                },
+                on: OnOrAfter {
+                    weekday: Monday,
+                    day: 1,
+                },
+                at: RuleAtP {
+                    span: PT1h,
+                    suffix: None,
+                },
+                save: RuleSaveP {
+                    span: PT1h,
+                    suffix: None,
+                },
+                letters: RuleLettersP {
+                    part: "S",
+                },
+            },
+            RuleP {
+                name: RuleNameP {
+                    name: "Swiss",
+                },
+                from: RuleFromP {
+                    year: 1941,
+                },
+                to: Year {
+                    year: 1942,
+                },
+                inn: RuleInP {
+                    month: 10,
+                },
+                on: OnOrAfter {
+                    weekday: Monday,
+                    day: 1,
+                },
+                at: RuleAtP {
+                    span: PT2h,
+                    suffix: None,
+                },
+                save: RuleSaveP {
+                    span: PT0s,
+                    suffix: None,
+                },
+                letters: RuleLettersP {
+                    part: "",
+                },
+            },
+        ],
+    },
+    zones: {
+        "Europe/Zurich": ZoneP {
+            first: ZoneFirstP {
+                name: ZoneNameP {
+                    name: "Europe/Zurich",
+                },
+                stdoff: ZoneStdoffP {
+                    span: PT34m8s,
+                },
+                rules: None,
+                format: Static {
+                    format: "LMT",
+                },
+                until: Some(
+                    YearMonthDay {
+                        year: 1853,
+                        month: RuleInP {
+                            month: 7,
+                        },
+                        day: Day {
+                            day: 16,
+                        },
+                    },
+                ),
+            },
+            continuations: [
+                ZoneContinuationP {
+                    stdoff: ZoneStdoffP {
+                        span: PT29m45.5s,
+                    },
+                    rules: None,
+                    format: Static {
+                        format: "BMT",
+                    },
+                    until: Some(
+                        YearMonth {
+                            year: 1894,
+                            month: RuleInP {
+                                month: 6,
+                            },
+                        },
+                    ),
+                },
+                ZoneContinuationP {
+                    stdoff: ZoneStdoffP {
+                        span: PT1h,
+                    },
+                    rules: Named(
+                        RuleNameP {
+                            name: "Swiss",
+                        },
+                    ),
+                    format: Variable {
+                        before: "CE",
+                        after: "T",
+                    },
+                    until: Some(
+                        Year {
+                            year: 1981,
+                        },
+                    ),
+                },
+                ZoneContinuationP {
+                    stdoff: ZoneStdoffP {
+                        span: PT1h,
+                    },
+                    rules: Named(
+                        RuleNameP {
+                            name: "EU",
+                        },
+                    ),
+                    format: Variable {
+                        before: "CE",
+                        after: "T",
+                    },
+                    until: None,
+                },
+            ],
+        },
+    },
+    links: {
+        "Europe/Vaduz": LinkP {
+            target: ZoneNameP {
+                name: "Europe/Zurich",
+            },
+            name: ZoneNameP {
+                name: "Europe/Vaduz",
+            },
+        },
+    },
+}
