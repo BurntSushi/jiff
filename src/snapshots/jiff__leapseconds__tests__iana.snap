@@ -1,0 +1,241 @@
+---
+source: src/leapseconds.rs
+expression: "LeapSeconds::from_iana_bytes(IANA)"
+---
+Ok(
+    LeapSeconds {
+        expires: Instant {
+            scale: "UNIX",
+            second: 1719532800,
+            nanosecond: 0,
+        },
+        by_unix: [
+            LeapSecondUnix {
+                timestamp: 63072000,
+                leap_seconds: 10,
+            },
+            LeapSecondUnix {
+                timestamp: 78796800,
+                leap_seconds: 11,
+            },
+            LeapSecondUnix {
+                timestamp: 94694400,
+                leap_seconds: 12,
+            },
+            LeapSecondUnix {
+                timestamp: 126230400,
+                leap_seconds: 13,
+            },
+            LeapSecondUnix {
+                timestamp: 157766400,
+                leap_seconds: 14,
+            },
+            LeapSecondUnix {
+                timestamp: 189302400,
+                leap_seconds: 15,
+            },
+            LeapSecondUnix {
+                timestamp: 220924800,
+                leap_seconds: 16,
+            },
+            LeapSecondUnix {
+                timestamp: 252460800,
+                leap_seconds: 17,
+            },
+            LeapSecondUnix {
+                timestamp: 283996800,
+                leap_seconds: 18,
+            },
+            LeapSecondUnix {
+                timestamp: 315532800,
+                leap_seconds: 19,
+            },
+            LeapSecondUnix {
+                timestamp: 362793600,
+                leap_seconds: 20,
+            },
+            LeapSecondUnix {
+                timestamp: 394329600,
+                leap_seconds: 21,
+            },
+            LeapSecondUnix {
+                timestamp: 425865600,
+                leap_seconds: 22,
+            },
+            LeapSecondUnix {
+                timestamp: 489024000,
+                leap_seconds: 23,
+            },
+            LeapSecondUnix {
+                timestamp: 567993600,
+                leap_seconds: 24,
+            },
+            LeapSecondUnix {
+                timestamp: 631152000,
+                leap_seconds: 25,
+            },
+            LeapSecondUnix {
+                timestamp: 662688000,
+                leap_seconds: 26,
+            },
+            LeapSecondUnix {
+                timestamp: 709948800,
+                leap_seconds: 27,
+            },
+            LeapSecondUnix {
+                timestamp: 741484800,
+                leap_seconds: 28,
+            },
+            LeapSecondUnix {
+                timestamp: 773020800,
+                leap_seconds: 29,
+            },
+            LeapSecondUnix {
+                timestamp: 820454400,
+                leap_seconds: 30,
+            },
+            LeapSecondUnix {
+                timestamp: 867715200,
+                leap_seconds: 31,
+            },
+            LeapSecondUnix {
+                timestamp: 915148800,
+                leap_seconds: 32,
+            },
+            LeapSecondUnix {
+                timestamp: 1136073600,
+                leap_seconds: 33,
+            },
+            LeapSecondUnix {
+                timestamp: 1230768000,
+                leap_seconds: 34,
+            },
+            LeapSecondUnix {
+                timestamp: 1341100800,
+                leap_seconds: 35,
+            },
+            LeapSecondUnix {
+                timestamp: 1435708800,
+                leap_seconds: 36,
+            },
+            LeapSecondUnix {
+                timestamp: 1483228800,
+                leap_seconds: 37,
+            },
+        ],
+        by_tai: [
+            LeapSecondTai {
+                timestamp: 63072010,
+                leap_seconds: -10,
+            },
+            LeapSecondTai {
+                timestamp: 78796811,
+                leap_seconds: -11,
+            },
+            LeapSecondTai {
+                timestamp: 94694412,
+                leap_seconds: -12,
+            },
+            LeapSecondTai {
+                timestamp: 126230413,
+                leap_seconds: -13,
+            },
+            LeapSecondTai {
+                timestamp: 157766414,
+                leap_seconds: -14,
+            },
+            LeapSecondTai {
+                timestamp: 189302415,
+                leap_seconds: -15,
+            },
+            LeapSecondTai {
+                timestamp: 220924816,
+                leap_seconds: -16,
+            },
+            LeapSecondTai {
+                timestamp: 252460817,
+                leap_seconds: -17,
+            },
+            LeapSecondTai {
+                timestamp: 283996818,
+                leap_seconds: -18,
+            },
+            LeapSecondTai {
+                timestamp: 315532819,
+                leap_seconds: -19,
+            },
+            LeapSecondTai {
+                timestamp: 362793620,
+                leap_seconds: -20,
+            },
+            LeapSecondTai {
+                timestamp: 394329621,
+                leap_seconds: -21,
+            },
+            LeapSecondTai {
+                timestamp: 425865622,
+                leap_seconds: -22,
+            },
+            LeapSecondTai {
+                timestamp: 489024023,
+                leap_seconds: -23,
+            },
+            LeapSecondTai {
+                timestamp: 567993624,
+                leap_seconds: -24,
+            },
+            LeapSecondTai {
+                timestamp: 631152025,
+                leap_seconds: -25,
+            },
+            LeapSecondTai {
+                timestamp: 662688026,
+                leap_seconds: -26,
+            },
+            LeapSecondTai {
+                timestamp: 709948827,
+                leap_seconds: -27,
+            },
+            LeapSecondTai {
+                timestamp: 741484828,
+                leap_seconds: -28,
+            },
+            LeapSecondTai {
+                timestamp: 773020829,
+                leap_seconds: -29,
+            },
+            LeapSecondTai {
+                timestamp: 820454430,
+                leap_seconds: -30,
+            },
+            LeapSecondTai {
+                timestamp: 867715231,
+                leap_seconds: -31,
+            },
+            LeapSecondTai {
+                timestamp: 915148832,
+                leap_seconds: -32,
+            },
+            LeapSecondTai {
+                timestamp: 1136073633,
+                leap_seconds: -33,
+            },
+            LeapSecondTai {
+                timestamp: 1230768034,
+                leap_seconds: -34,
+            },
+            LeapSecondTai {
+                timestamp: 1341100835,
+                leap_seconds: -35,
+            },
+            LeapSecondTai {
+                timestamp: 1435708836,
+                leap_seconds: -36,
+            },
+            LeapSecondTai {
+                timestamp: 1483228837,
+                leap_seconds: -37,
+            },
+        ],
+    },
+)

@@ -6,3 +6,45 @@ description = "WIP"
 license = "Unlicense OR MIT"
 edition = "2021"
 exclude = ["/.github", "/tmp"]
+autotests = false
+
+[features]
+default = ["std"]
+std = ["alloc"]
+alloc = []
+logging = ["dep:log"]
+
+[dependencies]
+log = { version = "0.4.21", optional = true }
+
+[dev-dependencies]
+anyhow = "1.0.81"
+env_logger = "0.11.3"
+insta = "1.38.0"
+quickcheck = { version = "1.0.3", default-features = false }
+tabwriter = "1.4.0"
+walkdir = "2.5.0"
+
+[[test]]
+path = "tests/lib.rs"
+name = "integration"
+
+[profile.test]
+opt-level = 3
+
+[profile.testrelease]
+inherits = "test"
+debug-assertions = false
+
+[package.metadata.docs.rs]
+# We want to document all features.
+all-features = true
+# Since this crate's feature setup is pretty complicated, it is worth opting
+# into a nightly unstable option to show the features that need to be enabled
+# for public API items. To do that, we set 'docsrs', and when that's enabled,
+# we enable the 'doc_auto_cfg' feature.
+#
+# To test this locally, run:
+#
+#     RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --all-features
+rustdoc-args = ["--cfg", "docsrs"]
