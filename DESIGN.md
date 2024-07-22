@@ -194,7 +194,7 @@ seconds into account in `hifitime`, but Jiff pretends as if they don't exist.
 In terms of building a new datetime library, I felt like `hifitime` wasn't
 really targeting the "general purpose datetime library" use case that I felt
 `chrono` and `time` were. And so, whether it existed or not didn't really
-impact whether another datetime library should be built.
+impact whether another _general purpose_ datetime library should be built.
 
 ### `icu`
 
@@ -225,23 +225,22 @@ ecosystem, and adding yet another choice, does actually come with downsides.
 There is a cost to having too many choices, and when possible, I do believe it
 is better to improve an existing project rather than start a new one.
 
-But improving existing projects can be extremely difficult. Jiff has an
-extremely different design than both `chrono` and `time`. Evolving either one
-of those crates into what Jiff is would, in my view, require a huge amount of
-resources. Not just in time, but in social capital as well. Because it wouldn't
-be greenfield development done by one person making all of the design choices,
-but instead someone from outside the project trying to convince the maintainers
-of established projects to move in a radically different direction. I know what
-it's like to be on the side of maintaining an established API for a library
-with a lot of users. There is a huge inertial cost to making sweeping API
-changes.
+Improving existing projects can be difficult. Jiff has a different design than
+both `chrono` and `time`. Evolving either one of those crates into what Jiff is
+would, in my view, require a huge amount of resources. Not just in time, but in
+social capital as well. Because it wouldn't be greenfield development done by
+one person making all of the design choices, but instead someone from outside
+the project trying to convince the maintainers of established projects to move
+in a radically different direction. I know what it's like to be on the side of
+maintaining an established API for a library with a lot of users. There is a
+huge inertial cost to making sweeping API changes.
 
 Moreover, when I started Jiff, I was not a domain expert in datetime libraries
 or datetime handling in general. Therefore, my opinion that `chrono` and `time`
-_could_ be better would arguably not carry a lot of weird. It was only through
+_could_ be better would arguably not carry a lot of weight. It was only through
 the process of actually building a datetime library did I learn enough to form
 nuanced opinions about the status quo. When I started, my opinions were much
-more vague.
+more vague (but still strong enough to start this project).
 
 On top of all of this, I was _intrinsically_ motivated to work on this problem.
 I found it very interesting, and especially because I perceived there to be a
@@ -250,7 +249,9 @@ a datetime library _should_ look like. And it took a lot of iteration to get
 from my initial vision to something that works in practice. Doing this on an
 existing datetime library with real users would be extremely difficult.
 
-Sometimes you just have to start fresh.
+And speaking as someone who has had folks publish _better_ versions of some of
+my own crates, I know what it's like to be on the other end of this. Sometimes
+you just have to start fresh.
 
 
 ## Why is there one duration type instead of two?
