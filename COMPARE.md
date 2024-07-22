@@ -198,8 +198,48 @@ fn main() -> anyhow::Result<()> {
 }
 ```
 
+Or, if you have a `Tz` from `chrono-tz`. But in this case, since `chrono-tz`
+doesn't support Serde, you have to convert to a `DateTime<FixedOffset>`. Like
+above, you'll lose DST safe arithmetic after deserialization:
+
+```rust
+use anyhow::Context;
+use chrono::{DateTime, FixedOffset, TimeDelta, TimeZone};
+use chrono_tz::America::New_York;
+
+fn main() -> anyhow::Result<()> {
+    let zdt = New_York.with_ymd_and_hms(2024, 3, 10, 1, 59, 59)
+        .single()
+        .context("invalid naive time")?;
+
+    let json = serde_json::to_string_pretty(&zdt.fixed_offset())?;
+    // Chrono only serializes the offset, which makes lossless
+    // deserialization impossible. Chrono loses the time zone
+    // information.
+    assert_eq!(json, "\"2024-03-10T01:59:59-05:00\"");
+
+    // The serialized datetime has no time zone information,
+    // so unless there is some out-of-band information saying
+    // what its time zone is, we're forced to use a fixed offset:
+    let got: DateTime<FixedOffset> = serde_json::from_str(&json)?;
+    assert_eq!(got.to_string(), "2024-03-10 01:59:59 -05:00");
+    let next = got.checked_add_signed(TimeDelta::minutes(1))
+        .context("arithmetic failed")?;
+    // This is correct for fixed offset, but it's no longer
+    // DST aware.
+    assert_eq!(next.to_string(), "2024-03-10 02:00:59 -05:00");
+
+    Ok(())
+}
+```
+
 The main way to solve this problem (and is how `java.time`, Temporal and Jiff
-solve it), is by supporting [RFC 9557].
+solve it), is by supporting [RFC 9557]. Otherwise, the only way to fully
+capture Jiff's functionality in Chrono is to define a custom serialization
+format that includes the instant, the time zone identifier *and* the offset.
+(The offset is used for conflict resolution when deserializing datetimes made
+in the future for which their offset has changed due to changes in the time
+zone database.)
 
 [RFC 9557]: https://datatracker.ietf.org/doc/rfc9557/
 
