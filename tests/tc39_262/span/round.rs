@@ -107,6 +107,10 @@ fn calendar_possibly_required() -> Result {
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/Duration/prototype/round/dst-balancing-result.js
 #[test]
 fn dst_balancing_result() -> Result {
+    if jiff::tz::db().is_definitively_empty() {
+        return Ok(());
+    }
+
     let sp = 1.year().hours(24);
     let zdt = "1999-10-29T01-07[America/Los_Angeles]".parse::<Zoned>()?;
     let result =
@@ -149,6 +153,10 @@ fn dst_balancing_result() -> Result {
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/Duration/prototype/round/dst-rounding-result.js
 #[test]
 fn dst_rounding_result() -> Result {
+    if jiff::tz::db().is_definitively_empty() {
+        return Ok(());
+    }
+
     let sp = 1.month().days(15).hours(11).minutes(30);
     let zdt = "2000-02-18T02-08[America/Los_Angeles]".parse::<Zoned>()?;
     let result =
