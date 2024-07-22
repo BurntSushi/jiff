@@ -9,9 +9,24 @@ This document is written as an FAQ, although it is restricted in scope to the
 API design of Jiff. This isn't a FAQ for questions like, "How do I add 1 day
 to a zoned datetime?"
 
-Unlike [Comparison with other Rust datetime crates][comparison], this document
-is _opinionated_. That is, some value judgments are expressed that are opinion
-based, and on which reasonable people may disagree.
+Unlike "[Comparison with other Rust datetime crates][comparison]," this
+document is _opinionated_. That is, some value judgments are expressed that are
+opinion based, and on which reasonable people may disagree.
+
+
+## Why name the library "jiff"?
+
+I wanted something short and related to time for the library name. Most of the
+"obvious" names are taken.
+
+I thought a lot about phrases or words that had some connection to time. There
+are more than you think. One phrase I heard a lot as a kid who grew up in New
+England was, "I'll be back in a jiff" or "I'll be back in a jiffy." The meaning
+of that phrase was, roughly, "I'll be back very soon." So "jiff" refers to some
+"short span of time." Since "jiff" was shorter than "jiffy," that's what I went
+with.
+
+Jiff is pronounced like "gif" with a soft "g," as in "gem."
 
 
 ## Why build another datetime library?
@@ -23,8 +38,8 @@ between the crates (mostly for just `chrono` and `time`), but it intentionally
 leaves out value judgments. To answer this question, I have to introduce value
 judgments and my opinions on existing libraries. **These are opinions on which
 reasonable people can disagree.** Moreover, since these are opinions meant to
-justify an alternative, these opinions tend to be oriented on the faults in
-existing crates as opposed to their benefits.
+justify an alternative, these opinions tend to be oriented on the faults (as
+this author sees them) in existing crates as opposed to their benefits.
 
 Broadly speaking, my view on Rust datetime libraries was that they had reached
 a local maximum, and there didn't seem to be much movement toward breaking out
@@ -110,7 +125,7 @@ automatically.
 * Chrono overall puts a large emphasis on "fixed offset" datetimes, but these
 are rarely the right abstraction to use. It's possible this is due to the fact
 that IANA time zone support is external to Chrono itself. Instead, Jiff just
-tries to do the right thing by default, and gives use IANA time zone support
+tries to do the right thing by default, and gives users IANA time zone support
 out of the box. Jiff does support fixed offset datetimes as well, but they are
 de-emphasized.
 * I find generic traits like `Datelike` to also be very confusing because they
@@ -591,3 +606,7 @@ serious confusion and conflicts in names when someone wants to use both an
 [NodaTime]: https://nodatime.org/
 [`chrono-tz`]: https://docs.rs/chrono-tz
 [`tzfile`]: https://docs.rs/tzfile
+[`chrono`]: https://docs.rs/chrono
+[`time`]: https://docs.rs/time
+[`hifitime`]: https://docs.rs/hifitime
+[`icu`]: https://docs.rs/icu
