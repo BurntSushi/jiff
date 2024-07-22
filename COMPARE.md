@@ -103,12 +103,21 @@ use anyhow::Context;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, TimeZone};
 use tzfile::Tz;
 
+#[cfg(unix)]
 fn main() -> anyhow::Result<()> {
     let tz = Tz::named("America/New_York")?;
     let zdt = (&tz).with_ymd_and_hms(2024, 6, 30, 9, 46, 0)
         .single()
         .context("invalid naive time")?;
     assert_eq!(zdt.to_string(), "2024-06-30 09:46:00 EDT");
+    Ok(())
+}
+
+// `tzfile` exposes a platform specific API, which means
+// users of the crate have to deal with platform differences
+// themselves.
+#[cfg(not(unix))]
+fn main() -> anyhow::Result<()> {
     Ok(())
 }
 ```

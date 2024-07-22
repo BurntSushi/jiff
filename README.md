@@ -1,4 +1,4 @@
-jiff
+Jiff
 ====
 Jiff is a datetime library for Rust that encourages you to jump into the
 pit of success. The focus of this library is providing high level datetime
@@ -22,6 +22,7 @@ Dual-licensed under MIT or the [UNLICENSE](https://unlicense.org/).
 
 * [API documentation on docs.rs](https://docs.rs/jiff)
 * [Comparison with `chrono`, `time`, `hifitime` and `icu`](COMPARE.md)
+* [The API design rationale for Jiff](DESIGN.md)
 
 ### Example
 
