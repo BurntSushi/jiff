@@ -617,15 +617,16 @@ $ cargo bench -- --save-baseline base
 $ critcmp -g '^[^/]+/(.*)$' -f '^(chrono|chrono-tzfile|jiff)/' base
 group                                         base/chrono-tzfile/                    base/chrono/                           base/jiff/
 -----                                         -------------------                    ------------                           ----------
-civil_datetime_to_instant_static              1.00     19.2±0.25ns        ? ?/sec    1.16     22.3±0.32ns        ? ?/sec    1.02     19.7±0.23ns        ? ?/sec
-civil_datetime_to_instant_with_tzdb_lookup    22.63     2.3±0.05µs        ? ?/sec                                           1.00    101.3±0.74ns        ? ?/sec
-instant_to_civil_datetime_offset                                                     1.00      6.9±0.01ns        ? ?/sec    3.45     23.7±0.49ns        ? ?/sec
-instant_to_civil_datetime_static              1.12     19.9±0.13ns        ? ?/sec    1.00     17.7±0.19ns        ? ?/sec    2.31     40.9±0.65ns        ? ?/sec
-offset_to_civil_datetime                                                             6.07      5.4±0.01ns        ? ?/sec    1.00      0.9±0.01ns        ? ?/sec
-offset_to_instant                                                                    3.17      1.2±0.01ns        ? ?/sec    1.00      0.4±0.00ns        ? ?/sec
-parse_civil_datetime                                                                 1.91     65.8±0.82ns        ? ?/sec    1.00     34.5±0.11ns        ? ?/sec
-parse_rfc2822                                                                        1.39     57.4±0.40ns        ? ?/sec    1.00     41.3±0.30ns        ? ?/sec
-zoned_add_time_duration                                                              1.00      5.6±0.04ns        ? ?/sec    5.78     32.4±0.31ns        ? ?/sec
+civil_datetime_to_instant_static              1.00     19.2±0.26ns        ? ?/sec    1.16     22.1±0.20ns        ? ?/sec    1.00     19.2±0.74ns        ? ?/sec
+civil_datetime_to_instant_with_tzdb_lookup    21.31     2.2±0.03µs        ? ?/sec                                           1.00    103.0±4.99ns        ? ?/sec
+instant_to_civil_datetime_offset                                                     1.00      6.9±0.02ns        ? ?/sec    3.45     23.8±1.11ns        ? ?/sec
+instant_to_civil_datetime_static              1.17     20.1±0.16ns        ? ?/sec    1.00     17.3±0.12ns        ? ?/sec    2.32     40.1±0.22ns        ? ?/sec
+offset_to_civil_datetime                                                             6.22      5.5±0.02ns        ? ?/sec    1.00      0.9±0.02ns        ? ?/sec
+offset_to_instant                                                                    3.61      1.4±0.02ns        ? ?/sec    1.00      0.4±0.00ns        ? ?/sec
+parse_civil_datetime                                                                 2.00     69.1±1.33ns        ? ?/sec    1.00     34.5±0.15ns        ? ?/sec
+parse_rfc2822                                                                        1.36     57.5±0.58ns        ? ?/sec    1.00     42.1±0.46ns        ? ?/sec
+parse_strptime                                                                       2.59    169.4±3.96ns        ? ?/sec    1.00     65.5±0.90ns        ? ?/sec
+zoned_add_time_duration                                                              1.00      5.6±0.06ns        ? ?/sec    5.85     32.8±0.25ns        ? ?/sec
 ```
 
 It's plausible that in cases where Jiff is slower (for example,
@@ -959,12 +960,13 @@ $ cargo bench -- --save-baseline base
 $ critcmp -g '^[^/]+/(.*)$' -f '^(time|jiff)/' base
 group                                         base/jiff/                             base/time/
 -----                                         ----------                             ----------
-instant_to_civil_datetime_offset              1.64     23.7±0.49ns        ? ?/sec    1.00     14.5±0.17ns        ? ?/sec
-offset_to_civil_datetime                      1.00      0.9±0.01ns        ? ?/sec    1.09      1.0±0.02ns        ? ?/sec
-offset_to_instant                             1.00      0.4±0.00ns        ? ?/sec    6.24      2.4±0.01ns        ? ?/sec
-parse_civil_datetime                          1.00     34.5±0.11ns        ? ?/sec    1.94     67.0±1.42ns        ? ?/sec
-parse_rfc2822                                 1.00     41.3±0.30ns        ? ?/sec    1.83     75.4±1.17ns        ? ?/sec
-zoned_add_time_duration                       1.41     32.4±0.31ns        ? ?/sec    1.00     23.0±0.09ns        ? ?/sec
+instant_to_civil_datetime_offset              1.65     23.8±1.11ns        ? ?/sec    1.00     14.4±0.14ns        ? ?/sec
+offset_to_civil_datetime                      1.14      0.9±0.02ns        ? ?/sec    1.00      0.8±0.00ns        ? ?/sec
+offset_to_instant                             1.00      0.4±0.00ns        ? ?/sec    6.29      2.4±0.03ns        ? ?/sec
+parse_civil_datetime                          1.00     34.5±0.15ns        ? ?/sec    1.95     67.2±1.49ns        ? ?/sec
+parse_rfc2822                                 1.00     42.1±0.46ns        ? ?/sec    1.75     73.8±0.66ns        ? ?/sec
+parse_strptime                                1.00     65.5±0.90ns        ? ?/sec    1.71    112.0±0.92ns        ? ?/sec
+zoned_add_time_duration                       1.42     32.8±0.25ns        ? ?/sec    1.00     23.1±0.15ns        ? ?/sec
 ```
 
 It's plausible that in cases where Jiff is slower (for example,
