@@ -1,12 +1,17 @@
 [package]
 name = "jiff"
-version = "0.1.0"  #:version
+version = "0.0.1"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
-description = "WIP"
 license = "Unlicense OR MIT"
 repository = "https://github.com/BurntSushi/jiff"
 documentation = "https://docs.rs/jiff"
+description = '''
+A date-time library that encourages you to jump into the pit of success.
+
+This library is heavily inspired by the Temporal project.
+'''
 categories = ["date-and-time"]
+keywords = ["date", "time", "temporal", "zone", "iana"]
 edition = "2021"
 exclude = ["/.github", "/tmp"]
 autotests = false
@@ -50,7 +55,7 @@ tzdb-bundle-always = ["dep:jiff-tzdb", "alloc"]
 tzdb-zoneinfo = ["std"]
 
 [dependencies]
-jiff-tzdb = { version = "0.1.0", path = "jiff-tzdb", optional = true }
+jiff-tzdb = { version = "0.0.1", path = "jiff-tzdb", optional = true }
 log = { version = "0.4.21", optional = true }
 serde = { version = "1.0.203", optional = true }
 
@@ -59,7 +64,7 @@ serde = { version = "1.0.203", optional = true }
 # is enabled by default, but that the `tzdb-bundle-platform` crate is only
 # actually used on platforms without a system tzdb (i.e., Windows).
 [target.'cfg(windows)'.dependencies]
-jiff-tzdb-platform = { version = "0.1.0", path = "jiff-tzdb-platform", optional = true }
+jiff-tzdb-platform = { version = "0.0.1", path = "jiff-tzdb-platform", optional = true }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.52.0"
