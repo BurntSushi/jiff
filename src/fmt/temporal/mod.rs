@@ -86,18 +86,18 @@ use jiff::{Span, ToSpan};
 
 let spans = [
     ("P40D", 40.days()),
-    ("P1y1d", 1.year().days(1)),
-    ("P3dT4h59m", 3.days().hours(4).minutes(59)),
+    ("P1Y1D", 1.year().days(1)),
+    ("P3DT4H59M", 3.days().hours(4).minutes(59)),
     ("PT2H30M", 2.hours().minutes(30)),
-    ("P1m", 1.month()),
-    ("P1w", 1.week()),
-    ("P1w4d", 1.week().days(4)),
-    ("PT1m", 1.minute()),
-    ("PT0.0021s", 2.milliseconds().microseconds(100)),
-    ("PT0s", 0.seconds()),
-    ("P0d", 0.seconds()),
+    ("P1M", 1.month()),
+    ("P1W", 1.week()),
+    ("P1W4D", 1.week().days(4)),
+    ("PT1M", 1.minute()),
+    ("PT0.0021S", 2.milliseconds().microseconds(100)),
+    ("PT0S", 0.seconds()),
+    ("P0D", 0.seconds()),
     (
-        "P1y1m1dT1h1m1.1s",
+        "P1Y1M1DT1H1M1.1S",
         1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
     ),
 ];
@@ -1045,7 +1045,7 @@ impl DateTimePrinter {
 /// // A parser can be created in a const context.
 /// static PARSER: SpanParser = SpanParser::new();
 ///
-/// let span = PARSER.parse_span(b"P3y7m25dT7h36m")?;
+/// let span = PARSER.parse_span(b"P3Y7M25DT7H36M")?;
 /// assert_eq!(span, 3.years().months(7).days(25).hours(7).minutes(36));
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1077,7 +1077,7 @@ impl SpanParser {
     ///
     /// static PARSER: SpanParser = SpanParser::new();
     ///
-    /// let span = PARSER.parse_span(b"PT48m")?;
+    /// let span = PARSER.parse_span(b"PT48M")?;
     /// assert_eq!(span, 48.minutes());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1091,7 +1091,7 @@ impl SpanParser {
     /// ```
     /// use jiff::{Span, ToSpan};
     ///
-    /// let span = "PT48m".parse::<Span>()?;
+    /// let span = "PT48M".parse::<Span>()?;
     /// assert_eq!(span, 48.minutes());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1133,7 +1133,7 @@ impl SpanParser {
 /// let mut buf = vec![];
 /// // Printing to a `Vec<u8>` can never fail.
 /// PRINTER.print_span(&span, &mut buf).unwrap();
-/// assert_eq!(buf, "PT48m".as_bytes());
+/// assert_eq!(buf, "PT48M".as_bytes());
 /// ```
 ///
 /// # Example: using adapters with `std::io::Write` and `std::fmt::Write`
@@ -1156,7 +1156,7 @@ impl SpanParser {
 /// let mut file = BufWriter::new(File::create(path)?);
 /// SpanPrinter::new().print_span(&span, StdIoWrite(&mut file)).unwrap();
 /// file.flush()?;
-/// assert_eq!(std::fs::read_to_string(path)?, "PT48m");
+/// assert_eq!(std::fs::read_to_string(path)?, "PT48M");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -1192,7 +1192,7 @@ impl SpanPrinter {
     /// let mut buf = String::new();
     /// // Printing to a `String` can never fail.
     /// PRINTER.print_span(&span, &mut buf).unwrap();
-    /// assert_eq!(buf, "P3y5m");
+    /// assert_eq!(buf, "P3Y5M");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```

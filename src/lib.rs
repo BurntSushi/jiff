@@ -360,7 +360,7 @@ use jiff::civil::date;
 let zdt1 = date(2020, 8, 26).at(6, 27, 0, 0).intz("America/New_York")?;
 let zdt2 = date(2023, 12, 31).at(18, 30, 0, 0).intz("America/New_York")?;
 let span = &zdt2 - &zdt1;
-assert_eq!(span.to_string(), "PT29341h3m");
+assert_eq!(span.to_string(), "PT29341H3M");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -376,7 +376,7 @@ use jiff::{civil::date, Unit};
 let zdt1 = date(2020, 8, 26).at(6, 27, 0, 0).intz("America/New_York")?;
 let zdt2 = date(2023, 12, 31).at(18, 30, 0, 0).intz("America/New_York")?;
 let span = zdt1.until((Unit::Year, &zdt2))?;
-assert_eq!(span.to_string(), "P3y4m5dT12h3m");
+assert_eq!(span.to_string(), "P3Y4M5DT12H3M");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -437,7 +437,7 @@ Jiff supports parsing ISO 8601 duration strings:
 ```
 use jiff::Span;
 
-let span: Span = "P5y1w10dT5h59m".parse()?;
+let span: Span = "P5Y1W10DT5H59M".parse()?;
 let expected = Span::new().years(5).weeks(1).days(10).hours(5).minutes(59);
 assert_eq!(span, expected);
 

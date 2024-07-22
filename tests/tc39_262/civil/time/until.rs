@@ -27,22 +27,22 @@ fn balance_negative_time_units() -> Result {
     let t2 = time(1, 1, 1, 001_001_001);
 
     let t1 = time(0, 0, 0, 000_000_002);
-    assert_eq!(t1.until(t2)?.to_string(), "PT1h1m1.001000999s");
+    assert_eq!(t1.until(t2)?.to_string(), "PT1H1M1.001000999S");
 
     let t1 = time(0, 0, 0, 000_002_000);
-    assert_eq!(t1.until(t2)?.to_string(), "PT1h1m1.000999001s");
+    assert_eq!(t1.until(t2)?.to_string(), "PT1H1M1.000999001S");
 
     let t1 = time(0, 0, 0, 002_000_000);
-    assert_eq!(t1.until(t2)?.to_string(), "PT1h1m0.999001001s");
+    assert_eq!(t1.until(t2)?.to_string(), "PT1H1M0.999001001S");
 
     let t1 = time(0, 0, 2, 0);
-    assert_eq!(t1.until(t2)?.to_string(), "PT1h59.001001001s");
+    assert_eq!(t1.until(t2)?.to_string(), "PT1H59.001001001S");
 
     let t1 = time(0, 2, 0, 0);
-    assert_eq!(t1.until(t2)?.to_string(), "PT59m1.001001001s");
+    assert_eq!(t1.until(t2)?.to_string(), "PT59M1.001001001S");
 
     let t1 = time(2, 0, 0, 0);
-    assert_eq!(t1.until(t2)?.to_string(), "-PT58m58.998998999s");
+    assert_eq!(t1.until(t2)?.to_string(), "-PT58M58.998998999S");
 
     Ok(())
 }
@@ -54,10 +54,10 @@ fn basic() -> Result {
     let two = time(16, 23, 30, 123_456_789);
     let three = time(17, 0, 30, 123_456_789);
 
-    assert_eq!(one.until(two)?.to_string(), "PT1h");
-    assert_eq!(two.until(one)?.to_string(), "-PT1h");
-    assert_eq!(one.until(three)?.to_string(), "PT1h37m");
-    assert_eq!(three.until(one)?.to_string(), "-PT1h37m");
+    assert_eq!(one.until(two)?.to_string(), "PT1H");
+    assert_eq!(two.until(one)?.to_string(), "-PT1H");
+    assert_eq!(one.until(three)?.to_string(), "PT1H37M");
+    assert_eq!(three.until(one)?.to_string(), "-PT1H37M");
 
     Ok(())
 }
@@ -109,10 +109,10 @@ fn largestunit() -> Result {
     let t1 = time(4, 48, 55, 0);
     let t2 = time(11, 59, 58, 0);
 
-    assert_eq!(t1.until(t2)?.to_string(), "PT7h11m3s");
-    assert_eq!(t1.until((Unit::Hour, t2))?.to_string(), "PT7h11m3s");
-    assert_eq!(t1.until((Unit::Minute, t2))?.to_string(), "PT431m3s");
-    assert_eq!(t1.until((Unit::Second, t2))?.to_string(), "PT25863s");
+    assert_eq!(t1.until(t2)?.to_string(), "PT7H11M3S");
+    assert_eq!(t1.until((Unit::Hour, t2))?.to_string(), "PT7H11M3S");
+    assert_eq!(t1.until((Unit::Minute, t2))?.to_string(), "PT431M3S");
+    assert_eq!(t1.until((Unit::Second, t2))?.to_string(), "PT25863S");
 
     Ok(())
 }
@@ -132,7 +132,7 @@ fn result_sub_second() -> Result {
     // via fractional seconds.)
     assert_eq!(
         t1.until((Unit::Millisecond, t2))?.to_string(),
-        "PT24762.25025025s",
+        "PT24762.25025025S",
     );
 
     assert_eq!(
@@ -141,7 +141,7 @@ fn result_sub_second() -> Result {
     );
     assert_eq!(
         t1.until((Unit::Microsecond, t2))?.to_string(),
-        "PT24762.25025025s",
+        "PT24762.25025025S",
     );
 
     assert_eq!(
@@ -150,7 +150,7 @@ fn result_sub_second() -> Result {
     );
     assert_eq!(
         t1.until((Unit::Nanosecond, t2))?.to_string(),
-        "PT24762.25025025s",
+        "PT24762.25025025S",
     );
 
     Ok(())

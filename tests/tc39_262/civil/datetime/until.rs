@@ -88,15 +88,15 @@ fn balance() -> Result {
     let c: DateTime = "2021-03-05T09:32:45+00:00[UTC]".parse()?;
 
     let span = a.until((Unit::Month, b))?;
-    assert_eq!(span.to_string(), "P40m27dT19h25m31s");
+    assert_eq!(span.to_string(), "P40M27DT19H25M31S");
     assert_eq!(a + span, b);
 
     let span = b.until((Unit::Month, a))?;
-    assert_eq!(span.to_string(), "-P40m30dT19h25m31s");
+    assert_eq!(span.to_string(), "-P40M30DT19H25M31S");
     assert_eq!(b + span, a);
 
     let span = c.until((Unit::Month, a))?;
-    assert_eq!(span.to_string(), "-P41mT1h25m31s");
+    assert_eq!(span.to_string(), "-P41MT1H25M31S");
     assert_eq!(c + span, a);
 
     Ok(())
@@ -474,8 +474,8 @@ fn weeks_months_mutually_exclusive() -> Result {
     let dt1 = date(1976, 11, 18).at(15, 23, 30, 123_456_789);
     let dt2 = dt1 + 42.days().hours(3);
 
-    assert_eq!(dt1.until((Unit::Week, dt2))?.to_string(), "P6wT3h");
-    assert_eq!(dt1.until((Unit::Month, dt2))?.to_string(), "P1m12dT3h");
+    assert_eq!(dt1.until((Unit::Week, dt2))?.to_string(), "P6WT3H");
+    assert_eq!(dt1.until((Unit::Month, dt2))?.to_string(), "P1M12DT3H");
     Ok(())
 }
 

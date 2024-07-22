@@ -201,14 +201,14 @@ fn duration_out_of_range_added_to_relative() -> Result {
     let relative = SpanRound::new().relative(d);
     insta::assert_snapshot!(
         sp.round(relative.smallest(Unit::Year)).unwrap_err(),
-        @"failed to add P2000000dT170000000h to 2000-01-01T00:00:00: failed to add overflowing span, P7083333d, from adding PT170000000h to 00:00:00, to 7475-10-25: parameter 'days' with value 7083333 is not in the required range of -4371587..=2932896",
+        @"failed to add P2000000DT170000000H to 2000-01-01T00:00:00: failed to add overflowing span, P7083333D, from adding PT170000000H to 00:00:00, to 7475-10-25: parameter 'days' with value 7083333 is not in the required range of -4371587..=2932896",
     );
 
     let sp = -2_000_000.days().hours(170_000_000);
     let relative = SpanRound::new().relative(d);
     insta::assert_snapshot!(
         sp.round(relative.smallest(Unit::Year)).unwrap_err(),
-        @"failed to add -P2000000dT170000000h to 2000-01-01T00:00:00: failed to add overflowing span, -P7083334d, from adding -PT170000000h to 00:00:00, to -003476-03-09: parameter 'days' with value -7083334 is not in the required range of -4371587..=2932896",
+        @"failed to add -P2000000DT170000000H to 2000-01-01T00:00:00: failed to add overflowing span, -P7083334D, from adding -PT170000000H to 00:00:00, to -003476-03-09: parameter 'days' with value -7083334 is not in the required range of -4371587..=2932896",
     );
 
     Ok(())
@@ -579,13 +579,13 @@ fn largestunit_smallestunit_mismatch() -> Result {
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/Duration/prototype/round/largestunit-undefined.js
 #[test]
 fn largestunit_undefined() -> Result {
-    let sp = "PT1h120m1.123456789s".parse::<Span>()?;
+    let sp = "PT1H120M1.123456789S".parse::<Span>()?;
     let result = sp.round(Unit::Nanosecond)?;
-    assert_eq!(result, "PT3h1.123456789s".parse()?);
+    assert_eq!(result, "PT3H1.123456789S".parse()?);
 
-    let sp = "PT120m1.123456789s".parse::<Span>()?;
+    let sp = "PT120M1.123456789S".parse::<Span>()?;
     let result = sp.round(Unit::Nanosecond)?;
-    assert_eq!(result, "PT120m1.123456789s".parse()?);
+    assert_eq!(result, "PT120M1.123456789S".parse()?);
 
     Ok(())
 }
@@ -602,7 +602,7 @@ fn out_of_range_when_adjusting_rounded_days() -> Result {
     insta::assert_snapshot!(
         sp.round(options).unwrap_err(),
         // Kind of a brutal error message...
-        @"failed to add P1dT631107331200.999999999s to 1970-01-01T00:00:00+00:00[UTC]: failed to add span PT631107331200.999999999s to timestamp 1970-01-02T00:00:00Z (which was created from 1970-01-02T00:00:00): adding PT631107331200.999999999s to 1970-01-02T00:00:00Z overflowed: parameter 'span' with value 631107331200999999999 is not in the required range of -377705023201000000000..=253402207200999999999",
+        @"failed to add P1DT631107331200.999999999S to 1970-01-01T00:00:00+00:00[UTC]: failed to add span PT631107331200.999999999S to timestamp 1970-01-02T00:00:00Z (which was created from 1970-01-02T00:00:00): adding PT631107331200.999999999S to 1970-01-02T00:00:00Z overflowed: parameter 'span' with value 631107331200999999999 is not in the required range of -377705023201000000000..=253402207200999999999",
     );
 
     Ok(())

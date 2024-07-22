@@ -1711,11 +1711,11 @@ impl Date {
     ///
     /// // The default limits durations to using "days" as the biggest unit.
     /// let span = d2.since(d1)?;
-    /// assert_eq!(span.to_string(), "P8456d");
+    /// assert_eq!(span.to_string(), "P8456D");
     ///
     /// // But we can ask for units all the way up to years.
     /// let span = d2.since((Unit::Year, d1))?;
-    /// assert_eq!(span.to_string(), "P23y1m24d");
+    /// assert_eq!(span.to_string(), "P23Y1M24D");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1867,11 +1867,11 @@ impl Date {
     ///
     /// // The default limits durations to using "days" as the biggest unit.
     /// let span = d1.until(d2)?;
-    /// assert_eq!(span.to_string(), "P8456d");
+    /// assert_eq!(span.to_string(), "P8456D");
     ///
     /// // But we can ask for units all the way up to years.
     /// let span = d1.until((Unit::Year, d2))?;
-    /// assert_eq!(span.to_string(), "P23y1m24d");
+    /// assert_eq!(span.to_string(), "P23Y1M24D");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```

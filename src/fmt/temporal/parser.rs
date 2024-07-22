@@ -1319,57 +1319,58 @@ mod tests {
         let p =
             |input| SpanParser::new().parse_temporal_duration(input).unwrap();
 
-        insta::assert_debug_snapshot!(p(b"P5d"), @r###"
+        insta::assert_debug_snapshot!(p(b"P5D"), @r###"
         Parsed {
-            value: P5d,
+            value: P5D,
             input: "",
         }
         "###);
-        insta::assert_debug_snapshot!(p(b"-P5d"), @r###"
+        insta::assert_debug_snapshot!(p(b"-P5D"), @r###"
         Parsed {
-            value: -P5d,
+            value: -P5D,
             input: "",
         }
         "###);
-        insta::assert_debug_snapshot!(p(b"+P5d"), @r###"
+        insta::assert_debug_snapshot!(p(b"+P5D"), @r###"
         Parsed {
-            value: P5d,
+            value: P5D,
             input: "",
         }
         "###);
-        insta::assert_debug_snapshot!(p(b"P5DT1s"), @r###"
+        insta::assert_debug_snapshot!(p(b"P5DT1S"), @r###"
         Parsed {
-            value: P5dT1s,
+            value: P5DT1S,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT1S"), @r###"
         Parsed {
-            value: PT1s,
+            value: PT1S,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT0S"), @r###"
         Parsed {
-            value: PT0s,
+            value: PT0S,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"P0Y"), @r###"
         Parsed {
-            value: PT0s,
+            value: PT0S,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"P1Y1M1W1DT1H1M1S"), @r###"
         Parsed {
-            value: P1y1m1w1dT1h1m1s,
+            value: P1Y1M1W1DT1H1M1S,
             input: "",
         }
         "###);
+        // Next test checks leniency with lower case inputs.
         insta::assert_debug_snapshot!(p(b"P1y1m1w1dT1h1m1s"), @r###"
         Parsed {
-            value: P1y1m1w1dT1h1m1s,
+            value: P1Y1M1W1DT1H1M1S,
             input: "",
         }
         "###);
@@ -1380,59 +1381,59 @@ mod tests {
         let p =
             |input| SpanParser::new().parse_temporal_duration(input).unwrap();
 
-        insta::assert_debug_snapshot!(p(b"PT0.5h"), @r###"
+        insta::assert_debug_snapshot!(p(b"PT0.5H"), @r###"
         Parsed {
-            value: PT30m,
+            value: PT30M,
             input: "",
         }
         "###);
-        insta::assert_debug_snapshot!(p(b"PT0.123456789h"), @r###"
+        insta::assert_debug_snapshot!(p(b"PT0.123456789H"), @r###"
         Parsed {
-            value: PT7m24.4444404s,
+            value: PT7M24.4444404S,
             input: "",
         }
         "###);
-        insta::assert_debug_snapshot!(p(b"PT1.123456789h"), @r###"
+        insta::assert_debug_snapshot!(p(b"PT1.123456789H"), @r###"
         Parsed {
-            value: PT1h7m24.4444404s,
-            input: "",
-        }
-        "###);
-
-        insta::assert_debug_snapshot!(p(b"PT0.5m"), @r###"
-        Parsed {
-            value: PT30s,
-            input: "",
-        }
-        "###);
-        insta::assert_debug_snapshot!(p(b"PT0.123456789m"), @r###"
-        Parsed {
-            value: PT7.40740734s,
-            input: "",
-        }
-        "###);
-        insta::assert_debug_snapshot!(p(b"PT1.123456789m"), @r###"
-        Parsed {
-            value: PT1m7.40740734s,
+            value: PT1H7M24.4444404S,
             input: "",
         }
         "###);
 
-        insta::assert_debug_snapshot!(p(b"PT0.5s"), @r###"
+        insta::assert_debug_snapshot!(p(b"PT0.5M"), @r###"
         Parsed {
-            value: PT0.5s,
+            value: PT30S,
             input: "",
         }
         "###);
-        insta::assert_debug_snapshot!(p(b"PT0.123456789s"), @r###"
+        insta::assert_debug_snapshot!(p(b"PT0.123456789M"), @r###"
         Parsed {
-            value: PT0.123456789s,
+            value: PT7.40740734S,
             input: "",
         }
         "###);
-        insta::assert_debug_snapshot!(p(b"PT1.123456789s"), @r###"
+        insta::assert_debug_snapshot!(p(b"PT1.123456789M"), @r###"
         Parsed {
-            value: PT1.123456789s,
+            value: PT1M7.40740734S,
+            input: "",
+        }
+        "###);
+
+        insta::assert_debug_snapshot!(p(b"PT0.5S"), @r###"
+        Parsed {
+            value: PT0.5S,
+            input: "",
+        }
+        "###);
+        insta::assert_debug_snapshot!(p(b"PT0.123456789S"), @r###"
+        Parsed {
+            value: PT0.123456789S,
+            input: "",
+        }
+        "###);
+        insta::assert_debug_snapshot!(p(b"PT1.123456789S"), @r###"
+        Parsed {
+            value: PT1.123456789S,
             input: "",
         }
         "###);
@@ -1441,27 +1442,27 @@ mod tests {
         // maximum allowed seconds in a span. But they should still parse
         // correctly by spilling over into milliseconds, microseconds and
         // nanoseconds.
-        insta::assert_debug_snapshot!(p(b"PT1902545624836.854775807s"), @r###"
+        insta::assert_debug_snapshot!(p(b"PT1902545624836.854775807S"), @r###"
         Parsed {
-            value: PT1902545624836.854775807s,
+            value: PT1902545624836.854775807S,
             input: "",
         }
         "###);
-        insta::assert_debug_snapshot!(p(b"PT175307616h10518456960m640330789636.854775807s"), @r###"
+        insta::assert_debug_snapshot!(p(b"PT175307616H10518456960M640330789636.854775807S"), @r###"
         Parsed {
-            value: PT175307616h10518456960m640330789636.854775807s,
+            value: PT175307616H10518456960M640330789636.854775807S,
             input: "",
         }
         "###);
-        insta::assert_debug_snapshot!(p(b"-PT1902545624836.854775807s"), @r###"
+        insta::assert_debug_snapshot!(p(b"-PT1902545624836.854775807S"), @r###"
         Parsed {
-            value: -PT1902545624836.854775807s,
+            value: -PT1902545624836.854775807S,
             input: "",
         }
         "###);
-        insta::assert_debug_snapshot!(p(b"-PT175307616h10518456960m640330789636.854775807s"), @r###"
+        insta::assert_debug_snapshot!(p(b"-PT175307616H10518456960M640330789636.854775807S"), @r###"
         Parsed {
-            value: -PT175307616h10518456960m640330789636.854775807s,
+            value: -PT175307616H10518456960M640330789636.854775807S,
             input: "",
         }
         "###);

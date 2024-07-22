@@ -35,7 +35,7 @@ fn balance_smaller_units_basic() -> Result {
 fn balance_smaller_units() -> Result {
     let d = date(2000, 5, 2);
 
-    let span: Span = "P1dT24h1440m86400s".parse()?;
+    let span: Span = "P1DT24H1440M86400S".parse()?;
     assert_eq!(d + span, date(2000, 5, 6));
 
     let span = 1

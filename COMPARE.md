@@ -288,7 +288,7 @@ use jiff::{Span, ToSpan};
 fn main() -> anyhow::Result<()> {
     let span = 5.years().months(2).days(1).hours(20);
     let json = serde_json::to_string_pretty(&span)?;
-    assert_eq!(json, "\"P5y2m1dT20h\"");
+    assert_eq!(json, "\"P5Y2M1DT20H\"");
 
     let got: Span = serde_json::from_str(&json)?;
     assert_eq!(got, span);

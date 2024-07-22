@@ -69,7 +69,7 @@ use crate::{
 /// use jiff::Span;
 ///
 /// let span = Span::new().days(5).hours(8).minutes(1);
-/// assert_eq!(span.to_string(), "P5dT8h1m");
+/// assert_eq!(span.to_string(), "P5DT8H1M");
 /// ```
 ///
 /// But Jiff provides a [`ToSpan`] trait that defines extension methods on
@@ -79,10 +79,10 @@ use crate::{
 /// use jiff::ToSpan;
 ///
 /// let span = 5.days().hours(8).minutes(1);
-/// assert_eq!(span.to_string(), "P5dT8h1m");
+/// assert_eq!(span.to_string(), "P5DT8H1M");
 /// // singular units on integers can be used too:
 /// let span = 1.day().hours(8).minutes(1);
-/// assert_eq!(span.to_string(), "P1dT8h1m");
+/// assert_eq!(span.to_string(), "P1DT8H1M");
 /// ```
 ///
 /// # Negative spans
@@ -93,25 +93,25 @@ use crate::{
 /// use jiff::{Span, ToSpan};
 ///
 /// let span = -Span::new().days(5);
-/// assert_eq!(span.to_string(), "-P5d");
+/// assert_eq!(span.to_string(), "-P5D");
 ///
 /// let span = Span::new().days(5).negate();
-/// assert_eq!(span.to_string(), "-P5d");
+/// assert_eq!(span.to_string(), "-P5D");
 ///
 /// let span = Span::new().days(-5);
-/// assert_eq!(span.to_string(), "-P5d");
+/// assert_eq!(span.to_string(), "-P5D");
 ///
 /// let span = -Span::new().days(-5).negate();
-/// assert_eq!(span.to_string(), "-P5d");
+/// assert_eq!(span.to_string(), "-P5D");
 ///
 /// let span = -5.days();
-/// assert_eq!(span.to_string(), "-P5d");
+/// assert_eq!(span.to_string(), "-P5D");
 ///
 /// let span = (-5).days();
-/// assert_eq!(span.to_string(), "-P5d");
+/// assert_eq!(span.to_string(), "-P5D");
 ///
 /// let span = -(5.days());
-/// assert_eq!(span.to_string(), "-P5d");
+/// assert_eq!(span.to_string(), "-P5D");
 /// ```
 ///
 /// The sign of a span applies to the entire span. When a span is negative,
@@ -175,7 +175,7 @@ use crate::{
 /// use jiff::Span;
 ///
 /// let span: Span = "P2M10DT2H30M".parse()?;
-/// assert_eq!(span.to_string(), "P2m10dT2h30m");
+/// assert_eq!(span.to_string(), "P2M10DT2H30M");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -188,18 +188,19 @@ use crate::{
 ///
 /// let spans = [
 ///     ("P40D", 40.days()),
-///     ("P1y1d", 1.year().days(1)),
-///     ("P3dT4h59m", 3.days().hours(4).minutes(59)),
+///     ("P1Y1D", 1.year().days(1)),
+///     ("P3DT4H59M", 3.days().hours(4).minutes(59)),
 ///     ("PT2H30M", 2.hours().minutes(30)),
-///     ("P1m", 1.month()),
-///     ("P1w", 1.week()),
-///     ("P1w4d", 1.week().days(4)),
-///     ("PT1m", 1.minute()),
-///     ("PT0.0021s", 2.milliseconds().microseconds(100)),
-///     ("PT0s", 0.seconds()),
-///     ("P0d", 0.seconds()),
+///     ("P1M", 1.month()),
+///     ("P1W", 1.week()),
+///     ("P1W4D", 1.week().days(4)),
+///     ("PT1M", 1.minute()),
+///     ("PT0.0021S", 2.milliseconds().microseconds(100)),
+///     ("PT0S", 0.seconds()),
+///     ("PT0S", 0.seconds()),
+///     ("P0D", 0.seconds()),
 ///     (
-///         "P1y1m1dT1h1m1.1s",
+///         "P1Y1M1DT1H1M1.1S",
 ///         1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
 ///     ),
 /// ];
@@ -249,7 +250,7 @@ use crate::{
 /// use jiff::{Span, ToSpan};
 ///
 /// let span1 = 2.hours().minutes(20);
-/// let span2: Span = "PT89400s".parse()?;
+/// let span2: Span = "PT89400S".parse()?;
 /// assert_eq!(span1.checked_add(span2)?, 27.hours().minutes(10));
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -898,9 +899,9 @@ impl Span {
     /// use jiff::ToSpan;
     ///
     /// let span = -100.seconds();
-    /// assert_eq!(span.to_string(), "-PT100s");
+    /// assert_eq!(span.to_string(), "-PT100S");
     /// let span = span.abs();
-    /// assert_eq!(span.to_string(), "PT100s");
+    /// assert_eq!(span.to_string(), "PT100S");
     /// ```
     #[inline]
     pub fn abs(self) -> Span {
@@ -922,9 +923,9 @@ impl Span {
     /// use jiff::ToSpan;
     ///
     /// let span = 100.days();
-    /// assert_eq!(span.to_string(), "P100d");
+    /// assert_eq!(span.to_string(), "P100D");
     /// let span = span.negate();
-    /// assert_eq!(span.to_string(), "-P100d");
+    /// assert_eq!(span.to_string(), "-P100D");
     /// ```
     ///
     /// # Example: available via the negation operator
@@ -935,9 +936,9 @@ impl Span {
     /// use jiff::ToSpan;
     ///
     /// let span = 100.days();
-    /// assert_eq!(span.to_string(), "P100d");
+    /// assert_eq!(span.to_string(), "P100D");
     /// let span = -span;
-    /// assert_eq!(span.to_string(), "-P100d");
+    /// assert_eq!(span.to_string(), "-P100D");
     /// ```
     #[inline]
     pub fn negate(self) -> Span {
@@ -1679,7 +1680,7 @@ impl Span {
     /// ```
     /// use jiff::{Span, ToSpan, Unit};
     ///
-    /// let span: Span = "PT23h50m3.123s".parse()?;
+    /// let span: Span = "PT23H50M3.123S".parse()?;
     /// assert_eq!(span.round((Unit::Minute, 30))?, 24.hours());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -2592,13 +2593,13 @@ impl quickcheck::Arbitrary for Span {
 /// ```
 /// use jiff::ToSpan;
 ///
-/// assert_eq!(5.days().to_string(), "P5d");
-/// assert_eq!(5.days().hours(10).to_string(), "P5dT10h");
+/// assert_eq!(5.days().to_string(), "P5D");
+/// assert_eq!(5.days().hours(10).to_string(), "P5DT10H");
 ///
 /// // Negation works and it doesn't matter where the sign goes. It can be
 /// // applied to the span itself or to the integer.
-/// assert_eq!((-5.days()).to_string(), "-P5d");
-/// assert_eq!((-5).days().to_string(), "-P5d");
+/// assert_eq!((-5.days()).to_string(), "-P5D");
+/// assert_eq!((-5).days().to_string(), "-P5D");
 /// ```
 ///
 /// # Example: alternative via span parsing
@@ -2609,7 +2610,7 @@ impl quickcheck::Arbitrary for Span {
 /// ```
 /// use jiff::Span;
 ///
-/// let span = "P5y2m15dT23h30m10s".parse::<Span>()?;
+/// let span = "P5Y2M15DT23H30M10S".parse::<Span>()?;
 /// assert_eq!(
 ///     span,
 ///     Span::new().years(5).months(2).days(15).hours(23).minutes(30).seconds(10),
@@ -2813,7 +2814,7 @@ impl_to_span!(i64);
 /// let zdt1: Zoned = "2024-07-06 17:40-04[America/New_York]".parse()?;
 /// let zdt2: Zoned = "2024-11-05 08:00-05[America/New_York]".parse()?;
 /// let span = zdt1.until((Unit::Year, &zdt2))?;
-/// assert_eq!(span.to_string(), "P3m29dT14h20m");
+/// assert_eq!(span.to_string(), "P3M29DT14H20M");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
