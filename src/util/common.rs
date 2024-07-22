@@ -107,8 +107,6 @@ pub(crate) fn days_in_month_common_year(month: Month) -> Day {
         Day::N::<30>(),
         Day::N::<31>(),
     ];
-    // FIXME: How do we want to handle indexing with range integers more
-    // generally? At the very least add `as_usize()`...
     BY_MONTH[usize::from(month.get() as u8)]
 }
 

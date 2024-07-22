@@ -13,10 +13,7 @@ echo "===== DEFAULT FEATURES ====="
 cargo test
 
 features=(
-    # FIXME: We currently don't test 'std' without some kind of tzdb because
-    # it's pretty annoying to filter out tests that rely on lookups to succeed.
-    # But we should probably just bite that bullet.
-    # "std"
+    "std"
     "alloc"
     "alloc tzdb-bundle-always"
     "std tzdb-bundle-platform tzdb-bundle-always"
