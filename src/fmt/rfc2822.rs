@@ -1543,6 +1543,10 @@ mod tests {
 
     #[test]
     fn ok_print_zoned() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
         let p = |zdt: &Zoned| -> String {
             let mut buf = String::new();
             DateTimePrinter::new().print_zoned(&zdt, &mut buf).unwrap();
@@ -1577,6 +1581,10 @@ mod tests {
 
     #[test]
     fn ok_print_timestamp() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
         let p = |ts: Timestamp| -> String {
             let mut buf = String::new();
             DateTimePrinter::new().print_timestamp(&ts, &mut buf).unwrap();
@@ -1615,6 +1623,10 @@ mod tests {
 
     #[test]
     fn err_print_zoned() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
         let p = |zdt: &Zoned| -> String {
             let mut buf = String::new();
             DateTimePrinter::new()
@@ -1630,6 +1642,10 @@ mod tests {
 
     #[test]
     fn err_print_timestamp() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
         let p = |ts: Timestamp| -> String {
             let mut buf = String::new();
             DateTimePrinter::new()

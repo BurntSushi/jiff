@@ -660,6 +660,10 @@ mod tests {
 
     #[test]
     fn ok_format_offset() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
         let f = |fmt: &str, zdt: &Zoned| format(fmt, zdt).unwrap();
 
         let zdt = date(2024, 7, 14)
@@ -686,6 +690,10 @@ mod tests {
 
     #[test]
     fn ok_format_tzabbrev() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
         let f = |fmt: &str, zdt: &Zoned| format(fmt, zdt).unwrap();
 
         let zdt = date(2024, 7, 14)
