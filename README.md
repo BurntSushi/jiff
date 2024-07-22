@@ -122,6 +122,36 @@ that makes it hard to do the wrong thing. Second to that is performance. Jiff
 should have reasonable performance, but there are likely areas in which it
 could improve. See the `bench` directory for benchmarks.
 
+### Platform support
+
+The question of platform support in the context of datetime libraries comes up
+primarily in relation to time zone support. Specifically:
+
+* How should Jiff determine the time zone transitions for an IANA time zone
+identifier like `Antarctica/Troll`?
+* How should Jiff determine the default time zone for the current system?
+
+Both of these require some level of platform interaction.
+
+For discovering time zone transition data, Jiff relies on the
+[IANA Time Zone Database]. On Unix systems, this is usually found at
+`/usr/share/zoneinfo`, although it can be configured via the `TZDIR`
+environment variable (which Jiff respects). On Windows, Jiff will automatically
+embed a copy of the time zone database into the compiled library.
+
+For discovering the system time zone, Jiff reads `/etc/localtime` on Unix. On
+Windows, Jiff reads the Windows-specific time zone identifier via
+[`GetDynamicTimeZoneInformation`] and then maps it to an IANA time zone
+identifier via Unicode's [CLDR XML data].
+
+I expect Jiff to grow more support for other platforms over time. Please file
+issues, although I will likely be reliant on contributor pull requests for more
+obscure platforms that aren't easy for me to test.
+
+[IANA Time Zone Database]: https://en.wikipedia.org/wiki/Tz_database
+[`GetDynamicTimeZoneInformation`]: https://learn.microsoft.com/en-us/windows/win32/api/timezoneapi/nf-timezoneapi-getdynamictimezoneinformation
+[CLDR XML data]: https://github.com/unicode-org/cldr/raw/main/common/supplemental/windowsZones.xml
+
 ### Dependencies
 
 At time of writing, it is no accident that Jiff has zero dependencies on Unix.
