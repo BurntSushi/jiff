@@ -35,14 +35,15 @@ Neri C, Schneider L. "Euclidean affine functions and their application to calend
 - https://www.youtube.com/watch?v=0s9F4QWAl-E
 */
 
-use crate::util::t::{Day, Month, Year};
+use crate::util::t::{Day, Month, Year, C};
 
 /// Returns true if and only if the given year is a leap year.
 ///
 /// A leap year is a year with 366 days. Typical years have 365 days.
 #[inline]
 pub(crate) fn is_leap_year(year: Year) -> bool {
-    is_leap_year_unranged(year.get())
+    let d = if year % C(25) != 0 { C(4) } else { C(16) };
+    (year % d) == 0
 }
 
 /// Returns true if and only if the given year is a leap year.
@@ -76,10 +77,20 @@ pub(crate) fn saturate_day_in_month(
 /// February.
 #[inline]
 pub(crate) fn days_in_month(year: Year, month: Month) -> Day {
-    Day::new_unchecked(days_in_month_unranged_unchecked(
-        year.get(),
-        month.get() as u8,
-    ))
+    if month == 2 {
+        if is_leap_year(year) {
+            Day::N::<29>()
+        } else {
+            Day::N::<28>()
+        }
+    } else {
+        let month = month.get();
+        if (month ^ month >> 3) & 1 == 0 {
+            Day::N::<30>()
+        } else {
+            Day::N::<31>()
+        }
+    }
 }
 
 /// Return the number of days in the given month.
@@ -90,11 +101,6 @@ pub(crate) const fn days_in_month_unranged(year: i16, month: i8) -> i8 {
     if !Month::contains(month) {
         return 0;
     }
-    days_in_month_unranged_unchecked(year, month as u8)
-}
-
-#[inline]
-const fn days_in_month_unranged_unchecked(year: i16, month: u8) -> i8 {
     if month == 2 {
         if is_leap_year_unranged(year) {
             29
@@ -102,7 +108,7 @@ const fn days_in_month_unranged_unchecked(year: i16, month: u8) -> i8 {
             28
         }
     } else {
-        30 | (month ^ month >> 3) as i8
+        30 | (month ^ month >> 3)
     }
 }
 
