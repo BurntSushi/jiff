@@ -31,6 +31,7 @@ so.
 
 Algorithms are taken from
 Neri C, Schneider L. "Euclidean affine functions and their application to calendar algorithms":
+- https://onlinelibrary.wiley.com/doi/full/10.1002/spe.3172
 - https://github.com/cassioneri/eaf/
 - https://www.youtube.com/watch?v=0s9F4QWAl-E
 */
