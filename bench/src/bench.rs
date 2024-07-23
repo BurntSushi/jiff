@@ -423,6 +423,26 @@ fn parse_civil_datetime(c: &mut Criterion) {
     });
 }
 
+/// Benchmarks the amount of time it takes to print a civil datetime.
+///
+/// This attempts to use the fastest possible API for the corresponding crate.
+fn print_civil_datetime(c: &mut Criterion) {
+    const NAME: &str = "print_civil_datetime";
+    const EXPECTED: &str = "2024-06-30T09:46:00";
+
+    let dt = jiff::civil::date(2024, 6, 30).at(9, 46, 0, 0);
+    let mut buf = String::new();
+    c.bench_function(&format!("jiff/{NAME}"), |b| {
+        b.iter(|| {
+            static PRINTER: jiff::fmt::temporal::DateTimePrinter =
+                jiff::fmt::temporal::DateTimePrinter::new();
+            buf.clear();
+            PRINTER.print_datetime(bb(&dt), &mut buf).unwrap();
+            assert_eq!(buf, EXPECTED);
+        })
+    });
+}
+
 /// Benchmarks the amount of time it takes to parse an RFC 2822 datetime as a
 /// timestamp.
 fn parse_rfc2822(c: &mut Criterion) {
@@ -559,5 +579,6 @@ criterion::criterion_group!(
     parse_civil_datetime,
     parse_rfc2822,
     parse_strptime,
+    print_civil_datetime,
 );
 criterion::criterion_main!(benches);
