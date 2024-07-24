@@ -10,6 +10,23 @@ inexact time, you can get it from [`Zoned`] via [`Zoned::datetime`].
 
 [RFC 2822]: https://datatracker.ietf.org/doc/html/rfc2822
 
+# Incomplete support
+
+The RFC 2822 support in this crate is technically incomplete. Specifically,
+it does not support parsing comments within folding whitespace. It will parse
+comments after the datetime itself (including nested comments). See [Issue
+#39][issue39] for an example. If you find a real world use case for parsing
+comments within whitespace at any point in the datetime string, please file
+an issue. That is, the main reason it isn't currently supported is because
+it didn't seem worth the implementation complexity to account for it. But if
+there are real world use cases that need it, then that would be sufficient
+justification for adding it.
+
+RFC 2822 support should otherwise be complete, including support for parsing
+obselete offsets.
+
+[issue39]: https://github.com/BurntSushi/jiff/issues/39
+
 # Warning
 
 The RFC 2822 format only supports writing a precise instant in time
