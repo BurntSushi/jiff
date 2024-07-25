@@ -283,15 +283,15 @@ fn offset_to_civil_datetime(c: &mut Criterion) {
     }
 }
 
-/// This benchmarks the time it takes to get a precise instant in time from
-/// a library's zone-aware datetime type.
+/// This benchmarks the time it takes to get a timestamp from a library's
+/// zone-aware datetime type.
 ///
-/// Jiff uses an instant internally, so this is effectively free.
+/// Jiff uses a timestamp internally, so this is effectively free.
 ///
-/// Chrono and `time` both use civil datetimes internally, so they must
-/// convert them to timestamps.
-fn offset_to_instant(c: &mut Criterion) {
-    const NAME: &str = "offset_to_instant";
+/// Chrono and `time` both use civil datetimes internally, so they must do a
+/// conversion step.
+fn offset_to_timestamp(c: &mut Criterion) {
+    const NAME: &str = "offset_to_timestamp";
     const OFFSET: i8 = -4;
     const STAMP: i64 = 1719755160;
 
@@ -411,13 +411,13 @@ fn parse_civil_datetime(c: &mut Criterion) {
     });
 
     let expected = time::macros::datetime!(2024-06-30 09:46:00);
-    let format = time::macros::format_description!(
-        "[year]-[month]-[day]T[hour]:[minute]:[second]"
-    );
     c.bench_function(&format!("time/{NAME}"), |b| {
         b.iter(|| {
-            let dt =
-                time::PrimitiveDateTime::parse(bb(STRING), &format).unwrap();
+            let dt = time::PrimitiveDateTime::parse(
+                bb(STRING),
+                &time::format_description::well_known::Iso8601::DEFAULT,
+            )
+            .unwrap();
             assert_eq!(dt, expected);
         })
     });
@@ -462,21 +462,18 @@ fn parse_rfc2822(c: &mut Criterion) {
     {
         use chrono::TimeZone;
 
-        let expected = chrono::Utc
-            .with_ymd_and_hms(2024, 7, 13, 21, 24, 59)
-            .unwrap()
-            .timestamp();
+        let expected =
+            chrono::Utc.with_ymd_and_hms(2024, 7, 13, 21, 24, 59).unwrap();
         c.bench_function(&format!("chrono/{NAME}"), |b| {
             b.iter(|| {
                 let dt =
                     chrono::DateTime::parse_from_rfc2822(bb(STRING)).unwrap();
-                assert_eq!(dt.timestamp(), expected);
+                assert_eq!(dt, expected);
             })
         });
     }
 
-    let expected =
-        time::macros::datetime!(2024-07-13 21:24:59 UTC).unix_timestamp();
+    let expected = time::macros::datetime!(2024-07-13 21:24:59 UTC);
     c.bench_function(&format!("time/{NAME}"), |b| {
         b.iter(|| {
             let odt = time::OffsetDateTime::parse(
@@ -484,7 +481,7 @@ fn parse_rfc2822(c: &mut Criterion) {
                 &time::format_description::well_known::Rfc2822,
             )
             .unwrap();
-            assert_eq!(odt.unix_timestamp(), expected);
+            assert_eq!(odt, expected);
         })
     });
 }
@@ -535,10 +532,8 @@ fn parse_strptime(c: &mut Criterion) {
     {
         use chrono::TimeZone;
 
-        let expected = chrono::Utc
-            .with_ymd_and_hms(2024, 7, 15, 20, 24, 59)
-            .unwrap()
-            .timestamp();
+        let expected =
+            chrono::Utc.with_ymd_and_hms(2024, 7, 15, 20, 24, 59).unwrap();
         let items =
             chrono::format::strftime::StrftimeItems::new(FMT).parse().unwrap();
         c.bench_function(&format!("chrono-amortize/{NAME}"), |b| {
@@ -551,18 +546,17 @@ fn parse_strptime(c: &mut Criterion) {
                 )
                 .unwrap();
                 let dt = parsed.to_datetime().unwrap();
-                assert_eq!(dt.timestamp(), expected);
+                assert_eq!(dt, expected);
             })
         });
     }
 
-    let expected =
-        time::macros::datetime!(2024-07-15 20:24:59 UTC).unix_timestamp();
+    let expected = time::macros::datetime!(2024-07-15 20:24:59 UTC);
     c.bench_function(&format!("time/{NAME}"), |b| {
         b.iter(|| {
             let odt =
                 time::OffsetDateTime::parse(bb(STRING), &TIME_FMT).unwrap();
-            assert_eq!(odt.unix_timestamp(), expected);
+            assert_eq!(odt, expected);
         })
     });
 }
@@ -574,7 +568,7 @@ criterion::criterion_group!(
     instant_to_civil_datetime_static,
     instant_to_civil_datetime_offset,
     offset_to_civil_datetime,
-    offset_to_instant,
+    offset_to_timestamp,
     zoned_add_time_duration,
     parse_civil_datetime,
     parse_rfc2822,
