@@ -1386,6 +1386,13 @@ impl Timestamp {
     /// Add the given span of time to this timestamp. If the sum would overflow
     /// the minimum or maximum timestamp values, then the result saturates.
     ///
+    /// # Panics
+    ///
+    /// This panics if the given `Span` contains any non-zero units greater
+    /// than hours. In `jiff 0.2`, this panic will be changed to an error. It
+    /// panics in `jiff 0.1` to avoid giving incorrect results. (It was an
+    /// oversight to make this method infallible.)
+    ///
     /// # Example
     ///
     /// This example shows that arithmetic saturates on overflow.
@@ -1404,6 +1411,12 @@ impl Timestamp {
     /// ```
     #[inline]
     pub fn saturating_add(self, span: Span) -> Timestamp {
+        if let Some(err) = span.smallest_non_time_non_zero_unit_error() {
+            panic!(
+                "saturing Timestamp arithmetic \
+                 requires only time units: {err}"
+            )
+        }
         self.checked_add(span).unwrap_or_else(|_| {
             if span.is_negative() {
                 Timestamp::MIN
@@ -1416,6 +1429,13 @@ impl Timestamp {
     /// Subtract the given span of time from this timestamp. If the difference
     /// would overflow the minimum or maximum timestamp values, then the result
     /// saturates.
+    ///
+    /// # Panics
+    ///
+    /// This panics if the given `Span` contains any non-zero units greater
+    /// than hours. In `jiff 0.2`, this panic will be changed to an error. It
+    /// panics in `jiff 0.1` to avoid giving incorrect results. (It was an
+    /// oversight to make this method infallible.)
     ///
     /// # Example
     ///
@@ -3085,6 +3105,18 @@ mod tests {
         );
         let got = Timestamp::from_nanosecond_ranged(nanos);
         assert_eq!(inst, got);
+    }
+
+    #[test]
+    #[should_panic]
+    fn timestamp_saturating_add() {
+        Timestamp::MIN.saturating_add(Span::new().days(1));
+    }
+
+    #[test]
+    #[should_panic]
+    fn timestamp_saturating_sub() {
+        Timestamp::MAX.saturating_sub(Span::new().days(1));
     }
 
     quickcheck::quickcheck! {

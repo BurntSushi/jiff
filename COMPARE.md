@@ -1093,7 +1093,7 @@ use jiff::{Timestamp, ToSpan};
 fn main() -> anyhow::Result<()> {
     let ts = Timestamp::MAX;
     assert!(ts.checked_add(1.day()).is_err());
-    assert_eq!(ts.saturating_add(1.day()), ts);
+    assert_eq!(ts.saturating_add(1.hour()), ts);
 
     Ok(())
 }
