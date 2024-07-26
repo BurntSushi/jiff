@@ -61,7 +61,7 @@ To a first approximation, the span format supported roughly corresponds to this
 regular expression:
 
 ```text
-P(\d+y)?(\d+m)?(\d+w)?(\d+d)?(T(\d+h)?(\d+m)?(\d+d)?)?
+P(\d+y)?(\d+m)?(\d+w)?(\d+d)?(T(\d+h)?(\d+m)?(\d+s)?)?
 ```
 
 But there are some details not easily captured by a simple regular expression:
