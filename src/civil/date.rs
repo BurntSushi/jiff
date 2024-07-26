@@ -3540,7 +3540,7 @@ fn day_of_year(year: Year, day: i16) -> Result<Date, Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{tz::TimeZone, Timestamp, ToSpan};
+    use crate::{civil::date, tz::TimeZone, Timestamp, ToSpan};
 
     use super::*;
 
@@ -3777,6 +3777,21 @@ mod tests {
             .relative(earlier.to_datetime(Time::midnight()));
         let rounded = span.round(options).unwrap();
         assert_eq!(rounded, 139.weeks());
+    }
+
+    // This test checks current behavior, but I think it's wrong. I think the
+    // results below should be 11 months and 1 month.
+    //
+    // Ref: https://github.com/tc39/proposal-temporal/issues/2919
+    #[test]
+    fn until_months_no_balance() {
+        let sp =
+            date(2023, 5, 31).until((Unit::Month, date(2024, 4, 30))).unwrap();
+        assert_eq!(sp, 10.months().days(30));
+
+        let sp =
+            date(2023, 5, 31).until((Unit::Month, date(2023, 6, 30))).unwrap();
+        assert_eq!(sp, 30.days());
     }
 
     #[test]
