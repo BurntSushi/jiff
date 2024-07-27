@@ -568,6 +568,8 @@ impl Offset {
     /// This example shows some cases where checked addition will fail.
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{tz::Offset, ToSpan};
     ///
     /// // Adding units above 'hour' always results in an error.
@@ -647,6 +649,8 @@ impl Offset {
     /// This example shows some cases where checked subtraction will fail.
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{tz::Offset, ToSpan};
     ///
     /// // Subtracting units above 'hour' always results in an error.
@@ -675,6 +679,8 @@ impl Offset {
     /// This example shows some cases where saturation will occur.
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{tz::Offset, ToSpan};
     ///
     /// // Adding units above 'day' always results in saturation.
@@ -709,6 +715,8 @@ impl Offset {
     /// This example shows some cases where saturation will occur.
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{tz::Offset, ToSpan};
     ///
     /// // Adding units above 'day' always results in saturation.
