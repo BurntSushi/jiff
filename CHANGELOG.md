@@ -1,3 +1,20 @@
+0.1.2 (TBD)
+===========
+TODO
+
+Enhancements:
+
+* [PR #52](https://github.com/BurntSushi/jiff/pull/52):
+Improve documentation for `Span` getter methods.
+
+Bug fixes:
+
+* [BUG #49](https://github.com/BurntSushi/jiff/pull/49):
+Fix informational regex describing ISO 8601 format.
+* [BUG #51](https://github.com/BurntSushi/jiff/pull/51):
+Explicitly allow new deny-by-default lint `ambiguous_negative_literals`.
+
+
 0.1.1 (2024-07-25)
 ==================
 This is a new semver compatible release. The principle addition are APIs for
