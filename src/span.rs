@@ -933,61 +933,223 @@ impl Span {
 
 /// Routines for accessing the individual units in a `Span`.
 impl Span {
-    /// Returns the number of years in this span.
+    /// Returns the number of year units in this span.
+    ///
+    /// Note that this is not the same as the total number of years in the
+    /// span. To get that, you'll need to use either [`Span::round`] or
+    /// [`Span::total`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::date, ToSpan, Unit};
+    ///
+    /// let span = 3.years().months(24);
+    /// assert_eq!(3, span.get_years());
+    /// assert_eq!(5.0, span.total((Unit::Year, date(2024, 1, 1)))?);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn get_years(&self) -> i16 {
         self.get_years_ranged().get()
     }
 
-    /// Returns the number of months in this span.
+    /// Returns the number of month units in this span.
+    ///
+    /// Note that this is not the same as the total number of months in the
+    /// span. To get that, you'll need to use either [`Span::round`] or
+    /// [`Span::total`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::date, ToSpan, Unit};
+    ///
+    /// let span = 7.months().days(59);
+    /// assert_eq!(7, span.get_months());
+    /// assert_eq!(9.0, span.total((Unit::Month, date(2022, 6, 1)))?);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn get_months(&self) -> i32 {
         self.get_months_ranged().get()
     }
 
-    /// Returns the number of weeks in this span.
+    /// Returns the number of week units in this span.
+    ///
+    /// Note that this is not the same as the total number of weeks in the
+    /// span. To get that, you'll need to use either [`Span::round`] or
+    /// [`Span::total`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::date, ToSpan, Unit};
+    ///
+    /// let span = 3.weeks().days(14);
+    /// assert_eq!(3, span.get_weeks());
+    /// assert_eq!(5.0, span.total((Unit::Week, date(2024, 1, 1)))?);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn get_weeks(&self) -> i32 {
         self.get_weeks_ranged().get()
     }
 
-    /// Returns the number of days in this span.
+    /// Returns the number of day units in this span.
+    ///
+    /// Note that this is not the same as the total number of days in the
+    /// span. To get that, you'll need to use either [`Span::round`] or
+    /// [`Span::total`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{ToSpan, Unit, Zoned};
+    ///
+    /// let span = 3.days().hours(47);
+    /// assert_eq!(3, span.get_days());
+    ///
+    /// let zdt: Zoned = "2024-03-07[America/New_York]".parse()?;
+    /// assert_eq!(5.0, span.total((Unit::Day, &zdt))?);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn get_days(&self) -> i32 {
         self.get_days_ranged().get()
     }
 
-    /// Returns the number of hours in this span.
+    /// Returns the number of hour units in this span.
+    ///
+    /// Note that this is not the same as the total number of hours in the
+    /// span. To get that, you'll need to use either [`Span::round`] or
+    /// [`Span::total`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{ToSpan, Unit};
+    ///
+    /// let span = 3.hours().minutes(120);
+    /// assert_eq!(3, span.get_hours());
+    /// assert_eq!(5.0, span.total(Unit::Hour)?);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn get_hours(&self) -> i32 {
         self.get_hours_ranged().get()
     }
 
-    /// Returns the number of minutes in this span.
+    /// Returns the number of minute units in this span.
+    ///
+    /// Note that this is not the same as the total number of minutes in the
+    /// span. To get that, you'll need to use either [`Span::round`] or
+    /// [`Span::total`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{ToSpan, Unit};
+    ///
+    /// let span = 3.minutes().seconds(120);
+    /// assert_eq!(3, span.get_minutes());
+    /// assert_eq!(5.0, span.total(Unit::Minute)?);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn get_minutes(&self) -> i64 {
         self.get_minutes_ranged().get()
     }
 
-    /// Returns the number of seconds in this span.
+    /// Returns the number of second units in this span.
+    ///
+    /// Note that this is not the same as the total number of seconds in the
+    /// span. To get that, you'll need to use either [`Span::round`] or
+    /// [`Span::total`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{ToSpan, Unit};
+    ///
+    /// let span = 3.seconds().milliseconds(2_000);
+    /// assert_eq!(3, span.get_seconds());
+    /// assert_eq!(5.0, span.total(Unit::Second)?);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn get_seconds(&self) -> i64 {
         self.get_seconds_ranged().get()
     }
 
-    /// Returns the number of milliseconds in this span.
+    /// Returns the number of millisecond units in this span.
+    ///
+    /// Note that this is not the same as the total number of milliseconds in
+    /// the span. To get that, you'll need to use either [`Span::round`] or
+    /// [`Span::total`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{ToSpan, Unit};
+    ///
+    /// let span = 3.milliseconds().microseconds(2_000);
+    /// assert_eq!(3, span.get_milliseconds());
+    /// assert_eq!(5.0, span.total(Unit::Millisecond)?);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn get_milliseconds(&self) -> i64 {
         self.get_milliseconds_ranged().get()
     }
 
-    /// Returns the number of microseconds in this span.
+    /// Returns the number of microsecond units in this span.
+    ///
+    /// Note that this is not the same as the total number of microseconds in
+    /// the span. To get that, you'll need to use either [`Span::round`] or
+    /// [`Span::total`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{ToSpan, Unit};
+    ///
+    /// let span = 3.microseconds().nanoseconds(2_000);
+    /// assert_eq!(3, span.get_microseconds());
+    /// assert_eq!(5.0, span.total(Unit::Microsecond)?);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn get_microseconds(&self) -> i64 {
         self.get_microseconds_ranged().get()
     }
 
-    /// Returns the number of nanoseconds in this span.
+    /// Returns the number of nanosecond units in this span.
+    ///
+    /// Note that this is not the same as the total number of nanoseconds in
+    /// the span. To get that, you'll need to use either [`Span::round`] or
+    /// [`Span::total`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{ToSpan, Unit};
+    ///
+    /// let span = 3.microseconds().nanoseconds(2_000);
+    /// assert_eq!(2_000, span.get_nanoseconds());
+    /// assert_eq!(5_000.0, span.total(Unit::Nanosecond)?);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn get_nanoseconds(&self) -> i64 {
         self.get_nanoseconds_ranged().get()
