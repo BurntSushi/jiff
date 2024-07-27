@@ -1482,6 +1482,8 @@ impl DateTime {
     /// # Example: negative spans are supported
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let dt = date(2024, 3, 31).at(19, 5, 59, 999_999_999);
@@ -1496,6 +1498,8 @@ impl DateTime {
     /// # Example: error on overflow
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let dt = date(2024, 3, 31).at(13, 13, 13, 13);
@@ -1581,6 +1585,8 @@ impl DateTime {
     /// # Example: negative spans are supported
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let dt = date(2024, 3, 31).at(19, 5, 59, 999_999_999);
@@ -1595,6 +1601,8 @@ impl DateTime {
     /// # Example: error on overflow
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let dt = date(2024, 3, 31).at(13, 13, 13, 13);
@@ -1642,6 +1650,8 @@ impl DateTime {
     /// # Example: negative spans are supported
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let dt = date(2024, 3, 31).at(19, 5, 59, 999_999_999);
@@ -1654,6 +1664,8 @@ impl DateTime {
     /// # Example: saturation on overflow
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::{DateTime, date}, ToSpan};
     ///
     /// let dt = date(2024, 3, 31).at(13, 13, 13, 13);
@@ -1708,6 +1720,8 @@ impl DateTime {
     /// # Example: negative spans are supported
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let dt = date(2024, 3, 31).at(19, 5, 59, 999_999_999);
@@ -1720,6 +1734,8 @@ impl DateTime {
     /// # Example: saturation on overflow
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::{DateTime, date}, ToSpan};
     ///
     /// let dt = date(2024, 3, 31).at(13, 13, 13, 13);
@@ -1780,6 +1796,8 @@ impl DateTime {
     /// # Example
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0);
@@ -1950,6 +1968,8 @@ impl DateTime {
     /// # Example
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0);

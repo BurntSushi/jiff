@@ -1180,6 +1180,8 @@ impl Time {
     /// # Examples
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::Time, ToSpan};
     ///
     /// let t1 = Time::constant(22, 35, 1, 0);
@@ -1267,6 +1269,8 @@ impl Time {
     /// # Examples
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::Time, ToSpan};
     ///
     /// let t1 = Time::constant(22, 35, 1, 0);
@@ -1468,6 +1472,8 @@ impl Time {
     /// Or go backwards every 6.5 hours:
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::Time, ToSpan};
     ///
     /// let start = Time::constant(23, 0, 0, 0);

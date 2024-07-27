@@ -575,6 +575,8 @@ specifiers and other APIs.
 #![warn(missing_debug_implementations)]
 // Document ALL THE THINGS!
 #![deny(missing_docs)]
+// See: https://github.com/rust-lang/rust/pull/121364
+#![allow(unknown_lints, ambiguous_negative_literals)]
 
 // It should be possible to support other pointer widths, but this library
 // hasn't been tested nor thought about much in contexts with pointers less

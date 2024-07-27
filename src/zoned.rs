@@ -1988,6 +1988,8 @@ impl Zoned {
     /// # Example: negative spans are supported
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let zdt = date(2024, 3, 31)
@@ -2006,6 +2008,8 @@ impl Zoned {
     /// # Example: error on overflow
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let zdt = date(2024, 3, 31).at(13, 13, 13, 13).intz("America/New_York")?;
@@ -2214,6 +2218,8 @@ impl Zoned {
     /// # Example: negative spans are supported
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let zdt = date(2024, 3, 31)
@@ -2232,6 +2238,8 @@ impl Zoned {
     /// # Example: error on overflow
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let zdt = date(2024, 3, 31).at(13, 13, 13, 13).intz("America/New_York")?;
@@ -2297,6 +2305,8 @@ impl Zoned {
     /// # Example: negative spans are supported
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let zdt = date(2024, 3, 31)
@@ -2315,6 +2325,8 @@ impl Zoned {
     /// # Example: saturation on overflow
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, Timestamp, ToSpan};
     ///
     /// let zdt = date(2024, 3, 31).at(13, 13, 13, 13).intz("America/New_York")?;
@@ -2387,6 +2399,8 @@ impl Zoned {
     /// # Example: negative spans are supported
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let zdt = date(2024, 3, 31)
@@ -2405,6 +2419,8 @@ impl Zoned {
     /// # Example: saturation on overflow
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, Timestamp, ToSpan};
     ///
     /// let zdt = date(2024, 3, 31).at(13, 13, 13, 13).intz("America/New_York")?;
@@ -2475,6 +2491,8 @@ impl Zoned {
     /// # Example
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0).intz("America/New_York")?;
@@ -2667,6 +2685,8 @@ impl Zoned {
     /// # Example
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0).intz("America/New_York")?;

@@ -87,9 +87,16 @@ use crate::{
 ///
 /// # Negative spans
 ///
+/// **WARNING:** As of nightly Rust 2024-07-26, negating spans like
+/// `-2.hours()` triggers a deny-by-default lint due to an ambiguous negative
+/// literal. However, in Jiff's case, this is a false positive. Feel free to
+/// `allow` the lint or write the span as `(-2).hours()` or `-(2.hours())`.
+///
 /// A span may be negative. All of these are equivalent:
 ///
 /// ```
+/// # // See: https://github.com/rust-lang/rust/pull/121364
+/// # #![allow(unknown_lints, ambiguous_negative_literals)]
 /// use jiff::{Span, ToSpan};
 ///
 /// let span = -Span::new().days(5);
@@ -118,6 +125,8 @@ use crate::{
 /// then all of its units are negative:
 ///
 /// ```
+/// # // See: https://github.com/rust-lang/rust/pull/121364
+/// # #![allow(unknown_lints, ambiguous_negative_literals)]
 /// use jiff::ToSpan;
 ///
 /// let span = -5.days().hours(10).minutes(1);
@@ -130,6 +139,8 @@ use crate::{
 /// as negative:
 ///
 /// ```
+/// # // See: https://github.com/rust-lang/rust/pull/121364
+/// # #![allow(unknown_lints, ambiguous_negative_literals)]
 /// use jiff::ToSpan;
 ///
 /// // It's the same thing.
@@ -541,6 +552,8 @@ use crate::{
 /// span positive before converting it to a `Duration`:
 ///
 /// ```
+/// # // See: https://github.com/rust-lang/rust/pull/121364
+/// # #![allow(unknown_lints, ambiguous_negative_literals)]
 /// use std::time::Duration;
 ///
 /// use jiff::{Span, ToSpan};
@@ -990,6 +1003,8 @@ impl Span {
     /// # Example
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::ToSpan;
     ///
     /// let span = -100.seconds();
@@ -1055,6 +1070,8 @@ impl Span {
     /// # Example
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::ToSpan;
     ///
     /// assert!(!2.months().is_negative());
@@ -1072,6 +1089,8 @@ impl Span {
     /// # Example
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::ToSpan;
     ///
     /// assert!(!2.months().is_negative());
@@ -1108,6 +1127,8 @@ impl Span {
     /// # Example
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::ToSpan;
     ///
     /// let span = 4.days().seconds(8);
@@ -1129,6 +1150,8 @@ impl Span {
     /// happens on overflow.
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::ToSpan;
     ///
     /// let span = 4.days().seconds(8);
@@ -1493,6 +1516,8 @@ impl Span {
     /// # Example: negative spans are less than zero
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::ToSpan;
     ///
     /// let span1 = -1.second();
@@ -1893,6 +1918,8 @@ impl Span {
     /// the span positive before converting it to a `Duration`:
     ///
     /// ```
+    /// # // See: https://github.com/rust-lang/rust/pull/121364
+    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use std::time::Duration;
     ///
     /// use jiff::{civil::date, Span, ToSpan};
@@ -2790,6 +2817,8 @@ impl core::ops::Mul<Span> for i64 {
 /// span positive before converting it to a `Duration`:
 ///
 /// ```
+/// # // See: https://github.com/rust-lang/rust/pull/121364
+/// # #![allow(unknown_lints, ambiguous_negative_literals)]
 /// use std::time::Duration;
 ///
 /// use jiff::{Span, ToSpan};
@@ -3039,6 +3068,8 @@ impl quickcheck::Arbitrary for Span {
 /// # Example
 ///
 /// ```
+/// # // See: https://github.com/rust-lang/rust/pull/121364
+/// # #![allow(unknown_lints, ambiguous_negative_literals)]
 /// use jiff::ToSpan;
 ///
 /// assert_eq!(5.days().to_string(), "P5d");
