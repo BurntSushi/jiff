@@ -154,7 +154,7 @@ strings, the strings are matched without regard to ASCII case.
 | `%T` | `23:30:59` | Equivalent to `%H:%M:%S`. |
 | `%Y` | `2024` | A full year, including century. Zero padded to 4 digits. |
 | `%y` | `24` | A two-digit year. Represents only 1969-2068. Zero padded. |
-| `%Z` | `EDT` | A time zone abbreviation. Supporting when formatting only. |
+| `%Z` | `EDT` | A time zone abbreviation. Supported when formatting only. |
 | `%z` | `+0530` | A time zone offset in the format `[+-]HHMM[SS]`. |
 | `%:z` | `+05:30` | A time zone offset in the format `[+-]HH:MM[:SS]`. |
 
@@ -498,6 +498,51 @@ impl BrokenDownTime {
         Ok(())
     }
 
+    /// Format this broken down time using the format string given into a new
+    /// `String`.
+    ///
+    /// See the [module documentation](self) for details on what's supported.
+    ///
+    /// This is like [`BrokenDownTime::format`], but always uses a `String` to
+    /// format the time into. If you need to reuse allocations or write a
+    /// formatted time into a different type, then you should use
+    /// [`BrokenDownTime::format`] instead.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error when formatting failed. Formatting can fail
+    /// either because of an invalid format string, or if formatting requires
+    /// a field in `BrokenDownTime` to be set that isn't. For example, trying
+    /// to format a [`DateTime`] with the `%z` specifier will fail because a
+    /// `DateTime` has no time zone or offset information associated with it.
+    ///
+    /// # Example
+    ///
+    /// This example shows a formatting option, `%Z`, that isn't available
+    /// during parsing. Namely, `%Z` inserts a time zone abbreviation. This
+    /// is generally only intended for display purposes, since it can be
+    /// ambiguous when parsing.
+    ///
+    /// ```
+    /// use jiff::{civil::date, fmt::strtime::BrokenDownTime};
+    ///
+    /// let zdt = date(2024, 7, 9).at(16, 24, 0, 0).intz("America/New_York")?;
+    /// let tm = BrokenDownTime::from(&zdt);
+    /// let string = tm.to_string("%a %b %e %I:%M:%S %p %Z %Y")?;
+    /// assert_eq!(string, "Tue Jul  9 04:24:00 PM EDT 2024");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn to_string(
+        &self,
+        format: impl AsRef<[u8]>,
+    ) -> Result<String, Error> {
+        let mut buf = String::new();
+        self.format(format, &mut buf)?;
+        Ok(buf)
+    }
+
     /// Extracts a zoned datetime from this broken down time.
     ///
     /// # Warning
@@ -777,26 +822,7 @@ impl BrokenDownTime {
     /// ```
     #[inline]
     pub fn to_time(&self) -> Result<Time, Error> {
-        let mut time = self.to_time_without_meridiem()?;
-        if let Some(meridiem) = self.meridiem {
-            let hour = time.hour_ranged();
-            let hour = match meridiem {
-                Meridiem::AM => hour % C(12),
-                Meridiem::PM => (hour % C(12)) + C(12),
-            };
-            time = Time::new_ranged(
-                hour,
-                time.minute_ranged(),
-                time.second_ranged(),
-                time.subsec_nanosecond_ranged(),
-            );
-        }
-        Ok(time)
-    }
-
-    #[inline]
-    fn to_time_without_meridiem(&self) -> Result<Time, Error> {
-        let Some(hour) = self.hour else {
+        let Some(hour) = self.hour_ranged() else {
             if self.minute.is_some() {
                 return Err(err!(
                     "parsing format did not include hour directive, \
@@ -827,6 +853,532 @@ impl BrokenDownTime {
             return Ok(Time::new_ranged(hour, minute, C(0), C(0)));
         };
         Ok(Time::new_ranged(hour, minute, second, C(0)))
+    }
+
+    /// Returns the parsed year, if available.
+    ///
+    /// This is also set when a 2 digit year is parsed. (But that's limited to
+    /// the years 1969 to 2068, inclusive.)
+    ///
+    /// # Example
+    ///
+    /// This shows how to parse just a year:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let tm = BrokenDownTime::parse("%Y", "2024")?;
+    /// assert_eq!(tm.year(), Some(2024));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// And 2-digit years are supported too:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let tm = BrokenDownTime::parse("%y", "24")?;
+    /// assert_eq!(tm.year(), Some(2024));
+    /// let tm = BrokenDownTime::parse("%y", "0")?;
+    /// assert_eq!(tm.year(), Some(2000));
+    /// let tm = BrokenDownTime::parse("%y", "69")?;
+    /// assert_eq!(tm.year(), Some(1969));
+    ///
+    /// // 2-digit years have limited range. They must
+    /// // be in the range 0-99.
+    /// assert!(BrokenDownTime::parse("%y", "2024").is_err());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn year(&self) -> Option<i16> {
+        self.year.map(|x| x.get())
+    }
+
+    /// Returns the parsed month, if available.
+    ///
+    /// # Example
+    ///
+    /// This shows a few different ways of parsing just a month:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let tm = BrokenDownTime::parse("%m", "12")?;
+    /// assert_eq!(tm.month(), Some(12));
+    ///
+    /// let tm = BrokenDownTime::parse("%B", "December")?;
+    /// assert_eq!(tm.month(), Some(12));
+    ///
+    /// let tm = BrokenDownTime::parse("%b", "Dec")?;
+    /// assert_eq!(tm.month(), Some(12));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn month(&self) -> Option<i8> {
+        self.month.map(|x| x.get())
+    }
+
+    /// Returns the parsed day, if available.
+    ///
+    /// # Example
+    ///
+    /// This shows how to parse the day of the month:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let tm = BrokenDownTime::parse("%d", "5")?;
+    /// assert_eq!(tm.day(), Some(5));
+    ///
+    /// let tm = BrokenDownTime::parse("%d", "05")?;
+    /// assert_eq!(tm.day(), Some(5));
+    ///
+    /// let tm = BrokenDownTime::parse("%d", "00000005")?;
+    /// assert_eq!(tm.day(), Some(5));
+    ///
+    /// // Parsing a day only works for all possible legal
+    /// // values, even if, e.g., 31 isn't valid for all
+    /// // possible year/month combinations.
+    /// let tm = BrokenDownTime::parse("%d", "31")?;
+    /// assert_eq!(tm.day(), Some(31));
+    /// // This is true even if you're parsing a full date:
+    /// let tm = BrokenDownTime::parse("%Y-%m-%d", "2024-04-31")?;
+    /// assert_eq!(tm.day(), Some(31));
+    /// // An error only occurs when you try to extract a date:
+    /// assert!(tm.to_date().is_err());
+    /// // But parsing a value that is always illegal will
+    /// // result in an error:
+    /// assert!(BrokenDownTime::parse("%d", "32").is_err());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn day(&self) -> Option<i8> {
+        self.day.map(|x| x.get())
+    }
+
+    /// Returns the parsed hour, if available.
+    ///
+    /// The hour returned incorporates [`BrokenDownTime::meridiem`] if it's
+    /// set. That is, if the actual parsed hour value is `1` but the meridiem
+    /// is `PM`, then the hour returned by this method will be `13`.
+    ///
+    /// # Example
+    ///
+    /// This shows a how to parse an hour:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let tm = BrokenDownTime::parse("%H", "13")?;
+    /// assert_eq!(tm.hour(), Some(13));
+    ///
+    /// // When parsing a 12-hour clock without a
+    /// // meridiem, the hour value is as parsed.
+    /// let tm = BrokenDownTime::parse("%I", "1")?;
+    /// assert_eq!(tm.hour(), Some(1));
+    ///
+    /// // If a meridiem is parsed, then it is used
+    /// // to calculate the correct hour value.
+    /// let tm = BrokenDownTime::parse("%I%P", "1pm")?;
+    /// assert_eq!(tm.hour(), Some(13));
+    ///
+    /// // This works even if the hour and meridiem are
+    /// // inconsistent with each other:
+    /// let tm = BrokenDownTime::parse("%H%P", "13am")?;
+    /// assert_eq!(tm.hour(), Some(1));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn hour(&self) -> Option<i8> {
+        self.hour_ranged().map(|x| x.get())
+    }
+
+    #[inline]
+    fn hour_ranged(&self) -> Option<t::Hour> {
+        let hour = self.hour?;
+        Some(match self.meridiem() {
+            None => hour,
+            Some(Meridiem::AM) => hour % C(12),
+            Some(Meridiem::PM) => (hour % C(12)) + C(12),
+        })
+    }
+
+    /// Returns the parsed minute, if available.
+    ///
+    /// # Example
+    ///
+    /// This shows how to parse the minute:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let tm = BrokenDownTime::parse("%M", "5")?;
+    /// assert_eq!(tm.minute(), Some(5));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn minute(&self) -> Option<i8> {
+        self.minute.map(|x| x.get())
+    }
+
+    /// Returns the parsed second, if available.
+    ///
+    /// # Example
+    ///
+    /// This shows how to parse the second:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let tm = BrokenDownTime::parse("%S", "5")?;
+    /// assert_eq!(tm.second(), Some(5));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn second(&self) -> Option<i8> {
+        self.second.map(|x| x.get())
+    }
+
+    /// Returns the parsed offset, if available.
+    ///
+    /// # Example
+    ///
+    /// This shows how to parse the offset:
+    ///
+    /// ```
+    /// use jiff::{fmt::strtime::BrokenDownTime, tz::Offset};
+    ///
+    /// let tm = BrokenDownTime::parse("%z", "-0430")?;
+    /// assert_eq!(
+    ///     tm.offset(),
+    ///     Some(Offset::from_seconds(-4 * 60 * 60 - 30 * 60).unwrap()),
+    /// );
+    /// let tm = BrokenDownTime::parse("%z", "-043059")?;
+    /// assert_eq!(
+    ///     tm.offset(),
+    ///     Some(Offset::from_seconds(-4 * 60 * 60 - 30 * 60 - 59).unwrap()),
+    /// );
+    ///
+    /// // Or, if you want colons:
+    /// let tm = BrokenDownTime::parse("%:z", "-04:30")?;
+    /// assert_eq!(
+    ///     tm.offset(),
+    ///     Some(Offset::from_seconds(-4 * 60 * 60 - 30 * 60).unwrap()),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn offset(&self) -> Option<Offset> {
+        self.offset
+    }
+
+    /// Returns the parsed weekday, if available.
+    ///
+    /// # Example
+    ///
+    /// This shows a few different ways of parsing just a weekday:
+    ///
+    /// ```
+    /// use jiff::{civil::Weekday, fmt::strtime::BrokenDownTime};
+    ///
+    /// let tm = BrokenDownTime::parse("%A", "Saturday")?;
+    /// assert_eq!(tm.weekday(), Some(Weekday::Saturday));
+    ///
+    /// let tm = BrokenDownTime::parse("%a", "Sat")?;
+    /// assert_eq!(tm.weekday(), Some(Weekday::Saturday));
+    ///
+    /// // A weekday is only available if it is explicitly parsed!
+    /// let tm = BrokenDownTime::parse("%F", "2024-07-27")?;
+    /// assert_eq!(tm.weekday(), None);
+    /// // If you need a weekday derived from a parsed date, then:
+    /// assert_eq!(tm.to_date()?.weekday(), Weekday::Saturday);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Note that this will return the parsed weekday even if
+    /// it's inconsistent with a parsed date:
+    ///
+    /// ```
+    /// use jiff::{civil::{Weekday, date}, fmt::strtime::BrokenDownTime};
+    ///
+    /// let mut tm = BrokenDownTime::parse("%a, %F", "Wed, 2024-07-27")?;
+    /// // 2024-07-27 is a Saturday, but Wednesday was parsed:
+    /// assert_eq!(tm.weekday(), Some(Weekday::Wednesday));
+    /// // An error only occurs when extracting a date:
+    /// assert!(tm.to_date().is_err());
+    /// // To skip the weekday, error checking, zero it out first:
+    /// tm.set_weekday(None);
+    /// assert_eq!(tm.to_date()?, date(2024, 7, 27));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn weekday(&self) -> Option<Weekday> {
+        self.weekday
+    }
+
+    /// Returns the parsed meridiem, if available.
+    ///
+    /// Note that unlike other fields, there is no
+    /// `BrokenDownTime::set_meridiem`. Instead, when formatting, the meridiem
+    /// label (if it's used in the formatting string) is determined purely as a
+    /// function of the hour in a 24 hour clock.
+    ///
+    /// # Example
+    ///
+    /// This shows a how to parse the meridiem:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::{BrokenDownTime, Meridiem};
+    ///
+    /// let tm = BrokenDownTime::parse("%p", "AM")?;
+    /// assert_eq!(tm.meridiem(), Some(Meridiem::AM));
+    /// let tm = BrokenDownTime::parse("%P", "pm")?;
+    /// assert_eq!(tm.meridiem(), Some(Meridiem::PM));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn meridiem(&self) -> Option<Meridiem> {
+        self.meridiem
+    }
+
+    /// Set the year on this broken down time.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given year is out of range.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// // out of range
+    /// assert!(tm.set_year(Some(10_000)).is_err());
+    /// tm.set_year(Some(2024))?;
+    /// assert_eq!(tm.to_string("%Y")?, "2024");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_year(&mut self, year: Option<i16>) -> Result<(), Error> {
+        self.year = match year {
+            None => None,
+            Some(year) => Some(t::Year::try_new("year", year)?),
+        };
+        Ok(())
+    }
+
+    /// Set the month on this broken down time.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given month is out of range.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// // out of range
+    /// assert!(tm.set_month(Some(0)).is_err());
+    /// tm.set_month(Some(12))?;
+    /// assert_eq!(tm.to_string("%B")?, "December");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_month(&mut self, month: Option<i8>) -> Result<(), Error> {
+        self.month = match month {
+            None => None,
+            Some(month) => Some(t::Month::try_new("month", month)?),
+        };
+        Ok(())
+    }
+
+    /// Set the day on this broken down time.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given day is out of range.
+    ///
+    /// Note that setting a day to a value that is legal in any context is
+    /// always valid, even if it isn't valid for the year and month
+    /// components already set.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// // out of range
+    /// assert!(tm.set_day(Some(32)).is_err());
+    /// tm.set_day(Some(31))?;
+    /// assert_eq!(tm.to_string("%d")?, "31");
+    ///
+    /// // Works even if the resulting date is invalid.
+    /// let mut tm = BrokenDownTime::default();
+    /// tm.set_year(Some(2024))?;
+    /// tm.set_month(Some(4))?;
+    /// tm.set_day(Some(31))?; // April has 30 days, not 31
+    /// assert_eq!(tm.to_string("%F")?, "2024-04-31");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_day(&mut self, day: Option<i8>) -> Result<(), Error> {
+        self.day = match day {
+            None => None,
+            Some(day) => Some(t::Day::try_new("day", day)?),
+        };
+        Ok(())
+    }
+
+    /// Set the hour on this broken down time.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given hour is out of range.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// // out of range
+    /// assert!(tm.set_hour(Some(24)).is_err());
+    /// tm.set_hour(Some(0))?;
+    /// assert_eq!(tm.to_string("%H")?, "00");
+    /// assert_eq!(tm.to_string("%-H")?, "0");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_hour(&mut self, hour: Option<i8>) -> Result<(), Error> {
+        self.hour = match hour {
+            None => None,
+            Some(hour) => Some(t::Hour::try_new("hour", hour)?),
+        };
+        Ok(())
+    }
+
+    /// Set the minute on this broken down time.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given minute is out of range.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// // out of range
+    /// assert!(tm.set_minute(Some(60)).is_err());
+    /// tm.set_minute(Some(59))?;
+    /// assert_eq!(tm.to_string("%M")?, "59");
+    /// assert_eq!(tm.to_string("%03M")?, "059");
+    /// assert_eq!(tm.to_string("%_3M")?, " 59");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_minute(&mut self, minute: Option<i8>) -> Result<(), Error> {
+        self.minute = match minute {
+            None => None,
+            Some(minute) => Some(t::Minute::try_new("minute", minute)?),
+        };
+        Ok(())
+    }
+
+    /// Set the second on this broken down time.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given second is out of range.
+    ///
+    /// Jiff does not support leap seconds, so the range of valid seconds is
+    /// `0` to `59`, inclusive. Note though that when parsing, a parsed value
+    /// of `60` is automatically constrained to `59`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// // out of range
+    /// assert!(tm.set_second(Some(60)).is_err());
+    /// tm.set_second(Some(59))?;
+    /// assert_eq!(tm.to_string("%S")?, "59");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_second(&mut self, second: Option<i8>) -> Result<(), Error> {
+        self.second = match second {
+            None => None,
+            Some(second) => Some(t::Second::try_new("second", second)?),
+        };
+        Ok(())
+    }
+
+    /// Set the weekday on this broken down time.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::Weekday, fmt::strtime::BrokenDownTime};
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// tm.set_weekday(Some(Weekday::Saturday));
+    /// assert_eq!(tm.to_string("%A")?, "Saturday");
+    /// assert_eq!(tm.to_string("%a")?, "Sat");
+    /// assert_eq!(tm.to_string("%^a")?, "SAT");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Note that one use case for this routine is to enable parsing of
+    /// weekdays in datetime, but skip checking that the weekday is valid for
+    /// the parsed date.
+    ///
+    /// ```
+    /// use jiff::{civil::date, fmt::strtime::BrokenDownTime};
+    ///
+    /// let mut tm = BrokenDownTime::parse("%a, %F", "Wed, 2024-07-27")?;
+    /// // 2024-07-27 was a Saturday, so asking for a date fails:
+    /// assert!(tm.to_date().is_err());
+    /// // But we can remove the weekday from our broken down time:
+    /// tm.set_weekday(None);
+    /// assert_eq!(tm.to_date()?, date(2024, 7, 27));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// The advantage of this approach is that it still ensures the parsed
+    /// weekday is a valid weekday (for example, `Wat` will cause parsing to
+    /// fail), but doesn't require it to be consistent with the date. This
+    /// is useful for interacting with systems that don't do strict error
+    /// checking.
+    #[inline]
+    pub fn set_weekday(&mut self, weekday: Option<Weekday>) {
+        self.weekday = weekday;
     }
 }
 
@@ -912,10 +1464,10 @@ impl From<Time> for BrokenDownTime {
 ///
 /// Note though that the `std::fmt::Display` API doesn't support surfacing
 /// arbitrary errors. All errors collapse into the unit `std::fmt::Error`
-/// struct. To see the actual error, use [`BrokenDownTime::format`] or
-/// [`strtime::format`](format()). And unfortunately, the `std::fmt::Display`
-/// trait is used in many places where there is no way to report errors other
-/// than panicking.
+/// struct. To see the actual error, use [`BrokenDownTime::format`],
+/// [`BrokenDownTime::to_string`] or [`strtime::format`](format()).
+/// Unfortunately, the `std::fmt::Display` trait is used in many places where
+/// there is no way to report errors other than panicking.
 ///
 /// Therefore, only use this type if you know your formatting string is valid
 /// and that the datetime type being formatted has all of the information
@@ -974,9 +1526,19 @@ impl<'f> core::fmt::Debug for Display<'f> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-enum Meridiem {
+/// A label to disambiguate hours on a 12-hour clock.
+///
+/// This can be accessed on a [`BrokenDownTime`] via
+/// [`BrokenDownTime::meridiem`].
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum Meridiem {
+    /// "ante meridiem" or "before midday."
+    ///
+    /// Specifically, this describes hours less than 12 on a 24-hour clock.
     AM,
+    /// "post meridiem" or "after midday."
+    ///
+    /// Specifically, this describes hours greater than 11 on a 24-hour clock.
     PM,
 }
 
