@@ -8,6 +8,8 @@ Enhancements:
 Improve documentation for `Span` getter methods.
 * [PR #53](https://github.com/BurntSushi/jiff/pull/53):
 Add support for skipping weekday checking when parsing datetimes.
+* [PR #55](https://github.com/BurntSushi/jiff/pull/55):
+Add support for fractional seconds in `jiff::fmt::strtime`.
 
 Bug fixes:
 

@@ -39,7 +39,9 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                      but found end of format string",
                 ));
             }
-            if self.inp.is_empty() {
+            // We don't check this for `%.` since that currently always
+            // must lead to `%.f` which can actually parse the empty string!
+            if self.inp.is_empty() && self.f() != b'.' {
                 return Err(err!(
                     "expected non-empty input for directive %{directive}, \
                      but found end of input",
@@ -79,6 +81,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                 b'd' => self.parse_day().context("%d failed")?,
                 b'e' => self.parse_day().context("%e failed")?,
                 b'F' => self.parse_iso_date().context("%F failed")?,
+                b'f' => self.parse_fractional().context("%f failed")?,
                 b'H' => self.parse_hour().context("%H failed")?,
                 b'h' => self.parse_month_name_abbrev().context("%h failed")?,
                 b'I' => self.parse_hour12().context("%I failed")?,
@@ -113,6 +116,38 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                 }
                 b'Z' => {
                     return Err(err!("cannot parse time zone abbreviations"));
+                }
+                b'.' => {
+                    if !self.bump_fmt() {
+                        return Err(err!(
+                            "invalid format string, expected directive \
+                             after '%.'",
+                        ));
+                    }
+                    // Skip over any precision settings that might be here.
+                    // This is a specific special format supported by `%.f`.
+                    while self.f().is_ascii_digit() {
+                        let digit = escape::Byte(self.f());
+                        if !self.bump_fmt() {
+                            return Err(err!(
+                                "found last precision digit {digit:?}, and \
+                                 expected another digit or a directive \
+                                 after it, but found end of input",
+                            ));
+                        }
+                    }
+                    match self.f() {
+                        b'f' => self
+                            .parse_dot_fractional()
+                            .context("%.f failed")?,
+                        unk => {
+                            return Err(err!(
+                                "found unrecognized directive %{unk} \
+                                 following %.",
+                                unk = escape::Byte(unk),
+                            ));
+                        }
+                    }
                 }
                 unk => {
                     return Err(err!(
@@ -475,6 +510,58 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         self.tm.second = Some(second);
         self.bump_fmt();
         Ok(())
+    }
+
+    /// Parses `%f`, which is equivalent to a fractional second up to
+    /// nanosecond precision. This must always parse at least one decimal digit
+    /// and does not parse any leading dot.
+    fn parse_fractional(&mut self) -> Result<(), Error> {
+        let mkdigits = parse::slicer(self.inp);
+        while mkdigits(self.inp).len() <= 8
+            && self.inp.first().map_or(false, u8::is_ascii_digit)
+        {
+            self.inp = &self.inp[1..];
+        }
+        let digits = mkdigits(self.inp);
+        if digits.is_empty() {
+            return Err(err!(
+                "expected at least one fractional decimal digit, \
+                 but did not find any",
+            ));
+        }
+        // I believe this error can never happen, since we know we have no more
+        // than 9 ASCII digits. Any sequence of 9 ASCII digits can be parsed
+        // into an `i64`.
+        let nanoseconds = parse::fraction(digits, 9).map_err(|err| {
+            err!(
+                "failed to parse {digits:?} as fractional second component \
+                 (up to 9 digits, nanosecond precision): {err}",
+                digits = escape::Bytes(digits),
+            )
+        })?;
+        // I believe this is also impossible to fail, since the maximal
+        // fractional nanosecond is 999_999_999, and which also corresponds
+        // to the maximal expressible number with 9 ASCII digits. So every
+        // possible expressible value here is in range.
+        let nanoseconds =
+            t::SubsecNanosecond::try_new("nanoseconds", nanoseconds).map_err(
+                |err| err!("fractional nanoseconds are not valid: {err}"),
+            )?;
+        self.tm.subsec = Some(nanoseconds);
+        self.bump_fmt();
+        Ok(())
+    }
+
+    /// Parses `%f`, which is equivalent to a dot followed by a fractional
+    /// second up to nanosecond precision. Note that if there is no leading
+    /// dot, then this successfully parses the empty string.
+    fn parse_dot_fractional(&mut self) -> Result<(), Error> {
+        if !self.inp.starts_with(b".") {
+            self.bump_fmt();
+            return Ok(());
+        }
+        self.inp = &self.inp[1..];
+        self.parse_fractional()
     }
 
     /// Parses `%m`, which is equivalent to the month.
@@ -1005,6 +1092,35 @@ mod tests {
             p("%H%p", "23am"),
             @"11:00:00",
         );
+
+        insta::assert_debug_snapshot!(
+            p("%H:%M:%S%.f", "15:48:01.1"),
+            @"15:48:01.1",
+        );
+        insta::assert_debug_snapshot!(
+            p("%H:%M:%S%.9999999999999f", "15:48:01.1"),
+            @"15:48:01.1",
+        );
+        insta::assert_debug_snapshot!(
+            p("%H:%M:%S%99999999999.9999999999999f", "15:48:01.1"),
+            @"15:48:01.1",
+        );
+        insta::assert_debug_snapshot!(
+            p("%H:%M:%S%.f", "15:48:01"),
+            @"15:48:01",
+        );
+        insta::assert_debug_snapshot!(
+            p("%H:%M:%S%.fa", "15:48:01a"),
+            @"15:48:01",
+        );
+        insta::assert_debug_snapshot!(
+            p("%H:%M:%S%.f", "15:48:01.123456789"),
+            @"15:48:01.123456789",
+        );
+        insta::assert_debug_snapshot!(
+            p("%H:%M:%S%.f", "15:48:01.000000001"),
+            @"15:48:01.000000001",
+        );
     }
 
     #[test]
@@ -1095,6 +1211,31 @@ mod tests {
         insta::assert_snapshot!(
             p("%_23", " "),
             @r###"strptime parsing failed: found last width digit "3", and expected another width digit or a directive after it, but found end of input"###,
+        );
+
+        insta::assert_snapshot!(
+            p("%H:%M:%S%.f", "15:59:01."),
+            @"strptime parsing failed: %.f failed: expected at least one fractional decimal digit, but did not find any",
+        );
+        insta::assert_snapshot!(
+            p("%H:%M:%S%.f", "15:59:01.a"),
+            @"strptime parsing failed: %.f failed: expected at least one fractional decimal digit, but did not find any",
+        );
+        insta::assert_snapshot!(
+            p("%H:%M:%S%.f", "15:59:01.1234567891"),
+            @r###"strptime expects to consume the entire input, but "1" remains unparsed"###,
+        );
+        insta::assert_snapshot!(
+            p("%H:%M:%S.%f", "15:59:01."),
+            @"strptime parsing failed: expected non-empty input for directive %f, but found end of input",
+        );
+        insta::assert_snapshot!(
+            p("%H:%M:%S.%f", "15:59:01"),
+            @r###"strptime parsing failed: expected to match literal byte "." from format string, but found end of input"###,
+        );
+        insta::assert_snapshot!(
+            p("%H:%M:%S.%f", "15:59:01.a"),
+            @"strptime parsing failed: %f failed: expected at least one fractional decimal digit, but did not find any",
         );
     }
 

@@ -103,7 +103,7 @@ impl DateTimePrinter {
     ) -> Result<(), Error> {
         static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
         static FMT_FRACTION: DecimalFormatter =
-            DecimalFormatter::new().fractional(9);
+            DecimalFormatter::new().fractional(0, 9);
 
         wtr.write_int(&FMT_TWO, time.hour())?;
         wtr.write_str(":")?;
@@ -215,7 +215,7 @@ impl SpanPrinter {
     ) -> Result<(), Error> {
         static FMT_INT: DecimalFormatter = DecimalFormatter::new();
         static FMT_FRACTION: DecimalFormatter =
-            DecimalFormatter::new().fractional(9);
+            DecimalFormatter::new().fractional(0, 9);
 
         if span.is_negative() {
             wtr.write_str("-")?;

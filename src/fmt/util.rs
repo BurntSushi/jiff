@@ -20,7 +20,7 @@ pub(crate) struct DecimalFormatter {
     force_sign: Option<bool>,
     minimum_digits: Option<u8>,
     padding_byte: u8,
-    fractional: bool,
+    minimum_precision: Option<u8>,
 }
 
 impl DecimalFormatter {
@@ -30,7 +30,7 @@ impl DecimalFormatter {
             force_sign: None,
             minimum_digits: None,
             padding_byte: b'0',
-            fractional: false,
+            minimum_precision: None,
         }
     }
 
@@ -78,16 +78,20 @@ impl DecimalFormatter {
     /// This is useful for formatting the fractional digits to the right-hand
     /// side of a decimal point.
     ///
-    /// This implies `minimum_digits(max_precision)`, but also strips all
+    /// This implies `padding(max_precision)`, but also strips all
     /// trailing zeros.
     ///
     /// The maximum precision is capped at the maximum number of digits for an
     /// i64 value (which is 19).
     pub(crate) const fn fractional(
         self,
+        min_precision: u8,
         max_precision: u8,
     ) -> DecimalFormatter {
-        DecimalFormatter { fractional: true, ..self.padding(max_precision) }
+        DecimalFormatter {
+            minimum_precision: Some(min_precision),
+            ..self.padding(max_precision)
+        }
     }
 }
 
@@ -155,8 +159,9 @@ impl Decimal {
             decimal.start -= 1;
             decimal.buf[decimal.start as usize] = ascii_sign;
         }
-        if formatter.fractional {
-            while decimal.end > 0
+        if let Some(min_precision) = formatter.minimum_precision {
+            while decimal.end > decimal.start
+                && decimal.len() > min_precision
                 && decimal.buf[decimal.end as usize - 1] == b'0'
             {
                 decimal.end -= 1;
@@ -168,7 +173,7 @@ impl Decimal {
     /// Returns the total number of ASCII bytes (including the sign) that are
     /// used to represent this decimal number.
     const fn len(&self) -> u8 {
-        Self::MAX_I64_LEN - self.start
+        self.end - self.start
     }
 
     /// Returns the ASCII representation of this decimal as a byte slice.
@@ -308,19 +313,22 @@ mod tests {
             DecimalFormatter::new().force_sign(true).padding(4).format(789);
         assert_eq!(x.as_str(), "+0789");
 
-        let x = DecimalFormatter::new().fractional(9).format(123_000_000);
+        let x = DecimalFormatter::new().fractional(0, 9).format(123_000_000);
         assert_eq!(x.as_str(), "123");
 
-        let x = DecimalFormatter::new().fractional(9).format(123_456_000);
+        let x = DecimalFormatter::new().fractional(0, 9).format(123_456_000);
         assert_eq!(x.as_str(), "123456");
 
-        let x = DecimalFormatter::new().fractional(9).format(123_456_789);
+        let x = DecimalFormatter::new().fractional(0, 9).format(123_456_789);
         assert_eq!(x.as_str(), "123456789");
 
-        let x = DecimalFormatter::new().fractional(9).format(456_789);
+        let x = DecimalFormatter::new().fractional(0, 9).format(456_789);
         assert_eq!(x.as_str(), "000456789");
 
-        let x = DecimalFormatter::new().fractional(9).format(789);
+        let x = DecimalFormatter::new().fractional(0, 9).format(789);
         assert_eq!(x.as_str(), "000000789");
+
+        let x = DecimalFormatter::new().fractional(6, 9).format(123_000_000);
+        assert_eq!(x.as_str(), "123000");
     }
 }

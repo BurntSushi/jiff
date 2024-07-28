@@ -53,6 +53,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
                 b'd' => self.fmt_day_zero(ext).context("%d failed")?,
                 b'e' => self.fmt_day_space(ext).context("%e failed")?,
                 b'F' => self.fmt_iso_date(ext).context("%F failed")?,
+                b'f' => self.fmt_fractional(ext).context("%f failed")?,
                 b'H' => self.fmt_hour24(ext).context("%H failed")?,
                 b'h' => self.fmt_month_abbrev(ext).context("%b failed")?,
                 b'I' => self.fmt_hour12(ext).context("%H failed")?,
@@ -81,6 +82,29 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
                             return Err(err!(
                                 "found unrecognized directive %{unk} \
                                  following %:",
+                                unk = escape::Byte(unk),
+                            ));
+                        }
+                    }
+                }
+                b'.' => {
+                    if !self.bump_fmt() {
+                        return Err(err!(
+                            "invalid format string, expected directive \
+                             after '%.'",
+                        ));
+                    }
+                    // Parse precision settings after the `.`, effectively
+                    // overriding any digits that came before it.
+                    let ext = Extension { width: self.parse_width()?, ..ext };
+                    match self.f() {
+                        b'f' => self
+                            .fmt_dot_fractional(ext)
+                            .context("%.f failed")?,
+                        unk => {
+                            return Err(err!(
+                                "found unrecognized directive %{unk} \
+                                 following %.",
                                 unk = escape::Byte(unk),
                             ));
                         }
@@ -157,6 +181,11 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     /// before the specifier directive itself. And if a width is parsed, the
     /// parser is bumped to the next byte. (If no next byte exists, then an
     /// error is returned.)
+    ///
+    /// Note that this is also used to parse precision settings for `%f` and
+    /// `%.f`. In the former case, the width is just re-interpreted as a
+    /// precision setting. In the latter case, something like `%5.9f` is
+    /// technically valid, but the `5` is ignored.
     fn parse_width(&mut self) -> Result<Option<u8>, Error> {
         let mut digits = 0;
         while digits < self.fmt.len() && self.fmt[digits].is_ascii_digit() {
@@ -380,6 +409,26 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         ext.write_int(b'0', Some(2), second, self.wtr)
     }
 
+    /// %f
+    fn fmt_fractional(&mut self, ext: Extension) -> Result<(), Error> {
+        let subsec = self.tm.subsec.ok_or_else(|| {
+            err!("requires time to format subsecond nanoseconds")
+        })?;
+        ext.write_fractional_seconds(subsec, self.wtr)?;
+        Ok(())
+    }
+
+    /// %.f
+    fn fmt_dot_fractional(&mut self, ext: Extension) -> Result<(), Error> {
+        let Some(subsec) = self.tm.subsec else { return Ok(()) };
+        if subsec == 0 && ext.width.is_none() {
+            return Ok(());
+        }
+        ext.write_str(Case::AsIs, ".", self.wtr)?;
+        ext.write_fractional_seconds(subsec, self.wtr)?;
+        Ok(())
+    }
+
     /// %Z
     fn fmt_tzabbrev(&mut self, ext: Extension) -> Result<(), Error> {
         let tzabbrev = self.tm.tzabbrev.as_ref().ok_or_else(|| {
@@ -505,6 +554,22 @@ impl Extension {
         if let Some(width) = pad_width {
             formatter = formatter.padding(width);
         }
+        wtr.write_int(&formatter, number)
+    }
+
+    /// Writes the given number of nanoseconds as a fractional component of
+    /// a second. This does not include the leading `.`.
+    ///
+    /// The `width` setting on `Extension` is treated as a precision setting.
+    fn write_fractional_seconds<W: Write>(
+        self,
+        number: impl Into<i64>,
+        mut wtr: &mut W,
+    ) -> Result<(), Error> {
+        let number = number.into();
+
+        let mut formatter =
+            DecimalFormatter::new().fractional(self.width.unwrap_or(1), 9);
         wtr.write_int(&formatter, number)
     }
 }
@@ -686,6 +751,29 @@ mod tests {
         insta::assert_snapshot!(f("%S", time(0, 0, 11, 0)), @"11");
         insta::assert_snapshot!(f("%S", time(0, 0, 23, 0)), @"23");
         insta::assert_snapshot!(f("%S", time(0, 0, 0, 0)), @"00");
+    }
+
+    #[test]
+    fn ok_format_subsec_nanosecond() {
+        let f = |fmt: &str, time: Time| format(fmt, time).unwrap();
+        let mk = |subsec| time(0, 0, 0, subsec);
+
+        insta::assert_snapshot!(f("%f", mk(123_000_000)), @"123");
+        insta::assert_snapshot!(f("%f", mk(0)), @"0");
+        insta::assert_snapshot!(f("%3f", mk(0)), @"000");
+        insta::assert_snapshot!(f("%3f", mk(123_000_000)), @"123");
+        insta::assert_snapshot!(f("%6f", mk(123_000_000)), @"123000");
+        insta::assert_snapshot!(f("%9f", mk(123_000_000)), @"123000000");
+        insta::assert_snapshot!(f("%255f", mk(123_000_000)), @"123000000");
+
+        insta::assert_snapshot!(f("%.f", mk(123_000_000)), @".123");
+        insta::assert_snapshot!(f("%.f", mk(0)), @"");
+        insta::assert_snapshot!(f("%3.f", mk(0)), @"");
+        insta::assert_snapshot!(f("%.3f", mk(0)), @".000");
+        insta::assert_snapshot!(f("%.3f", mk(123_000_000)), @".123");
+        insta::assert_snapshot!(f("%.6f", mk(123_000_000)), @".123000");
+        insta::assert_snapshot!(f("%.9f", mk(123_000_000)), @".123000000");
+        insta::assert_snapshot!(f("%.255f", mk(123_000_000)), @".123000000");
     }
 
     #[test]
