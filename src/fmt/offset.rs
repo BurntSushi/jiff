@@ -243,7 +243,7 @@ impl core::fmt::Display for Numeric {
         }
         if let Some(nanos) = self.nanoseconds {
             static FMT: DecimalFormatter =
-                DecimalFormatter::new().fractional(9);
+                DecimalFormatter::new().fractional(0, 9);
             write!(f, ".{}", FMT.format(i64::from(nanos)).as_str())?;
         }
         Ok(())

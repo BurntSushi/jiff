@@ -144,6 +144,8 @@ strings, the strings are matched without regard to ASCII case.
 | `%D` | `7/14/24` | Equivalent to `%m/%d/%y`. |
 | `%d`, `%e` | `25`, ` 5` | The day of the month. `%d` is zero-padded, `%e` is space padded. |
 | `%F` | `2024-07-14` | Equivalent to `%Y-%m-%d`. |
+| `%f` | `000456` | Fractional seconds, up to nanosecond precision. |
+| `%.f` | `.000456` | Optional fractional seconds, with dot, up to nanosecond precision. |
 | `%H` | `23` | The hour in a 24 hour clock. Zero padded. |
 | `%I` | `11` | The hour in a 12 hour clock. Zero padded. |
 | `%M` | `04` | The minute. Zero padded. |
@@ -182,13 +184,22 @@ The flags and padding amount above may be used when parsing as well, but they
 are ignored since parsing supports all of the different flag modes all of the
 time.
 
+The `%f` and `%.f` flags also support specifying the precision, up to
+nanoseconds. For example, `%3f` and `%.3f` will both always print a fractional
+second component to at least 3 decimal places. When no precision is specified,
+then `%f` will always emit at least one digit, even if it's zero. But `%.f`
+will emit the empty string when the fractional component is zero. Otherwise, it
+will include the leading `.`. For parsing, `%f` does not include the leading
+dot, but `%.f` does. Note that all of the options above are still parsed for
+`%f` and `%.f`, but they are all no-ops (except for the padding for `%f`, which
+is instead interpreted as a precision setting).
+
 # Unsupported
 
 The following things are currently unsupported:
 
 * Parsing or formatting IANA time zone identifiers.
-* Parsing or formatting fractional seconds in either the clock time or time
-time zone offset.
+* Parsing or formatting fractional seconds in the time time zone offset.
 * Conversion specifiers related to week numbers.
 * Conversion specifiers related to day-of-year numbers, like the Julian day.
 * The `%s` conversion specifier, for Unix timestamps in seconds.
@@ -255,6 +266,23 @@ mod parse;
 /// `strptime`-like APIs have no way of expressing such requirements.
 ///
 /// [RFC 2822]: https://datatracker.ietf.org/doc/html/rfc2822
+///
+/// # Example: parse RFC 3339 timestamp with fractional seconds
+///
+/// ```
+/// use jiff::{civil::date, fmt::strtime};
+///
+/// let zdt = strtime::parse(
+///     "%Y-%m-%dT%H:%M:%S%.f%:z",
+///     "2024-07-15T16:24:59.123456789-04:00",
+/// )?.to_zoned()?;
+/// assert_eq!(
+///     zdt,
+///     date(2024, 7, 15).at(16, 24, 59, 123_456_789).intz("America/New_York")?,
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[inline]
 pub fn parse(
     format: impl AsRef<[u8]>,
@@ -314,6 +342,20 @@ pub fn parse(
 /// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).intz("America/New_York")?;
 /// let string = strtime::format("%a %b %e %I:%M:%S %p %Z %Y", &zdt)?;
 /// assert_eq!(string, "Mon Jul 15 04:24:59 PM EDT 2024");
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// # Example: RFC 3339 compatible output with fractional seconds
+///
+/// ```
+/// use jiff::{civil::date, fmt::strtime, tz};
+///
+/// let zdt = date(2024, 7, 15)
+///     .at(16, 24, 59, 123_456_789)
+///     .intz("America/New_York")?;
+/// let string = strtime::format("%Y-%m-%dT%H:%M:%S%.f%:z", &zdt)?;
+/// assert_eq!(string, "2024-07-15T16:24:59.123456789-04:00");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -385,6 +427,7 @@ pub struct BrokenDownTime {
     hour: Option<t::Hour>,
     minute: Option<t::Minute>,
     second: Option<t::Second>,
+    subsec: Option<t::SubsecNanosecond>,
     offset: Option<Offset>,
     // Only used to confirm that it is consistent
     // with the date given. But otherwise cannot
@@ -837,6 +880,13 @@ impl BrokenDownTime {
                      smaller time units with bigger time units missing)",
                 ));
             }
+            if self.subsec.is_some() {
+                return Err(err!(
+                    "parsing format did not include hour directive, \
+                     but did include fractional second directive (cannot have \
+                     smaller time units with bigger time units missing)",
+                ));
+            }
             return Ok(Time::midnight());
         };
         let Some(minute) = self.minute else {
@@ -847,12 +897,29 @@ impl BrokenDownTime {
                      smaller time units with bigger time units missing)",
                 ));
             }
+            if self.subsec.is_some() {
+                return Err(err!(
+                    "parsing format did not include minute directive, \
+                     but did include fractional second directive (cannot have \
+                     smaller time units with bigger time units missing)",
+                ));
+            }
             return Ok(Time::new_ranged(hour, C(0), C(0), C(0)));
         };
         let Some(second) = self.second else {
+            if self.subsec.is_some() {
+                return Err(err!(
+                    "parsing format did not include second directive, \
+                     but did include fractional second directive (cannot have \
+                     smaller time units with bigger time units missing)",
+                ));
+            }
             return Ok(Time::new_ranged(hour, minute, C(0), C(0)));
         };
-        Ok(Time::new_ranged(hour, minute, second, C(0)))
+        let Some(subsec) = self.subsec else {
+            return Ok(Time::new_ranged(hour, minute, second, C(0)));
+        };
+        Ok(Time::new_ranged(hour, minute, second, subsec))
     }
 
     /// Returns the parsed year, if available.
@@ -1044,6 +1111,41 @@ impl BrokenDownTime {
     #[inline]
     pub fn second(&self) -> Option<i8> {
         self.second.map(|x| x.get())
+    }
+
+    /// Returns the parsed subsecond nanosecond, if available.
+    ///
+    /// # Example
+    ///
+    /// This shows how to parse fractional seconds:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let tm = BrokenDownTime::parse("%f", "123456")?;
+    /// assert_eq!(tm.subsec_nanosecond(), Some(123_456_000));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Note that when using `%.f`, the fractional component is optional!
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let tm = BrokenDownTime::parse("%S%.f", "1")?;
+    /// assert_eq!(tm.second(), Some(1));
+    /// assert_eq!(tm.subsec_nanosecond(), None);
+    ///
+    /// let tm = BrokenDownTime::parse("%S%.f", "1.789")?;
+    /// assert_eq!(tm.second(), Some(1));
+    /// assert_eq!(tm.subsec_nanosecond(), Some(789_000_000));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn subsec_nanosecond(&self) -> Option<i32> {
+        self.subsec.map(|x| x.get())
     }
 
     /// Returns the parsed offset, if available.
@@ -1338,6 +1440,42 @@ impl BrokenDownTime {
         Ok(())
     }
 
+    /// Set the subsecond nanosecond on this broken down time.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given number of nanoseconds is out of
+    /// range. It must be non-negative and less than 1 whole second.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// // out of range
+    /// assert!(tm.set_subsec_nanosecond(Some(1_000_000_000)).is_err());
+    /// tm.set_subsec_nanosecond(Some(123_000_000))?;
+    /// assert_eq!(tm.to_string("%f")?, "123");
+    /// assert_eq!(tm.to_string("%.6f")?, ".123000");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_subsec_nanosecond(
+        &mut self,
+        subsec_nanosecond: Option<i32>,
+    ) -> Result<(), Error> {
+        self.subsec = match subsec_nanosecond {
+            None => None,
+            Some(subsec_nanosecond) => Some(t::SubsecNanosecond::try_new(
+                "subsecond-nanosecond",
+                subsec_nanosecond,
+            )?),
+        };
+        Ok(())
+    }
+
     /// Set the weekday on this broken down time.
     ///
     /// # Example
@@ -1413,6 +1551,7 @@ impl From<DateTime> for BrokenDownTime {
             hour: Some(t.hour_ranged()),
             minute: Some(t.minute_ranged()),
             second: Some(t.second_ranged()),
+            subsec: Some(t.subsec_nanosecond_ranged()),
             weekday: Some(d.weekday()),
             meridiem: Some(Meridiem::from(t)),
             ..BrokenDownTime::default()
@@ -1438,6 +1577,7 @@ impl From<Time> for BrokenDownTime {
             hour: Some(t.hour_ranged()),
             minute: Some(t.minute_ranged()),
             second: Some(t.second_ranged()),
+            subsec: Some(t.subsec_nanosecond_ranged()),
             meridiem: Some(Meridiem::from(t)),
             ..BrokenDownTime::default()
         }
