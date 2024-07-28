@@ -217,14 +217,50 @@ pub fn parse(string: &str) -> Result<Zoned, Error> {
 /// ```
 #[derive(Debug)]
 pub struct DateTimeParser {
-    // The RFC 2822 parser has no configuration at present.
-    _private: (),
+    relaxed_weekday: bool,
 }
 
 impl DateTimeParser {
     /// Create a new RFC 2822 datetime parser with the default configuration.
     pub const fn new() -> DateTimeParser {
-        DateTimeParser { _private: () }
+        DateTimeParser { relaxed_weekday: false }
+    }
+
+    /// When enabled, parsing will permit the weekday to be inconsistent with
+    /// the date. When enabled, the weekday is still parsed and can result in
+    /// an error if it isn't _a_ valid weekday. Only the error checking for
+    /// whether it is _the_ correct weekday for the parsed date is disabled.
+    ///
+    /// This is sometimes useful for interaction with systems that don't do
+    /// strict error checking.
+    ///
+    /// This is disabled by default. And note that RFC 2822 compliance requires
+    /// that the weekday is consistent with the date.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::date, fmt::rfc2822};
+    ///
+    /// let string = "Sun, 13 Jul 2024 15:09:59 -0400";
+    /// // The above normally results in an error, since 2024-07-13 is a
+    /// // Saturday:
+    /// assert!(rfc2822::parse(string).is_err());
+    /// // But we can relax the error checking:
+    /// static P: rfc2822::DateTimeParser = rfc2822::DateTimeParser::new()
+    ///     .relaxed_weekday(true);
+    /// assert_eq!(
+    ///     P.parse_zoned(string)?,
+    ///     date(2024, 7, 13).at(15, 9, 59, 0).intz("America/New_York")?,
+    /// );
+    /// // But note that something that isn't recognized as a valid weekday
+    /// // will still result in an error:
+    /// assert!(P.parse_zoned("Wat, 13 Jul 2024 15:09:59 -0400").is_err());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub const fn relaxed_weekday(self, yes: bool) -> DateTimeParser {
+        DateTimeParser { relaxed_weekday: yes, ..self }
     }
 
     /// Parse a datetime string into a [`Zoned`] value.
@@ -427,7 +463,7 @@ impl DateTimeParser {
         );
         let dt = DateTime::from_parts(date, time);
         if let Some(wd) = wd {
-            if wd != dt.weekday() {
+            if !self.relaxed_weekday && wd != dt.weekday() {
                 return Err(err!(
                     "found parsed weekday of {parsed}, \
                      but parsed datetime of {dt} has weekday \

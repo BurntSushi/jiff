@@ -6,6 +6,8 @@ Enhancements:
 
 * [PR #52](https://github.com/BurntSushi/jiff/pull/52):
 Improve documentation for `Span` getter methods.
+* [PR #53](https://github.com/BurntSushi/jiff/pull/53):
+Add support for skipping weekday checking when parsing datetimes.
 
 Bug fixes:
 
