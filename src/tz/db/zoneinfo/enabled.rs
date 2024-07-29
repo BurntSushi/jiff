@@ -51,7 +51,7 @@ impl ZoneInfo {
             match ZoneInfo::from_dir(&tzdir) {
                 Ok(db) => return db,
                 Err(_err) => {
-                    debug!("failed opening TZDIR={}: {_err}", tzdir.display());
+                    debug!("failed opening {}: {_err}", tzdir.display());
                 }
             }
         }

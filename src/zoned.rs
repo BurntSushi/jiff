@@ -391,6 +391,14 @@ impl Zoned {
     /// If you want to get the current Unix time fallibly, use
     /// [`Zoned::try_from`] with a `std::time::SystemTime` as input.
     ///
+    /// This may also panic when `SystemTime::now()` itself panics. The most
+    /// common context in which this happens is on the `wasm32-unknown-unknown`
+    /// target. If you're using that target in the context of the web (for
+    /// example, via `wasm-pack`), and you're an application, then you should
+    /// enable Jiff's `js` feature. This will automatically instruct Jiff in
+    /// this very specific circumstance to execute JavaScript code to determine
+    /// the current time from the web browser.
+    ///
     /// # Example
     ///
     /// ```
@@ -401,7 +409,7 @@ impl Zoned {
     #[cfg(feature = "std")]
     #[inline]
     pub fn now() -> Zoned {
-        Zoned::try_from(std::time::SystemTime::now())
+        Zoned::try_from(crate::now::system_time())
             .expect("system time is valid")
     }
 

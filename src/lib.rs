@@ -65,6 +65,7 @@ documentation:
 
 * [Comparison with other Rust datetime crates](crate::_documentation::comparison)
 * [The API design rationale for Jiff](crate::_documentation::design)
+* [Platform support](crate::_documentation::platform)
 
 # Features
 
@@ -533,6 +534,18 @@ specifiers and other APIs.
   Temporal, but it's a mix of the "best" parts of RFC 3339, RFC 9557 and
   ISO 8601. See the [`fmt::temporal`] module for more details on the format
   used.
+* **js** -
+  On _only_ the `wasm32-unknown-unknown` and `wasm64-unknown-unknown` targets,
+  the `js` feature will add dependencies on `js-sys` and `wasm-bindgen`.
+  These dependencies are used to determine the current datetime and time
+  zone from the web browser. On these targets without the `js` feature
+  enabled, getting the current datetime will panic (because that's what
+  `std::time::SystemTime::now()` does), and it won't be possible to determine
+  the time zone. This feature is disabled by default because not all uses
+  of `wasm{32,64}-unknown-unknown` are in a web context, although _many_ are
+  (for example, when using `wasm-pack`). Only binary, tests and benchmarks
+  should enable this feature. See
+  [Platform support](crate::_documentation::platform) for more details.
 
 ### Time zone features
 
@@ -631,6 +644,8 @@ mod logging;
 pub mod civil;
 mod error;
 pub mod fmt;
+#[cfg(feature = "std")]
+mod now;
 mod span;
 mod timestamp;
 pub mod tz;
@@ -643,6 +658,8 @@ pub mod _documentation {
     pub mod comparison {}
     #[doc = include_str!("../DESIGN.md")]
     pub mod design {}
+    #[doc = include_str!("../PLATFORM.md")]
+    pub mod platform {}
 }
 
 #[cfg(test)]

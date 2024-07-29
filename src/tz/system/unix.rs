@@ -23,7 +23,16 @@ pub(super) fn get(db: &TimeZoneDatabase) -> Option<TimeZone> {
         "failed to find time zone name using Unix-specific heuristics, \
          attempting to read {UNIX_LOCALTIME_PATH} as unnamed time zone",
     );
-    super::read_unnamed_tzif_file(UNIX_LOCALTIME_PATH).ok()
+    match super::read_unnamed_tzif_file(UNIX_LOCALTIME_PATH) {
+        Ok(tz) => Some(tz),
+        Err(_err) => {
+            trace!(
+                "failed to read {UNIX_LOCALTIME_PATH} \
+                 as unnamed time zone: {_err}"
+            );
+            None
+        }
+    }
 }
 
 /// Attempt to determine the time zone name from the symlink path given.

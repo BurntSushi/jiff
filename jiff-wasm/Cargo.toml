@@ -1,0 +1,26 @@
+[package]
+publish = false
+name = "jiff-wasm"
+version = "0.1.0"
+authors = ["Andrew Gallant <jamslam@gmail.com>"]
+license = "Unlicense OR MIT"
+edition = "2021"
+
+[workspace]
+
+[lib]
+path = "lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+jiff = { path = "..", features = ["js"] }
+wasm-bindgen = "0.2.84"
+wasm-bindgen-test = "0.3.34"
+web-sys = { version = "0.3.69", features = ["console"] }
+
+# The `console_error_panic_hook` crate provides better debugging of panics
+# by logging them with `console.error`.
+console_error_panic_hook = "0.1.7"
+
+[profile.release]
+opt-level = "s"

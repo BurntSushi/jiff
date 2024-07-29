@@ -38,7 +38,11 @@ pub fn db() -> &'static TimeZoneDatabase {
         use std::sync::OnceLock;
 
         static DB: OnceLock<TimeZoneDatabase> = OnceLock::new();
-        DB.get_or_init(|| TimeZoneDatabase::from_env())
+        DB.get_or_init(|| {
+            let db = TimeZoneDatabase::from_env();
+            debug!("initialized global time zone database: {db:?}");
+            db
+        })
     }
 }
 

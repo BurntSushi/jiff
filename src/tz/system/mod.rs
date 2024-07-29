@@ -13,10 +13,28 @@ use crate::{
 #[cfg(unix)]
 #[path = "unix.rs"]
 mod sys;
+
 #[cfg(windows)]
 #[path = "windows/mod.rs"]
 mod sys;
-#[cfg(not(any(unix, windows)))]
+
+#[cfg(all(
+    feature = "js",
+    any(target_arch = "wasm32", target_arch = "wasm64"),
+    target_os = "unknown"
+))]
+#[path = "wasm_js.rs"]
+mod sys;
+
+#[cfg(not(any(
+    unix,
+    windows,
+    all(
+        feature = "js",
+        any(target_arch = "wasm32", target_arch = "wasm64"),
+        target_os = "unknown"
+    )
+)))]
 mod sys {
     use crate::tz::{TimeZone, TimeZoneDatabase};
 
