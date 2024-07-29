@@ -1,0 +1,44 @@
+[package]
+name = "jiff-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[features]
+relaxed = []
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
+
+[dependencies.jiff]
+path = ".."
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "rfc2822_parse"
+path = "fuzz_targets/rfc2822_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "strtime_parse"
+path = "fuzz_targets/strtime_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "temporal_parse"
+path = "fuzz_targets/temporal_parse.rs"
+test = false
+doc = false
+bench = false
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
