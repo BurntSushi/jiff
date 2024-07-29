@@ -229,6 +229,23 @@ jobs:
       run: |
         cargo bench --manifest-path bench/Cargo.toml -- --test
 
+  # Test that we can build the fuzzer targets.
+  #
+  # It's not necessary to check the fuzzers on all platforms, as this is pretty
+  # strictly a testing utility.
+  test-fuzz:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+    - name: Build fuzzer targets
+      working-directory: ./fuzz
+      run: cargo build --verbose
+
   # Runs miri on a subset of Jiff's test suite. This doesn't quite cover
   # everything. In particular, `miri` and `insta` cannot play nice together,
   # and `insta` is used a lot among Jiff's tests. However, the primary reason
