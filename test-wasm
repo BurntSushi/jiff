@@ -19,5 +19,5 @@ export CARGO_BUILD_TARGET=wasm32-wasip1
 # Not sure exactly why this is needed, but without it,
 # `insta` tries to run `cargo`, and wasip1 doesn't like that.
 export INSTA_WORKSPACE_ROOT="$PWD"
-export CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmtime run --dir / -S inherit-env"
+export CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmtime run -S inherit-env"
 "$@"

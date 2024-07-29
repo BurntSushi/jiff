@@ -1,3 +1,15 @@
+0.1.3 (2024-07-30)
+==================
+This release features support for `wasm32-unknown-unknown`. That is, when
+Jiff's new `js` crate feature is enabled, Jiff will automatically use
+JavaScript APIs to determine the current time and time zone.
+
+Enhancements:
+
+* [#58](https://github.com/BurntSushi/jiff/pull/58):
+Add WASM support and a new `PLATFORM.md` guide.
+
+
 0.1.2 (2024-07-28)
 ==================
 This release features a few new APIs that a need for arose while experimenting

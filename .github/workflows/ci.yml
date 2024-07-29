@@ -29,18 +29,6 @@ permissions:
 
 jobs:
   test:
-    env:
-      # For some builds, we use cross to test on 32-bit and big-endian
-      # systems.
-      CARGO: cargo
-      # When CARGO is set to CROSS, TARGET is set to `--target matrix.target`.
-      # Note that we only use cross on Linux, so setting a target on a
-      # different OS will just use normal cargo.
-      TARGET:
-      # Bump this as appropriate. We pin to a version to make sure CI
-      # continues to work as cross releases in the past have broken things
-      # in subtle ways.
-      CROSS_VERSION: v0.2.5
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -49,22 +37,6 @@ jobs:
         - build: stable
           os: ubuntu-latest
           rust: stable
-        - build: stable-x86
-          os: ubuntu-latest
-          rust: stable
-          target: i686-unknown-linux-gnu
-        - build: stable-aarch64
-          os: ubuntu-latest
-          rust: stable
-          target: aarch64-unknown-linux-gnu
-        - build: stable-powerpc64
-          os: ubuntu-latest
-          rust: stable
-          target: powerpc64-unknown-linux-gnu
-        - build: stable-s390x
-          os: ubuntu-latest
-          rust: stable
-          target: s390x-unknown-linux-gnu
         - build: beta
           os: ubuntu-latest
           rust: beta
@@ -87,38 +59,12 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
-    - name: Install and configure Cross
-      if: matrix.os == 'ubuntu-latest' && matrix.target != ''
-      run: |
-        # In the past, new releases of 'cross' have broken CI. So for now, we
-        # pin it. We also use their pre-compiled binary releases because cross
-        # has over 100 dependencies and takes a bit to compile.
-        dir="$RUNNER_TEMP/cross-download"
-        mkdir "$dir"
-        echo "$dir" >> $GITHUB_PATH
-        cd "$dir"
-        curl -LO "https://github.com/cross-rs/cross/releases/download/$CROSS_VERSION/cross-x86_64-unknown-linux-musl.tar.gz"
-        tar xf cross-x86_64-unknown-linux-musl.tar.gz
-
-        # We used to install 'cross' from master, but it kept failing. So now
-        # we build from a known-good version until 'cross' becomes more stable
-        # or we find an alternative. Notably, between v0.2.1 and current
-        # master (2022-06-14), the number of Cross's dependencies has doubled.
-        echo "CARGO=cross" >> $GITHUB_ENV
-        echo "TARGET=--target ${{ matrix.target }}" >> $GITHUB_ENV
-    - name: Show command used for Cargo
-      run: |
-        echo "cargo command is: ${{ env.CARGO }}"
-        echo "target flag is: ${{ env.TARGET }}"
-    - run: ${{ env.CARGO }} build --verbose $TARGET
-    - run: ${{ env.CARGO }} doc --verbose $TARGET
-    - if: matrix.build == 'pinned'
-      run: ${{ env.CARGO }} test
-    - if: matrix.build != 'pinned'
-      run: ${{ env.CARGO }} test --all --verbose $TARGET
-    - if: matrix.build != 'pinned'
-      run: ${{ env.CARGO }} test -p jiff-cli --verbose $TARGET
-    - if: matrix.target == ''
+    - run: cargo build --verbose
+    - run: cargo doc --verbose
+    - run: cargo test --verbose --all
+    - run: cargo test --verbose -p jiff-cli
+    # Skip on Windows because it takes freaking forever.
+    - if: matrix.build != 'win-msvc' && matrix.build != 'win-gnu'
       run: ./test
 
   # This job runs a stripped down version of CI to test the MSRV. The specific
@@ -150,8 +96,44 @@ jobs:
     - name: Run integration tests
       run: cargo test --test integration
 
-  # Setup and run tests on the wasm32-wasi target via wasmtime.
-  wasm:
+  # Generic testing for most cross targets. Some get special treatment in
+  # other jobs.
+  cross:
+    env:
+      # Bump this as appropriate. We pin to a version to make sure CI
+      # continues to work as cross releases in the past have broken things
+      # in subtle ways.
+      CROSS_VERSION: v0.2.5
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+        - i686-unknown-linux-gnu
+        - aarch64-unknown-linux-gnu
+        - powerpc-unknown-linux-gnu
+        - powerpc64-unknown-linux-gnu
+        - s390x-unknown-linux-gnu
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install and configure Cross
+      run: |
+        # In the past, new releases of 'cross' have broken CI. So for now, we
+        # pin it. We also use their pre-compiled binary releases because cross
+        # has over 100 dependencies and takes a bit to compile.
+        dir="$RUNNER_TEMP/cross-download"
+        mkdir "$dir"
+        echo "$dir" >> $GITHUB_PATH
+        cd "$dir"
+        curl -LO "https://github.com/cross-rs/cross/releases/download/$CROSS_VERSION/cross-x86_64-unknown-linux-musl.tar.gz"
+        tar xf cross-x86_64-unknown-linux-musl.tar.gz
+    - run: cross build --verbose --target ${{ matrix.target }}
+    - run: cross test --verbose --target ${{ matrix.target }} --all
+    - run: cross test --verbose --target ${{ matrix.target }} -p jiff-cli
+
+  # Test the wasm32-wasip1 target via wasmtime.
+  wasm32-wasip1:
     runs-on: ubuntu-latest
     env:
       # The version of wasmtime to download and install.
@@ -185,6 +167,62 @@ jobs:
     - name: Run integration tests
       run: cargo test --test integration -- --nocapture
 
+  # Test the wasm32-unknown-emscripten target.
+  #
+  # Regretably, `insta` doesn't work on emscripten, so we just do a basic
+  # sanity check here.
+  wasm32-unknown-emscripten:
+    runs-on: ubuntu-latest
+    env:
+      # Bump this as appropriate. We pin to a version to make sure CI
+      # continues to work as cross releases in the past have broken things
+      # in subtle ways.
+      CROSS_VERSION: v0.2.5
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+    - name: Install and configure Cross
+      run: |
+        dir="$RUNNER_TEMP/cross-download"
+        mkdir "$dir"
+        echo "$dir" >> $GITHUB_PATH
+        cd "$dir"
+        curl -LO "https://github.com/cross-rs/cross/releases/download/$CROSS_VERSION/cross-x86_64-unknown-linux-musl.tar.gz"
+        tar xf cross-x86_64-unknown-linux-musl.tar.gz
+    - name: Build jiff
+      run: cross build --verbose --target wasm32-unknown-emscripten -p jiff
+    - name: Build jiff-tzdb
+      run: cargo build --verbose --target wasm32-unknown-emscripten -p jiff-tzdb
+    - name: Build jiff-tzdb-platform
+      run: cargo build --verbose --target wasm32-unknown-emscripten -p jiff-tzdb-platform
+    - name: Run library tests
+      run: cross test --verbose --target wasm32-unknown-emscripten --features logging --lib now_works -- --nocapture
+
+  # Tests wasm32-unknown-unknown integration via wasm-pack.
+  wasm32-unknown-uknown:
+    runs-on: ubuntu-latest
+    env:
+      # Set the time zone to something so that there's some kind of interesting
+      # output to scrutinize. The test below doesn't actually assert anything
+      # about the time zone, but we can at least visually inspect it in the CI
+      # logs.
+      TZ: America/New_York
+    steps:
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: actions/checkout@v4
+    - name: Install wasm-pack
+      run: |
+        curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+    - name: Test wasm-pack project
+      run: |
+        cd jiff-wasm
+        wasm-pack test --node
+
+  # Run benchmarks as tests.
   testbench:
     runs-on: ubuntu-latest
     steps:
@@ -198,6 +236,7 @@ jobs:
       run: |
         cargo bench --manifest-path bench/Cargo.toml -- --test
 
+  # Check that all files are formatted properly.
   rustfmt:
     runs-on: ubuntu-latest
     steps:

@@ -1,0 +1,6 @@
+[build.env]
+passthrough = [
+  "TZ",
+  "RUST_LOG",
+  "RUST_BACKTRACE",
+]
