@@ -3,9 +3,9 @@ on:
   pull_request:
   push:
     branches:
-    - master
+      - master
   schedule:
-  - cron: '00 01 * * *'
+    - cron: '00 01 * * *'
 
 # The section is needed to drop write-all permissions that are granted on
 # `schedule` event. By specifying any permission explicitly all others are set
@@ -46,80 +46,80 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - build: stable
-          os: ubuntu-latest
-          rust: stable
-        - build: stable-x86
-          os: ubuntu-latest
-          rust: stable
-          target: i686-unknown-linux-gnu
-        - build: stable-aarch64
-          os: ubuntu-latest
-          rust: stable
-          target: aarch64-unknown-linux-gnu
-        - build: stable-powerpc64
-          os: ubuntu-latest
-          rust: stable
-          target: powerpc64-unknown-linux-gnu
-        - build: stable-s390x
-          os: ubuntu-latest
-          rust: stable
-          target: s390x-unknown-linux-gnu
-        - build: beta
-          os: ubuntu-latest
-          rust: beta
-        - build: nightly
-          os: ubuntu-latest
-          rust: nightly
-        - build: macos
-          os: macos-latest
-          rust: stable
-        - build: win-msvc
-          os: windows-latest
-          rust: stable
-        - build: win-gnu
-          os: windows-latest
-          rust: stable-x86_64-gnu
+          - build: stable
+            os: ubuntu-latest
+            rust: stable
+          - build: stable-x86
+            os: ubuntu-latest
+            rust: stable
+            target: i686-unknown-linux-gnu
+          - build: stable-aarch64
+            os: ubuntu-latest
+            rust: stable
+            target: aarch64-unknown-linux-gnu
+          - build: stable-powerpc64
+            os: ubuntu-latest
+            rust: stable
+            target: powerpc64-unknown-linux-gnu
+          - build: stable-s390x
+            os: ubuntu-latest
+            rust: stable
+            target: s390x-unknown-linux-gnu
+          - build: beta
+            os: ubuntu-latest
+            rust: beta
+          - build: nightly
+            os: ubuntu-latest
+            rust: nightly
+          - build: macos
+            os: macos-latest
+            rust: stable
+          - build: win-msvc
+            os: windows-latest
+            rust: stable
+          - build: win-gnu
+            os: windows-latest
+            rust: stable-x86_64-gnu
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: ${{ matrix.rust }}
-    - name: Install and configure Cross
-      if: matrix.os == 'ubuntu-latest' && matrix.target != ''
-      run: |
-        # In the past, new releases of 'cross' have broken CI. So for now, we
-        # pin it. We also use their pre-compiled binary releases because cross
-        # has over 100 dependencies and takes a bit to compile.
-        dir="$RUNNER_TEMP/cross-download"
-        mkdir "$dir"
-        echo "$dir" >> $GITHUB_PATH
-        cd "$dir"
-        curl -LO "https://github.com/cross-rs/cross/releases/download/$CROSS_VERSION/cross-x86_64-unknown-linux-musl.tar.gz"
-        tar xf cross-x86_64-unknown-linux-musl.tar.gz
-
-        # We used to install 'cross' from master, but it kept failing. So now
-        # we build from a known-good version until 'cross' becomes more stable
-        # or we find an alternative. Notably, between v0.2.1 and current
-        # master (2022-06-14), the number of Cross's dependencies has doubled.
-        echo "CARGO=cross" >> $GITHUB_ENV
-        echo "TARGET=--target ${{ matrix.target }}" >> $GITHUB_ENV
-    - name: Show command used for Cargo
-      run: |
-        echo "cargo command is: ${{ env.CARGO }}"
-        echo "target flag is: ${{ env.TARGET }}"
-    - run: ${{ env.CARGO }} build --verbose $TARGET
-    - run: ${{ env.CARGO }} doc --verbose $TARGET
-    - if: matrix.build == 'pinned'
-      run: ${{ env.CARGO }} test
-    - if: matrix.build != 'pinned'
-      run: ${{ env.CARGO }} test --all --verbose $TARGET
-    - if: matrix.build != 'pinned'
-      run: ${{ env.CARGO }} test -p jiff-cli --verbose $TARGET
-    - if: matrix.target == ''
-      run: ./test
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - name: Install and configure Cross
+        if: matrix.os == 'ubuntu-latest' && matrix.target != ''
+        run: |
+          # In the past, new releases of 'cross' have broken CI. So for now, we
+          # pin it. We also use their pre-compiled binary releases because cross
+          # has over 100 dependencies and takes a bit to compile.
+          dir="$RUNNER_TEMP/cross-download"
+          mkdir "$dir"
+          echo "$dir" >> $GITHUB_PATH
+          cd "$dir"
+          curl -LO "https://github.com/cross-rs/cross/releases/download/$CROSS_VERSION/cross-x86_64-unknown-linux-musl.tar.gz"
+          tar xf cross-x86_64-unknown-linux-musl.tar.gz
+          
+          # We used to install 'cross' from master, but it kept failing. So now
+          # we build from a known-good version until 'cross' becomes more stable
+          # or we find an alternative. Notably, between v0.2.1 and current
+          # master (2022-06-14), the number of Cross's dependencies has doubled.
+          echo "CARGO=cross" >> $GITHUB_ENV
+          echo "TARGET=--target ${{ matrix.target }}" >> $GITHUB_ENV
+      - name: Show command used for Cargo
+        run: |
+          echo "cargo command is: ${{ env.CARGO }}"
+          echo "target flag is: ${{ env.TARGET }}"
+      - run: ${{ env.CARGO }} build --verbose $TARGET
+      - run: ${{ env.CARGO }} doc --verbose $TARGET
+      - if: matrix.build == 'pinned'
+        run: ${{ env.CARGO }} test
+      - if: matrix.build != 'pinned'
+        run: ${{ env.CARGO }} test --all --verbose $TARGET
+      - if: matrix.build != 'pinned'
+        run: ${{ env.CARGO }} test -p jiff-cli --verbose $TARGET
+      - if: matrix.target == ''
+        run: ./test
 
   # This job runs a stripped down version of CI to test the MSRV. The specific
   # reason for doing this is that Jiff dev-dependencies tend to evolve more
@@ -129,26 +129,31 @@ jobs:
   msrv:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: 1.70.0
-    # We would use `cargo build --all` here, but `jiff-cli` doesn't really
-    # track an MSRV and I don't want it to.
-    - name: Build jiff
-      run: cargo build -p jiff --verbose
-    - name: Build jiff-tzdb
-      run: cargo build -p jiff-tzdb --verbose
-    - name: Build jiff-tzdb-platform
-      run: cargo build -p jiff-tzdb-platform --verbose
-    - name: Build docs
-      run: cargo doc --verbose
-    - name: Run library tests
-      run: cargo test --lib
-    - name: Run integration tests
-      run: cargo test --test integration
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.70.0
+      # We would use `cargo build --all` here, but `jiff-cli` doesn't really
+      # track an MSRV and I don't want it to.
+      - name: Build jiff
+        run: cargo build -p jiff --verbose
+      - name: Build jiff-tzdb
+        run: cargo build -p jiff-tzdb --verbose
+      - name: Build jiff-tzdb-platform
+        run: cargo build -p jiff-tzdb-platform --verbose
+      # It's not necessary to check the fuzzers on all platforms, as this is
+      # pretty strictly a testing utility
+      - name: Build jiff-fuzz
+        run: cargo build --verbose
+        working-directory: ./fuzz
+      - name: Build docs
+        run: cargo doc --verbose
+      - name: Run library tests
+        run: cargo test --lib
+      - name: Run integration tests
+        run: cargo test --test integration
 
   # Setup and run tests on the wasm32-wasi target via wasmtime.
   wasm:
@@ -159,55 +164,55 @@ jobs:
       # Yes'um.
       WASMTIME_BACKTRACE_DETAILS: 1
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-    - name: Add wasm32-wasip1 target
-      run: rustup target add wasm32-wasip1
-    - name: Download and install Wasmtime
-      run: |
-        echo "CARGO_BUILD_TARGET=wasm32-wasip1" >> $GITHUB_ENV
-        curl -LO https://github.com/bytecodealliance/wasmtime/releases/download/v$WASMTIME_VERSION/wasmtime-v$WASMTIME_VERSION-x86_64-linux.tar.xz
-        tar xvf wasmtime-v$WASMTIME_VERSION-x86_64-linux.tar.xz
-        echo `pwd`/wasmtime-v$WASMTIME_VERSION-x86_64-linux >> $GITHUB_PATH
-        echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime run --dir / --env INSTA_WORKSPACE_ROOT=$PWD --" >> $GITHUB_ENV
-    - name: Build jiff
-      run: cargo build -p jiff --verbose
-    - name: Build jiff-tzdb
-      run: cargo build -p jiff-tzdb --verbose
-    - name: Build jiff-tzdb-platform
-      run: cargo build -p jiff-tzdb-platform --verbose
-    - name: Run library tests
-      run: cargo test --lib -- --nocapture
-    - name: Run integration tests
-      run: cargo test --test integration -- --nocapture
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Add wasm32-wasip1 target
+        run: rustup target add wasm32-wasip1
+      - name: Download and install Wasmtime
+        run: |
+          echo "CARGO_BUILD_TARGET=wasm32-wasip1" >> $GITHUB_ENV
+          curl -LO https://github.com/bytecodealliance/wasmtime/releases/download/v$WASMTIME_VERSION/wasmtime-v$WASMTIME_VERSION-x86_64-linux.tar.xz
+          tar xvf wasmtime-v$WASMTIME_VERSION-x86_64-linux.tar.xz
+          echo `pwd`/wasmtime-v$WASMTIME_VERSION-x86_64-linux >> $GITHUB_PATH
+          echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime run --dir / --env INSTA_WORKSPACE_ROOT=$PWD --" >> $GITHUB_ENV
+      - name: Build jiff
+        run: cargo build -p jiff --verbose
+      - name: Build jiff-tzdb
+        run: cargo build -p jiff-tzdb --verbose
+      - name: Build jiff-tzdb-platform
+        run: cargo build -p jiff-tzdb-platform --verbose
+      - name: Run library tests
+        run: cargo test --lib -- --nocapture
+      - name: Run integration tests
+        run: cargo test --test integration -- --nocapture
 
   testbench:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-    - name: Run benchmark tests
-      run: |
-        cargo bench --manifest-path bench/Cargo.toml -- --test
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Run benchmark tests
+        run: |
+          cargo bench --manifest-path bench/Cargo.toml -- --test
 
   rustfmt:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-        components: rustfmt
-    - name: Check formatting
-      run: |
-        cargo fmt --all -- --check
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt
+      - name: Check formatting
+        run: |
+          cargo fmt --all -- --check
