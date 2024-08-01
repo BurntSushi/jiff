@@ -219,7 +219,7 @@ use crate::{
     },
     tz::{Offset, TimeZone},
     util::{
-        escape,
+        self, escape,
         t::{self, C},
     },
     Error, Timestamp, Zoned,
@@ -1690,6 +1690,88 @@ impl From<Time> for Meridiem {
             Meridiem::PM
         }
     }
+}
+
+/// These are "extensions" to the standard `strftime` conversion specifiers.
+///
+/// Basically, these provide control over padding (zeros, spaces or none),
+/// how much to pad and the case of string enumerations.
+#[derive(Clone, Copy, Debug)]
+struct Extension {
+    flag: Option<Flag>,
+    width: Option<u8>,
+}
+
+impl Extension {
+    /// Parses an optional directive flag from the beginning of `fmt`. This
+    /// assumes `fmt` is not empty and guarantees that the return unconsumed
+    /// slice is also non-empty.
+    fn parse_flag<'i>(
+        fmt: &'i [u8],
+    ) -> Result<(Option<Flag>, &'i [u8]), Error> {
+        let byte = fmt[0];
+        let flag = match byte {
+            b'_' => Flag::PadSpace,
+            b'0' => Flag::PadZero,
+            b'-' => Flag::NoPad,
+            b'^' => Flag::Uppercase,
+            b'#' => Flag::Swapcase,
+            _ => return Ok((None, fmt)),
+        };
+        let fmt = &fmt[1..];
+        if fmt.is_empty() {
+            return Err(err!(
+                "expected to find specifier directive after flag \
+                 {byte:?}, but found end of format string",
+                byte = escape::Byte(byte),
+            ));
+        }
+        Ok((Some(flag), fmt))
+    }
+
+    /// Parses an optional width that comes after a (possibly absent) flag and
+    /// before the specifier directive itself. And if a width is parsed, the
+    /// slice returned does not contain it. (If that slice is empty, then an
+    /// error is returned.)
+    ///
+    /// Note that this is also used to parse precision settings for `%f`
+    /// and `%.f`. In the former case, the width is just re-interpreted as
+    /// a precision setting. In the latter case, something like `%5.9f` is
+    /// technically valid, but the `5` is ignored.
+    fn parse_width<'i>(
+        fmt: &'i [u8],
+    ) -> Result<(Option<u8>, &'i [u8]), Error> {
+        let mut digits = 0;
+        while digits < fmt.len() && fmt[digits].is_ascii_digit() {
+            digits += 1;
+        }
+        if digits == 0 {
+            return Ok((None, fmt));
+        }
+        let (digits, fmt) = util::parse::split(fmt, digits).unwrap();
+        let width = util::parse::i64(digits)
+            .context("failed to parse conversion specifier width")?;
+        let width = u8::try_from(width).map_err(|_| {
+            err!("{width} is too big, max is {max}", max = u8::MAX)
+        })?;
+        if fmt.is_empty() {
+            return Err(err!(
+                "expected to find specifier directive after width \
+                 {width}, but found end of format string",
+            ));
+        }
+        Ok((Some(width), fmt))
+    }
+}
+
+/// The different flags one can set. They are mutually exclusive.
+#[derive(Clone, Copy, Debug)]
+enum Flag {
+    PadSpace,
+    PadZero,
+    NoPad,
+    Uppercase,
+    Swapcase,
 }
 
 /// Returns the "full" weekday name.

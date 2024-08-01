@@ -5,7 +5,7 @@ use crate::{
     fmt::{
         strtime::{
             month_name_abbrev, month_name_full, weekday_name_abbrev,
-            weekday_name_full, BrokenDownTime,
+            weekday_name_full, BrokenDownTime, Extension, Flag,
         },
         util::DecimalFormatter,
         Write, WriteExt,
@@ -140,12 +140,6 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         !self.fmt.is_empty()
     }
 
-    // The parsing routines below are helpers for parsing the format string
-    // itself. Ironically, the strtime parser doesn't need to do as much
-    // parsing of the format string as the strtime formatter, since the parser
-    // doesn't care about zero pad versus space pad. It just supports accepting
-    // all of it unconditionally.
-
     /// Parses optional extensions before a specifier directive. That is, right
     /// after the `%`. If any extensions are parsed, the parser is bumped
     /// to the next byte. (If no next byte exists, then an error is returned.)
@@ -158,23 +152,9 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     /// Parses an optional flag. And if one is parsed, the parser is bumped
     /// to the next byte. (If no next byte exists, then an error is returned.)
     fn parse_flag(&mut self) -> Result<Option<Flag>, Error> {
-        let byte = self.f();
-        let flag = match byte {
-            b'_' => Flag::PadSpace,
-            b'0' => Flag::PadZero,
-            b'-' => Flag::NoPad,
-            b'^' => Flag::Uppercase,
-            b'#' => Flag::Swapcase,
-            _ => return Ok(None),
-        };
-        if !self.bump_fmt() {
-            return Err(err!(
-                "expected to find specifier directive after flag \
-                 {byte:?}, but found end of format string",
-                byte = escape::Byte(byte),
-            ));
-        }
-        Ok(Some(flag))
+        let (flag, fmt) = Extension::parse_flag(self.fmt)?;
+        self.fmt = fmt;
+        Ok(flag)
     }
 
     /// Parses an optional width that comes after a (possibly absent) flag and
@@ -187,28 +167,9 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     /// precision setting. In the latter case, something like `%5.9f` is
     /// technically valid, but the `5` is ignored.
     fn parse_width(&mut self) -> Result<Option<u8>, Error> {
-        let mut digits = 0;
-        while digits < self.fmt.len() && self.fmt[digits].is_ascii_digit() {
-            digits += 1;
-        }
-        if digits == 0 {
-            return Ok(None);
-        }
-        let (digits, fmt) = parse::split(self.fmt, digits).unwrap();
+        let (width, fmt) = Extension::parse_width(self.fmt)?;
         self.fmt = fmt;
-
-        let width = parse::i64(digits)
-            .context("failed to parse conversion specifier width")?;
-        let width = u8::try_from(width).map_err(|_| {
-            err!("{width} is too big, max is {max}", max = u8::MAX)
-        })?;
-        if self.fmt.is_empty() {
-            return Err(err!(
-                "expected to find specifier directive after width \
-                 {width}, but found end of format string",
-            ));
-        }
-        Ok(Some(width))
+        Ok(width)
     }
 
     // These are the formatting functions. They are pretty much responsible
@@ -483,16 +444,6 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 }
 
-/// These are "extensions" to the standard `strftime` conversion specifiers.
-///
-/// Basically, these provide control over padding (zeros, spaces or none),
-/// how much to pad and the case of string enumerations.
-#[derive(Clone, Copy, Debug)]
-struct Extension {
-    flag: Option<Flag>,
-    width: Option<u8>,
-}
-
 impl Extension {
     /// Writes the given string using the default case rule provided, unless
     /// an option in this extension config overrides the default case.
@@ -572,16 +523,6 @@ impl Extension {
             DecimalFormatter::new().fractional(self.width.unwrap_or(1), 9);
         wtr.write_int(&formatter, number)
     }
-}
-
-/// The different flags one can set. They are mutually exclusive.
-#[derive(Clone, Copy, Debug)]
-enum Flag {
-    PadSpace,
-    PadZero,
-    NoPad,
-    Uppercase,
-    Swapcase,
 }
 
 /// The case to use when printing a string like weekday or TZ abbreviation.
