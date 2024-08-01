@@ -3,7 +3,7 @@ use core::fmt::Write;
 use crate::{
     civil::Weekday,
     error::{err, ErrorContext},
-    fmt::strtime::{BrokenDownTime, Meridiem},
+    fmt::strtime::{BrokenDownTime, Extension, Meridiem},
     tz::Offset,
     util::{
         escape, parse,
@@ -48,29 +48,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                     directive = escape::Byte(self.f()),
                 ));
             }
-            // Skip over flags and width settings. We only use these when
-            // formatting. The parser is "flexible" enough to absorb all of
-            // this automatically in all cases.
-            if matches!(self.f(), b'_' | b'0' | b'-' | b'^' | b'#') {
-                let flag = escape::Byte(self.f());
-                if !self.bump_fmt() {
-                    return Err(err!(
-                        "found flag {flag:?} after '%', and expected \
-                         a directive after it, but found end of input",
-                    ));
-                }
-            }
-            // Same deal with the width setting.
-            while self.f().is_ascii_digit() {
-                let digit = escape::Byte(self.f());
-                if !self.bump_fmt() {
-                    return Err(err!(
-                        "found last width digit {digit:?}, and expected \
-                         another width digit or a directive after it, \
-                         but found end of input",
-                    ));
-                }
-            }
+            // Parse extensions like padding/case options and padding width.
+            let ext = self.parse_extension()?;
             match self.f() {
                 b'%' => self.parse_percent().context("%% failed")?,
                 b'A' => self.parse_weekday_full().context("%A failed")?,
@@ -126,16 +105,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                     }
                     // Skip over any precision settings that might be here.
                     // This is a specific special format supported by `%.f`.
-                    while self.f().is_ascii_digit() {
-                        let digit = escape::Byte(self.f());
-                        if !self.bump_fmt() {
-                            return Err(err!(
-                                "found last precision digit {digit:?}, and \
-                                 expected another digit or a directive \
-                                 after it, but found end of input",
-                            ));
-                        }
-                    }
+                    let (_width, fmt) = Extension::parse_width(self.fmt)?;
+                    self.fmt = fmt;
                     match self.f() {
                         b'f' => self
                             .parse_dot_fractional()
@@ -194,6 +165,16 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     fn bump_input(&mut self) -> bool {
         self.inp = &self.inp[1..];
         !self.inp.is_empty()
+    }
+
+    /// Parses optional extensions before a specifier directive. That is, right
+    /// after the `%`. If any extensions are parsed, the parser is bumped
+    /// to the next byte. (If no next byte exists, then an error is returned.)
+    fn parse_extension(&mut self) -> Result<Extension, Error> {
+        let (flag, fmt) = Extension::parse_flag(self.fmt)?;
+        let (width, fmt) = Extension::parse_width(fmt)?;
+        self.fmt = fmt;
+        Ok(Extension { flag, width })
     }
 
     // We write out a parsing routine for each directive below. Each parsing
@@ -1098,11 +1079,11 @@ mod tests {
             @"15:48:01.1",
         );
         insta::assert_debug_snapshot!(
-            p("%H:%M:%S%.9999999999999f", "15:48:01.1"),
+            p("%H:%M:%S%.255f", "15:48:01.1"),
             @"15:48:01.1",
         );
         insta::assert_debug_snapshot!(
-            p("%H:%M:%S%99999999999.9999999999999f", "15:48:01.1"),
+            p("%H:%M:%S%255.255f", "15:48:01.1"),
             @"15:48:01.1",
         );
         insta::assert_debug_snapshot!(
@@ -1186,31 +1167,31 @@ mod tests {
 
         insta::assert_snapshot!(
             p("%_", " "),
-            @r###"strptime parsing failed: found flag "_" after '%', and expected a directive after it, but found end of input"###,
+            @r###"strptime parsing failed: expected to find specifier directive after flag "_", but found end of format string"###,
         );
         insta::assert_snapshot!(
             p("%-", " "),
-            @r###"strptime parsing failed: found flag "-" after '%', and expected a directive after it, but found end of input"###,
+            @r###"strptime parsing failed: expected to find specifier directive after flag "-", but found end of format string"###,
         );
         insta::assert_snapshot!(
             p("%0", " "),
-            @r###"strptime parsing failed: found flag "0" after '%', and expected a directive after it, but found end of input"###,
+            @r###"strptime parsing failed: expected to find specifier directive after flag "0", but found end of format string"###,
         );
         insta::assert_snapshot!(
             p("%^", " "),
-            @r###"strptime parsing failed: found flag "^" after '%', and expected a directive after it, but found end of input"###,
+            @r###"strptime parsing failed: expected to find specifier directive after flag "^", but found end of format string"###,
         );
         insta::assert_snapshot!(
             p("%#", " "),
-            @r###"strptime parsing failed: found flag "#" after '%', and expected a directive after it, but found end of input"###,
+            @r###"strptime parsing failed: expected to find specifier directive after flag "#", but found end of format string"###,
         );
         insta::assert_snapshot!(
             p("%_1", " "),
-            @r###"strptime parsing failed: found last width digit "1", and expected another width digit or a directive after it, but found end of input"###,
+            @"strptime parsing failed: expected to find specifier directive after width 1, but found end of format string",
         );
         insta::assert_snapshot!(
             p("%_23", " "),
-            @r###"strptime parsing failed: found last width digit "3", and expected another width digit or a directive after it, but found end of input"###,
+            @"strptime parsing failed: expected to find specifier directive after width 23, but found end of format string",
         );
 
         insta::assert_snapshot!(
