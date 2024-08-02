@@ -1,3 +1,12 @@
+0.1.4 (2024-08-01)
+==================
+This release includes a small improvement for `strptime` that permits
+`%Y%m%d` to parse `20240730` correctly.
+
+* [#62](https://github.com/BurntSushi/jiff/issues/62):
+Tweak `strptime` so that things like `%Y` aren't unceremoniously greedy.
+
+
 0.1.3 (2024-07-30)
 ==================
 This release features support for `wasm32-unknown-unknown`. That is, when
