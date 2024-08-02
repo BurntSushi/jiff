@@ -1,5 +1,5 @@
 /*!
-Support for "printf" style parsing and formatting.
+Support for "printf"-style parsing and formatting.
 
 While the routines exposed in this module very closely resemble the
 corresponding [`strptime`] and [`strftime`] POSIX functions, it is not a goal
