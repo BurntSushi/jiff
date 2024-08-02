@@ -2075,11 +2075,11 @@ impl Date {
     }
 }
 
-/// Parsing and formatting using a "printf" style of API.
+/// Parsing and formatting using a "printf"-style API.
 impl Date {
     /// Parses a civil date in `input` matching the given `format`.
     ///
-    /// The format string uses a "printf" style of API where conversion
+    /// The format string uses a "printf"-style API where conversion
     /// specifiers can be used as place holders to match components of
     /// a datetime. For details on the specifiers supported, see the
     /// [`fmt::strtime`] module documentation.
@@ -2116,7 +2116,7 @@ impl Date {
 
     /// Formats this civil date according to the given `format`.
     ///
-    /// The format string uses a "printf" style of API where conversion
+    /// The format string uses a "printf"-style API where conversion
     /// specifiers can be used as place holders to format components of
     /// a datetime. For details on the specifiers supported, see the
     /// [`fmt::strtime`] module documentation.
