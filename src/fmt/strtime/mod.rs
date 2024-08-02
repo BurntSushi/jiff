@@ -75,42 +75,50 @@ assert_eq!(
 # Advice
 
 The formatting machinery supported by this module is not especially expressive.
-The pattern language is a simple sequence of greedy conversion specifiers
-interspersed by literals and arbitrary whitespace. This means that you usually
-need delimiters or spaces between components. For example, this is fine:
+The pattern language is a simple sequence of conversion specifiers interspersed
+by literals and arbitrary whitespace. This means that you sometimes need
+delimiters or spaces between components. For example, this is fine:
 
 ```
 use jiff::fmt::strtime;
 
-let date = strtime::parse("%Y %m %d", "2024 7 15")?.to_date()?;
+let date = strtime::parse("%Y%m%d", "20240715")?.to_date()?;
 assert_eq!(date.to_string(), "2024-07-15");
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-But this is ambiguous:
+But this is ambiguous (is the year `999` or `9990`?):
 
 ```
 use jiff::fmt::strtime;
 
-assert_eq!(
-    strtime::parse("%Y%m%d", "2024715").unwrap_err().to_string(),
-    "strptime parsing failed: %Y failed: year number is invalid: \
-     parameter 'year' with value 2024715 is not in the required range of -9999..=9999",
-);
+assert!(strtime::parse("%Y%m%d", "9990715").is_err());
 ```
 
-You can think of numerical conversion specifiers as regexes like `[0-9]+`.
-The difference is that a regex like `([0-9]+)([0-9]+)([0-9]+)` would match the
-above string, but even then, the specific values of each capture group wouldn't
-be what you wanted. In a regex, you can control the number of digits, e.g.,
-`([0-9]{4})([0-9]{1})([0-9]{2})`, but there is no such mechanism for the
-parsing supported by `strptime`.
+In this case, since years greedily consume up to 4 digits by default, `9990`
+is parsed as the year. And since months greedily consume up to 2 digits by
+default, `71` is parsed as the month, which results in an invalid day. If you
+expect your datetimes to always use 4 digits for the year, then it might be
+okay to skip on the delimiters. For example, the year `999` could be written
+with a leading zero:
 
-On top of all of that, the parsing and formatting in this module does not
-currently support IANA time zone identifiers. This means that it isn't suitable
-as an interchange format. And time zone abbreviations, i.e., `%Z` when
-formatting, aren't supported when parsing because time zone abbreviations are
-ambiguous.
+```
+use jiff::fmt::strtime;
+
+let date = strtime::parse("%Y%m%d", "09990715")?.to_date()?;
+assert_eq!(date.to_string(), "0999-07-15");
+// Indeed, the leading zero is written by default when
+// formatting, since years are padded out to 4 digits
+// by default:
+assert_eq!(date.strftime("%Y%m%d").to_string(), "09990715");
+
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Additionally, the parsing and formatting in this module does not currently
+support IANA time zone identifiers. This means that it isn't suitable as an
+interchange format. And time zone abbreviations, i.e., `%Z` when formatting,
+aren't supported when parsing because time zone abbreviations are ambiguous.
 
 The main advice here is that these APIs can come in handy for ad hoc tasks that
 would otherwise be annoying to deal with. For example, I once wrote a tool to
@@ -123,8 +131,8 @@ kind of use case where this module shines.
 If the formatting machinery in this module isn't flexible enough for your use
 case and you don't control the format, it is recommended to write a bespoke
 parser (possibly with regex). It is unlikely that the expressiveness of this
-formatting machinery will be improved. (Although it is plausible to add new
-conversion specifiers.)
+formatting machinery will be improved much. (Although it is plausible to add
+new conversion specifiers.)
 
 # Conversion specifications
 
@@ -177,12 +185,14 @@ spaces. The exceptions are the `%z` and `%:z` specifiers. They are unaffected
 by any flags.
 
 Moreover, any number of decimal digits can be inserted after the (possibly
-absent) flag and before the directive. The number formed by these digits will
-correspond to the minimum amount of padding (to the left).
+absent) flag and before the directive, so long as the parsed number is less
+than 256. The number formed by these digits will correspond to the minimum
+amount of padding (to the left).
 
-The flags and padding amount above may be used when parsing as well, but they
-are ignored since parsing supports all of the different flag modes all of the
-time.
+The flags and padding amount above may be used when parsing as well. Most
+settings are ignoring during parsing except for padding. For example, if one
+wanted to parse `003` as the day `3`, then one should use `%03d`. Otherwise, by
+default, `%d` will only try to consume at most 2 digits.
 
 The `%f` and `%.f` flags also support specifying the precision, up to
 nanoseconds. For example, `%3f` and `%.3f` will both always print a fractional
@@ -947,7 +957,7 @@ impl BrokenDownTime {
     ///
     /// let tm = BrokenDownTime::parse("%y", "24")?;
     /// assert_eq!(tm.year(), Some(2024));
-    /// let tm = BrokenDownTime::parse("%y", "0")?;
+    /// let tm = BrokenDownTime::parse("%y", "00")?;
     /// assert_eq!(tm.year(), Some(2000));
     /// let tm = BrokenDownTime::parse("%y", "69")?;
     /// assert_eq!(tm.year(), Some(1969));
@@ -1003,7 +1013,7 @@ impl BrokenDownTime {
     /// let tm = BrokenDownTime::parse("%d", "05")?;
     /// assert_eq!(tm.day(), Some(5));
     ///
-    /// let tm = BrokenDownTime::parse("%d", "00000005")?;
+    /// let tm = BrokenDownTime::parse("%03d", "005")?;
     /// assert_eq!(tm.day(), Some(5));
     ///
     /// // Parsing a day only works for all possible legal
@@ -1706,6 +1716,7 @@ impl Extension {
     /// Parses an optional directive flag from the beginning of `fmt`. This
     /// assumes `fmt` is not empty and guarantees that the return unconsumed
     /// slice is also non-empty.
+    #[inline(always)]
     fn parse_flag<'i>(
         fmt: &'i [u8],
     ) -> Result<(Option<Flag>, &'i [u8]), Error> {
@@ -1738,6 +1749,7 @@ impl Extension {
     /// and `%.f`. In the former case, the width is just re-interpreted as
     /// a precision setting. In the latter case, something like `%5.9f` is
     /// technically valid, but the `5` is ignored.
+    #[inline(always)]
     fn parse_width<'i>(
         fmt: &'i [u8],
     ) -> Result<(Option<u8>, &'i [u8]), Error> {
@@ -1835,5 +1847,23 @@ fn month_name_abbrev(month: t::Month) -> &'static str {
         11 => "Nov",
         12 => "Dec",
         unk => unreachable!("invalid month {unk}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // See: https://github.com/BurntSushi/jiff/issues/62
+    #[test]
+    fn parse_non_delimited() {
+        insta::assert_snapshot!(
+            Timestamp::strptime("%Y%m%d-%H%M%S%z", "20240730-005625+0400").unwrap(),
+            @"2024-07-29T20:56:25Z",
+        );
+        insta::assert_snapshot!(
+            Zoned::strptime("%Y%m%d-%H%M%S%z", "20240730-005625+0400").unwrap(),
+            @"2024-07-30T00:56:25+04:00[+04:00]",
+        );
     }
 }

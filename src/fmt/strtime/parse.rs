@@ -3,7 +3,7 @@ use core::fmt::Write;
 use crate::{
     civil::Weekday,
     error::{err, ErrorContext},
-    fmt::strtime::{BrokenDownTime, Extension, Meridiem},
+    fmt::strtime::{BrokenDownTime, Extension, Flag, Meridiem},
     tz::Offset,
     util::{
         escape, parse,
@@ -57,21 +57,21 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                 b'B' => self.parse_month_name_full().context("%B failed")?,
                 b'b' => self.parse_month_name_abbrev().context("%b failed")?,
                 b'D' => self.parse_american_date().context("%D failed")?,
-                b'd' => self.parse_day().context("%d failed")?,
-                b'e' => self.parse_day().context("%e failed")?,
+                b'd' => self.parse_day(ext).context("%d failed")?,
+                b'e' => self.parse_day(ext).context("%e failed")?,
                 b'F' => self.parse_iso_date().context("%F failed")?,
-                b'f' => self.parse_fractional().context("%f failed")?,
-                b'H' => self.parse_hour().context("%H failed")?,
+                b'f' => self.parse_fractional(ext).context("%f failed")?,
+                b'H' => self.parse_hour(ext).context("%H failed")?,
                 b'h' => self.parse_month_name_abbrev().context("%h failed")?,
-                b'I' => self.parse_hour12().context("%I failed")?,
-                b'M' => self.parse_minute().context("%M failed")?,
-                b'm' => self.parse_month().context("%m failed")?,
+                b'I' => self.parse_hour12(ext).context("%I failed")?,
+                b'M' => self.parse_minute(ext).context("%M failed")?,
+                b'm' => self.parse_month(ext).context("%m failed")?,
                 b'P' => self.parse_ampm().context("%P failed")?,
                 b'p' => self.parse_ampm().context("%p failed")?,
-                b'S' => self.parse_second().context("%S failed")?,
+                b'S' => self.parse_second(ext).context("%S failed")?,
                 b'T' => self.parse_clock().context("%T failed")?,
-                b'Y' => self.parse_year().context("%Y failed")?,
-                b'y' => self.parse_year_2digit().context("%y failed")?,
+                b'Y' => self.parse_year(ext).context("%Y failed")?,
+                b'y' => self.parse_year_2digit(ext).context("%y failed")?,
                 b'z' => self.parse_offset_nocolon().context("%z failed")?,
                 b':' => {
                     if !self.bump_fmt() {
@@ -105,11 +105,12 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                     }
                     // Skip over any precision settings that might be here.
                     // This is a specific special format supported by `%.f`.
-                    let (_width, fmt) = Extension::parse_width(self.fmt)?;
+                    let (width, fmt) = Extension::parse_width(self.fmt)?;
+                    let ext = Extension { width, ..ext };
                     self.fmt = fmt;
                     match self.f() {
                         b'f' => self
-                            .parse_dot_fractional()
+                            .parse_dot_fractional(ext)
                             .context("%.f failed")?,
                         unk => {
                             return Err(err!(
@@ -268,9 +269,10 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     ///
     /// We merely require that it is in the range 1-31 here. It isn't
     /// validated as an actual date until `Pieces` is used.
-    fn parse_day(&mut self) -> Result<(), Error> {
-        let (day, inp) =
-            parse_number(self.inp).context("failed to parse day")?;
+    fn parse_day(&mut self, ext: Extension) -> Result<(), Error> {
+        let (day, inp) = ext
+            .parse_number(2, Flag::PadZero, self.inp)
+            .context("failed to parse day")?;
         self.inp = inp;
 
         let day =
@@ -281,9 +283,10 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     }
 
     /// Parses `%H`, which is equivalent to the hour.
-    fn parse_hour(&mut self) -> Result<(), Error> {
-        let (hour, inp) =
-            parse_number(self.inp).context("failed to parse hour")?;
+    fn parse_hour(&mut self, ext: Extension) -> Result<(), Error> {
+        let (hour, inp) = ext
+            .parse_number(2, Flag::PadZero, self.inp)
+            .context("failed to parse hour")?;
         self.inp = inp;
 
         let hour = t::Hour::try_new("hour", hour)
@@ -294,11 +297,12 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     }
 
     /// Parses `%I`, which is equivalent to the hour on a 12-hour clock.
-    fn parse_hour12(&mut self) -> Result<(), Error> {
+    fn parse_hour12(&mut self, ext: Extension) -> Result<(), Error> {
         type Hour12 = ri8<1, 12>;
 
-        let (hour, inp) =
-            parse_number(self.inp).context("failed to parse hour")?;
+        let (hour, inp) = ext
+            .parse_number(2, Flag::PadZero, self.inp)
+            .context("failed to parse hour")?;
         self.inp = inp;
 
         let hour =
@@ -318,9 +322,10 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     }
 
     /// Parses `%M`, which is equivalent to the minute.
-    fn parse_minute(&mut self) -> Result<(), Error> {
-        let (minute, inp) =
-            parse_number(self.inp).context("failed to parse minute")?;
+    fn parse_minute(&mut self, ext: Extension) -> Result<(), Error> {
+        let (minute, inp) = ext
+            .parse_number(2, Flag::PadZero, self.inp)
+            .context("failed to parse minute")?;
         self.inp = inp;
 
         let minute = t::Minute::try_new("minute", minute)
@@ -475,9 +480,10 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     }
 
     /// Parses `%S`, which is equivalent to the second.
-    fn parse_second(&mut self) -> Result<(), Error> {
-        let (mut second, inp) =
-            parse_number(self.inp).context("failed to parse second")?;
+    fn parse_second(&mut self, ext: Extension) -> Result<(), Error> {
+        let (mut second, inp) = ext
+            .parse_number(2, Flag::PadZero, self.inp)
+            .context("failed to parse second")?;
         self.inp = inp;
 
         // As with other parses in Jiff, and like Temporal,
@@ -496,9 +502,13 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// Parses `%f`, which is equivalent to a fractional second up to
     /// nanosecond precision. This must always parse at least one decimal digit
     /// and does not parse any leading dot.
-    fn parse_fractional(&mut self) -> Result<(), Error> {
+    ///
+    /// At present, we don't use any flags/width/precision settings to
+    /// influence parsing. That is, `%3f` will parse the fractional component
+    /// in `0.123456789`.
+    fn parse_fractional(&mut self, _ext: Extension) -> Result<(), Error> {
         let mkdigits = parse::slicer(self.inp);
-        while mkdigits(self.inp).len() <= 8
+        while mkdigits(self.inp).len() < 9
             && self.inp.first().map_or(false, u8::is_ascii_digit)
         {
             self.inp = &self.inp[1..];
@@ -536,19 +546,20 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// Parses `%f`, which is equivalent to a dot followed by a fractional
     /// second up to nanosecond precision. Note that if there is no leading
     /// dot, then this successfully parses the empty string.
-    fn parse_dot_fractional(&mut self) -> Result<(), Error> {
+    fn parse_dot_fractional(&mut self, ext: Extension) -> Result<(), Error> {
         if !self.inp.starts_with(b".") {
             self.bump_fmt();
             return Ok(());
         }
         self.inp = &self.inp[1..];
-        self.parse_fractional()
+        self.parse_fractional(ext)
     }
 
     /// Parses `%m`, which is equivalent to the month.
-    fn parse_month(&mut self) -> Result<(), Error> {
-        let (month, inp) =
-            parse_number(self.inp).context("failed to parse month")?;
+    fn parse_month(&mut self, ext: Extension) -> Result<(), Error> {
+        let (month, inp) = ext
+            .parse_number(2, Flag::PadZero, self.inp)
+            .context("failed to parse month")?;
         self.inp = inp;
 
         let month = t::Month::try_new("month", month)
@@ -636,11 +647,16 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     }
 
     /// Parses `%Y`, which we permit to be any year, including a negative year.
-    fn parse_year(&mut self) -> Result<(), Error> {
-        let (year, inp) = parse_optional_signed_number(self.inp)
+    fn parse_year(&mut self, ext: Extension) -> Result<(), Error> {
+        let (sign, inp) = parse_optional_sign(self.inp);
+        let (year, inp) = ext
+            .parse_number(4, Flag::PadZero, inp)
             .context("failed to parse year")?;
         self.inp = inp;
 
+        // OK because sign=={1,-1} and year can't be bigger than 4 digits
+        // so overflow isn't possible.
+        let year = sign.checked_mul(year).unwrap();
         let year = t::Year::try_new("year", year)
             .context("year number is invalid")?;
         self.tm.year = Some(year);
@@ -651,11 +667,12 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// Parses `%y`, which is equivalent to a 2-digit year.
     ///
     /// The numbers 69-99 refer to 1969-1999, while 00-68 refer to 2000-2068.
-    fn parse_year_2digit(&mut self) -> Result<(), Error> {
+    fn parse_year_2digit(&mut self, ext: Extension) -> Result<(), Error> {
         type Year2Digit = ri8<0, 99>;
 
-        let (year, inp) =
-            parse_number(self.inp).context("failed to parse year")?;
+        let (year, inp) = ext
+            .parse_number(2, Flag::PadZero, self.inp)
+            .context("failed to parse 2-digit year")?;
         self.inp = inp;
 
         let year = Year2Digit::try_new("year (2 digits)", year)
@@ -672,42 +689,69 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     }
 }
 
-/// A function that looks for an optional sign (assumed positive if one
-/// does not exist) following by a run of one or more ASCII digits and parses
-/// it into a signed integer.
-///
-/// This also returns the remaining unparsed input.
-///
-/// It is legal to pass an empty input to this routine. In that case, an error
-/// is returned.
-#[inline(always)]
-fn parse_optional_signed_number<'i>(
-    input: &'i [u8],
-) -> Result<(i64, &'i [u8]), Error> {
-    let (sign, input) = parse_optional_sign(input);
-    let (number, input) = parse_number(input)?;
-    let number = number
-        .checked_mul(sign)
-        .ok_or_else(|| err!("failed to negate parsed number {number}"))?;
-    Ok((number, input))
-}
+impl Extension {
+    /// Parse an integer with the given default padding and flag settings.
+    ///
+    /// The default padding is usually 2 (4 for %Y) and the default flag is
+    /// usually Flag::PadZero (there are no cases where the default flag is
+    /// different at time of writing). But both the padding and the flag can be
+    /// overridden by the settings on this extension.
+    ///
+    /// Generally speaking, parsing ignores everything in an extension except
+    /// for padding. When padding is set, then parsing will limit itself to a
+    /// number of digits equal to the greater of the default padding size or
+    /// the configured padding size. This permits `%Y%m%d` to parse `20240730`
+    /// successfully, for example.
+    ///
+    /// The remaining input is returned. This returns an error if the given
+    /// input is empty.
+    #[inline(always)]
+    fn parse_number<'i>(
+        self,
+        default_pad_width: usize,
+        default_flag: Flag,
+        inp: &'i [u8],
+    ) -> Result<(i64, &'i [u8]), Error> {
+        let flag = self.flag.unwrap_or(default_flag);
+        let zero_pad_width = match flag {
+            Flag::PadSpace | Flag::NoPad => 0,
+            _ => self.width.map(usize::from).unwrap_or(default_pad_width),
+        };
+        let max_digits = default_pad_width.max(zero_pad_width);
 
-/// A function that looks for a run of ASCII digits and parses it into a
-/// number. This returns an error if no ASCII digits could be found or if the
-/// number parsed is out of bounds.
-///
-/// This also returns the remaining unparsed input.
-///
-/// It is legal to pass an empty input to this routine. In that case, an error
-/// is returned.
-#[inline(always)]
-fn parse_number<'i>(input: &'i [u8]) -> Result<(i64, &'i [u8]), Error> {
-    let mut digits = 0;
-    while digits < input.len() && input[digits].is_ascii_digit() {
-        digits += 1;
+        let mut digits = 0;
+        while digits < inp.len()
+            && digits < zero_pad_width
+            && inp[digits] == b'0'
+        {
+            digits += 1;
+        }
+        let mut n: i64 = 0;
+        while digits < inp.len()
+            && digits < max_digits
+            && inp[digits].is_ascii_digit()
+        {
+            let byte = inp[digits];
+            digits += 1;
+            // This is manually inlined from `crate::util::parse::i64` to avoid
+            // repeating this loop, and with some error cases removed since we
+            // know that `byte` is an ASCII digit.
+            let digit = i64::from(byte - b'0');
+            n = n
+                .checked_mul(10)
+                .and_then(|n| n.checked_add(digit))
+                .ok_or_else(|| {
+                    err!(
+                        "number '{}' too big to parse into 64-bit integer",
+                        escape::Bytes(&inp[..digits]),
+                    )
+                })?;
+        }
+        if digits == 0 {
+            return Err(err!("invalid number, no digits found"));
+        }
+        Ok((n, &inp[digits..]))
     }
-    let (digits, input) = input.split_at(digits);
-    parse::i64(digits).map(|number| (number, input))
 }
 
 /// Parses an optional sign from the beginning of the input. If one isn't
@@ -970,15 +1014,19 @@ mod tests {
         };
 
         insta::assert_debug_snapshot!(
-            p("%m/%d/%y", "1/1/0000099"),
+            p("%m/%d/%y", "1/1/99"),
             @"1999-01-01",
         );
         insta::assert_debug_snapshot!(
-            p("%D", "1/1/0000099"),
+            p("%m/%d/%04y", "1/1/0099"),
             @"1999-01-01",
         );
         insta::assert_debug_snapshot!(
-            p("%m/%d/%Y", "1/1/0000099"),
+            p("%D", "1/1/99"),
+            @"1999-01-01",
+        );
+        insta::assert_debug_snapshot!(
+            p("%m/%d/%Y", "1/1/0099"),
             @"0099-01-01",
         );
         insta::assert_debug_snapshot!(
@@ -1012,6 +1060,31 @@ mod tests {
         insta::assert_snapshot!(
             p("%A, %B %d, %Y", "Wednesday, dEcEmBeR 25, 2024"),
             @"2024-12-25",
+        );
+
+        insta::assert_debug_snapshot!(
+            p("%Y%m%d", "20240730"),
+            @"2024-07-30",
+        );
+        insta::assert_debug_snapshot!(
+            p("%Y%m%d", "09990730"),
+            @"0999-07-30",
+        );
+        insta::assert_debug_snapshot!(
+            p("%Y%m%d", "9990111"),
+            @"9990-11-01",
+        );
+        insta::assert_debug_snapshot!(
+            p("%3Y%m%d", "09990111"),
+            @"0999-01-11",
+        );
+        insta::assert_debug_snapshot!(
+            p("%5Y%m%d", "09990111"),
+            @"9990-11-01",
+        );
+        insta::assert_debug_snapshot!(
+            p("%5Y%m%d", "009990111"),
+            @"0999-01-11",
         );
     }
 
@@ -1102,6 +1175,19 @@ mod tests {
             p("%H:%M:%S%.f", "15:48:01.000000001"),
             @"15:48:01.000000001",
         );
+
+        insta::assert_debug_snapshot!(
+            p("%H:%M:%S.%f", "15:48:01.1"),
+            @"15:48:01.1",
+        );
+        insta::assert_debug_snapshot!(
+            p("%H:%M:%S.%3f", "15:48:01.123"),
+            @"15:48:01.123",
+        );
+        insta::assert_debug_snapshot!(
+            p("%H:%M:%S.%3f", "15:48:01.123456"),
+            @"15:48:01.123456",
+        );
     }
 
     #[test]
@@ -1113,16 +1199,33 @@ mod tests {
         };
 
         insta::assert_snapshot!(
+            p("%M", ""),
+            @"strptime parsing failed: expected non-empty input for directive %M, but found end of input",
+        );
+        insta::assert_snapshot!(
+            p("%M", "a"),
+            @"strptime parsing failed: %M failed: failed to parse minute: invalid number, no digits found",
+        );
+        insta::assert_snapshot!(
+            p("%M%S", "15"),
+            @"strptime parsing failed: expected non-empty input for directive %S, but found end of input",
+        );
+        insta::assert_snapshot!(
+            p("%M%a", "Sun"),
+            @"strptime parsing failed: %M failed: failed to parse minute: invalid number, no digits found",
+        );
+
+        insta::assert_snapshot!(
             p("%y", "999"),
-            @"strptime parsing failed: %y failed: year number is invalid: parameter 'year (2 digits)' with value 999 is not in the required range of 0..=99",
+            @r###"strptime expects to consume the entire input, but "9" remains unparsed"###,
         );
         insta::assert_snapshot!(
             p("%Y", "-10000"),
-            @"strptime parsing failed: %Y failed: year number is invalid: parameter 'year' with value -10000 is not in the required range of -9999..=9999",
+            @r###"strptime expects to consume the entire input, but "0" remains unparsed"###,
         );
         insta::assert_snapshot!(
             p("%Y", "10000"),
-            @"strptime parsing failed: %Y failed: year number is invalid: parameter 'year' with value 10000 is not in the required range of -9999..=9999",
+            @r###"strptime expects to consume the entire input, but "0" remains unparsed"###,
         );
         insta::assert_snapshot!(
             p("%A %m/%d/%y", "Mon 7/14/24"),
