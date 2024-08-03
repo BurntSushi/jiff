@@ -20,7 +20,6 @@ pub(crate) struct DecimalFormatter {
     force_sign: Option<bool>,
     minimum_digits: Option<u8>,
     padding_byte: u8,
-    minimum_precision: Option<u8>,
 }
 
 impl DecimalFormatter {
@@ -30,12 +29,12 @@ impl DecimalFormatter {
             force_sign: None,
             minimum_digits: None,
             padding_byte: b'0',
-            minimum_precision: None,
         }
     }
 
     /// Format the given value using this configuration as a decimal ASCII
     /// number.
+    #[cfg(test)]
     pub(crate) const fn format(&self, value: i64) -> Decimal {
         Decimal::new(self, value)
     }
@@ -71,27 +70,6 @@ impl DecimalFormatter {
     /// The default is `0`.
     pub(crate) const fn padding_byte(self, byte: u8) -> DecimalFormatter {
         DecimalFormatter { padding_byte: byte, ..self }
-    }
-
-    /// Sets the maximum precision of this as a fractional number.
-    ///
-    /// This is useful for formatting the fractional digits to the right-hand
-    /// side of a decimal point.
-    ///
-    /// This implies `padding(max_precision)`, but also strips all
-    /// trailing zeros.
-    ///
-    /// The maximum precision is capped at the maximum number of digits for an
-    /// i64 value (which is 19).
-    pub(crate) const fn fractional(
-        self,
-        min_precision: u8,
-        max_precision: u8,
-    ) -> DecimalFormatter {
-        DecimalFormatter {
-            minimum_precision: Some(min_precision),
-            ..self.padding(max_precision)
-        }
     }
 }
 
@@ -159,14 +137,6 @@ impl Decimal {
             decimal.start -= 1;
             decimal.buf[decimal.start as usize] = ascii_sign;
         }
-        if let Some(min_precision) = formatter.minimum_precision {
-            while decimal.end > decimal.start
-                && decimal.len() > min_precision
-                && decimal.buf[decimal.end as usize - 1] == b'0'
-            {
-                decimal.end -= 1;
-            }
-        }
         decimal
     }
 
@@ -210,7 +180,6 @@ impl FractionalFormatter {
 
     /// Format the given value using this configuration as a decimal ASCII
     /// fractional number.
-    #[cfg(test)]
     pub(crate) const fn format(&self, value: i64) -> Fractional {
         Fractional::new(self, value)
     }
@@ -425,24 +394,6 @@ mod tests {
         let x =
             DecimalFormatter::new().force_sign(true).padding(4).format(789);
         assert_eq!(x.as_str(), "+0789");
-
-        let x = DecimalFormatter::new().fractional(0, 9).format(123_000_000);
-        assert_eq!(x.as_str(), "123");
-
-        let x = DecimalFormatter::new().fractional(0, 9).format(123_456_000);
-        assert_eq!(x.as_str(), "123456");
-
-        let x = DecimalFormatter::new().fractional(0, 9).format(123_456_789);
-        assert_eq!(x.as_str(), "123456789");
-
-        let x = DecimalFormatter::new().fractional(0, 9).format(456_789);
-        assert_eq!(x.as_str(), "000456789");
-
-        let x = DecimalFormatter::new().fractional(0, 9).format(789);
-        assert_eq!(x.as_str(), "000000789");
-
-        let x = DecimalFormatter::new().fractional(6, 9).format(123_000_000);
-        assert_eq!(x.as_str(), "123000");
     }
 
     #[test]
