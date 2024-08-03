@@ -10,6 +10,8 @@ Add support for `%V` for formatting _and_ parsing IANA time zone identifiers.
 
 Bug fixes:
 
+* [#71](https://github.com/BurntSushi/jiff/issues/71):
+Tweak wording in documentation of "printf"-style API.
 * [#73](https://github.com/BurntSushi/jiff/issues/73):
 Make it so `%.Nf` only formats to `N` decimal places.
 
