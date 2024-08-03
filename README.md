@@ -149,6 +149,8 @@ I expect Jiff to grow more support for other platforms over time. Please file
 issues, although I will likely be reliant on contributor pull requests for more
 obscure platforms that aren't easy for me to test.
 
+For more on platform support, see [`PLATFORM.md`](PLATFORM.md).
+
 [IANA Time Zone Database]: https://en.wikipedia.org/wiki/Tz_database
 [`GetDynamicTimeZoneInformation`]: https://learn.microsoft.com/en-us/windows/win32/api/timezoneapi/nf-timezoneapi-getdynamictimezoneinformation
 [CLDR XML data]: https://github.com/unicode-org/cldr/raw/main/common/supplemental/windowsZones.xml
