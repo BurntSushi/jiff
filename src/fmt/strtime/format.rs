@@ -10,6 +10,7 @@ use crate::{
         util::{DecimalFormatter, FractionalFormatter},
         Write, WriteExt,
     },
+    tz::Offset,
     util::{escape, parse},
     Error,
 };
@@ -63,6 +64,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
                 b'p' => self.fmt_ampm_upper(ext).context("%p failed")?,
                 b'S' => self.fmt_second(ext).context("%S failed")?,
                 b'T' => self.fmt_clock(ext).context("%T failed")?,
+                b'V' => self.fmt_iana_nocolon().context("%V failed")?,
                 b'Y' => self.fmt_year(ext).context("%Y failed")?,
                 b'y' => self.fmt_year_2digit(ext).context("%y failed")?,
                 b'Z' => self.fmt_tzabbrev(ext).context("%Z failed")?,
@@ -75,6 +77,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
                         ));
                     }
                     match self.f() {
+                        b'V' => self.fmt_iana_colon().context("%:V failed")?,
                         b'z' => {
                             self.fmt_offset_colon().context("%:z failed")?
                         }
@@ -318,46 +321,50 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         ext.write_str(Case::AsIs, month_name_abbrev(month), self.wtr)
     }
 
+    /// %V
+    fn fmt_iana_nocolon(&mut self) -> Result<(), Error> {
+        let Some(iana) = self.tm.iana.as_ref() else {
+            let offset = self.tm.offset.ok_or_else(|| {
+                err!(
+                    "requires IANA time zone identifier or time \
+                     zone offset, but none were present"
+                )
+            })?;
+            return write_offset(offset, false, &mut self.wtr);
+        };
+        self.wtr.write_str(iana)?;
+        Ok(())
+    }
+
+    /// %:V
+    fn fmt_iana_colon(&mut self) -> Result<(), Error> {
+        let Some(iana) = self.tm.iana.as_ref() else {
+            let offset = self.tm.offset.ok_or_else(|| {
+                err!(
+                    "requires IANA time zone identifier or time \
+                     zone offset, but none were present"
+                )
+            })?;
+            return write_offset(offset, true, &mut self.wtr);
+        };
+        self.wtr.write_str(iana)?;
+        Ok(())
+    }
+
     /// %z
     fn fmt_offset_nocolon(&mut self) -> Result<(), Error> {
-        static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
-
         let offset = self.tm.offset.ok_or_else(|| {
             err!("requires offset to format time zone offset")
         })?;
-        let hours = offset.part_hours_ranged().abs().get();
-        let minutes = offset.part_minutes_ranged().abs().get();
-        let seconds = offset.part_seconds_ranged().abs().get();
-
-        self.wtr.write_str(if offset.is_negative() { "-" } else { "+" })?;
-        self.wtr.write_int(&FMT_TWO, hours)?;
-        self.wtr.write_int(&FMT_TWO, minutes)?;
-        if seconds != 0 {
-            self.wtr.write_int(&FMT_TWO, seconds)?;
-        }
-        Ok(())
+        write_offset(offset, false, self.wtr)
     }
 
     /// %:z
     fn fmt_offset_colon(&mut self) -> Result<(), Error> {
-        static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
-
         let offset = self.tm.offset.ok_or_else(|| {
             err!("requires offset to format time zone offset")
         })?;
-        let hours = offset.part_hours_ranged().abs().get();
-        let minutes = offset.part_minutes_ranged().abs().get();
-        let seconds = offset.part_seconds_ranged().abs().get();
-
-        self.wtr.write_str(if offset.is_negative() { "-" } else { "+" })?;
-        self.wtr.write_int(&FMT_TWO, hours)?;
-        self.wtr.write_str(":")?;
-        self.wtr.write_int(&FMT_TWO, minutes)?;
-        if seconds != 0 {
-            self.wtr.write_str(":")?;
-            self.wtr.write_int(&FMT_TWO, seconds)?;
-        }
-        Ok(())
+        write_offset(offset, true, self.wtr)
     }
 
     /// %S
@@ -455,6 +462,36 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         let year = year % 100;
         ext.write_int(b'0', Some(2), year, self.wtr)
     }
+}
+
+/// Writes the given time zone offset to the writer.
+///
+/// When `colon` is true, the hour, minute and optional second components are
+/// delimited by a colon. Otherwise, no delimiter is used.
+fn write_offset<W: Write>(
+    offset: Offset,
+    colon: bool,
+    mut wtr: &mut W,
+) -> Result<(), Error> {
+    static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
+
+    let hours = offset.part_hours_ranged().abs().get();
+    let minutes = offset.part_minutes_ranged().abs().get();
+    let seconds = offset.part_seconds_ranged().abs().get();
+
+    wtr.write_str(if offset.is_negative() { "-" } else { "+" })?;
+    wtr.write_int(&FMT_TWO, hours)?;
+    if colon {
+        wtr.write_str(":")?;
+    }
+    wtr.write_int(&FMT_TWO, minutes)?;
+    if seconds != 0 {
+        if colon {
+            wtr.write_str(":")?;
+        }
+        wtr.write_int(&FMT_TWO, seconds)?;
+    }
+    Ok(())
 }
 
 impl Extension {
@@ -759,6 +796,36 @@ mod tests {
 
         let zdt = zdt.checked_add(crate::Span::new().months(5)).unwrap();
         insta::assert_snapshot!(f("%Z", &zdt), @"EST");
+    }
+
+    #[test]
+    fn ok_format_iana() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let f = |fmt: &str, zdt: &Zoned| format(fmt, zdt).unwrap();
+
+        let zdt = date(2024, 7, 14)
+            .at(22, 24, 0, 0)
+            .intz("America/New_York")
+            .unwrap();
+        insta::assert_snapshot!(f("%V", &zdt), @"America/New_York");
+        insta::assert_snapshot!(f("%:V", &zdt), @"America/New_York");
+
+        let zdt = date(2024, 7, 14)
+            .at(22, 24, 0, 0)
+            .to_zoned(crate::tz::offset(-4).to_time_zone())
+            .unwrap();
+        insta::assert_snapshot!(f("%V", &zdt), @"-0400");
+        insta::assert_snapshot!(f("%:V", &zdt), @"-04:00");
+
+        let zdt = date(2024, 7, 14)
+            .at(22, 24, 0, 0)
+            .to_zoned(crate::tz::TimeZone::UTC)
+            .unwrap();
+        insta::assert_snapshot!(f("%V", &zdt), @"UTC");
+        insta::assert_snapshot!(f("%:V", &zdt), @"UTC");
     }
 
     #[test]

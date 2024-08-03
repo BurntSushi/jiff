@@ -1,5 +1,7 @@
 use core::fmt::Write;
 
+use alloc::string::ToString;
+
 use crate::{
     civil::Weekday,
     error::{err, ErrorContext},
@@ -70,6 +72,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                 b'p' => self.parse_ampm().context("%p failed")?,
                 b'S' => self.parse_second(ext).context("%S failed")?,
                 b'T' => self.parse_clock().context("%T failed")?,
+                b'V' => self.parse_iana_nocolon().context("%V failed")?,
                 b'Y' => self.parse_year(ext).context("%Y failed")?,
                 b'y' => self.parse_year_2digit(ext).context("%y failed")?,
                 b'z' => self.parse_offset_nocolon().context("%z failed")?,
@@ -81,6 +84,9 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                         ));
                     }
                     match self.f() {
+                        b'V' => {
+                            self.parse_iana_colon().context("%:V failed")?
+                        }
                         b'z' => {
                             self.parse_offset_colon().context("%:z failed")?
                         }
@@ -331,6 +337,32 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         let minute = t::Minute::try_new("minute", minute)
             .context("minute number is invalid")?;
         self.tm.minute = Some(minute);
+        self.bump_fmt();
+        Ok(())
+    }
+
+    /// Parse `%V`, which is the IANA time zone identifier or an offset without
+    /// colons.
+    fn parse_iana_nocolon(&mut self) -> Result<(), Error> {
+        if !self.inp.is_empty() && matches!(self.inp[0], b'+' | b'-') {
+            return self.parse_offset_nocolon();
+        }
+        let (iana, inp) = parse_iana(self.inp)?;
+        self.inp = inp;
+        self.tm.iana = Some(iana.to_string());
+        self.bump_fmt();
+        Ok(())
+    }
+
+    /// Parse `%:V`, which is the IANA time zone identifier or an offset with
+    /// colons.
+    fn parse_iana_colon(&mut self) -> Result<(), Error> {
+        if !self.inp.is_empty() && matches!(self.inp[0], b'+' | b'-') {
+            return self.parse_offset_colon();
+        }
+        let (iana, inp) = parse_iana(self.inp)?;
+        self.inp = inp;
+        self.tm.iana = Some(iana.to_string());
         self.bump_fmt();
         Ok(())
     }
@@ -943,11 +975,98 @@ fn parse_month_name_abbrev<'i>(
     Ok((index, input))
 }
 
+#[inline(always)]
+fn parse_iana<'i>(input: &'i [u8]) -> Result<(&'i str, &'i [u8]), Error> {
+    let mkiana = parse::slicer(input);
+    let (_, mut input) = parse_iana_component(input)?;
+    while input.starts_with(b"/") {
+        input = &input[1..];
+        let (_, unconsumed) = parse_iana_component(input)?;
+        input = unconsumed;
+    }
+    // This is OK because all bytes in a IANA TZ annotation are guaranteed
+    // to be ASCII, or else we wouldn't be here. If this turns out to be
+    // a perf issue, we can do an unchecked conversion here. But I figured
+    // it would be better to start conservative.
+    let iana = core::str::from_utf8(mkiana(input)).expect("ASCII");
+    Ok((iana, input))
+}
+
+/// Parses a single IANA name component. That is, the thing that leads all IANA
+/// time zone identifiers and the thing that must always come after a `/`. This
+/// returns an error if no component could be found.
+#[inline(always)]
+fn parse_iana_component<'i>(
+    mut input: &'i [u8],
+) -> Result<(&'i [u8], &'i [u8]), Error> {
+    let mkname = parse::slicer(input);
+    if input.is_empty() {
+        return Err(err!(
+            "expected the start of an IANA time zone identifier \
+             name or component, but found end of input instead",
+        ));
+    }
+    if !matches!(input[0], b'_' | b'.' | b'A'..=b'Z' | b'a'..=b'z') {
+        return Err(err!(
+            "expected the start of an IANA time zone identifier \
+             name or component, but found {:?} instead",
+            escape::Byte(input[0]),
+        ));
+    }
+    input = &input[1..];
+
+    let is_iana_char = |byte| {
+        matches!(
+            byte,
+            b'_' | b'.' | b'+' | b'-' | b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z',
+        )
+    };
+    while !input.is_empty() && is_iana_char(input[0]) {
+        input = &input[1..];
+    }
+    Ok((mkname(input), input))
+}
+
 #[cfg(test)]
 mod tests {
     use alloc::string::ToString;
 
     use super::*;
+
+    #[test]
+    fn ok_parse_zoned() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let p = |fmt: &str, input: &str| {
+            BrokenDownTime::parse_mono(fmt.as_bytes(), input.as_bytes())
+                .unwrap()
+                .to_zoned()
+                .unwrap()
+        };
+
+        insta::assert_debug_snapshot!(
+            p("%h %d, %Y %H:%M:%S %z", "Apr 1, 2022 20:46:15 -0400"),
+            @"2022-04-01T20:46:15-04:00[-04:00]",
+        );
+        insta::assert_debug_snapshot!(
+            p("%h %d, %Y %H:%M:%S %V", "Apr 1, 2022 20:46:15 -0400"),
+            @"2022-04-01T20:46:15-04:00[-04:00]",
+        );
+        insta::assert_debug_snapshot!(
+            p("%h %d, %Y %H:%M:%S [%V]", "Apr 1, 2022 20:46:15 [America/New_York]"),
+            @"2022-04-01T20:46:15-04:00[America/New_York]",
+        );
+        insta::assert_debug_snapshot!(
+            p("%h %d, %Y %H:%M:%S %V", "Apr 1, 2022 20:46:15 America/New_York"),
+            @"2022-04-01T20:46:15-04:00[America/New_York]",
+        );
+        insta::assert_debug_snapshot!(
+            p("%h %d, %Y %H:%M:%S %:z %:V", "Apr 1, 2022 20:46:15 -08:00 -04:00"),
+            @"2022-04-01T20:46:15-04:00[-04:00]",
+        );
+    }
 
     #[test]
     fn ok_parse_timestamp() {
@@ -1320,6 +1439,31 @@ mod tests {
         insta::assert_snapshot!(
             p("%H:%M:%S.%f", "15:59:01.a"),
             @"strptime parsing failed: %f failed: expected at least one fractional decimal digit, but did not find any",
+        );
+
+        insta::assert_snapshot!(
+            p("%V", "+America/New_York"),
+            @"strptime parsing failed: %V failed: failed to parse hours from time zone offset Amer: invalid digit, expected 0-9 but got A",
+        );
+        insta::assert_snapshot!(
+            p("%V", "-America/New_York"),
+            @"strptime parsing failed: %V failed: failed to parse hours from time zone offset Amer: invalid digit, expected 0-9 but got A",
+        );
+        insta::assert_snapshot!(
+            p("%:V", "+0400"),
+            @"strptime parsing failed: %:V failed: expected at least HH:MM digits for time zone offset after sign, but found only 4 bytes remaining",
+        );
+        insta::assert_snapshot!(
+            p("%V", "+04:00"),
+            @"strptime parsing failed: %V failed: failed to parse minutes from time zone offset 04:0: invalid digit, expected 0-9 but got :",
+        );
+        insta::assert_snapshot!(
+            p("%V", "America/"),
+            @"strptime parsing failed: %V failed: expected the start of an IANA time zone identifier name or component, but found end of input instead",
+        );
+        insta::assert_snapshot!(
+            p("%V", "America/+"),
+            @r###"strptime parsing failed: %V failed: expected the start of an IANA time zone identifier name or component, but found "+" instead"###,
         );
     }
 

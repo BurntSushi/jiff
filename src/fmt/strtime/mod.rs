@@ -46,6 +46,23 @@ assert_eq!(string, "Monday, July 15, 2024 at 5:30pm AEST");
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+Or parse a zoned datetime with an IANA time zone identifier:
+
+```
+use jiff::{civil::date, Zoned};
+
+let zdt = Zoned::strptime(
+    "%A, %B %d, %Y at %-I:%M%P %:V",
+    "Monday, July 15, 2024 at 5:30pm Australia/Tasmania",
+)?;
+assert_eq!(
+    zdt,
+    date(2024, 7, 15).at(17, 30, 0, 0).intz("Australia/Tasmania")?,
+);
+
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 # Usage
 
 For most cases, you can use the `strptime` and `strftime` methods on the
@@ -162,6 +179,8 @@ strings, the strings are matched without regard to ASCII case.
 | `%p` | `PM` | Whether the time is in the AM or PM, uppercase. |
 | `%S` | `59` | The second. Zero padded. |
 | `%T` | `23:30:59` | Equivalent to `%H:%M:%S`. |
+| `%V` | `America/New_York`, `+0530` | An IANA time zone identifier, or `%z` if one doesn't exist. |
+| `%:V` | `America/New_York`, `+05:30` | An IANA time zone identifier, or `%:z` if one doesn't exist. |
 | `%Y` | `2024` | A full year, including century. Zero padded to 4 digits. |
 | `%y` | `24` | A two-digit year. Represents only 1969-2068. Zero padded. |
 | `%Z` | `EDT` | A time zone abbreviation. Supported when formatting only. |
@@ -229,7 +248,7 @@ use crate::{
         strtime::{format::Formatter, parse::Parser},
         Write,
     },
-    tz::{Offset, TimeZone},
+    tz::{Offset, OffsetConflict, TimeZone, TimeZoneDatabase},
     util::{
         self, escape,
         t::{self, C},
@@ -452,6 +471,9 @@ pub struct BrokenDownTime {
     // The time zone abbreviation. Used only when
     // formatting a `Zoned`.
     tzabbrev: Option<String>,
+    // The IANA time zone identifier. Used only when
+    // formatting a `Zoned`.
+    iana: Option<String>,
 }
 
 impl BrokenDownTime {
@@ -600,24 +622,35 @@ impl BrokenDownTime {
 
     /// Extracts a zoned datetime from this broken down time.
     ///
+    /// When an IANA time zone identifier is
+    /// present but an offset is not, then the
+    /// [`Disambiguation::Compatible`](crate::tz::Disambiguation::Compatible)
+    /// strategy is used if the parsed datetime is ambiguous in the time zone.
+    ///
+    /// If you need to use a custom time zone database for doing IANA time
+    /// zone identifier lookups (via the `%V` directive), then use
+    /// [`BrokenDownTime::to_zoned_with`].
+    ///
     /// # Warning
     ///
-    /// The `strtime` module APIs do not support parsing or formatting with
-    /// IANA time zone identifiers. This means that if you format a zoned
+    /// The `strtime` module APIs do not require an IANA time zone identifier
+    /// to parse a `Zoned`. If one is not used, then if you format a zoned
     /// datetime in a time zone like `America/New_York` and then parse it back
     /// again, the zoned datetime you get back will be a "fixed offset" zoned
     /// datetime. This in turn means it will not perform daylight saving time
     /// safe arithmetic.
     ///
-    /// The `strtime` modules APIs are useful for ad hoc formatting and
-    /// parsing, but they shouldn't be used as an interchange format. For
-    /// an interchange format, the default `std::fmt::Display` and
-    /// `std::str::FromStr` trait implementations on `Zoned` are appropriate.
+    /// However, the `%V` directive may be used to both format and parse an
+    /// IANA time zone identifier. It is strongly recommended to use this
+    /// directive whenever one is formatting or parsing `Zoned` values.
     ///
     /// # Errors
     ///
     /// This returns an error if there weren't enough components to construct
-    /// a civil datetime _and_ a UTC offset.
+    /// a civil datetime _and_ either a UTC offset or a IANA time zone
+    /// identifier. When both a UTC offset and an IANA time zone identifier
+    /// are found, then [`OffsetConflict::Reject`] is used to detect any
+    /// inconsistency between the offset and the time zone.
     ///
     /// # Example
     ///
@@ -627,37 +660,125 @@ impl BrokenDownTime {
     /// use jiff::fmt::strtime;
     ///
     /// let zdt = strtime::parse(
-    ///     "%F %H:%M %:z",
-    ///     "2024-07-14 21:14 -04:00",
+    ///     "%F %H:%M %:z %:V",
+    ///     "2024-07-14 21:14 -04:00 US/Eastern",
     /// )?.to_zoned()?;
-    /// assert_eq!(zdt.to_string(), "2024-07-14T21:14:00-04:00[-04:00]");
+    /// assert_eq!(zdt.to_string(), "2024-07-14T21:14:00-04:00[US/Eastern]");
     ///
-    /// // It might be prudent to convert the zoned datetime you get back
-    /// // into a "real" time zone:
-    /// let zdt = zdt.intz("Australia/Tasmania")?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// This shows that an error is returned when the offset is inconsistent
+    /// with the time zone. For example, `US/Eastern` is in daylight saving
+    /// time in July 2024:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime;
+    ///
+    /// let result = strtime::parse(
+    ///     "%F %H:%M %:z %:V",
+    ///     "2024-07-14 21:14 -05:00 US/Eastern",
+    /// )?.to_zoned();
     /// assert_eq!(
-    ///     zdt.to_string(),
-    ///     "2024-07-15T11:14:00+10:00[Australia/Tasmania]",
+    ///     result.unwrap_err().to_string(),
+    ///     "datetime 2024-07-14T21:14:00 could not resolve to a \
+    ///      timestamp since 'reject' conflict resolution was chosen, \
+    ///      and because datetime has offset -05, but the time zone \
+    ///      US/Eastern for the given datetime unambiguously has offset -04",
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
     pub fn to_zoned(&self) -> Result<Zoned, Error> {
+        self.to_zoned_with(crate::tz::db())
+    }
+
+    /// Extracts a zoned datetime from this broken down time and uses the time
+    /// zone database given for any IANA time zone identifier lookups.
+    ///
+    /// An IANA time zone identifier lookup is only performed when this
+    /// `BrokenDownTime` contains an IANA time zone identifier. An IANA time
+    /// zone identifier can be parsed with the `%V` directive.
+    ///
+    /// When an IANA time zone identifier is
+    /// present but an offset is not, then the
+    /// [`Disambiguation::Compatible`](crate::tz::Disambiguation::Compatible)
+    /// strategy is used if the parsed datetime is ambiguous in the time zone.
+    ///
+    /// # Warning
+    ///
+    /// The `strtime` module APIs do not require an IANA time zone identifier
+    /// to parse a `Zoned`. If one is not used, then if you format a zoned
+    /// datetime in a time zone like `America/New_York` and then parse it back
+    /// again, the zoned datetime you get back will be a "fixed offset" zoned
+    /// datetime. This in turn means it will not perform daylight saving time
+    /// safe arithmetic.
+    ///
+    /// However, the `%V` directive may be used to both format and parse an
+    /// IANA time zone identifier. It is strongly recommended to use this
+    /// directive whenever one is formatting or parsing `Zoned` values.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if there weren't enough components to construct
+    /// a civil datetime _and_ either a UTC offset or a IANA time zone
+    /// identifier. When both a UTC offset and an IANA time zone identifier
+    /// are found, then [`OffsetConflict::Reject`] is used to detect any
+    /// inconsistency between the offset and the time zone.
+    ///
+    /// # Example
+    ///
+    /// This example shows how to parse a zoned datetime:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime;
+    ///
+    /// let zdt = strtime::parse(
+    ///     "%F %H:%M %:z %:V",
+    ///     "2024-07-14 21:14 -04:00 US/Eastern",
+    /// )?.to_zoned_with(jiff::tz::db())?;
+    /// assert_eq!(zdt.to_string(), "2024-07-14T21:14:00-04:00[US/Eastern]");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn to_zoned_with(
+        &self,
+        db: &TimeZoneDatabase,
+    ) -> Result<Zoned, Error> {
         let dt = self
             .to_datetime()
             .context("datetime required to parse zoned datetime")?;
-        let offset = self
-            .to_offset()
-            .context("offset required to parse zoned datetime")?;
-        let ts = offset.to_timestamp(dt).with_context(|| {
-            err!(
-                "parsed datetime {dt} and offset {offset}, \
-                 but combining them into a zoned datetime is outside \
-                 Jiff's supported timestamp range",
-            )
-        })?;
-        Ok(ts.to_zoned(TimeZone::fixed(offset)))
+        match (self.offset, self.iana.as_deref()) {
+            (None, None) => Err(err!(
+                "either offset (from %z) or IANA time zone identifier \
+                 (from %V) is required for parsing zoned datetime",
+            )),
+            (Some(offset), None) => {
+                let ts = offset.to_timestamp(dt).with_context(|| {
+                    err!(
+                        "parsed datetime {dt} and offset {offset}, \
+                         but combining them into a zoned datetime is outside \
+                         Jiff's supported timestamp range",
+                    )
+                })?;
+                Ok(ts.to_zoned(TimeZone::fixed(offset)))
+            }
+            (None, Some(iana)) => {
+                let tz = db.get(iana)?;
+                let zdt = tz.to_zoned(dt)?;
+                Ok(zdt)
+            }
+            (Some(offset), Some(iana)) => {
+                let tz = db.get(iana)?;
+                let azdt = OffsetConflict::Reject.resolve(dt, offset, tz)?;
+                // Guaranteed that if OffsetConflict::Reject doesn't reject,
+                // then we get back an unambiguous zoned datetime.
+                let zdt = azdt.unambiguous().unwrap();
+                Ok(zdt)
+            }
+        }
     }
 
     /// Extracts a timestamp from this broken down time.
@@ -1538,6 +1659,7 @@ impl<'a> From<&'a Zoned> for BrokenDownTime {
         BrokenDownTime {
             offset: Some(zdt.offset()),
             tzabbrev: Some(tzabbrev.to_string()),
+            iana: zdt.time_zone().iana_name().map(|s| s.to_string()),
             ..BrokenDownTime::from(zdt.datetime())
         }
     }

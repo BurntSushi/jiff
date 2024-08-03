@@ -481,17 +481,17 @@ a "odd" custom format into a zoned datetime:
 use jiff::Zoned;
 
 let zdt = Zoned::strptime(
-    "%A, %B %d, %Y at %I:%M%p %z",
-    "Monday, July 15, 2024 at 5:30pm -0400",
+    "%A, %B %d, %Y at %I:%M%p %V",
+    "Monday, July 15, 2024 at 5:30pm US/Eastern",
 )?;
-assert_eq!(zdt.to_string(), "2024-07-15T17:30:00-04:00[-04:00]");
+assert_eq!(zdt.to_string(), "2024-07-15T17:30:00-04:00[US/Eastern]");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-And this shows how to use [`Zoned::strftime`] to format a zoned datetime. Note
-the use of `%Z` instead of `%z`, which will print a time zone abbreviation
-(when one is available) instead of an offset (`%Z` can't be used for parsing):
+And this shows how to use [`Zoned::strftime`] to format a zoned datetime.
+Note the use of `%Z`, which will print a time zone abbreviation (when one is
+available) instead of an offset (`%Z` can't be used for parsing):
 
 ```
 use jiff::civil::date;
@@ -500,6 +500,22 @@ let zdt = date(2024, 7, 15).at(17, 30, 59, 0).intz("Australia/Tasmania")?;
 // %-I instead of %I means no padding.
 let string = zdt.strftime("%A, %B %d, %Y at %-I:%M%P %Z").to_string();
 assert_eq!(string, "Monday, July 15, 2024 at 5:30pm AEST");
+
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+However, time zone abbreviations aren't parsable because they are ambiguous.
+For example, `CST` can stand for `Central Standard Time`, `Cuba Standard Time`
+or `China Standard Time`. Instead, it is recommended to use `%V` to format an
+IANA time zone identifier (which can be parsed, as shown above):
+
+```
+use jiff::civil::date;
+
+let zdt = date(2024, 7, 15).at(17, 30, 59, 0).intz("Australia/Tasmania")?;
+// %-I instead of %I means no padding.
+let string = zdt.strftime("%A, %B %d, %Y at %-I:%M%P %V").to_string();
+assert_eq!(string, "Monday, July 15, 2024 at 5:30pm Australia/Tasmania");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
