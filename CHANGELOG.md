@@ -1,7 +1,7 @@
 0.1.5 (TBD)
 ==================
-This release includes some improvements and bug fixes for Jiff's `strtime`
-APIs.
+This release includes some improvements and bug fixes, particularly for Jiff's
+`strtime` APIs.
 
 Enhancements:
 
@@ -10,6 +10,8 @@ Add support for `%V` for formatting _and_ parsing IANA time zone identifiers.
 
 Bug fixes:
 
+* [#59](https://github.com/BurntSushi/jiff/issues/59):
+Fixes a bug where some `Span`s could not be roundtripped through ISO 8601.
 * [#71](https://github.com/BurntSushi/jiff/issues/71):
 Tweak wording in documentation of "printf"-style API.
 * [#73](https://github.com/BurntSushi/jiff/issues/73):
