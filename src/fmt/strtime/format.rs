@@ -7,7 +7,7 @@ use crate::{
             month_name_abbrev, month_name_full, weekday_name_abbrev,
             weekday_name_full, BrokenDownTime, Extension, Flag,
         },
-        util::DecimalFormatter,
+        util::{DecimalFormatter, FractionalFormatter},
         Write, WriteExt,
     },
     util::{escape, parse},
@@ -375,6 +375,19 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         let subsec = self.tm.subsec.ok_or_else(|| {
             err!("requires time to format subsecond nanoseconds")
         })?;
+        // For %f, we always want to emit at least one digit. The only way we
+        // wouldn't is if our fractional component is zero. One exception to
+        // this is when the width is `0` (which looks like `%00f`), in which
+        // case, we emit an error. We could allow it to emit an empty string,
+        // but this seems very odd. And an empty string cannot be parsed by
+        // `%f`.
+        if ext.width == Some(0) {
+            return Err(err!("zero precision with %f is not allowed"));
+        }
+        if subsec == 0 && ext.width.is_none() {
+            self.wtr.write_str("0")?;
+            return Ok(());
+        }
         ext.write_fractional_seconds(subsec, self.wtr)?;
         Ok(())
     }
@@ -382,7 +395,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     /// %.f
     fn fmt_dot_fractional(&mut self, ext: Extension) -> Result<(), Error> {
         let Some(subsec) = self.tm.subsec else { return Ok(()) };
-        if subsec == 0 && ext.width.is_none() {
+        if subsec == 0 && ext.width.is_none() || ext.width == Some(0) {
             return Ok(());
         }
         ext.write_str(Case::AsIs, ".", self.wtr)?;
@@ -519,9 +532,11 @@ impl Extension {
     ) -> Result<(), Error> {
         let number = number.into();
 
-        let mut formatter =
-            DecimalFormatter::new().fractional(self.width.unwrap_or(1), 9);
-        wtr.write_int(&formatter, number)
+        let mut formatter = FractionalFormatter::new();
+        if let Some(precision) = self.width {
+            formatter = formatter.precision(precision);
+        }
+        wtr.write_fraction(&formatter, number)
     }
 }
 
@@ -715,6 +730,15 @@ mod tests {
         insta::assert_snapshot!(f("%.6f", mk(123_000_000)), @".123000");
         insta::assert_snapshot!(f("%.9f", mk(123_000_000)), @".123000000");
         insta::assert_snapshot!(f("%.255f", mk(123_000_000)), @".123000000");
+
+        insta::assert_snapshot!(f("%3f", mk(123_456_789)), @"123");
+        insta::assert_snapshot!(f("%6f", mk(123_456_789)), @"123456");
+        insta::assert_snapshot!(f("%9f", mk(123_456_789)), @"123456789");
+
+        insta::assert_snapshot!(f("%.0f", mk(123_456_789)), @"");
+        insta::assert_snapshot!(f("%.3f", mk(123_456_789)), @".123");
+        insta::assert_snapshot!(f("%.6f", mk(123_456_789)), @".123456");
+        insta::assert_snapshot!(f("%.9f", mk(123_456_789)), @".123456789");
     }
 
     #[test]
@@ -769,5 +793,16 @@ mod tests {
         insta::assert_snapshot!(f("%05y", date(2001, 7, 14)), @"00001");
         insta::assert_snapshot!(f("%_y", date(2001, 7, 14)), @" 1");
         insta::assert_snapshot!(f("%_5y", date(2001, 7, 14)), @"    1");
+    }
+
+    #[test]
+    fn err_format_subsec_nanosecond() {
+        let f = |fmt: &str, time: Time| format(fmt, time).unwrap_err();
+        let mk = |subsec| time(0, 0, 0, subsec);
+
+        insta::assert_snapshot!(
+            f("%00f", mk(123_456_789)),
+            @"strftime formatting failed: %f failed: zero precision with %f is not allowed",
+        );
     }
 }
