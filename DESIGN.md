@@ -254,6 +254,15 @@ my own crates, I know what it's like to be on the other end of this. Sometimes
 you just have to start fresh.
 
 
+## Are there any published alternative perspectives on Rust datetime libraries?
+
+Here's a list. More may be added in the future:
+
+* [Commentary from the original author of the `chrono` crate.][alt1]
+
+[alt1]: https://github.com/BurntSushi/jiff/issues/63
+
+
 ## Why is there one duration type instead of two?
 
 In large part, this design decision came from [Temporal], which also [uses
