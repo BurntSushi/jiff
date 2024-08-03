@@ -196,13 +196,15 @@ default, `%d` will only try to consume at most 2 digits.
 
 The `%f` and `%.f` flags also support specifying the precision, up to
 nanoseconds. For example, `%3f` and `%.3f` will both always print a fractional
-second component to at least 3 decimal places. When no precision is specified,
+second component to exactly 3 decimal places. When no precision is specified,
 then `%f` will always emit at least one digit, even if it's zero. But `%.f`
 will emit the empty string when the fractional component is zero. Otherwise, it
 will include the leading `.`. For parsing, `%f` does not include the leading
 dot, but `%.f` does. Note that all of the options above are still parsed for
 `%f` and `%.f`, but they are all no-ops (except for the padding for `%f`, which
-is instead interpreted as a precision setting).
+is instead interpreted as a precision setting). When using a precision setting,
+truncation is used. If you need a different rounding mode, you should use
+higher level APIs like [`Timestamp::round`] or [`Zoned::round`].
 
 # Unsupported
 

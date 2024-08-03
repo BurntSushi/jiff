@@ -1,7 +1,19 @@
+0.1.5 (TBD)
+==================
+This releases fixes a bug with fixed precision fractional formatting.
+
+Bug fixes:
+
+* [#73](https://github.com/BurntSushi/jiff/issues/73):
+Make it so `%.Nf` only formats to `N` decimal places.
+
+
 0.1.4 (2024-08-01)
 ==================
 This release includes a small improvement for `strptime` that permits
 `%Y%m%d` to parse `20240730` correctly.
+
+Enhancements:
 
 * [#62](https://github.com/BurntSushi/jiff/issues/62):
 Tweak `strptime` so that things like `%Y` aren't unceremoniously greedy.
