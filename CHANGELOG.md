@@ -1,6 +1,12 @@
 0.1.5 (TBD)
 ==================
-This releases fixes a bug with fixed precision fractional formatting.
+This release includes some improvements and bug fixes for Jiff's `strtime`
+APIs.
+
+Enhancements:
+
+* [#75](https://github.com/BurntSushi/jiff/issues/75):
+Add support for `%V` for formatting _and_ parsing IANA time zone identifiers.
 
 Bug fixes:
 

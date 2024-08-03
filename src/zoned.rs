@@ -3092,17 +3092,16 @@ impl Zoned {
     ///
     /// # Warning
     ///
-    /// The `strtime` module APIs do not support parsing or formatting with
-    /// IANA time zone identifiers. This means that if you format a zoned
+    /// The `strtime` module APIs do not require an IANA time zone identifier
+    /// to parse a `Zoned`. If one is not used, then if you format a zoned
     /// datetime in a time zone like `America/New_York` and then parse it back
     /// again, the zoned datetime you get back will be a "fixed offset" zoned
     /// datetime. This in turn means it will not perform daylight saving time
     /// safe arithmetic.
     ///
-    /// The `strtime` modules APIs are useful for ad hoc formatting and
-    /// parsing, but they shouldn't be used as an interchange format. For
-    /// an interchange format, the default `std::fmt::Display` and
-    /// `std::str::FromStr` trait implementations on `Zoned` are appropriate.
+    /// However, the `%V` directive may be used to both format and parse an
+    /// IANA time zone identifier. It is strongly recommended to use this
+    /// directive whenever one is formatting or parsing `Zoned` values.
     ///
     /// # Errors
     ///
@@ -3120,16 +3119,8 @@ impl Zoned {
     /// ```
     /// use jiff::Zoned;
     ///
-    /// let zdt = Zoned::strptime("%F %H:%M %:z", "2024-07-14 21:14 -04:00")?;
-    /// assert_eq!(zdt.to_string(), "2024-07-14T21:14:00-04:00[-04:00]");
-    ///
-    /// // It might be prudent to convert the zoned datetime you get back
-    /// // into a "real" time zone:
-    /// let zdt = zdt.intz("Australia/Tasmania")?;
-    /// assert_eq!(
-    ///     zdt.to_string(),
-    ///     "2024-07-15T11:14:00+10:00[Australia/Tasmania]",
-    /// );
+    /// let zdt = Zoned::strptime("%F %H:%M %:V", "2024-07-14 21:14 US/Eastern")?;
+    /// assert_eq!(zdt.to_string(), "2024-07-14T21:14:00-04:00[US/Eastern]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
