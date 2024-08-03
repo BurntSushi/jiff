@@ -120,9 +120,13 @@ version = "3.9.0"
 path = "tests/lib.rs"
 name = "integration"
 
-[profile.test]
-opt-level = 3
-
+# This is just like the default 'test' profile, but debug_assertions are
+# disabled. This is important to cover for Jiff because we do a lot of extra
+# work in our internal ranged integer types when debug_assertions are enabled.
+# It also makes types fatter. It's very useful for catching overflow bugs.
+# But since there's a fair bit of logic there, it's also worth running tests
+# without debug_assertions enabled to exercise the *actual* code paths used
+# in production.
 [profile.testrelease]
 inherits = "test"
 debug-assertions = false
