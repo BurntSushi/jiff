@@ -1,7 +1,10 @@
 use crate::{
     civil::{Date, DateTime, Time},
     error::Error,
-    fmt::{util::DecimalFormatter, Write, WriteExt},
+    fmt::{
+        util::{DecimalFormatter, FractionalFormatter},
+        Write, WriteExt,
+    },
     span::Span,
     tz::{Offset, TimeZone},
     util::{rangeint::RFrom, t},
@@ -102,8 +105,7 @@ impl DateTimePrinter {
         mut wtr: W,
     ) -> Result<(), Error> {
         static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
-        static FMT_FRACTION: DecimalFormatter =
-            DecimalFormatter::new().fractional(0, 9);
+        static FMT_FRACTION: FractionalFormatter = FractionalFormatter::new();
 
         wtr.write_int(&FMT_TWO, time.hour())?;
         wtr.write_str(":")?;
@@ -113,7 +115,7 @@ impl DateTimePrinter {
         let fractional_nanosecond = time.subsec_nanosecond();
         if fractional_nanosecond != 0 {
             wtr.write_str(".")?;
-            wtr.write_int(&FMT_FRACTION, fractional_nanosecond)?;
+            wtr.write_fraction(&FMT_FRACTION, fractional_nanosecond)?;
         }
         Ok(())
     }
@@ -214,8 +216,7 @@ impl SpanPrinter {
         mut wtr: W,
     ) -> Result<(), Error> {
         static FMT_INT: DecimalFormatter = DecimalFormatter::new();
-        static FMT_FRACTION: DecimalFormatter =
-            DecimalFormatter::new().fractional(0, 9);
+        static FMT_FRACTION: FractionalFormatter = FractionalFormatter::new();
 
         if span.is_negative() {
             wtr.write_str("-")?;
@@ -310,7 +311,7 @@ impl SpanPrinter {
             wtr.write_int(&FMT_INT, fraction_second.get())?;
             if fraction_nano != 0 {
                 wtr.write_str(".")?;
-                wtr.write_int(&FMT_FRACTION, fraction_nano.get())?;
+                wtr.write_fraction(&FMT_FRACTION, fraction_nano.get())?;
             }
             wtr.write_str("s")?;
         }

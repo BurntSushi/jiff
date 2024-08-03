@@ -106,7 +106,7 @@ from [Temporal's hybrid grammar].
 use crate::{
     error::{err, Error, ErrorContext},
     fmt::{
-        util::{parse_temporal_fraction, DecimalFormatter},
+        util::{parse_temporal_fraction, FractionalFormatter},
         Parsed,
     },
     tz::Offset,
@@ -242,8 +242,7 @@ impl core::fmt::Display for Numeric {
             write!(f, ":{:02}", seconds)?;
         }
         if let Some(nanos) = self.nanoseconds {
-            static FMT: DecimalFormatter =
-                DecimalFormatter::new().fractional(0, 9);
+            static FMT: FractionalFormatter = FractionalFormatter::new();
             write!(f, ".{}", FMT.format(i64::from(nanos)).as_str())?;
         }
         Ok(())
