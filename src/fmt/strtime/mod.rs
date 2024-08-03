@@ -132,11 +132,6 @@ assert_eq!(date.strftime("%Y%m%d").to_string(), "09990715");
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-Additionally, the parsing and formatting in this module does not currently
-support IANA time zone identifiers. This means that it isn't suitable as an
-interchange format. And time zone abbreviations, i.e., `%Z` when formatting,
-aren't supported when parsing because time zone abbreviations are ambiguous.
-
 The main advice here is that these APIs can come in handy for ad hoc tasks that
 would otherwise be annoying to deal with. For example, I once wrote a tool to
 extract data from an XML dump of my SMS messages, and one of the date formats
