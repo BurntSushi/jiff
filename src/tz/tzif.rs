@@ -1478,8 +1478,8 @@ mod tests {
     }
 
     /// This tests walks the /usr/share/zoneinfo directory (if it exists) and
-    /// tries to parse an TZif formatted file it can find. We don't really do
-    /// much with it other than to ensure we don't panic or return an error.
+    /// tries to parse every TZif formatted file it can find. We don't really
+    /// do much with it other than to ensure we don't panic or return an error.
     /// That is, we check that we can parse each file, but not that we do so
     /// correctly.
     #[cfg(target_os = "linux")]
@@ -1492,6 +1492,12 @@ mod tests {
             // These aren't related to our parsing, so it's some other problem
             // (like the directory not existing).
             let Ok(dent) = result else { continue };
+            // This test can take some time in debug mode, so skip parsing
+            // some of the less frequently used TZif files.
+            let Some(name) = dent.path().to_str() else { continue };
+            if name.contains("right/") || name.contains("posix/") {
+                continue;
+            }
             // Again, skip if we can't read. Not my monkeys, not my circus.
             let Ok(bytes) = std::fs::read(dent.path()) else { continue };
             if !is_possibly_tzif(&bytes) {

@@ -49,9 +49,6 @@ jobs:
         - build: win-msvc
           os: windows-latest
           rust: stable
-        - build: win-gnu
-          os: windows-latest
-          rust: stable-x86_64-gnu
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -64,8 +61,30 @@ jobs:
     - run: cargo test --verbose --all
     - run: cargo test --verbose -p jiff-cli
     # Skip on Windows because it takes freaking forever.
-    - if: matrix.build != 'win-msvc' && matrix.build != 'win-gnu'
+    - if: matrix.build != 'win-msvc'
+      run: cargo test --verbose --lib --profile testrelease
+    - if: matrix.build != 'win-msvc'
+      run: cargo test --verbose --test integration --profile testrelease
+    - if: matrix.build != 'win-msvc'
       run: ./test
+
+  # Tests for stable-x86_64-gnu. It's different enough from the "main" targets
+  # to warrant its own section. The main problem is that it is just
+  # annoyingly slow. Like, twice as slow as the next slowest runner. So we
+  # run a stripped down version of tests.
+  win-gnu:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable-x86_64-gnu
+    - run: cargo build --verbose
+    - run: cargo doc --verbose
+    - run: cargo test --verbose --lib
+    - run: cargo test --verbose --test integration
 
   # This job runs a stripped down version of CI to test the MSRV. The specific
   # reason for doing this is that Jiff dev-dependencies tend to evolve more
