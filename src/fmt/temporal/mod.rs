@@ -1207,6 +1207,10 @@ impl SpanPrinter {
 
 #[cfg(test)]
 mod tests {
+    use alloc::string::ToString;
+
+    use crate::Unit;
+
     use super::*;
 
     // This test ensures that strings like `2024-07-15+02` fail to parse.
@@ -1236,6 +1240,17 @@ mod tests {
         insta::assert_snapshot!(
             DateTimeParser::new().parse_date("-000000-01-01").unwrap_err(),
             @r###"failed to parse year in date "-000000-01-01": year zero must be written without a sign or a positive sign, but not a negative sign"###,
+        );
+    }
+
+    // Regression test for: https://github.com/BurntSushi/jiff/issues/59
+    #[test]
+    fn fractional_duration_roundtrip() {
+        let span1: Span = "Pt843517081,1H".parse().unwrap();
+        let span2: Span = span1.to_string().parse().unwrap();
+        assert_eq!(
+            span1.total(Unit::Hour).unwrap(),
+            span2.total(Unit::Hour).unwrap()
         );
     }
 }

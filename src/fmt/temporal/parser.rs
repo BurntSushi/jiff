@@ -1045,14 +1045,32 @@ impl SpanParser {
                 // lowest unit of time.
                 break;
             } else {
-                span =
+                let result =
                     span.try_units_ranged(unit, value).with_context(|| {
                         err!(
                             "failed to set value {value:?} \
                              as {unit} unit on span",
                             unit = Unit::from(unit).singular(),
                         )
-                    })?;
+                    });
+                // This is annoying, but because we can write out a larger
+                // number of hours/minutes/seconds than what we actually
+                // support, we need to be prepared to parse an unbalanced span
+                // if our time units are too big here. This entire dance is
+                // because ISO 8601 requires fractional seconds to represent
+                // milli-, micro- and nano-seconds. This means that spans
+                // cannot retain their full fidelity when roundtripping through
+                // ISO 8601. However, it is guaranteed that their total elapsed
+                // time represented will never change.
+                span = match result {
+                    Ok(span) => span,
+                    Err(_) => span_fractional_time(
+                        unit,
+                        value,
+                        t::SubsecNanosecond::N::<0>(),
+                        span,
+                    )?,
+                };
             }
         }
         Ok(Parsed { value: (span, parsed_any), input })
@@ -1203,8 +1221,8 @@ impl SpanParser {
 /// `500_000_000`. The span given would just be `1d`. The span returned would
 /// be `P1dT1h30m`.
 ///
-/// This can if the resulting units would be too large for the limits on a
-/// `span`.
+/// This can error if the resulting units would be too large for the limits on
+/// a `span`.
 ///
 /// # Panics
 ///
@@ -1219,12 +1237,12 @@ fn span_fractional_time(
     // appropriate. In general, we always create a balanced span, but there
     // are some cases where we can't. For example, if one serializes a span
     // with both the maximum number of seconds and the maximum number of
-    // milliseconds, then it isn't technically balanced, but only because
-    // of the limits placed on each of the units. When this kind of span is
-    // serialized to a string, it results in a second value that is actually
-    // bigger than the maximum allowed number of seconds in a span. So here,
-    // we have to reverse that operation and spread the seconds over smaller
-    // units. This in turn creates an unbalanced span. Annoying.
+    // milliseconds, then this just can't be balanced due to the limits on
+    // each of the units. When this kind of span is serialized to a string,
+    // it results in a second value that is actually bigger than the maximum
+    // allowed number of seconds in a span. So here, we have to reverse that
+    // operation and spread the seconds over smaller units. This in turn
+    // creates an unbalanced span. Annoying.
     //
     // The above is why we have `if unit_value > MAX { <do adjustments> }` in
     // the balancing code below. Basically, if we overshoot our limit, we back
@@ -1462,6 +1480,34 @@ mod tests {
         insta::assert_debug_snapshot!(p(b"-PT175307616h10518456960m640330789636.854775807s"), @r###"
         Parsed {
             value: -PT175307616h10518456960m640330789636.854775807s,
+            input: "",
+        }
+        "###);
+    }
+
+    #[test]
+    fn ok_temporal_duration_unbalanced() {
+        let p =
+            |input| SpanParser::new().parse_temporal_duration(input).unwrap();
+
+        insta::assert_debug_snapshot!(
+            p(b"PT175307616h10518456960m1774446656760s"), @r###"
+        Parsed {
+            value: PT175307616h10518456960m1774446656760s,
+            input: "",
+        }
+        "###);
+        insta::assert_debug_snapshot!(
+            p(b"Pt843517082H"), @r###"
+        Parsed {
+            value: PT175307616h10518456960m1774446660000s,
+            input: "",
+        }
+        "###);
+        insta::assert_debug_snapshot!(
+            p(b"Pt843517081H"), @r###"
+        Parsed {
+            value: PT175307616h10518456960m1774446656400s,
             input: "",
         }
         "###);
