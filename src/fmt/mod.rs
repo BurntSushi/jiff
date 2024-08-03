@@ -14,7 +14,7 @@ use crate::{
     util::escape,
 };
 
-use self::util::{Decimal, DecimalFormatter};
+use self::util::{Decimal, DecimalFormatter, Fractional, FractionalFormatter};
 
 mod offset;
 pub mod rfc2822;
@@ -229,10 +229,30 @@ trait WriteExt: Write {
         self.write_decimal(&Decimal::new(formatter, n.into()))
     }
 
+    /// Write the given fractional number using ASCII digits to this buffer.
+    /// The given formatter controls how the fractional number is formatted.
+    #[inline]
+    fn write_fraction(
+        &mut self,
+        formatter: &FractionalFormatter,
+        n: impl Into<i64>,
+    ) -> Result<(), Error> {
+        self.write_fractional(&Fractional::new(formatter, n.into()))
+    }
+
     /// Write the given decimal number to this buffer.
     #[inline]
     fn write_decimal(&mut self, decimal: &Decimal) -> Result<(), Error> {
         self.write_str(decimal.as_str())
+    }
+
+    /// Write the given fractional number to this buffer.
+    #[inline]
+    fn write_fractional(
+        &mut self,
+        fractional: &Fractional,
+    ) -> Result<(), Error> {
+        self.write_str(fractional.as_str())
     }
 }
 

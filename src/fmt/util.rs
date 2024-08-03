@@ -192,6 +192,117 @@ impl Decimal {
     }
 }
 
+/// A simple formatter for converting fractional components to ASCII byte
+/// strings.
+///
+/// We only support precision to 9 decimal places, which corresponds to
+/// nanosecond precision as a fractional second component.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FractionalFormatter {
+    precision: Option<u8>,
+}
+
+impl FractionalFormatter {
+    /// Creates a new fractional formatter using the given precision settings.
+    pub(crate) const fn new() -> FractionalFormatter {
+        FractionalFormatter { precision: None }
+    }
+
+    /// Format the given value using this configuration as a decimal ASCII
+    /// fractional number.
+    #[cfg(test)]
+    pub(crate) const fn format(&self, value: i64) -> Fractional {
+        Fractional::new(self, value)
+    }
+
+    /// Set the precision.
+    ///
+    /// If the `precision` is greater than `9`, then it is clamped to `9`.
+    ///
+    /// When the precision is not set, then it is automatically determined base
+    /// on the value.
+    pub(crate) const fn precision(
+        self,
+        mut precision: u8,
+    ) -> FractionalFormatter {
+        if precision > 9 {
+            precision = 9;
+        }
+        FractionalFormatter { precision: Some(precision), ..self }
+    }
+}
+
+/// A formatted fractional number that can be converted to a sequence of bytes.
+#[derive(Debug)]
+pub(crate) struct Fractional {
+    buf: [u8; Self::MAX_LEN as usize],
+    end: u8,
+}
+
+impl Fractional {
+    /// Since we don't support precision bigger than this.
+    const MAX_LEN: u8 = 9;
+
+    /// Using the given formatter, turn the value given into a fractional
+    /// decimal representation using ASCII bytes.
+    ///
+    /// Note that the fractional number returned *may* expand to an empty
+    /// slice of bytes. This occurs whenever the precision is set to `0`, or
+    /// when the precision is not set and the value is `0`. Any non-zero
+    /// explicitly set precision guarantees that the slice returned is not
+    /// empty.
+    ///
+    /// This panics if the value given isn't in the range `0..=999_999_999`.
+    pub(crate) const fn new(
+        formatter: &FractionalFormatter,
+        mut value: i64,
+    ) -> Fractional {
+        assert!(0 <= value && value <= 999_999_999);
+        let mut fractional = Fractional {
+            buf: [b'0'; Self::MAX_LEN as usize],
+            end: Self::MAX_LEN,
+        };
+        let mut i = 9;
+        loop {
+            i -= 1;
+
+            let digit = (value % 10) as u8;
+            value /= 10;
+            fractional.buf[i] += digit;
+            if value == 0 {
+                break;
+            }
+        }
+        if let Some(precision) = formatter.precision {
+            fractional.end = precision;
+        } else {
+            while fractional.end > 0
+                && fractional.buf[fractional.end as usize - 1] == b'0'
+            {
+                fractional.end -= 1;
+            }
+        }
+        fractional
+    }
+
+    /// Returns the ASCII representation of this fractional number as a byte
+    /// slice. The slice returned may be empty.
+    ///
+    /// The slice returned is guaranteed to be valid ASCII.
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        &self.buf[..usize::from(self.end)]
+    }
+
+    /// Returns the ASCII representation of this fractional number as a string
+    /// slice. The slice returned may be empty.
+    pub(crate) fn as_str(&self) -> &str {
+        // SAFETY: This is safe because all bytes written to `self.buf` are
+        // guaranteed to be ASCII (including in its initial state), and thus,
+        // any subsequence is guaranteed to be valid UTF-8.
+        unsafe { core::str::from_utf8_unchecked(self.as_bytes()) }
+    }
+}
+
 /// Parses an optional fractional number from the start of `input`.
 ///
 /// If `input` does not begin with a `.` (or a `,`), then this returns `None`
@@ -275,6 +386,8 @@ pub(crate) fn parse_temporal_fraction<'i>(
 
 #[cfg(test)]
 mod tests {
+    use alloc::string::ToString;
+
     use super::*;
 
     #[test]
@@ -330,5 +443,48 @@ mod tests {
 
         let x = DecimalFormatter::new().fractional(6, 9).format(123_000_000);
         assert_eq!(x.as_str(), "123000");
+    }
+
+    #[test]
+    fn fractional_auto() {
+        let f = |n| FractionalFormatter::new().format(n).as_str().to_string();
+
+        assert_eq!(f(0), "");
+        assert_eq!(f(123_000_000), "123");
+        assert_eq!(f(123_456_000), "123456");
+        assert_eq!(f(123_456_789), "123456789");
+        assert_eq!(f(456_789), "000456789");
+        assert_eq!(f(789), "000000789");
+    }
+
+    #[test]
+    fn fractional_precision() {
+        let f = |precision, n| {
+            FractionalFormatter::new()
+                .precision(precision)
+                .format(n)
+                .as_str()
+                .to_string()
+        };
+
+        assert_eq!(f(0, 0), "");
+        assert_eq!(f(1, 0), "0");
+        assert_eq!(f(9, 0), "000000000");
+
+        assert_eq!(f(3, 123_000_000), "123");
+        assert_eq!(f(6, 123_000_000), "123000");
+        assert_eq!(f(9, 123_000_000), "123000000");
+
+        assert_eq!(f(3, 123_456_000), "123");
+        assert_eq!(f(6, 123_456_000), "123456");
+        assert_eq!(f(9, 123_456_000), "123456000");
+
+        assert_eq!(f(3, 123_456_789), "123");
+        assert_eq!(f(6, 123_456_789), "123456");
+        assert_eq!(f(9, 123_456_789), "123456789");
+
+        // We use truncation, no rounding.
+        assert_eq!(f(2, 889_000_000), "88");
+        assert_eq!(f(2, 999_000_000), "99");
     }
 }
