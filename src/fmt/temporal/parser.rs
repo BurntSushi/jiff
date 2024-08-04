@@ -4,12 +4,15 @@ use crate::{
     fmt::{
         offset::{self, ParsedOffset},
         rfc9557::{self, ParsedAnnotations},
-        util::parse_temporal_fraction,
+        util::{
+            fractional_time_to_duration, fractional_time_to_span,
+            parse_temporal_fraction,
+        },
         Parsed,
     },
     span::Span,
     tz::{AmbiguousZoned, Disambiguation, OffsetConflict, TimeZoneDatabase},
-    util::{escape, parse, rangeint::RFrom, t},
+    util::{escape, parse, t},
     SignedDuration, Timestamp, Unit, Zoned,
 };
 
@@ -1071,7 +1074,7 @@ impl SpanParser {
             parsed_any = true;
 
             if let Some(fraction) = fraction {
-                span = span_fractional_time(unit, value, fraction, span)?;
+                span = fractional_time_to_span(unit, value, fraction, span)?;
                 // Once we see a fraction, we are done. We don't permit parsing
                 // any more units. That is, a fraction can only occur on the
                 // lowest unit of time.
@@ -1096,7 +1099,7 @@ impl SpanParser {
                 // time represented will never change.
                 span = match result {
                     Ok(span) => span,
-                    Err(_) => span_fractional_time(
+                    Err(_) => fractional_time_to_span(
                         unit,
                         value,
                         t::SubsecNanosecond::N::<0>(),
@@ -1192,8 +1195,8 @@ impl SpanParser {
             })?;
 
             if let Some(fraction) = fraction {
-                // span = span_fractional_time(unit, value, fraction, span)?;
-                let fraction_dur = duration_fractional_time(unit, fraction);
+                let fraction_dur =
+                    fractional_time_to_duration(unit, fraction)?;
                 let result = if negative {
                     dur.checked_sub(fraction_dur)
                 } else {
@@ -1360,148 +1363,6 @@ impl SpanParser {
     }
 }
 
-/// This routine returns a span based on the given with fractional time applied
-/// to it.
-///
-/// For example, given a span like `P1dT1.5h`, the `unit` would be
-/// `Unit::Hour`, the `value` would be `1` and the `fraction` would be
-/// `500_000_000`. The span given would just be `1d`. The span returned would
-/// be `P1dT1h30m`.
-///
-/// This can error if the resulting units would be too large for the limits on
-/// a `span`.
-///
-/// # Panics
-///
-/// This panics if `unit` is not `Hour`, `Minute` or `Second`.
-fn span_fractional_time(
-    unit: Unit,
-    value: t::NoUnits,
-    fraction: t::SubsecNanosecond,
-    mut span: Span,
-) -> Result<Span, Error> {
-    // We switch everything over to nanoseconds and then divy that up as
-    // appropriate. In general, we always create a balanced span, but there
-    // are some cases where we can't. For example, if one serializes a span
-    // with both the maximum number of seconds and the maximum number of
-    // milliseconds, then this just can't be balanced due to the limits on
-    // each of the units. When this kind of span is serialized to a string,
-    // it results in a second value that is actually bigger than the maximum
-    // allowed number of seconds in a span. So here, we have to reverse that
-    // operation and spread the seconds over smaller units. This in turn
-    // creates an unbalanced span. Annoying.
-    //
-    // The above is why we have `if unit_value > MAX { <do adjustments> }` in
-    // the balancing code below. Basically, if we overshoot our limit, we back
-    // out anything over the limit and carry it over to the lesser units. If
-    // our value is truly too big, then the final call to set nanoseconds will
-    // fail.
-    let value = t::NoUnits128::rfrom(value);
-    let fraction = t::NoUnits128::rfrom(fraction);
-    let mut nanos = match unit {
-        Unit::Hour => {
-            (value * t::NANOS_PER_HOUR) + (fraction * t::SECONDS_PER_HOUR)
-        }
-        Unit::Minute => {
-            (value * t::NANOS_PER_MINUTE) + (fraction * t::SECONDS_PER_MINUTE)
-        }
-        Unit::Second => (value * t::NANOS_PER_SECOND) + fraction,
-        _ => unreachable!("unsupported unit: {unit:?}"),
-    };
-
-    if unit >= Unit::Hour && nanos > 0 {
-        let mut hours = nanos / t::NANOS_PER_HOUR;
-        nanos %= t::NANOS_PER_HOUR;
-        if hours > t::SpanHours::MAX_SELF {
-            nanos += (hours - t::SpanHours::MAX_SELF) * t::NANOS_PER_HOUR;
-            hours = t::NoUnits128::rfrom(t::SpanHours::MAX_SELF);
-        }
-        // OK because we just checked that our units are in range.
-        span = span.try_hours_ranged(hours).unwrap();
-    }
-    if unit >= Unit::Minute && nanos > 0 {
-        let mut minutes = nanos / t::NANOS_PER_MINUTE;
-        nanos %= t::NANOS_PER_MINUTE;
-        if minutes > t::SpanMinutes::MAX_SELF {
-            nanos +=
-                (minutes - t::SpanMinutes::MAX_SELF) * t::NANOS_PER_MINUTE;
-            minutes = t::NoUnits128::rfrom(t::SpanMinutes::MAX_SELF);
-        }
-        // OK because we just checked that our units are in range.
-        span = span.try_minutes_ranged(minutes).unwrap();
-    }
-    if nanos > 0 {
-        let mut seconds = nanos / t::NANOS_PER_SECOND;
-        nanos %= t::NANOS_PER_SECOND;
-        if seconds > t::SpanSeconds::MAX_SELF {
-            nanos +=
-                (seconds - t::SpanSeconds::MAX_SELF) * t::NANOS_PER_SECOND;
-            seconds = t::NoUnits128::rfrom(t::SpanSeconds::MAX_SELF);
-        }
-        // OK because we just checked that our units are in range.
-        span = span.try_seconds_ranged(seconds).unwrap();
-    }
-    if nanos > 0 {
-        let mut millis = nanos / t::NANOS_PER_MILLI;
-        nanos %= t::NANOS_PER_MILLI;
-        if millis > t::SpanMilliseconds::MAX_SELF {
-            nanos +=
-                (millis - t::SpanMilliseconds::MAX_SELF) * t::NANOS_PER_MILLI;
-            millis = t::NoUnits128::rfrom(t::SpanMilliseconds::MAX_SELF);
-        }
-        // OK because we just checked that our units are in range.
-        span = span.try_milliseconds_ranged(millis).unwrap();
-    }
-    if nanos > 0 {
-        let mut micros = nanos / t::NANOS_PER_MICRO;
-        nanos %= t::NANOS_PER_MICRO;
-        if micros > t::SpanMicroseconds::MAX_SELF {
-            nanos +=
-                (micros - t::SpanMicroseconds::MAX_SELF) * t::NANOS_PER_MICRO;
-            micros = t::NoUnits128::rfrom(t::SpanMicroseconds::MAX_SELF);
-        }
-        // OK because we just checked that our units are in range.
-        span = span.try_microseconds_ranged(micros).unwrap();
-    }
-    if nanos > 0 {
-        span = span.try_nanoseconds_ranged(nanos).with_context(|| {
-            err!(
-                "failed to set nanosecond value {nanos} on span \
-                 determined from {value}.{fraction}",
-            )
-        })?;
-    }
-
-    Ok(span)
-}
-
-/// Like `span_fractional_time`, but just converts the fraction of the given
-/// unit to a signed duration.
-///
-/// Since a signed duration doesn't keep track of individual units, there is
-/// no loss of fidelity between it and ISO 8601 durations like there is for
-/// `Span`.
-///
-/// Note that `fraction` can be a fractional hour, minute or second (even
-/// though its type suggests its only a fraction of a second).
-///
-/// # Panics
-///
-/// This panics if `unit` is not `Hour`, `Minute` or `Second`.
-fn duration_fractional_time(
-    unit: Unit,
-    fraction: t::SubsecNanosecond,
-) -> SignedDuration {
-    let fraction = t::NoUnits::rfrom(fraction);
-    let nanos = match unit {
-        Unit::Hour => fraction * t::SECONDS_PER_HOUR,
-        Unit::Minute => fraction * t::SECONDS_PER_MINUTE,
-        Unit::Second => fraction,
-        _ => unreachable!("unsupported unit: {unit:?}"),
-    };
-    SignedDuration::from_nanos(nanos.get())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1537,56 +1398,56 @@ mod tests {
         "###);
         insta::assert_debug_snapshot!(p(b"PT60s"), @r###"
         Parsed {
-            value: 60s,
+            value: 1m,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT1m"), @r###"
         Parsed {
-            value: 60s,
+            value: 1m,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT1m0.000000001s"), @r###"
         Parsed {
-            value: 60s1ns,
+            value: 1m 1ns,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT1.25m"), @r###"
         Parsed {
-            value: 75s,
+            value: 1m 15s,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT1h"), @r###"
         Parsed {
-            value: 3600s,
+            value: 1h,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT1h0.000000001s"), @r###"
         Parsed {
-            value: 3600s1ns,
+            value: 1h 1ns,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT1.25h"), @r###"
         Parsed {
-            value: 4500s,
+            value: 1h 15m,
             input: "",
         }
         "###);
 
         insta::assert_debug_snapshot!(p(b"-PT2562047788015215h30m8.999999999s"), @r###"
         Parsed {
-            value: -9223372036854775808s999999999ns,
+            value: 2562047788015215h 30m 8s 999ms 999µs 999ns ago,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT2562047788015215h30m7.999999999s"), @r###"
         Parsed {
-            value: 9223372036854775807s999999999ns,
+            value: 2562047788015215h 30m 7s 999ms 999µs 999ns,
             input: "",
         }
         "###);
@@ -1652,11 +1513,11 @@ mod tests {
 
         insta::assert_snapshot!(
             p(b"PT1m9223372036854775807s"),
-            @"failed to parse ISO 8601 duration string into `SignedDuration`: adding value 9223372036854775807 from unit second overflowed signed duration 60s",
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: adding value 9223372036854775807 from unit second overflowed signed duration 1m",
         );
         insta::assert_snapshot!(
             p(b"PT2562047788015215.6h"),
-            @"failed to parse ISO 8601 duration string into `SignedDuration`: adding fractional duration 2160s from unit hour to 9223372036854774000s overflowed signed duration limits",
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: adding fractional duration 36m from unit hour to 2562047788015215h overflowed signed duration limits",
         );
     }
 
@@ -1667,55 +1528,55 @@ mod tests {
 
         insta::assert_debug_snapshot!(p(b"P5d"), @r###"
         Parsed {
-            value: P5d,
+            value: 5d,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"-P5d"), @r###"
         Parsed {
-            value: -P5d,
+            value: 5d ago,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"+P5d"), @r###"
         Parsed {
-            value: P5d,
+            value: 5d,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"P5DT1s"), @r###"
         Parsed {
-            value: P5dT1s,
+            value: 5d 1s,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT1S"), @r###"
         Parsed {
-            value: PT1s,
+            value: 1s,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT0S"), @r###"
         Parsed {
-            value: PT0s,
+            value: 0s,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"P0Y"), @r###"
         Parsed {
-            value: PT0s,
+            value: 0s,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"P1Y1M1W1DT1H1M1S"), @r###"
         Parsed {
-            value: P1y1m1w1dT1h1m1s,
+            value: 1y 1mo 1w 1d 1h 1m 1s,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"P1y1m1w1dT1h1m1s"), @r###"
         Parsed {
-            value: P1y1m1w1dT1h1m1s,
+            value: 1y 1mo 1w 1d 1h 1m 1s,
             input: "",
         }
         "###);
@@ -1728,57 +1589,57 @@ mod tests {
 
         insta::assert_debug_snapshot!(p(b"PT0.5h"), @r###"
         Parsed {
-            value: PT30m,
+            value: 30m,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT0.123456789h"), @r###"
         Parsed {
-            value: PT7m24.4444404s,
+            value: 7m 24s 444ms 440µs 400ns,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT1.123456789h"), @r###"
         Parsed {
-            value: PT1h7m24.4444404s,
+            value: 1h 7m 24s 444ms 440µs 400ns,
             input: "",
         }
         "###);
 
         insta::assert_debug_snapshot!(p(b"PT0.5m"), @r###"
         Parsed {
-            value: PT30s,
+            value: 30s,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT0.123456789m"), @r###"
         Parsed {
-            value: PT7.40740734s,
+            value: 7s 407ms 407µs 340ns,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT1.123456789m"), @r###"
         Parsed {
-            value: PT1m7.40740734s,
+            value: 1m 7s 407ms 407µs 340ns,
             input: "",
         }
         "###);
 
         insta::assert_debug_snapshot!(p(b"PT0.5s"), @r###"
         Parsed {
-            value: PT0.5s,
+            value: 500ms,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT0.123456789s"), @r###"
         Parsed {
-            value: PT0.123456789s,
+            value: 123ms 456µs 789ns,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT1.123456789s"), @r###"
         Parsed {
-            value: PT1.123456789s,
+            value: 1s 123ms 456µs 789ns,
             input: "",
         }
         "###);
@@ -1789,25 +1650,25 @@ mod tests {
         // nanoseconds.
         insta::assert_debug_snapshot!(p(b"PT1902545624836.854775807s"), @r###"
         Parsed {
-            value: PT1902545624836.854775807s,
+            value: 631107417600s 631107417600000ms 631107417600000000µs 9223372036854775807ns,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"PT175307616h10518456960m640330789636.854775807s"), @r###"
         Parsed {
-            value: PT175307616h10518456960m640330789636.854775807s,
+            value: 175307616h 10518456960m 631107417600s 9223372036854ms 775µs 807ns,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"-PT1902545624836.854775807s"), @r###"
         Parsed {
-            value: -PT1902545624836.854775807s,
+            value: 631107417600s 631107417600000ms 631107417600000000µs 9223372036854775807ns ago,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(p(b"-PT175307616h10518456960m640330789636.854775807s"), @r###"
         Parsed {
-            value: -PT175307616h10518456960m640330789636.854775807s,
+            value: 175307616h 10518456960m 631107417600s 9223372036854ms 775µs 807ns ago,
             input: "",
         }
         "###);
@@ -1821,21 +1682,21 @@ mod tests {
         insta::assert_debug_snapshot!(
             p(b"PT175307616h10518456960m1774446656760s"), @r###"
         Parsed {
-            value: PT175307616h10518456960m1774446656760s,
+            value: 175307616h 10518456960m 631107417600s 631107417600000ms 512231821560000000µs,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(
             p(b"Pt843517082H"), @r###"
         Parsed {
-            value: PT175307616h10518456960m1774446660000s,
+            value: 175307616h 10518456960m 631107417600s 631107417600000ms 512231824800000000µs,
             input: "",
         }
         "###);
         insta::assert_debug_snapshot!(
             p(b"Pt843517081H"), @r###"
         Parsed {
-            value: PT175307616h10518456960m1774446656400s,
+            value: 175307616h 10518456960m 631107417600s 631107417600000ms 512231821200000000µs,
             input: "",
         }
         "###);

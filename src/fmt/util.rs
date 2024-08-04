@@ -1,7 +1,8 @@
 use crate::{
-    error::{err, Error},
+    error::{err, ErrorContext},
     fmt::Parsed,
-    util::{escape, parse, t},
+    util::{escape, parse, rangeint::RFrom, t},
+    Error, SignedDuration, Span, Unit,
 };
 
 /// A simple formatter for converting `i64` values to ASCII byte strings.
@@ -199,6 +200,31 @@ impl FractionalFormatter {
         };
         FractionalFormatter { precision, ..self }
     }
+
+    /// Returns true if and only if at least one digit will be written for the
+    /// given value.
+    ///
+    /// This is useful for callers that need to know whether to write
+    /// a decimal separator, e.g., `.`, before the digits.
+    pub(crate) fn will_write_digits(self, value: i64) -> bool {
+        self.precision.map_or_else(|| value != 0, |p| p > 0)
+    }
+
+    /// Returns true if and only if this formatter has an explicit non-zero
+    /// precision setting.
+    ///
+    /// This is useful for determining whether something like `0.000` needs to
+    /// be written in the case of a `precision=Some(3)` setting and a zero
+    /// value.
+    pub(crate) fn has_non_zero_fixed_precision(self) -> bool {
+        self.precision.map_or(false, |p| p > 0)
+    }
+
+    /// Returns true if and only if this formatter has fixed zero precision.
+    /// That is, no matter what is given as input, a fraction is never written.
+    pub(crate) fn has_zero_fixed_precision(self) -> bool {
+        self.precision.map_or(false, |p| p == 0)
+    }
 }
 
 /// A formatted fractional number that can be converted to a sequence of bytes.
@@ -279,11 +305,13 @@ impl Fractional {
 /// the decimal separator.
 ///
 /// While this is most typically used to parse the fractional component of
-/// second units, it is also used to parse the fractional component of hours
-/// or minutes in ISO 8601 duration parsing. The return type in that case is
-/// obviously a misnomer, but the range of possible values is still correct.
-/// (That is, the fractional component of an hour is still limited to 9 decimal
-/// places per the Temporal spec.)
+/// second units, it is also used to parse the fractional component of hours or
+/// minutes in ISO 8601 duration parsing, and milliseconds and microseconds in
+/// the "friendly" duration format. The return type in that case is obviously a
+/// misnomer, but the range of possible values is still correct. (That is, the
+/// fractional component of an hour is still limited to 9 decimal places per
+/// the Temporal spec.)
+#[inline(never)]
 pub(crate) fn parse_temporal_fraction<'i>(
     mut input: &'i [u8],
 ) -> Result<Parsed<'i, Option<t::SubsecNanosecond>>, Error> {
@@ -351,6 +379,185 @@ pub(crate) fn parse_temporal_fraction<'i>(
     let nanoseconds = t::SubsecNanosecond::try_new("nanoseconds", nanoseconds)
         .map_err(|err| err!("fractional nanoseconds are not valid: {err}"))?;
     Ok(Parsed { value: Some(nanoseconds), input })
+}
+
+/// This routine returns a span based on the given with fractional time applied
+/// to it.
+///
+/// For example, given a span like `P1dT1.5h`, the `unit` would be
+/// `Unit::Hour`, the `value` would be `1` and the `fraction` would be
+/// `500_000_000`. The span given would just be `1d`. The span returned would
+/// be `P1dT1h30m`.
+///
+/// Note that `fraction` can be a fractional hour, minute, second, millisecond
+/// or microsecond (even though its type suggests its only a fraction of a
+/// second). When milliseconds or microseconds, the given fraction has any
+/// sub-nanosecond precision truncated.
+///
+/// # Errors
+///
+/// This can error if the resulting units would be too large for the limits on
+/// a `span`. This also errors if `unit` is not `Hour`, `Minute`, `Second`,
+/// `Millisecond` or `Microsecond`.
+#[inline(never)]
+pub(crate) fn fractional_time_to_span(
+    unit: Unit,
+    value: t::NoUnits,
+    fraction: t::SubsecNanosecond,
+    mut span: Span,
+) -> Result<Span, Error> {
+    let allowed = matches!(
+        unit,
+        Unit::Hour
+            | Unit::Minute
+            | Unit::Second
+            | Unit::Millisecond
+            | Unit::Microsecond
+    );
+    if !allowed {
+        return Err(err!(
+            "fractional {unit} units are not allowed",
+            unit = unit.singular(),
+        ));
+    }
+    // We switch everything over to nanoseconds and then divy that up as
+    // appropriate. In general, we always create a balanced span, but there
+    // are some cases where we can't. For example, if one serializes a span
+    // with both the maximum number of seconds and the maximum number of
+    // milliseconds, then this just can't be balanced due to the limits on
+    // each of the units. When this kind of span is serialized to a string,
+    // it results in a second value that is actually bigger than the maximum
+    // allowed number of seconds in a span. So here, we have to reverse that
+    // operation and spread the seconds over smaller units. This in turn
+    // creates an unbalanced span. Annoying.
+    //
+    // The above is why we have `if unit_value > MAX { <do adjustments> }` in
+    // the balancing code below. Basically, if we overshoot our limit, we back
+    // out anything over the limit and carry it over to the lesser units. If
+    // our value is truly too big, then the final call to set nanoseconds will
+    // fail.
+    let value = t::NoUnits128::rfrom(value);
+    let fraction = t::NoUnits128::rfrom(fraction);
+    let mut nanos = match unit {
+        Unit::Hour => {
+            (value * t::NANOS_PER_HOUR) + (fraction * t::SECONDS_PER_HOUR)
+        }
+        Unit::Minute => {
+            (value * t::NANOS_PER_MINUTE) + (fraction * t::SECONDS_PER_MINUTE)
+        }
+        Unit::Second => (value * t::NANOS_PER_SECOND) + fraction,
+        Unit::Millisecond => {
+            (value * t::NANOS_PER_MILLI) + (fraction / t::NANOS_PER_MICRO)
+        }
+        Unit::Microsecond => {
+            (value * t::NANOS_PER_MICRO) + (fraction / t::NANOS_PER_MILLI)
+        }
+        // We return an error above if we hit this case.
+        _ => unreachable!("unsupported unit: {unit:?}"),
+    };
+
+    if unit >= Unit::Hour && nanos > 0 {
+        let mut hours = nanos / t::NANOS_PER_HOUR;
+        nanos %= t::NANOS_PER_HOUR;
+        if hours > t::SpanHours::MAX_SELF {
+            nanos += (hours - t::SpanHours::MAX_SELF) * t::NANOS_PER_HOUR;
+            hours = t::NoUnits128::rfrom(t::SpanHours::MAX_SELF);
+        }
+        // OK because we just checked that our units are in range.
+        span = span.try_hours_ranged(hours).unwrap();
+    }
+    if unit >= Unit::Minute && nanos > 0 {
+        let mut minutes = nanos / t::NANOS_PER_MINUTE;
+        nanos %= t::NANOS_PER_MINUTE;
+        if minutes > t::SpanMinutes::MAX_SELF {
+            nanos +=
+                (minutes - t::SpanMinutes::MAX_SELF) * t::NANOS_PER_MINUTE;
+            minutes = t::NoUnits128::rfrom(t::SpanMinutes::MAX_SELF);
+        }
+        // OK because we just checked that our units are in range.
+        span = span.try_minutes_ranged(minutes).unwrap();
+    }
+    if unit >= Unit::Second && nanos > 0 {
+        let mut seconds = nanos / t::NANOS_PER_SECOND;
+        nanos %= t::NANOS_PER_SECOND;
+        if seconds > t::SpanSeconds::MAX_SELF {
+            nanos +=
+                (seconds - t::SpanSeconds::MAX_SELF) * t::NANOS_PER_SECOND;
+            seconds = t::NoUnits128::rfrom(t::SpanSeconds::MAX_SELF);
+        }
+        // OK because we just checked that our units are in range.
+        span = span.try_seconds_ranged(seconds).unwrap();
+    }
+    if unit >= Unit::Millisecond && nanos > 0 {
+        let mut millis = nanos / t::NANOS_PER_MILLI;
+        nanos %= t::NANOS_PER_MILLI;
+        if millis > t::SpanMilliseconds::MAX_SELF {
+            nanos +=
+                (millis - t::SpanMilliseconds::MAX_SELF) * t::NANOS_PER_MILLI;
+            millis = t::NoUnits128::rfrom(t::SpanMilliseconds::MAX_SELF);
+        }
+        // OK because we just checked that our units are in range.
+        span = span.try_milliseconds_ranged(millis).unwrap();
+    }
+    if unit >= Unit::Microsecond && nanos > 0 {
+        let mut micros = nanos / t::NANOS_PER_MICRO;
+        nanos %= t::NANOS_PER_MICRO;
+        if micros > t::SpanMicroseconds::MAX_SELF {
+            nanos +=
+                (micros - t::SpanMicroseconds::MAX_SELF) * t::NANOS_PER_MICRO;
+            micros = t::NoUnits128::rfrom(t::SpanMicroseconds::MAX_SELF);
+        }
+        // OK because we just checked that our units are in range.
+        span = span.try_microseconds_ranged(micros).unwrap();
+    }
+    if nanos > 0 {
+        span = span.try_nanoseconds_ranged(nanos).with_context(|| {
+            err!(
+                "failed to set nanosecond value {nanos} on span \
+                 determined from {value}.{fraction}",
+            )
+        })?;
+    }
+
+    Ok(span)
+}
+
+/// Like `fractional_time_to_span`, but just converts the fraction of the given
+/// unit to a signed duration.
+///
+/// Since a signed duration doesn't keep track of individual units, there is
+/// no loss of fidelity between it and ISO 8601 durations like there is for
+/// `Span`.
+///
+/// Note that `fraction` can be a fractional hour, minute, second, millisecond
+/// or microsecond (even though its type suggests its only a fraction of a
+/// second). When milliseconds or microseconds, the given fraction has any
+/// sub-nanosecond precision truncated.
+///
+/// # Errors
+///
+/// This returns an error if `unit` is not `Hour`, `Minute`, `Second`,
+/// `Millisecond` or `Microsecond`.
+#[inline(never)]
+pub(crate) fn fractional_time_to_duration(
+    unit: Unit,
+    fraction: t::SubsecNanosecond,
+) -> Result<SignedDuration, Error> {
+    let fraction = t::NoUnits::rfrom(fraction);
+    let nanos = match unit {
+        Unit::Hour => fraction * t::SECONDS_PER_HOUR,
+        Unit::Minute => fraction * t::SECONDS_PER_MINUTE,
+        Unit::Second => fraction,
+        Unit::Millisecond => fraction / t::NANOS_PER_MICRO,
+        Unit::Microsecond => fraction / t::NANOS_PER_MILLI,
+        unit => {
+            return Err(err!(
+                "fractional {unit} units are not allowed",
+                unit = unit.singular(),
+            ))
+        }
+    };
+    Ok(SignedDuration::from_nanos(nanos.get()))
 }
 
 #[cfg(test)]

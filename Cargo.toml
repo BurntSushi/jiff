@@ -100,6 +100,8 @@ wasm-bindgen = { version = "0.2.70", optional = true }
 anyhow = "1.0.81"
 chrono = { version = "0.4.38", features = ["serde"] }
 chrono-tz = "0.10.0"
+clap = { version = "4.5.23", features = ["derive"] }
+humantime = "2.1.0"
 # This adds approximately 50 new compilation units when running `cargo test`
 # locally on Unix. Blech.
 icu = { version = "1.5.0", features = ["std"] }

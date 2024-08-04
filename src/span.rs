@@ -6,9 +6,10 @@ use crate::{
     civil::{Date, DateTime, Time},
     duration::{Duration, SDuration},
     error::{err, Error, ErrorContext},
-    fmt::temporal::{DEFAULT_SPAN_PARSER, DEFAULT_SPAN_PRINTER},
+    fmt::{friendly, temporal},
     tz::TimeZone,
     util::{
+        escape,
         rangeint::{ri64, ri8, RFrom, RInto, TryRFrom, TryRInto},
         round::increment,
         t::{self, Constant, NoUnits, NoUnits128, Sign, C},
@@ -178,21 +179,32 @@ use crate::{
 /// [`std::str::FromStr`] and [`std::fmt::Display`]:
 ///
 /// ```
-/// use jiff::Span;
+/// use jiff::{Span, ToSpan};
 ///
 /// let span: Span = "P2M10DT2H30M".parse()?;
 /// assert_eq!(span.to_string(), "P2m10dT2h30m");
+///
+/// // Or use the "friendly" format by invoking the alternate:
+/// assert_eq!(format!("{span:#}"), "2mo 10d 2h 30m");
+///
+/// // Parsing automatically supports both the ISO 8601 and "friendly" formats:
+/// let span: Span = "2mo 10d 2h 30m".parse()?;
+/// assert_eq!(span, 2.months().days(10).hours(2).minutes(30));
+/// let span: Span = "2 months, 10 days, 2 hours, 30 minutes".parse()?;
+/// assert_eq!(span, 2.months().days(10).hours(2).minutes(30));
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
 /// The format supported is a variation (nearly a subset) of the duration
-/// format specified in [ISO 8601]. Here are more examples:
+/// format specified in [ISO 8601] _and_ a Jiff-specific "friendly" format.
+/// Here are more examples:
 ///
 /// ```
 /// use jiff::{Span, ToSpan};
 ///
 /// let spans = [
+///     // ISO 8601
 ///     ("P40D", 40.days()),
 ///     ("P1y1d", 1.year().days(1)),
 ///     ("P3dT4h59m", 3.days().hours(4).minutes(59)),
@@ -208,6 +220,42 @@ use crate::{
 ///         "P1y1m1dT1h1m1.1s",
 ///         1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
 ///     ),
+///     // Jiff's "friendly" format
+///     ("40d", 40.days()),
+///     ("40 days", 40.days()),
+///     ("1y1d", 1.year().days(1)),
+///     ("1yr 1d", 1.year().days(1)),
+///     ("3d4h59m", 3.days().hours(4).minutes(59)),
+///     ("3 days, 4 hours, 59 minutes", 3.days().hours(4).minutes(59)),
+///     ("3d 4h 59m", 3.days().hours(4).minutes(59)),
+///     ("2h30m", 2.hours().minutes(30)),
+///     ("2h 30m", 2.hours().minutes(30)),
+///     ("1mo", 1.month()),
+///     ("1w", 1.week()),
+///     ("1 week", 1.week()),
+///     ("1w4d", 1.week().days(4)),
+///     ("1 wk 4 days", 1.week().days(4)),
+///     ("1m", 1.minute()),
+///     ("0.0021s", 2.milliseconds().microseconds(100)),
+///     ("0s", 0.seconds()),
+///     ("0d", 0.seconds()),
+///     ("0 days", 0.seconds()),
+///     (
+///         "1y1mo1d1h1m1.1s",
+///         1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
+///     ),
+///     (
+///         "1yr 1mo 1day 1hr 1min 1.1sec",
+///         1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
+///     ),
+///     (
+///         "1 year, 1 month, 1 day, 1 hour, 1 minute 1.1 seconds",
+///         1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
+///     ),
+///     (
+///         "1 year, 1 month, 1 day, 01:01:01.1",
+///         1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
+///     ),
 /// ];
 /// for (string, span) in spans {
 ///     let parsed: Span = string.parse()?;
@@ -217,7 +265,8 @@ use crate::{
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
-/// For more details, see the [`fmt::temporal`](crate::fmt::temporal) module.
+/// For more details, see the [`fmt::temporal`](temporal) and
+/// [`fmt::friendly`](friendly) modules.
 ///
 /// [ISO 8601]: https://www.iso.org/iso-8601-date-and-time-format.html
 ///
@@ -2170,7 +2219,7 @@ impl Span {
     /// it does have non-zero units of days, then every day is considered 24
     /// hours.
     #[inline]
-    fn to_jiff_duration_invariant(&self) -> SignedDuration {
+    pub(crate) fn to_jiff_duration_invariant(&self) -> SignedDuration {
         // This guarantees, at compile time, that a maximal invariant Span
         // (that is, all units are days or lower and all units are set to their
         // maximum values) will still balance out to a number of seconds that
@@ -3153,7 +3202,11 @@ impl Default for Span {
 impl core::fmt::Debug for Span {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(self, f)
+        use crate::fmt::StdFmtWrite;
+
+        friendly::DEFAULT_SPAN_PRINTER
+            .print_span(self, StdFmtWrite(f))
+            .map_err(|_| core::fmt::Error)
     }
 }
 
@@ -3162,9 +3215,15 @@ impl core::fmt::Display for Span {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         use crate::fmt::StdFmtWrite;
 
-        DEFAULT_SPAN_PRINTER
-            .print_span(self, StdFmtWrite(f))
-            .map_err(|_| core::fmt::Error)
+        if f.alternate() {
+            friendly::DEFAULT_SPAN_PRINTER
+                .print_span(self, StdFmtWrite(f))
+                .map_err(|_| core::fmt::Error)
+        } else {
+            temporal::DEFAULT_SPAN_PRINTER
+                .print_span(self, StdFmtWrite(f))
+                .map_err(|_| core::fmt::Error)
+        }
     }
 }
 
@@ -3173,7 +3232,7 @@ impl core::str::FromStr for Span {
 
     #[inline]
     fn from_str(string: &str) -> Result<Span, Error> {
-        DEFAULT_SPAN_PARSER.parse_span(string)
+        parse_iso_or_friendly(string.as_bytes())
     }
 }
 
@@ -3551,9 +3610,7 @@ impl<'de> serde::Deserialize<'de> for Span {
                 self,
                 value: &[u8],
             ) -> Result<Span, E> {
-                DEFAULT_SPAN_PARSER
-                    .parse_span(value)
-                    .map_err(de::Error::custom)
+                parse_iso_or_friendly(value).map_err(de::Error::custom)
             }
 
             #[inline]
@@ -5996,9 +6053,54 @@ fn clamp_relative_span(
     Ok((relative0, relative1))
 }
 
+/// A common parsing function that works in bytes.
+///
+/// Specifically, this parses either an ISO 8601 duration into a `Span` or
+/// a "friendly" duration into a `Span`. It also tries to give decent error
+/// messages.
+///
+/// This works because the friendly and ISO 8601 formats have non-overlapping
+/// prefixes. Both can start with a `+` or `-`, but aside from that, an ISO
+/// 8601 duration _always_ has to start with a `P` or `p`. We can utilize this
+/// property to very quickly determine how to parse the input. We just need to
+/// handle the possibly ambiguous case with a leading sign a little carefully
+/// in order to ensure good error messages.
+///
+/// (We do the same thing for `SignedDuration`.)
+#[inline(always)]
+fn parse_iso_or_friendly(bytes: &[u8]) -> Result<Span, Error> {
+    if bytes.is_empty() {
+        return Err(err!(
+            "an empty string is not a valid `Span`, \
+             expected either a ISO 8601 or Jiff's 'friendly' \
+             format",
+        ));
+    }
+    let mut first = bytes[0];
+    if first == b'+' || first == b'-' {
+        if bytes.len() == 1 {
+            return Err(err!(
+                "found nothing after sign `{sign}`, \
+                 which is not a valid `Span`, \
+                 expected either a ISO 8601 or Jiff's 'friendly' \
+                 format",
+                sign = escape::Byte(first),
+            ));
+        }
+        first = bytes[1];
+    }
+    if first == b'P' || first == b'p' {
+        temporal::DEFAULT_SPAN_PARSER.parse_span(bytes)
+    } else {
+        friendly::DEFAULT_SPAN_PARSER.parse_span(bytes)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
+
+    use alloc::string::ToString;
 
     use crate::{civil::date, RoundMode};
 
@@ -6394,5 +6496,170 @@ mod tests {
         let deserialized: Span = serde_yml::from_reader(cursor).unwrap();
 
         assert_eq!(deserialized, expected);
+    }
+
+    #[test]
+    fn display() {
+        let span = Span::new()
+            .years(1)
+            .months(2)
+            .weeks(3)
+            .days(4)
+            .hours(5)
+            .minutes(6)
+            .seconds(7)
+            .milliseconds(8)
+            .microseconds(9)
+            .nanoseconds(10);
+        insta::assert_snapshot!(
+            span,
+            @"P1y2m3w4dT5h6m7.00800901s",
+        );
+        insta::assert_snapshot!(
+            alloc::format!("{span:#}"),
+            @"1y 2mo 3w 4d 5h 6m 7s 8ms 9µs 10ns",
+        );
+    }
+
+    /// This test ensures that we can parse `humantime` formatted durations.
+    #[test]
+    fn humantime_compatibility_parse() {
+        let dur = std::time::Duration::new(60 * 60 * 24 * 411, 123_456_789);
+        let formatted = humantime::format_duration(dur).to_string();
+        assert_eq!(
+            formatted,
+            "1year 1month 15days 7h 26m 24s 123ms 456us 789ns"
+        );
+        let expected = 1
+            .year()
+            .months(1)
+            .days(15)
+            .hours(7)
+            .minutes(26)
+            .seconds(24)
+            .milliseconds(123)
+            .microseconds(456)
+            .nanoseconds(789);
+        assert_eq!(formatted.parse::<Span>().unwrap(), expected);
+    }
+
+    /// This test ensures that we can print a `Span` that `humantime` can
+    /// parse.
+    ///
+    /// Note that this isn't the default since `humantime`'s parser is
+    /// pretty limited. e.g., It doesn't support things like `nsecs`
+    /// despite supporting `secs`. And other reasons. See the docs on
+    /// `Designator::HumanTime` for why we sadly provide a custom variant for
+    /// it.
+    #[test]
+    fn humantime_compatibility_print() {
+        static PRINTER: friendly::SpanPrinter = friendly::SpanPrinter::new()
+            .designator(friendly::Designator::HumanTime);
+
+        let span = 1
+            .year()
+            .months(1)
+            .days(15)
+            .hours(7)
+            .minutes(26)
+            .seconds(24)
+            .milliseconds(123)
+            .microseconds(456)
+            .nanoseconds(789);
+        let formatted = PRINTER.span_to_string(&span);
+        assert_eq!(formatted, "1y 1month 15d 7h 26m 24s 123ms 456us 789ns");
+
+        let dur = humantime::parse_duration(&formatted).unwrap();
+        let expected =
+            std::time::Duration::new(60 * 60 * 24 * 411, 123_456_789);
+        assert_eq!(dur, expected);
+    }
+
+    #[test]
+    fn from_str() {
+        let p = |s: &str| -> Result<Span, Error> { s.parse() };
+
+        insta::assert_snapshot!(
+            p("1 day").unwrap(),
+            @"P1d",
+        );
+        insta::assert_snapshot!(
+            p("+1 day").unwrap(),
+            @"P1d",
+        );
+        insta::assert_snapshot!(
+            p("-1 day").unwrap(),
+            @"-P1d",
+        );
+        insta::assert_snapshot!(
+            p("P1d").unwrap(),
+            @"P1d",
+        );
+        insta::assert_snapshot!(
+            p("+P1d").unwrap(),
+            @"P1d",
+        );
+        insta::assert_snapshot!(
+            p("-P1d").unwrap(),
+            @"-P1d",
+        );
+
+        insta::assert_snapshot!(
+            p("").unwrap_err(),
+            @"an empty string is not a valid `Span`, expected either a ISO 8601 or Jiff's 'friendly' format",
+        );
+        insta::assert_snapshot!(
+            p("+").unwrap_err(),
+            @"found nothing after sign `+`, which is not a valid `Span`, expected either a ISO 8601 or Jiff's 'friendly' format",
+        );
+        insta::assert_snapshot!(
+            p("-").unwrap_err(),
+            @"found nothing after sign `-`, which is not a valid `Span`, expected either a ISO 8601 or Jiff's 'friendly' format",
+        );
+    }
+
+    #[test]
+    fn serde_deserialize() {
+        let p = |s: &str| -> Result<Span, serde_json::Error> {
+            serde_json::from_str(&alloc::format!("\"{s}\""))
+        };
+
+        insta::assert_snapshot!(
+            p("1 day").unwrap(),
+            @"P1d",
+        );
+        insta::assert_snapshot!(
+            p("+1 day").unwrap(),
+            @"P1d",
+        );
+        insta::assert_snapshot!(
+            p("-1 day").unwrap(),
+            @"-P1d",
+        );
+        insta::assert_snapshot!(
+            p("P1d").unwrap(),
+            @"P1d",
+        );
+        insta::assert_snapshot!(
+            p("+P1d").unwrap(),
+            @"P1d",
+        );
+        insta::assert_snapshot!(
+            p("-P1d").unwrap(),
+            @"-P1d",
+        );
+
+        insta::assert_snapshot!(
+            p("").unwrap_err(),
+            @"an empty string is not a valid `Span`, expected either a ISO 8601 or Jiff's 'friendly' format at line 1 column 2",
+        );
+        insta::assert_snapshot!(
+            p("+").unwrap_err(),
+            @"found nothing after sign `+`, which is not a valid `Span`, expected either a ISO 8601 or Jiff's 'friendly' format at line 1 column 3",
+        );
+        insta::assert_snapshot!(
+            p("-").unwrap_err(),
+            @"found nothing after sign `-`, which is not a valid `Span`, expected either a ISO 8601 or Jiff's 'friendly' format at line 1 column 3",
+        );
     }
 }

@@ -1,5 +1,5 @@
 /*!
-Configurable support for printing and parsing datetimes and spans.
+Configurable support for printing and parsing datetimes and durations.
 
 Note that for most use cases, you should be using the corresponding
 [`Display`](std::fmt::Display) or [`FromStr`](std::str::FromStr) trait
@@ -16,6 +16,7 @@ use crate::{
 
 use self::util::{Decimal, DecimalFormatter, Fractional, FractionalFormatter};
 
+pub mod friendly;
 mod offset;
 pub mod rfc2822;
 mod rfc9557;

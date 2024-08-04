@@ -23,13 +23,13 @@ ZicP {
                     day: 1,
                 },
                 at: RuleAtP {
-                    span: PT1h,
+                    span: 1h,
                     suffix: Some(
                         Universal,
                     ),
                 },
                 save: RuleSaveP {
-                    span: PT1h,
+                    span: 1h,
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -51,13 +51,13 @@ ZicP {
                     weekday: Sunday,
                 },
                 at: RuleAtP {
-                    span: PT1h,
+                    span: 1h,
                     suffix: Some(
                         Universal,
                     ),
                 },
                 save: RuleSaveP {
-                    span: PT0s,
+                    span: 0s,
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -79,13 +79,13 @@ ZicP {
                     day: 1,
                 },
                 at: RuleAtP {
-                    span: PT1h,
+                    span: 1h,
                     suffix: Some(
                         Universal,
                     ),
                 },
                 save: RuleSaveP {
-                    span: PT0s,
+                    span: 0s,
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -109,13 +109,13 @@ ZicP {
                     weekday: Sunday,
                 },
                 at: RuleAtP {
-                    span: PT1h,
+                    span: 1h,
                     suffix: Some(
                         Universal,
                     ),
                 },
                 save: RuleSaveP {
-                    span: PT0s,
+                    span: 0s,
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -137,13 +137,13 @@ ZicP {
                     weekday: Sunday,
                 },
                 at: RuleAtP {
-                    span: PT1h,
+                    span: 1h,
                     suffix: Some(
                         Universal,
                     ),
                 },
                 save: RuleSaveP {
-                    span: PT1h,
+                    span: 1h,
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -165,13 +165,13 @@ ZicP {
                     weekday: Sunday,
                 },
                 at: RuleAtP {
-                    span: PT1h,
+                    span: 1h,
                     suffix: Some(
                         Universal,
                     ),
                 },
                 save: RuleSaveP {
-                    span: PT0s,
+                    span: 0s,
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -198,11 +198,11 @@ ZicP {
                     day: 1,
                 },
                 at: RuleAtP {
-                    span: PT1h,
+                    span: 1h,
                     suffix: None,
                 },
                 save: RuleSaveP {
-                    span: PT1h,
+                    span: 1h,
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -227,11 +227,11 @@ ZicP {
                     day: 1,
                 },
                 at: RuleAtP {
-                    span: PT2h,
+                    span: 2h,
                     suffix: None,
                 },
                 save: RuleSaveP {
-                    span: PT0s,
+                    span: 0s,
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -247,7 +247,7 @@ ZicP {
                     name: "Europe/Zurich",
                 },
                 stdoff: ZoneStdoffP {
-                    span: PT34m8s,
+                    span: 34m 8s,
                 },
                 rules: None,
                 format: Static {
@@ -268,7 +268,7 @@ ZicP {
             continuations: [
                 ZoneContinuationP {
                     stdoff: ZoneStdoffP {
-                        span: PT29m45.5s,
+                        span: 29m 45s 500ms,
                     },
                     rules: None,
                     format: Static {
@@ -285,7 +285,7 @@ ZicP {
                 },
                 ZoneContinuationP {
                     stdoff: ZoneStdoffP {
-                        span: PT1h,
+                        span: 1h,
                     },
                     rules: Named(
                         RuleNameP {
@@ -304,7 +304,7 @@ ZicP {
                 },
                 ZoneContinuationP {
                     stdoff: ZoneStdoffP {
-                        span: PT1h,
+                        span: 1h,
                     },
                     rules: Named(
                         RuleNameP {
