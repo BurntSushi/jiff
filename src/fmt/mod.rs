@@ -16,6 +16,7 @@ use crate::{
 
 use self::util::{Decimal, DecimalFormatter, Fractional, FractionalFormatter};
 
+pub mod friendly;
 mod offset;
 pub mod rfc2822;
 mod rfc9557;
