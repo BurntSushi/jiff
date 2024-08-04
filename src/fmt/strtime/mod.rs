@@ -224,7 +224,6 @@ higher level APIs like [`Timestamp::round`] or [`Zoned::round`].
 
 The following things are currently unsupported:
 
-* Parsing or formatting IANA time zone identifiers.
 * Parsing or formatting fractional seconds in the time time zone offset.
 * Conversion specifiers related to week numbers.
 * Conversion specifiers related to day-of-year numbers, like the Julian day.
