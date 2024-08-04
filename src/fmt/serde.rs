@@ -1,20 +1,28 @@
 /*!
 This module provides helpers to use with [Serde].
 
-The helpers are exposed as modules meant to be used with
-Serde's [`with` attribute].
-
-At present, the helpers are limited to serializing and deserializing
-[`Timestamp`](crate::Timestamp) values as an integer number of seconds,
-milliseconds, microseconds or nanoseconds.
+Some helpers, like those for `Timestamp`, are exposed as modules meant
+to be used with Serde's [`with` attribute]. Others, like for `Span` and
+`SignedDuration`, only provide serialization helpers to be used with Serde's
+[`serialize_with` attribute].
 
 # Module hierarchy
 
 The available helpers can be more quickly understood by looking at a fully
 rendered tree of this module's hierarchy. Only the leaves of the tree are
-usable with Serde's `with` attribute. For each leaf, the full path is spelled
-out for easy copy & paste.
+usable with Serde's attributes. For each leaf, the full path is spelled out for
+easy copy & paste.
 
+* [`duration`]
+    * [`friendly`](self::duration::friendly)
+        * [`compact`](self::duration::friendly::compact)
+            * [`jiff::fmt::serde::duration::friendly::compact::required`](self::duration::friendly::compact::required)
+            * [`jiff::fmt::serde::duration::friendly::compact::optional`](self::duration::friendly::compact::optional)
+* [`span`]
+    * [`friendly`](self::span::friendly)
+        * [`compact`](self::span::friendly::compact)
+            * [`jiff::fmt::serde::span::friendly::compact::required`](self::span::friendly::compact::required)
+            * [`jiff::fmt::serde::span::friendly::compact::optional`](self::span::friendly::compact::optional)
 * [`timestamp`]
     * [`second`](self::timestamp::second)
         * [`jiff::fmt::serde::timestamp::second::required`](self::timestamp::second::required)
@@ -28,16 +36,6 @@ out for easy copy & paste.
     * [`nanosecond`](self::timestamp::millisecond)
         * [`jiff::fmt::serde::timestamp::nanosecond::required`](self::timestamp::nanosecond::required)
         * [`jiff::fmt::serde::timestamp::nanosecond::optional`](self::timestamp::nanosecond::optional)
-
-# Advice
-
-In general, these helpers should only be used to interface with "legacy" APIs
-that transmit times as integer number of seconds (or milliseconds or whatever).
-If you're designing a new API and need to transmit instants in time that don't
-care about time zones, then you should use `Timestamp` directly. It will
-automatically use RFC 3339. (And if you do want to include the time zone, then
-using [`Zoned`](crate::Zoned) directly will work as well by utilizing the
-RFC 9557 extension to RFC 3339.)
 
 # Example
 
@@ -85,12 +83,343 @@ assert_eq!(serde_json::to_string(&got)?, json);
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+# Example: the "friendly" duration format
+
+The [`Span`](crate::Span) and [`SignedDuration`](crate::SignedDuration) types
+in this crate both implement Serde's `Serialize` and `Deserialize` traits. For
+`Serialize`, they both use the [ISO 8601 Temporal duration format], but for
+`Deserialize`, they both support the ISO 8601 Temporal duration format and
+the ["friendly" duration format] simultaneously. In order to serialize either
+type in the "friendly" format, you can either define your own serialization
+functions or use one of the convenience routines provided by this module. For
+example:
+
+```
+use jiff::{ToSpan, Span};
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+struct Record {
+    #[serde(
+        serialize_with = "jiff::fmt::serde::span::friendly::compact::required"
+    )]
+    span: Span,
+}
+
+let json = r#"{"span":"1 year 2 months 36 hours 1100ms"}"#;
+let got: Record = serde_json::from_str(&json)?;
+assert_eq!(got.span, 1.year().months(2).hours(36).milliseconds(1100));
+
+let expected = r#"{"span":"1y 2mo 36h 1100ms"}"#;
+assert_eq!(serde_json::to_string(&got).unwrap(), expected);
+
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 [Serde]: https://serde.rs/
 [`with` attribute]: https://serde.rs/field-attrs.html#with
+[`serialize_with` attribute]: https://serde.rs/field-attrs.html#serialize_with
+[ISO 8601 Temporal duration format]: crate::fmt::temporal
+["friendly" duration format]: crate::fmt::friendly
 */
+
+/// Convenience routines for serializing [`SignedDuration`](crate::SignedDuration)
+/// values.
+///
+/// These convenience routines exist because the `Serialize` implementation for
+/// `SignedDuration` always uses the ISO 8601 duration format. These routines
+/// provide a way to use the "[friendly](crate::fmt::friendly)" format.
+///
+/// Only serialization routines are provided because a `SignedDuration`'s
+/// `Deserialize` implementation automatically handles both the ISO 8601
+/// duration format and the "friendly" format.
+///
+/// # Advice
+///
+/// The `Serialize` implementation uses ISO 8601 because it is a widely
+/// accepted interchange format for communicating durations. If you need to
+/// inter-operate with other systems, it is almost certainly the correct
+/// choice.
+///
+/// The "friendly" format does not adhere to any universal specified format.
+/// However, it is perhaps easier to read. Beyond that, its utility for
+/// `SignedDuration` is somewhat less compared to [`Span`](crate::Span), since
+/// for `Span`, the friendly format preserves all components of the `Span`
+/// faithfully. But a `SignedDuration` is just a 96-bit integer of nanoseconds,
+/// so there are no individual components to preserve. Still, even with a
+/// `SignedDuration`, you might prefer the friendly format.
+///
+/// # Available routines
+///
+/// A [`SpanPrinter`](crate::fmt::friendly::SpanPrinter) has a lot of different
+/// configuration options. The convenience routines provided by this module
+/// only cover a small space of those options since it isn't feasible to
+/// provide a convenience routine for every possible set of configuration
+/// options.
+///
+/// While more convenience routines could be added (please file an issue), only
+/// the most common or popular such routines can be feasibly added. So in the
+/// case where a convenience routine isn't available for the configuration you
+/// want, you can very easily define your own `serialize_with` routine.
+///
+/// The recommended approach is to define a function and a type that
+/// implements the `std::fmt::Display` trait. This way, if a serializer can
+/// efficiently support `Display` implementations, then an allocation can be
+/// avoided.
+///
+/// ```
+/// use jiff::SignedDuration;
+///
+/// #[derive(Debug, serde::Deserialize, serde::Serialize)]
+/// struct Data {
+///     #[serde(serialize_with = "custom_friendly")]
+///     duration: SignedDuration,
+/// }
+///
+/// let json = r#"{"duration": "36 hours 1100ms"}"#;
+/// let got: Data = serde_json::from_str(&json).unwrap();
+/// assert_eq!(got.duration, SignedDuration::new(36 * 60 * 60 + 1, 100_000_000));
+///
+/// let expected = r#"{"duration":"36:00:01.100"}"#;
+/// assert_eq!(serde_json::to_string(&got).unwrap(), expected);
+///
+/// fn custom_friendly<S: serde::Serializer>(
+///     duration: &SignedDuration,
+///     se: S,
+/// ) -> Result<S::Ok, S::Error> {
+///     struct Custom<'a>(&'a SignedDuration);
+///
+///     impl<'a> std::fmt::Display for Custom<'a> {
+///         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+///             use jiff::fmt::{friendly::SpanPrinter, StdFmtWrite};
+///
+///             static PRINTER: SpanPrinter = SpanPrinter::new()
+///                 .hours_minutes_seconds(true)
+///                 .precision(Some(3));
+///
+///             PRINTER
+///                 .print_duration(self.0, StdFmtWrite(f))
+///                 .map_err(|_| core::fmt::Error)
+///         }
+///     }
+///
+///     se.collect_str(&Custom(duration))
+/// }
+/// ```
+///
+/// Recall from above that you only need a custom serialization routine
+/// for this. Namely, deserialization automatically supports parsing all
+/// configuration options for serialization unconditionally.
+pub mod duration {
+    /// Serialize a `Span` in the [`friendly`](crate::fmt::friendly) duration
+    /// format.
+    pub mod friendly {
+        /// Serialize a `SignedDuration` in the
+        /// [`friendly`](crate::fmt::friendly) duration format using compact
+        /// designators.
+        pub mod compact {
+            use crate::fmt::{friendly, StdFmtWrite};
+
+            struct CompactDuration<'a>(&'a crate::SignedDuration);
+
+            impl<'a> core::fmt::Display for CompactDuration<'a> {
+                fn fmt(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    static PRINTER: friendly::SpanPrinter =
+                        friendly::SpanPrinter::new()
+                            .designator(friendly::Designator::Compact);
+                    PRINTER
+                        .print_duration(self.0, StdFmtWrite(f))
+                        .map_err(|_| core::fmt::Error)
+                }
+            }
+
+            /// Serialize a required `SignedDuration` in the [`friendly`]
+            /// duration format using compact designators.
+            #[inline]
+            pub fn required<S: serde::Serializer>(
+                duration: &crate::SignedDuration,
+                se: S,
+            ) -> Result<S::Ok, S::Error> {
+                se.collect_str(&CompactDuration(duration))
+            }
+
+            /// Serialize an optional `SignedDuration` in the [`friendly`]
+            /// duration format using compact designators.
+            #[inline]
+            pub fn optional<S: serde::Serializer>(
+                duration: &Option<crate::SignedDuration>,
+                se: S,
+            ) -> Result<S::Ok, S::Error> {
+                match *duration {
+                    None => se.serialize_none(),
+                    Some(ref duration) => {
+                        se.collect_str(&CompactDuration(duration))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Convenience routines for serializing [`Span`](crate::Span) values.
+///
+/// These convenience routines exist because the `Serialize` implementation for
+/// `Span` always uses the ISO 8601 duration format. These routines provide a
+/// way to use the "[friendly](crate::fmt::friendly)" format.
+///
+/// Only serialization routines are provided because a `Span`'s `Deserialize`
+/// implementation automatically handles both the ISO 8601 duration format and
+/// the "friendly" format.
+///
+/// # Advice
+///
+/// The `Serialize` implementation uses ISO 8601 because it is a widely
+/// accepted interchange format for communicating durations. If you need to
+/// inter-operate with other systems, it is almost certainly the correct choice.
+///
+/// The "friendly" format does not adhere to any universal specified format.
+/// However, it is perhaps easier to read, and crucially, unambiguously
+/// represents all components of a `Span` faithfully. (In contrast, the ISO
+/// 8601 format always normalizes sub-second durations into fractional seconds,
+/// which means durations like `1100ms` and `1s100ms` are alwasys considered
+/// equivalent.)
+///
+/// # Available routines
+///
+/// A [`SpanPrinter`](crate::fmt::friendly::SpanPrinter) has a lot of different
+/// configuration options. The convenience routines provided by this module
+/// only cover a small space of those options since it isn't feasible to
+/// provide a convenience routine for every possible set of configuration
+/// options.
+///
+/// While more convenience routines could be added (please file an issue), only
+/// the most common or popular such routines can be feasibly added. So in the
+/// case where a convenience routine isn't available for the configuration you
+/// want, you can very easily define your own `serialize_with` routine.
+///
+/// The recommended approach is to define a function and a type that
+/// implements the `std::fmt::Display` trait. This way, if a serializer can
+/// efficiently support `Display` implementations, then an allocation can be
+/// avoided.
+///
+/// ```
+/// use jiff::{Span, ToSpan};
+///
+/// #[derive(Debug, serde::Deserialize, serde::Serialize)]
+/// struct Data {
+///     #[serde(serialize_with = "custom_friendly")]
+///     duration: Span,
+/// }
+///
+/// let json = r#"{"duration": "1 year 2 months 36 hours 1100ms"}"#;
+/// let got: Data = serde_json::from_str(&json).unwrap();
+/// assert_eq!(got.duration, 1.year().months(2).hours(36).milliseconds(1100));
+///
+/// let expected = r#"{"duration":"1 year, 2 months, 36:00:01.100"}"#;
+/// assert_eq!(serde_json::to_string(&got).unwrap(), expected);
+///
+/// fn custom_friendly<S: serde::Serializer>(
+///     span: &Span,
+///     se: S,
+/// ) -> Result<S::Ok, S::Error> {
+///     struct Custom<'a>(&'a Span);
+///
+///     impl<'a> std::fmt::Display for Custom<'a> {
+///         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+///             use jiff::fmt::{
+///                 friendly::{Designator, Spacing, SpanPrinter},
+///                 StdFmtWrite,
+///             };
+///
+///             static PRINTER: SpanPrinter = SpanPrinter::new()
+///                 .designator(Designator::Verbose)
+///                 .comma_after_designator(true)
+///                 .spacing(Spacing::BetweenUnitsAndDesignators)
+///                 .hours_minutes_seconds(true)
+///                 .precision(Some(3));
+///
+///             PRINTER
+///                 .print_span(self.0, StdFmtWrite(f))
+///                 .map_err(|_| core::fmt::Error)
+///         }
+///     }
+///
+///     se.collect_str(&Custom(span))
+/// }
+/// ```
+///
+/// Recall from above that you only need a custom serialization routine
+/// for this. Namely, deserialization automatically supports parsing all
+/// configuration options for serialization unconditionally.
+pub mod span {
+    /// Serialize a `Span` in the [`friendly`](crate::fmt::friendly) duration
+    /// format.
+    pub mod friendly {
+        /// Serialize a `Span` in the [`friendly`](crate::fmt::friendly)
+        /// duration format using compact designators.
+        pub mod compact {
+            use crate::fmt::{friendly, StdFmtWrite};
+
+            struct CompactSpan<'a>(&'a crate::Span);
+
+            impl<'a> core::fmt::Display for CompactSpan<'a> {
+                fn fmt(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    static PRINTER: friendly::SpanPrinter =
+                        friendly::SpanPrinter::new()
+                            .designator(friendly::Designator::Compact);
+                    PRINTER
+                        .print_span(self.0, StdFmtWrite(f))
+                        .map_err(|_| core::fmt::Error)
+                }
+            }
+
+            /// Serialize a required `Span` in the [`friendly`] duration format
+            /// using compact designators.
+            #[inline]
+            pub fn required<S: serde::Serializer>(
+                span: &crate::Span,
+                se: S,
+            ) -> Result<S::Ok, S::Error> {
+                se.collect_str(&CompactSpan(span))
+            }
+
+            /// Serialize an optional `Span` in the [`friendly`] duration
+            /// format using compact designators.
+            #[inline]
+            pub fn optional<S: serde::Serializer>(
+                span: &Option<crate::Span>,
+                se: S,
+            ) -> Result<S::Ok, S::Error> {
+                match *span {
+                    None => se.serialize_none(),
+                    Some(ref span) => se.collect_str(&CompactSpan(span)),
+                }
+            }
+        }
+    }
+}
 
 /// Convenience routines for (de)serializing [`Timestamp`](crate::Timestamp) as
 /// raw integer values.
+///
+/// At present, the helpers are limited to serializing and deserializing
+/// [`Timestamp`](crate::Timestamp) values as an integer number of seconds,
+/// milliseconds, microseconds or nanoseconds.
+///
+/// # Advice
+///
+/// In general, these helpers should only be used to interface with "legacy"
+/// APIs that transmit times as integer number of seconds (or milliseconds or
+/// whatever). If you're designing a new API and need to transmit instants in
+/// time that don't care about time zones, then you should use `Timestamp`
+/// directly. It will automatically use RFC 3339. (And if you do want to
+/// include the time zone, then using [`Zoned`](crate::Zoned) directly will
+/// work as well by utilizing the RFC 9557 extension to RFC 3339.)
 pub mod timestamp {
     use serde::de;
 
@@ -746,7 +1075,88 @@ pub mod timestamp {
 
 #[cfg(test)]
 mod tests {
-    use crate::Timestamp;
+    use crate::{SignedDuration, Span, Timestamp, ToSpan};
+
+    #[test]
+    fn duration_friendly_compact_required() {
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Data {
+            #[serde(
+                serialize_with = "crate::fmt::serde::duration::friendly::compact::required"
+            )]
+            duration: SignedDuration,
+        }
+
+        let json = r#"{"duration":"36 hours 1100ms"}"#;
+        let got: Data = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            got.duration,
+            SignedDuration::new(36 * 60 * 60 + 1, 100_000_000)
+        );
+
+        let expected = r#"{"duration":"36h 1s 100ms"}"#;
+        assert_eq!(serde_json::to_string(&got).unwrap(), expected);
+    }
+
+    #[test]
+    fn duration_friendly_compact_optional() {
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Data {
+            #[serde(
+                serialize_with = "crate::fmt::serde::duration::friendly::compact::optional"
+            )]
+            duration: Option<SignedDuration>,
+        }
+
+        let json = r#"{"duration":"36 hours 1100ms"}"#;
+        let got: Data = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            got.duration,
+            Some(SignedDuration::new(36 * 60 * 60 + 1, 100_000_000))
+        );
+
+        let expected = r#"{"duration":"36h 1s 100ms"}"#;
+        assert_eq!(serde_json::to_string(&got).unwrap(), expected);
+    }
+
+    #[test]
+    fn span_friendly_compact_required() {
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Data {
+            #[serde(
+                serialize_with = "crate::fmt::serde::span::friendly::compact::required"
+            )]
+            span: Span,
+        }
+
+        let json = r#"{"span":"1 year 2 months 36 hours 1100ms"}"#;
+        let got: Data = serde_json::from_str(&json).unwrap();
+        assert_eq!(got.span, 1.year().months(2).hours(36).milliseconds(1100));
+
+        let expected = r#"{"span":"1y 2mo 36h 1100ms"}"#;
+        assert_eq!(serde_json::to_string(&got).unwrap(), expected);
+    }
+
+    #[test]
+    fn span_friendly_compact_optional() {
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Data {
+            #[serde(
+                serialize_with = "crate::fmt::serde::span::friendly::compact::optional"
+            )]
+            span: Option<Span>,
+        }
+
+        let json = r#"{"span":"1 year 2 months 36 hours 1100ms"}"#;
+        let got: Data = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            got.span,
+            Some(1.year().months(2).hours(36).milliseconds(1100))
+        );
+
+        let expected = r#"{"span":"1y 2mo 36h 1100ms"}"#;
+        assert_eq!(serde_json::to_string(&got).unwrap(), expected);
+    }
 
     #[test]
     fn timestamp_second_required() {
