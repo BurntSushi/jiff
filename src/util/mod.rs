@@ -9,4 +9,5 @@ pub(crate) mod parse;
 pub(crate) mod rangeint;
 pub(crate) mod round;
 pub(crate) mod t;
+pub(crate) mod trie;
 pub(crate) mod utf8;

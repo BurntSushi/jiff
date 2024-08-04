@@ -2170,7 +2170,7 @@ impl Span {
     /// it does have non-zero units of days, then every day is considered 24
     /// hours.
     #[inline]
-    fn to_jiff_duration_invariant(&self) -> SignedDuration {
+    pub(crate) fn to_jiff_duration_invariant(&self) -> SignedDuration {
         // This guarantees, at compile time, that a maximal invariant Span
         // (that is, all units are days or lower and all units are set to their
         // maximum values) will still balance out to a number of seconds that
