@@ -5202,7 +5202,7 @@ impl Nudge {
         mode: RoundMode,
     ) -> Result<Nudge, Error> {
         #[cfg(not(feature = "std"))]
-        use crate::util::libm::F64;
+        use crate::util::libm::Float;
 
         assert!(smallest >= Unit::Day);
         let sign = balanced.get_sign_ranged();
