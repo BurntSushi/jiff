@@ -14,14 +14,14 @@ floating point. And now it's also used in parts of `SignedDuration`.
 [`libm`]: https://github.com/rust-lang/libm
 */
 
-pub(crate) trait F64 {
-    fn abs(self) -> f64;
-    fn ceil(self) -> f64;
-    fn floor(self) -> f64;
-    fn round(self) -> f64;
-    fn signum(self) -> f64;
-    fn trunc(self) -> f64;
-    fn fract(self) -> f64;
+pub(crate) trait Float {
+    fn abs(self) -> Self;
+    fn ceil(self) -> Self;
+    fn floor(self) -> Self;
+    fn round(self) -> Self;
+    fn signum(self) -> Self;
+    fn trunc(self) -> Self;
+    fn fract(self) -> Self;
 }
 
 macro_rules! force_eval {
@@ -30,9 +30,9 @@ macro_rules! force_eval {
     };
 }
 
-const TOINT: f64 = 1. / f64::EPSILON;
+const TOINT64: f64 = 1. / f64::EPSILON;
 
-impl F64 for f64 {
+impl Float for f64 {
     fn abs(self) -> f64 {
         if self.is_sign_negative() {
             -self
@@ -52,9 +52,9 @@ impl F64 for f64 {
         }
         // y = int(x) - x, where int(x) is an integer neighbor of x
         y = if (u >> 63) != 0 {
-            x - TOINT + TOINT - x
+            x - TOINT64 + TOINT64 - x
         } else {
-            x + TOINT - TOINT - x
+            x + TOINT64 - TOINT64 - x
         };
         // special case because of non-nearest rounding modes
         if e < 0x3ff {
@@ -80,9 +80,9 @@ impl F64 for f64 {
         }
         /* y = int(x) - x, where int(x) is an integer neighbor of x */
         let y = if (ui >> 63) != 0 {
-            x - TOINT + TOINT - x
+            x - TOINT64 + TOINT64 - x
         } else {
-            x + TOINT - TOINT - x
+            x + TOINT64 - TOINT64 - x
         };
         /* special case because of non-nearest rounding modes */
         if e < 0x3ff {
@@ -99,14 +99,14 @@ impl F64 for f64 {
     }
 
     fn round(self) -> f64 {
-        (self + copysign(0.5 - 0.25 * f64::EPSILON, self)).trunc()
+        (self + copysign64(0.5 - 0.25 * f64::EPSILON, self)).trunc()
     }
 
     fn signum(self) -> f64 {
         if self.is_nan() {
             Self::NAN
         } else {
-            copysign(1.0, self)
+            copysign64(1.0, self)
         }
     }
 
@@ -140,7 +140,7 @@ impl F64 for f64 {
     }
 }
 
-fn copysign(x: f64, y: f64) -> f64 {
+fn copysign64(x: f64, y: f64) -> f64 {
     let mut ux = x.to_bits();
     let uy = y.to_bits();
     ux &= (!0) >> 1;

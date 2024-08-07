@@ -178,7 +178,7 @@ impl RoundMode {
         increment: NoUnits128,
     ) -> NoUnits128 {
         #[cfg(not(feature = "std"))]
-        use crate::util::libm::F64;
+        use crate::util::libm::Float;
 
         let quotient = quantity / (increment.get() as f64);
         let rounded = match self {

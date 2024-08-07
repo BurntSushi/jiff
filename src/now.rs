@@ -44,7 +44,7 @@ mod sys {
         use std::time::Duration;
 
         #[cfg(not(feature = "std"))]
-        use crate::util::libm::F64;
+        use crate::util::libm::Float;
 
         let millis = js_sys::Date::new_0().get_time();
         let sign = millis.signum();
