@@ -6,10 +6,10 @@ wouldn't necessarily mind depending on `libm`, but I don't think there's a
 way to express "only depend on a crate if some on-by-default feature is not
 enabled."
 
-We also very intentionally have very minimal floating point requirements.
-It's used for `Span::total` where it's part of the API and thus necessary.
-It's also used when rounding in some cases, although I would like to remove
-that use of floating point.
+We also very intentionally have very minimal floating point requirements. It's
+used for `Span::total` where it's part of the API and thus necessary. It's also
+used when rounding in some cases, although I would like to remove that use of
+floating point. And now it's also used in parts of `SignedDuration`.
 
 [`libm`]: https://github.com/rust-lang/libm
 */
@@ -21,6 +21,7 @@ pub(crate) trait F64 {
     fn round(self) -> f64;
     fn signum(self) -> f64;
     fn trunc(self) -> f64;
+    fn fract(self) -> f64;
 }
 
 macro_rules! force_eval {
@@ -132,6 +133,10 @@ impl F64 for f64 {
         }
         i &= !m;
         f64::from_bits(i)
+    }
+
+    fn fract(self) -> f64 {
+        self - self.trunc()
     }
 }
 
