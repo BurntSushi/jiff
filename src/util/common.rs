@@ -62,7 +62,7 @@ pub(crate) fn saturate_day_in_month(
 /// February.
 pub(crate) fn days_in_month(year: Year, month: Month) -> Day {
     if month == 2 && is_leap_year(year) {
-        Day::N::<29>()
+        Day::V::<29, 28, 31>()
     } else {
         days_in_month_common_year(month)
     }
@@ -93,19 +93,19 @@ pub(crate) const fn days_in_month_unranged(year: i16, month: i8) -> i8 {
 /// Returns the number of days in the given month for a non-leap year.
 pub(crate) fn days_in_month_common_year(month: Month) -> Day {
     const BY_MONTH: [Day; 13] = [
-        Day::N::<0>(),
-        Day::N::<31>(),
-        Day::N::<28>(),
-        Day::N::<31>(),
-        Day::N::<30>(),
-        Day::N::<31>(),
-        Day::N::<30>(),
-        Day::N::<31>(),
-        Day::N::<31>(),
-        Day::N::<30>(),
-        Day::N::<31>(),
-        Day::N::<30>(),
-        Day::N::<31>(),
+        Day::V::<0, 28, 31>(),
+        Day::V::<31, 28, 31>(),
+        Day::V::<28, 28, 31>(),
+        Day::V::<31, 28, 31>(),
+        Day::V::<30, 28, 31>(),
+        Day::V::<31, 28, 31>(),
+        Day::V::<30, 28, 31>(),
+        Day::V::<31, 28, 31>(),
+        Day::V::<31, 28, 31>(),
+        Day::V::<30, 28, 31>(),
+        Day::V::<31, 28, 31>(),
+        Day::V::<30, 28, 31>(),
+        Day::V::<31, 28, 31>(),
     ];
     BY_MONTH[usize::from(month.get() as u8)]
 }
