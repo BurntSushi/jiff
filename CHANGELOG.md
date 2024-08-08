@@ -1,3 +1,39 @@
+0.1.6 (TBD)
+===========
+This release includes a new top-level type, `SignedDuration`, that provides a
+near exact replica of `std::time::Duration`, but signed. It is meant to provide
+alternative APIs for working with durations at a lower level than what `Span`
+provides, and to facilitate better integration with the standard library.
+
+This marks an initial integration phase with `SignedDuration`. It is planned
+to integrate it more with the datetime types. Currently, there are integrations
+on `Timestamp` and `Span`, but more will be added in the future.
+
+This release also includes a few deprecations.
+
+Deprecations:
+
+* `Timestamp::as_duration`: to be replaced with `SignedDuration` in `jiff 0.2`.
+* `Timestamp::from_duration`: to be replaced with `SignedDuration` in
+`jiff 0.2`.
+* `Timestamp::from_signed_duration`: to be replaced with `SignedDuration` in
+`jiff 0.2`.
+* `Span::to_duration`: to be replaced with `SignedDuration` in `jiff 0.2`.
+
+Basically, all of the above APIs either accept or return a
+`std::time::Duration`. To avoid breaking chnages at this point, new methods
+for `SignedDuration` were added. For example, `Timestamp::as_jiff_duration`.
+In `jiff 0.2`, the above deprecated methods will be removed and replaced with
+equivalent methods that accept or return a `SignedDuration` instead. Callers
+can then convert between a `SignedDuration` and a `std::time::Duration` using
+appropriate `TryFrom` trait implementations.
+
+Enhancements:
+
+* [#XXX](https://github.com/BurntSushi/jiff/issues/XXX):
+Add new top-level `SignedDuration` type.
+
+
 0.1.5 (2024-08-09)
 ==================
 This release includes some improvements and bug fixes, particularly for Jiff's

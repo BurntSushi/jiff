@@ -643,6 +643,7 @@ extern crate alloc;
 
 pub use crate::{
     error::Error,
+    signed_duration::SignedDuration,
     span::{
         Span, SpanArithmetic, SpanCompare, SpanRelativeTo, SpanRound,
         SpanTotal, ToSpan, Unit,
@@ -662,6 +663,7 @@ mod error;
 pub mod fmt;
 #[cfg(feature = "std")]
 mod now;
+mod signed_duration;
 mod span;
 mod timestamp;
 pub mod tz;
