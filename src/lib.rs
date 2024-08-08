@@ -78,8 +78,11 @@ Jiff automatically embeds a copy of it.
 [`Zoned`]) and civil times ([`civil::DateTime`]).
 * Nanosecond precision.
 * Time zone and daylight saving time aware arithmetic.
-* A single time duration type, called [`Span`], which mixes calendar and clock
-units.
+* The primary duration type, [`Span`], mixes calendar and clock
+units to provide an all-in-one human friendly experience that is time zone
+aware.
+* An "absolute" duration type, [`SignedDuration`], is like
+[`std::time::Duration`] but signed.
 * Datetime rounding.
 * Span rounding, including calendar units and including taking time zones into
 account.
@@ -645,6 +648,7 @@ extern crate alloc;
 
 pub use crate::{
     error::Error,
+    signed_duration::SignedDuration,
     span::{
         Span, SpanArithmetic, SpanCompare, SpanRelativeTo, SpanRound,
         SpanTotal, ToSpan, Unit,
@@ -664,6 +668,7 @@ mod error;
 pub mod fmt;
 #[cfg(feature = "std")]
 mod now;
+mod signed_duration;
 mod span;
 mod timestamp;
 pub mod tz;
