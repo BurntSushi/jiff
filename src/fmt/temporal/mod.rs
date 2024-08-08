@@ -109,6 +109,29 @@ for (string, span) in spans {
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+One can also parse ISO 8601 durations into a [`SignedDuration`], but units are
+limited to hours or smaller:
+
+```
+use jiff::SignedDuration;
+
+let durations = [
+    ("PT2H30M", SignedDuration::from_secs(2 * 60 * 60 + 30 * 60)),
+    ("PT2.5h", SignedDuration::from_secs(2 * 60 * 60 + 30 * 60)),
+    ("PT1m", SignedDuration::from_mins(1)),
+    ("PT1.5m", SignedDuration::from_secs(90)),
+    ("PT0.0021s", SignedDuration::new(0, 2_100_000)),
+    ("PT0s", SignedDuration::ZERO),
+    ("PT0.000000001s", SignedDuration::from_nanos(1)),
+];
+for (string, duration) in durations {
+    let parsed: SignedDuration = string.parse()?;
+    assert_eq!(duration, parsed, "result of parsing {string:?}");
+}
+
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 The complete span format supported is described by the [Temporal ISO 8601
 grammar].
 
@@ -146,7 +169,7 @@ use crate::{
     fmt::Write,
     span::Span,
     tz::{Disambiguation, OffsetConflict, TimeZoneDatabase},
-    Timestamp, Zoned,
+    SignedDuration, Timestamp, Zoned,
 };
 
 mod parser;
@@ -1102,6 +1125,54 @@ impl SpanParser {
         let span = parsed.into_full()?;
         Ok(span)
     }
+
+    /// Parse an ISO 8601 duration string into a [`SignedDuration`] value.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the span string given is invalid or if it is
+    /// valid but can't be converted to a `SignedDuration`. This can occur
+    /// when the parsed time exceeds the minimum and maximum `SignedDuration`
+    /// values, or if there are any non-zero units greater than hours.
+    ///
+    /// # Example
+    ///
+    /// This shows a basic example of using this routine.
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::SpanParser, SignedDuration};
+    ///
+    /// static PARSER: SpanParser = SpanParser::new();
+    ///
+    /// let duration = PARSER.parse_duration(b"PT48m")?;
+    /// assert_eq!(duration, SignedDuration::from_mins(48));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Note that unless you need to parse a span from a byte string,
+    /// at time of writing, there is no other advantage to using this
+    /// parser directly. It is likely more convenient to just use
+    /// the [`FromStr`](std::str::FromStr) trait implementation on
+    /// [`SignedDuration`]:
+    ///
+    /// ```
+    /// use jiff::SignedDuration;
+    ///
+    /// let duration = "PT48m".parse::<SignedDuration>()?;
+    /// assert_eq!(duration, SignedDuration::from_mins(48));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn parse_duration<I: AsRef<[u8]>>(
+        &self,
+        input: I,
+    ) -> Result<SignedDuration, Error> {
+        let input = input.as_ref();
+        let parsed = self.p.parse_signed_duration(input)?;
+        let dur = parsed.into_full()?;
+        Ok(dur)
+    }
 }
 
 /// A printer for Temporal durations.
@@ -1202,6 +1273,47 @@ impl SpanPrinter {
         wtr: W,
     ) -> Result<(), Error> {
         self.p.print_span(span, wtr)
+    }
+
+    /// Print a `SignedDuration` to the given writer.
+    ///
+    /// This balances the units of the duration up to at most hours
+    /// automatically.
+    ///
+    /// # Errors
+    ///
+    /// This only returns an error when writing to the given [`Write`]
+    /// implementation would fail. Some such implementations, like for `String`
+    /// and `Vec<u8>`, never fail (unless memory allocation fails). In such
+    /// cases, it would be appropriate to call `unwrap()` on the result.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::SpanPrinter, SignedDuration};
+    ///
+    /// const PRINTER: SpanPrinter = SpanPrinter::new();
+    ///
+    /// let dur = SignedDuration::new(86_525, 123_000_789);
+    ///
+    /// let mut buf = String::new();
+    /// // Printing to a `String` can never fail.
+    /// PRINTER.print_duration(&dur, &mut buf).unwrap();
+    /// assert_eq!(buf, "PT24h2m5.123000789s");
+    ///
+    /// // Negative durations are supported.
+    /// buf.clear();
+    /// PRINTER.print_duration(&-dur, &mut buf).unwrap();
+    /// assert_eq!(buf, "-PT24h2m5.123000789s");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn print_duration<W: Write>(
+        &self,
+        duration: &SignedDuration,
+        wtr: W,
+    ) -> Result<(), Error> {
+        self.p.print_duration(duration, wtr)
     }
 }
 

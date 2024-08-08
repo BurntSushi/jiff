@@ -14,7 +14,7 @@ use crate::{
         },
     },
     zoned::Zoned,
-    RoundMode, Span, SpanRound, Unit,
+    RoundMode, SignedDuration, Span, SpanRound, Unit,
 };
 
 /// An instant in time represented as the number of nanoseconds since the Unix
@@ -649,47 +649,20 @@ impl Timestamp {
         Ok(Timestamp::from_nanosecond_ranged(nanosecond))
     }
 
-    /// Creates a new instant from a `Duration` since the Unix epoch.
-    ///
-    /// A `Duration` is always positive. If you need to construct
-    /// a timestamp before the Unix epoch with a `Duration`, use
-    /// [`Timestamp::from_signed_duration`].
-    ///
-    /// # Errors
-    ///
-    /// This returns an error if the given duration corresponds to a timestamp
-    /// greater than [`Timestamp::MAX`].
-    ///
-    /// # Example
-    ///
-    /// How one might construct a `Timestamp` from a `SystemTime` if one can
-    /// assume the time is after the Unix epoch:
-    ///
-    /// ```
-    /// use std::time::SystemTime;
-    /// use jiff::Timestamp;
-    ///
-    /// let elapsed = SystemTime::UNIX_EPOCH.elapsed()?;
-    /// assert!(Timestamp::from_duration(elapsed).is_ok());
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// Of course, one should just use [`Timestamp::try_from`] for this
-    /// instead.
-    #[cfg(feature = "std")]
-    #[inline]
-    pub fn from_duration(
-        duration: std::time::Duration,
-    ) -> Result<Timestamp, Error> {
-        Timestamp::from_signed_duration(1, duration)
-    }
-
     /// Creates a new timestamp from a `Duration` with the given sign since the
     /// Unix epoch.
     ///
     /// Positive durations result in a timestamp after the Unix epoch. Negative
     /// durations result in a timestamp before the Unix epoch.
+    ///
+    /// # Planned breaking change
+    ///
+    /// It is planned to rename this routine to `Timestamp::from_duration` in
+    /// `jiff 0.2`. The current `Timestamp::from_duration` routine, which
+    /// accepts a `std::time::Duration`, will be removed. If callers need to
+    /// build a `Timestamp` from a `std::time::Duration`, then they should
+    /// first convert it to a `SignedDuration` via
+    /// `TryFrom<Duration> for SignedDuration`.
     ///
     /// # Errors
     ///
@@ -732,27 +705,11 @@ impl Timestamp {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    #[cfg(feature = "std")]
     #[inline]
-    pub fn from_signed_duration(
-        sign: i8,
-        duration: std::time::Duration,
+    pub fn from_jiff_duration(
+        duration: SignedDuration,
     ) -> Result<Timestamp, Error> {
-        let sign = sign.signum();
-        let seconds = i64::try_from(duration.as_secs()).map_err(|_| {
-            Error::unsigned(
-                "duration seconds",
-                duration.as_secs(),
-                UnixSeconds::MIN_REPR,
-                UnixSeconds::MAX_REPR,
-            )
-        })?;
-        let nanos = i32::try_from(duration.subsec_nanos())
-            .expect("nanoseconds in duration are less than 1,000,000,000");
-        // NOTE: Can multiplication actually fail here? I think if `seconds` is
-        // `i64::MIN`? But, no, I don't think so. Since `duration` is always
-        // positive.
-        Timestamp::new(seconds * i64::from(sign), nanos * i32::from(sign))
+        Timestamp::new(duration.as_secs(), duration.subsec_nanos())
     }
 
     /// Returns this timestamp as a number of seconds since the Unix epoch.
@@ -962,45 +919,44 @@ impl Timestamp {
         self.subsec_nanosecond_ranged().get()
     }
 
-    /// Returns this timestamp as a standard library
-    /// [`Duration`](std::time::Duration) since the Unix epoch.
+    /// Returns this timestamp as a [`SignedDuration`] since the Unix epoch.
     ///
-    /// Since a `Duration` is unsigned and a `Timestamp` is signed, this
-    /// also returns the sign of this timestamp (`-1`, `0` or `1`) along with
-    /// the unsigned `Duration`. A negative sign means the duration should be
-    /// subtracted from the Unix epoch. A positive sign means the duration
-    /// should be added to the Unix epoch. A zero sign means the duration is
-    /// the same precise instant as the Unix epoch.
+    /// # Planned breaking change
+    ///
+    /// It is planned to rename this routine to `Timestamp::as_duration` in
+    /// `jiff 0.2`. The current `Timestamp::as_duration` routine, which returns
+    /// a `std::time::Duration`, will be removed. If callers need a
+    /// `std::time::Duration` from a `Timestamp`, then they should call this
+    /// routine and then use `TryFrom<SignedDuration> for Duration` to convert
+    /// the result.
     ///
     /// # Example
     ///
     /// ```
-    /// use std::time::Duration;
-    /// use jiff::Timestamp;
+    /// use jiff::{SignedDuration, Timestamp};
     ///
     /// assert_eq!(
-    ///     Timestamp::UNIX_EPOCH.as_duration(),
-    ///     (0, Duration::ZERO),
+    ///     Timestamp::UNIX_EPOCH.as_jiff_duration(),
+    ///     SignedDuration::ZERO,
     /// );
     /// assert_eq!(
-    ///     Timestamp::new(5, 123_456_789)?.as_duration(),
-    ///     (1, Duration::new(5, 123_456_789)),
+    ///     Timestamp::new(5, 123_456_789)?.as_jiff_duration(),
+    ///     SignedDuration::new(5, 123_456_789),
     /// );
     /// assert_eq!(
-    ///     Timestamp::new(-5, -123_456_789)?.as_duration(),
-    ///     (-1, Duration::new(5, 123_456_789)),
+    ///     Timestamp::new(-5, -123_456_789)?.as_jiff_duration(),
+    ///     SignedDuration::new(-5, -123_456_789),
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    #[cfg(feature = "std")]
     #[inline]
-    pub fn as_duration(self) -> (i8, std::time::Duration) {
-        let second = u64::try_from(self.as_second().abs())
-            .expect("absolute value of seconds fits in u64");
-        let nanosecond = u32::try_from(self.subsec_nanosecond().abs())
-            .expect("nanosecond always fit in a u32");
-        (self.signum(), std::time::Duration::new(second, nanosecond))
+    pub fn as_jiff_duration(self) -> SignedDuration {
+        let second = i64::try_from(self.as_second())
+            .expect("value of seconds fits in i64");
+        let nanosecond = i32::try_from(self.subsec_nanosecond())
+            .expect("nanosecond always fit in a i32");
+        SignedDuration::new(second, nanosecond)
     }
 
     /// Returns the sign of this timestamp.
@@ -1972,6 +1928,166 @@ impl Timestamp {
     }
 }
 
+/// Deprecated APIs on `Timestamp`.
+impl Timestamp {
+    /// Creates a new instant from a `Duration` since the Unix epoch.
+    ///
+    /// A `Duration` is always positive. If you need to construct
+    /// a timestamp before the Unix epoch with a `Duration`, use
+    /// [`Timestamp::from_signed_duration`].
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given duration corresponds to a timestamp
+    /// greater than [`Timestamp::MAX`].
+    ///
+    /// # Example
+    ///
+    /// How one might construct a `Timestamp` from a `SystemTime` if one can
+    /// assume the time is after the Unix epoch:
+    ///
+    /// ```
+    /// use std::time::SystemTime;
+    /// use jiff::Timestamp;
+    ///
+    /// let elapsed = SystemTime::UNIX_EPOCH.elapsed()?;
+    /// assert!(Timestamp::from_duration(elapsed).is_ok());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Of course, one should just use [`Timestamp::try_from`] for this
+    /// instead.
+    #[deprecated(
+        since = "0.1.5",
+        note = "use Timestamp::from_jiff_duration instead"
+    )]
+    #[inline]
+    pub fn from_duration(
+        duration: core::time::Duration,
+    ) -> Result<Timestamp, Error> {
+        #[allow(deprecated)]
+        Timestamp::from_signed_duration(1, duration)
+    }
+
+    /// Creates a new timestamp from a `Duration` with the given sign since the
+    /// Unix epoch.
+    ///
+    /// Positive durations result in a timestamp after the Unix epoch. Negative
+    /// durations result in a timestamp before the Unix epoch.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given duration corresponds to a timestamp
+    /// outside of the [`Timestamp::MIN`] and [`Timestamp::MAX`] boundaries.
+    ///
+    /// # Example
+    ///
+    /// How one might construct a `Timestamp` from a `SystemTime`:
+    ///
+    /// ```
+    /// use std::time::SystemTime;
+    /// use jiff::Timestamp;
+    ///
+    /// let unix_epoch = SystemTime::UNIX_EPOCH;
+    /// let now = SystemTime::now();
+    /// let (duration, sign) = match now.duration_since(unix_epoch) {
+    ///     Ok(duration) => (duration, 1),
+    ///     Err(err) => (err.duration(), -1),
+    /// };
+    ///
+    /// let ts = Timestamp::from_signed_duration(sign, duration)?;
+    /// assert!(ts > Timestamp::UNIX_EPOCH);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Of course, one should just use [`Timestamp::try_from`] for this
+    /// instead. Indeed, the above example is copied almost exactly from the
+    /// `TryFrom` implementation.
+    ///
+    /// # Example: a sign of 0 always results in `Timestamp::UNIX_EPOCH`
+    ///
+    /// ```
+    /// use jiff::Timestamp;
+    ///
+    /// let duration = std::time::Duration::new(5, 123_456_789);
+    /// let ts = Timestamp::from_signed_duration(0, duration)?;
+    /// assert_eq!(ts, Timestamp::UNIX_EPOCH);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[deprecated(
+        since = "0.1.5",
+        note = "use Timestamp::from_jiff_duration instead"
+    )]
+    #[inline]
+    pub fn from_signed_duration(
+        sign: i8,
+        duration: core::time::Duration,
+    ) -> Result<Timestamp, Error> {
+        let sign = sign.signum();
+        let seconds = i64::try_from(duration.as_secs()).map_err(|_| {
+            Error::unsigned(
+                "duration seconds",
+                duration.as_secs(),
+                UnixSeconds::MIN_REPR,
+                UnixSeconds::MAX_REPR,
+            )
+        })?;
+        let nanos = i32::try_from(duration.subsec_nanos())
+            .expect("nanoseconds in duration are less than 1,000,000,000");
+        // NOTE: Can multiplication actually fail here? I think if `seconds` is
+        // `i64::MIN`? But, no, I don't think so. Since `duration` is always
+        // positive.
+        Timestamp::new(seconds * i64::from(sign), nanos * i32::from(sign))
+    }
+
+    /// Returns this timestamp as a standard library
+    /// [`Duration`](std::time::Duration) since the Unix epoch.
+    ///
+    /// Since a `Duration` is unsigned and a `Timestamp` is signed, this
+    /// also returns the sign of this timestamp (`-1`, `0` or `1`) along with
+    /// the unsigned `Duration`. A negative sign means the duration should be
+    /// subtracted from the Unix epoch. A positive sign means the duration
+    /// should be added to the Unix epoch. A zero sign means the duration is
+    /// the same precise instant as the Unix epoch.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use jiff::Timestamp;
+    ///
+    /// assert_eq!(
+    ///     Timestamp::UNIX_EPOCH.as_duration(),
+    ///     (0, Duration::ZERO),
+    /// );
+    /// assert_eq!(
+    ///     Timestamp::new(5, 123_456_789)?.as_duration(),
+    ///     (1, Duration::new(5, 123_456_789)),
+    /// );
+    /// assert_eq!(
+    ///     Timestamp::new(-5, -123_456_789)?.as_duration(),
+    ///     (-1, Duration::new(5, 123_456_789)),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[deprecated(
+        since = "0.1.5",
+        note = "use Timestamp::as_signed_duration instead"
+    )]
+    #[inline]
+    pub fn as_duration(self) -> (i8, core::time::Duration) {
+        let second = u64::try_from(self.as_second().abs())
+            .expect("absolute value of seconds fits in u64");
+        let nanosecond = u32::try_from(self.subsec_nanosecond().abs())
+            .expect("nanosecond always fit in a u32");
+        (self.signum(), std::time::Duration::new(second, nanosecond))
+    }
+}
+
 /// Internal APIs using Jiff ranged integers.
 impl Timestamp {
     #[inline]
@@ -2292,18 +2408,15 @@ impl From<Timestamp> for std::time::SystemTime {
     #[inline]
     fn from(time: Timestamp) -> std::time::SystemTime {
         let unix_epoch = std::time::SystemTime::UNIX_EPOCH;
-        let (sign, duration) = time.as_duration();
+        let sdur = time.as_jiff_duration();
+        let dur = sdur.unsigned_abs();
         // These are guaranteed to succeed because we assume that SystemTime
         // uses at least 64 bits for the time, and our durations are capped via
         // the range on UnixSeconds.
-        if sign >= 0 {
-            unix_epoch
-                .checked_add(duration)
-                .expect("duration too big (positive)")
+        if sdur.is_negative() {
+            unix_epoch.checked_sub(dur).expect("duration too big (negative)")
         } else {
-            unix_epoch
-                .checked_sub(duration)
-                .expect("duration too big (negative)")
+            unix_epoch.checked_add(dur).expect("duration too big (positive)")
         }
     }
 }
@@ -2317,11 +2430,8 @@ impl TryFrom<std::time::SystemTime> for Timestamp {
         system_time: std::time::SystemTime,
     ) -> Result<Timestamp, Error> {
         let unix_epoch = std::time::SystemTime::UNIX_EPOCH;
-        let (duration, sign) = match system_time.duration_since(unix_epoch) {
-            Ok(duration) => (duration, 1),
-            Err(err) => (err.duration(), -1),
-        };
-        Timestamp::from_signed_duration(sign, duration)
+        let dur = SignedDuration::until(unix_epoch, system_time)?;
+        Timestamp::from_jiff_duration(dur)
     }
 }
 

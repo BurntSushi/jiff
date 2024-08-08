@@ -10,7 +10,7 @@ use crate::{
     span::Span,
     tz::{AmbiguousZoned, Disambiguation, OffsetConflict, TimeZoneDatabase},
     util::{escape, parse, rangeint::RFrom, t},
-    Timestamp, Unit, Zoned,
+    SignedDuration, Timestamp, Unit, Zoned,
 };
 
 /// The datetime components parsed from a string.
@@ -913,6 +913,17 @@ impl SpanParser {
     }
 
     #[inline(always)]
+    pub(super) fn parse_signed_duration<'i>(
+        &self,
+        input: &'i [u8],
+    ) -> Result<Parsed<'i, SignedDuration>, Error> {
+        self.parse_duration(input).context(
+            "failed to parse ISO 8601 \
+             duration string into `SignedDuration`",
+        )
+    }
+
+    #[inline(always)]
     fn parse_span<'i>(
         &self,
         input: &'i [u8],
@@ -947,6 +958,27 @@ impl SpanParser {
             span = span.negate();
         }
         Ok(Parsed { value: span, input })
+    }
+
+    #[inline(always)]
+    fn parse_duration<'i>(
+        &self,
+        input: &'i [u8],
+    ) -> Result<Parsed<'i, SignedDuration>, Error> {
+        let Parsed { value: sign, input } = self.parse_sign(input);
+        let Parsed { input, .. } = self.parse_duration_designator(input)?;
+        let Parsed { value: has_time, input } =
+            self.parse_time_designator(input);
+        if !has_time {
+            return Err(err!(
+                "parsing ISO 8601 duration into SignedDuration requires \
+                 that the duration contain a time component and no \
+                 components of days or greater",
+            ));
+        }
+        let Parsed { value: dur, input } =
+            self.parse_time_units_duration(input, sign == -1)?;
+        Ok(Parsed { value: dur, input })
     }
 
     /// Parses consecutive date units from an ISO 8601 duration string into the
@@ -1076,6 +1108,121 @@ impl SpanParser {
         Ok(Parsed { value: (span, parsed_any), input })
     }
 
+    /// Parses consecutive time units from an ISO 8601 duration string into
+    /// a Jiff signed duration.
+    ///
+    /// If no time units are found, then this returns an error.
+    #[inline(always)]
+    fn parse_time_units_duration<'i>(
+        &self,
+        mut input: &'i [u8],
+        negative: bool,
+    ) -> Result<Parsed<'i, SignedDuration>, Error> {
+        let mut parsed_any = false;
+        let mut prev_unit: Option<Unit> = None;
+        let mut dur = SignedDuration::ZERO;
+
+        loop {
+            let parsed = self.parse_unit_value(input)?;
+            input = parsed.input;
+            let Some(value) = parsed.value else { break };
+
+            let parsed = parse_temporal_fraction(input)?;
+            input = parsed.input;
+            let fraction = parsed.value;
+
+            let parsed = self.parse_unit_time_designator(input)?;
+            input = parsed.input;
+            let unit = parsed.value;
+
+            if let Some(prev_unit) = prev_unit {
+                if prev_unit <= unit {
+                    return Err(err!(
+                        "found value {value:?} with unit {unit} \
+                         after unit {prev_unit}, but units must be \
+                         written from largest to smallest \
+                         (and they can't be repeated)",
+                        unit = unit.singular(),
+                        prev_unit = prev_unit.singular(),
+                    ));
+                }
+            }
+            prev_unit = Some(unit);
+            parsed_any = true;
+
+            // Convert our parsed unit into a number of seconds.
+            let unit_secs = match unit {
+                Unit::Second => value.get(),
+                Unit::Minute => {
+                    let mins = value.get();
+                    mins.checked_mul(60).ok_or_else(|| {
+                        err!(
+                            "minute units {mins} overflowed i64 when \
+                             converted to seconds"
+                        )
+                    })?
+                }
+                Unit::Hour => {
+                    let hours = value.get();
+                    hours.checked_mul(3_600).ok_or_else(|| {
+                        err!(
+                            "hour units {hours} overflowed i64 when \
+                             converted to seconds"
+                        )
+                    })?
+                }
+                // Guaranteed not to be here since `parse_unit_time_designator`
+                // always returns hours, minutes or seconds.
+                _ => unreachable!(),
+            };
+            // Never panics since nanos==0.
+            let unit_dur = SignedDuration::new(unit_secs, 0);
+            // And now try to add it to our existing duration.
+            let result = if negative {
+                dur.checked_sub(unit_dur)
+            } else {
+                dur.checked_add(unit_dur)
+            };
+            dur = result.ok_or_else(|| {
+                err!(
+                    "adding value {value} from unit {unit} overflowed \
+                     signed duration {dur:?}",
+                    unit = unit.singular(),
+                )
+            })?;
+
+            if let Some(fraction) = fraction {
+                // span = span_fractional_time(unit, value, fraction, span)?;
+                let fraction_dur = duration_fractional_time(unit, fraction);
+                let result = if negative {
+                    dur.checked_sub(fraction_dur)
+                } else {
+                    dur.checked_add(fraction_dur)
+                };
+                dur = result.ok_or_else(|| {
+                    err!(
+                        "adding fractional duration {fraction_dur:?} \
+                         from unit {unit} to {dur:?} overflowed \
+                         signed duration limits",
+                        unit = unit.singular(),
+                    )
+                })?;
+                // Once we see a fraction, we are done. We don't permit parsing
+                // any more units. That is, a fraction can only occur on the
+                // lowest unit of time.
+                break;
+            }
+        }
+        if !parsed_any {
+            return Err(err!(
+                "expected at least one unit of time (hours, minutes or \
+                 seconds) in ISO 8601 duration when parsing into a \
+                 `SignedDuration`",
+            ));
+        }
+        Ok(Parsed { value: dur, input })
+    }
+
     #[inline(always)]
     fn parse_unit_value<'i>(
         &self,
@@ -1167,13 +1314,13 @@ impl SpanParser {
     ) -> Result<Parsed<'i, ()>, Error> {
         if input.is_empty() {
             return Err(err!(
-                "expected to find span beginning with 'P' or 'p', \
+                "expected to find duration beginning with 'P' or 'p', \
                  but found end of input",
             ));
         }
         if !matches!(input[0], b'P' | b'p') {
             return Err(err!(
-                "expected 'P' or 'p' prefix to begin span, \
+                "expected 'P' or 'p' prefix to begin duration, \
                  but found {found:?} instead",
                 found = escape::Byte(input[0]),
             ));
@@ -1328,9 +1475,190 @@ fn span_fractional_time(
     Ok(span)
 }
 
+/// Like `span_fractional_time`, but just converts the fraction of the given
+/// unit to a signed duration.
+///
+/// Since a signed duration doesn't keep track of individual units, there is
+/// no loss of fidelity between it and ISO 8601 durations like there is for
+/// `Span`.
+///
+/// Note that `fraction` can be a fractional hour, minute or second (even
+/// though its type suggests its only a fraction of a second).
+///
+/// # Panics
+///
+/// This panics if `unit` is not `Hour`, `Minute` or `Second`.
+fn duration_fractional_time(
+    unit: Unit,
+    fraction: t::SubsecNanosecond,
+) -> SignedDuration {
+    let fraction = t::NoUnits::rfrom(fraction);
+    let nanos = match unit {
+        Unit::Hour => fraction * t::SECONDS_PER_HOUR,
+        Unit::Minute => fraction * t::SECONDS_PER_MINUTE,
+        Unit::Second => fraction,
+        _ => unreachable!("unsupported unit: {unit:?}"),
+    };
+    SignedDuration::from_nanos(nanos.get())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ok_signed_duration() {
+        let p =
+            |input| SpanParser::new().parse_signed_duration(input).unwrap();
+
+        insta::assert_debug_snapshot!(p(b"PT0s"), @r###"
+        Parsed {
+            value: 0s,
+            input: "",
+        }
+        "###);
+        insta::assert_debug_snapshot!(p(b"PT0.000000001s"), @r###"
+        Parsed {
+            value: 1ns,
+            input: "",
+        }
+        "###);
+        insta::assert_debug_snapshot!(p(b"PT1s"), @r###"
+        Parsed {
+            value: 1s,
+            input: "",
+        }
+        "###);
+        insta::assert_debug_snapshot!(p(b"PT59s"), @r###"
+        Parsed {
+            value: 59s,
+            input: "",
+        }
+        "###);
+        insta::assert_debug_snapshot!(p(b"PT60s"), @r###"
+        Parsed {
+            value: 60s,
+            input: "",
+        }
+        "###);
+        insta::assert_debug_snapshot!(p(b"PT1m"), @r###"
+        Parsed {
+            value: 60s,
+            input: "",
+        }
+        "###);
+        insta::assert_debug_snapshot!(p(b"PT1m0.000000001s"), @r###"
+        Parsed {
+            value: 60s1ns,
+            input: "",
+        }
+        "###);
+        insta::assert_debug_snapshot!(p(b"PT1.25m"), @r###"
+        Parsed {
+            value: 75s,
+            input: "",
+        }
+        "###);
+        insta::assert_debug_snapshot!(p(b"PT1h"), @r###"
+        Parsed {
+            value: 3600s,
+            input: "",
+        }
+        "###);
+        insta::assert_debug_snapshot!(p(b"PT1h0.000000001s"), @r###"
+        Parsed {
+            value: 3600s1ns,
+            input: "",
+        }
+        "###);
+        insta::assert_debug_snapshot!(p(b"PT1.25h"), @r###"
+        Parsed {
+            value: 4500s,
+            input: "",
+        }
+        "###);
+
+        insta::assert_debug_snapshot!(p(b"-PT2562047788015215h30m8.999999999s"), @r###"
+        Parsed {
+            value: -9223372036854775808s999999999ns,
+            input: "",
+        }
+        "###);
+        insta::assert_debug_snapshot!(p(b"PT2562047788015215h30m7.999999999s"), @r###"
+        Parsed {
+            value: 9223372036854775807s999999999ns,
+            input: "",
+        }
+        "###);
+    }
+
+    #[test]
+    fn err_signed_duration() {
+        let p = |input| {
+            SpanParser::new().parse_signed_duration(input).unwrap_err()
+        };
+
+        insta::assert_snapshot!(
+            p(b"P0d"),
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: parsing ISO 8601 duration into SignedDuration requires that the duration contain a time component and no components of days or greater",
+        );
+        insta::assert_snapshot!(
+            p(b"PT0d"),
+            @r###"failed to parse ISO 8601 duration string into `SignedDuration`: expected to find time unit designator suffix (H, M or S), but found "d" instead"###,
+        );
+        insta::assert_snapshot!(
+            p(b"P0dT1s"),
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: parsing ISO 8601 duration into SignedDuration requires that the duration contain a time component and no components of days or greater",
+        );
+
+        insta::assert_snapshot!(
+            p(b""),
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: expected to find duration beginning with 'P' or 'p', but found end of input",
+        );
+        insta::assert_snapshot!(
+            p(b"P"),
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: parsing ISO 8601 duration into SignedDuration requires that the duration contain a time component and no components of days or greater",
+        );
+        insta::assert_snapshot!(
+            p(b"PT"),
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: expected at least one unit of time (hours, minutes or seconds) in ISO 8601 duration when parsing into a `SignedDuration`",
+        );
+        insta::assert_snapshot!(
+            p(b"PTs"),
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: expected at least one unit of time (hours, minutes or seconds) in ISO 8601 duration when parsing into a `SignedDuration`",
+        );
+
+        insta::assert_snapshot!(
+            p(b"PT1s1m"),
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: found value 1 with unit minute after unit second, but units must be written from largest to smallest (and they can't be repeated)",
+        );
+        insta::assert_snapshot!(
+            p(b"PT1s1h"),
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: found value 1 with unit hour after unit second, but units must be written from largest to smallest (and they can't be repeated)",
+        );
+        insta::assert_snapshot!(
+            p(b"PT1m1h"),
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: found value 1 with unit hour after unit minute, but units must be written from largest to smallest (and they can't be repeated)",
+        );
+
+        insta::assert_snapshot!(
+            p(b"-PT9223372036854775809s"),
+            @r###"failed to parse ISO 8601 duration string into `SignedDuration`: failed to parse "9223372036854775809" as 64-bit signed integer: number '9223372036854775809' too big to parse into 64-bit integer"###,
+        );
+        insta::assert_snapshot!(
+            p(b"PT9223372036854775808s"),
+            @r###"failed to parse ISO 8601 duration string into `SignedDuration`: failed to parse "9223372036854775808" as 64-bit signed integer: number '9223372036854775808' too big to parse into 64-bit integer"###,
+        );
+
+        insta::assert_snapshot!(
+            p(b"PT1m9223372036854775807s"),
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: adding value 9223372036854775807 from unit second overflowed signed duration 60s",
+        );
+        insta::assert_snapshot!(
+            p(b"PT2562047788015215.6h"),
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: adding fractional duration 2160s from unit hour to 9223372036854774000s overflowed signed duration limits",
+        );
+    }
 
     #[test]
     fn ok_temporal_duration_basic() {
