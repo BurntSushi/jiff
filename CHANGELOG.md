@@ -1,12 +1,18 @@
-0.1.5 (TBD)
+0.1.5 (2024-08-09)
 ==================
 This release includes some improvements and bug fixes, particularly for Jiff's
 `strtime` APIs.
 
 Enhancements:
 
+* [#63](https://github.com/BurntSushi/jiff/issues/63):
+Add link to original Chrono maintainer's commentary in `DESIGN.md`.
 * [#75](https://github.com/BurntSushi/jiff/issues/75):
 Add support for `%V` for formatting _and_ parsing IANA time zone identifiers.
+* [#79](https://github.com/BurntSushi/jiff/pull/79):
+Add `devcontainer.json` to support GitHub Codespaces.
+* [#85](https://github.com/BurntSushi/jiff/pull/85):
+Set correct ranges for internal tracking in return value of `days_in_month`.
 
 Bug fixes:
 
@@ -16,6 +22,8 @@ Fixes a bug where some `Span`s could not be roundtripped through ISO 8601.
 Tweak wording in documentation of "printf"-style API.
 * [#73](https://github.com/BurntSushi/jiff/issues/73):
 Make it so `%.Nf` only formats to `N` decimal places.
+* [#77](https://github.com/BurntSushi/jiff/pull/77):
+Disable optimizations when running tests.
 
 
 0.1.4 (2024-08-01)
