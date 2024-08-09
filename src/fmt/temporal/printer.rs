@@ -8,7 +8,7 @@ use crate::{
     span::Span,
     tz::{Offset, TimeZone},
     util::{rangeint::RFrom, t},
-    Timestamp, Zoned,
+    SignedDuration, Timestamp, Zoned,
 };
 
 #[derive(Clone, Debug)]
@@ -317,6 +317,55 @@ impl SpanPrinter {
         }
         Ok(())
     }
+
+    /// Print the given signed duration to the writer given.
+    ///
+    /// This only returns an error when the given writer returns an error.
+    pub(super) fn print_duration<W: Write>(
+        &self,
+        dur: &SignedDuration,
+        mut wtr: W,
+    ) -> Result<(), Error> {
+        static FMT_INT: DecimalFormatter = DecimalFormatter::new();
+        static FMT_FRACTION: FractionalFormatter = FractionalFormatter::new();
+
+        let mut non_zero_greater_than_second = false;
+        if dur.is_negative() {
+            wtr.write_str("-")?;
+        }
+        wtr.write_str("PT")?;
+
+        let mut secs = dur.as_secs();
+        // OK because subsec_nanos -999_999_999<=nanos<=999_999_999.
+        let nanos = dur.subsec_nanos().abs();
+        // OK because guaranteed to be bigger than i64::MIN.
+        let hours = (secs / (60 * 60)).abs();
+        secs %= 60 * 60;
+        // OK because guaranteed to be bigger than i64::MIN.
+        let minutes = (secs / 60).abs();
+        // OK because guaranteed to be bigger than i64::MIN.
+        secs = (secs % 60).abs();
+        if hours != 0 {
+            wtr.write_int(&FMT_INT, hours)?;
+            wtr.write_str("h")?;
+            non_zero_greater_than_second = true;
+        }
+        if minutes != 0 {
+            wtr.write_int(&FMT_INT, minutes)?;
+            wtr.write_str("m")?;
+            non_zero_greater_than_second = true;
+        }
+        if (secs != 0 || !non_zero_greater_than_second) && nanos == 0 {
+            wtr.write_int(&FMT_INT, secs)?;
+            wtr.write_str("s")?;
+        } else if nanos != 0 {
+            wtr.write_int(&FMT_INT, secs)?;
+            wtr.write_str(".")?;
+            wtr.write_fraction(&FMT_FRACTION, nanos)?;
+            wtr.write_str("s")?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -547,5 +596,51 @@ mod tests {
             .microseconds(t::SpanMicroseconds::MIN_REPR)
             .nanoseconds(t::SpanNanoseconds::MIN_REPR),
         ), @"-PT1902545624836.854775807s");
+    }
+
+    #[test]
+    fn print_duration() {
+        let p = |secs, nanos| -> String {
+            let dur = SignedDuration::new(secs, nanos);
+            let mut buf = String::new();
+            SpanPrinter::new().print_duration(&dur, &mut buf).unwrap();
+            buf
+        };
+
+        insta::assert_snapshot!(p(0, 0), @"PT0s");
+        insta::assert_snapshot!(p(0, 1), @"PT0.000000001s");
+        insta::assert_snapshot!(p(1, 0), @"PT1s");
+        insta::assert_snapshot!(p(59, 0), @"PT59s");
+        insta::assert_snapshot!(p(60, 0), @"PT1m");
+        insta::assert_snapshot!(p(60, 1), @"PT1m0.000000001s");
+        insta::assert_snapshot!(p(61, 1), @"PT1m1.000000001s");
+        insta::assert_snapshot!(p(3_600, 0), @"PT1h");
+        insta::assert_snapshot!(p(3_600, 1), @"PT1h0.000000001s");
+        insta::assert_snapshot!(p(3_660, 0), @"PT1h1m");
+        insta::assert_snapshot!(p(3_660, 1), @"PT1h1m0.000000001s");
+        insta::assert_snapshot!(p(3_661, 0), @"PT1h1m1s");
+        insta::assert_snapshot!(p(3_661, 1), @"PT1h1m1.000000001s");
+
+        insta::assert_snapshot!(p(0, -1), @"-PT0.000000001s");
+        insta::assert_snapshot!(p(-1, 0), @"-PT1s");
+        insta::assert_snapshot!(p(-59, 0), @"-PT59s");
+        insta::assert_snapshot!(p(-60, 0), @"-PT1m");
+        insta::assert_snapshot!(p(-60, -1), @"-PT1m0.000000001s");
+        insta::assert_snapshot!(p(-61, -1), @"-PT1m1.000000001s");
+        insta::assert_snapshot!(p(-3_600, 0), @"-PT1h");
+        insta::assert_snapshot!(p(-3_600, -1), @"-PT1h0.000000001s");
+        insta::assert_snapshot!(p(-3_660, 0), @"-PT1h1m");
+        insta::assert_snapshot!(p(-3_660, -1), @"-PT1h1m0.000000001s");
+        insta::assert_snapshot!(p(-3_661, 0), @"-PT1h1m1s");
+        insta::assert_snapshot!(p(-3_661, -1), @"-PT1h1m1.000000001s");
+
+        insta::assert_snapshot!(
+            p(i64::MIN, -999_999_999),
+            @"-PT2562047788015215h30m8.999999999s",
+        );
+        insta::assert_snapshot!(
+            p(i64::MAX, 999_999_999),
+            @"PT2562047788015215h30m7.999999999s",
+        );
     }
 }
