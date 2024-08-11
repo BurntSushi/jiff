@@ -952,11 +952,7 @@ impl Timestamp {
     /// ```
     #[inline]
     pub fn as_jiff_duration(self) -> SignedDuration {
-        let second = i64::try_from(self.as_second())
-            .expect("value of seconds fits in i64");
-        let nanosecond = i32::try_from(self.subsec_nanosecond())
-            .expect("nanosecond always fit in a i32");
-        SignedDuration::new(second, nanosecond)
+        SignedDuration::from_timestamp(self)
     }
 
     /// Returns the sign of this timestamp.
@@ -2430,7 +2426,7 @@ impl TryFrom<std::time::SystemTime> for Timestamp {
         system_time: std::time::SystemTime,
     ) -> Result<Timestamp, Error> {
         let unix_epoch = std::time::SystemTime::UNIX_EPOCH;
-        let dur = SignedDuration::until(unix_epoch, system_time)?;
+        let dur = SignedDuration::system_until(unix_epoch, system_time)?;
         Timestamp::from_jiff_duration(dur)
     }
 }

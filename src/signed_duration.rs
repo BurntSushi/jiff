@@ -1,8 +1,10 @@
 use core::time::Duration;
 
 use crate::{
+    civil::{Date, DateTime, Time},
     error::{err, ErrorContext},
-    Error,
+    tz::Offset,
+    Error, Timestamp, Zoned,
 };
 
 #[cfg(not(feature = "std"))]
@@ -497,6 +499,24 @@ impl SignedDuration {
             )
         }
         SignedDuration::from_secs(minutes * SECS_PER_MINUTE)
+    }
+
+    /// Converts the given timestamp into a signed duration.
+    ///
+    /// This isn't exported because it's not clear that it makes semantic
+    /// sense, since it somewhat encodes the assumption that the "desired"
+    /// duration is relative to the Unix epoch. Which is... probably fine?
+    /// But I'm not sure.
+    ///
+    /// But the point of this is to make the conversion a little cheaper.
+    /// Namely, since a `Timestamp` internally uses same representation as a
+    /// `SignedDuration` with the same guarantees (except with smaller limits),
+    /// we can avoid a fair bit of case analysis done in `SignedDuration::new`.
+    pub(crate) fn from_timestamp(timestamp: Timestamp) -> SignedDuration {
+        SignedDuration {
+            secs: timestamp.as_second(),
+            nanos: timestamp.subsec_nanosecond(),
+        }
     }
 
     /// Returns true if this duration spans no time.
@@ -1404,58 +1424,6 @@ impl SignedDuration {
 /// In most cases, these APIs exist as a result of the fact that this duration
 /// is signed.
 impl SignedDuration {
-    /// Returns the duration from `time1` until `time2`.
-    ///
-    /// # Errors
-    ///
-    /// This returns an error if the difference between the two time values
-    /// overflows the signed duration limits.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use std::time::{Duration, SystemTime};
-    /// use jiff::SignedDuration;
-    ///
-    /// let time1 = SystemTime::UNIX_EPOCH;
-    /// let time2 = time1.checked_add(Duration::from_secs(86_400)).unwrap();
-    /// assert_eq!(
-    ///     SignedDuration::until(time1, time2)?,
-    ///     SignedDuration::from_hours(24),
-    /// );
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    #[cfg(feature = "std")]
-    #[inline]
-    pub fn until(
-        time1: std::time::SystemTime,
-        time2: std::time::SystemTime,
-    ) -> Result<SignedDuration, Error> {
-        match time2.duration_since(time1) {
-            Ok(dur) => SignedDuration::try_from(dur).with_context(|| {
-                err!(
-                    "unsigned duration {dur:?} for system time since \
-                     Unix epoch overflowed signed duration"
-                )
-            }),
-            Err(err) => {
-                let dur = err.duration();
-                let dur =
-                    SignedDuration::try_from(dur).with_context(|| {
-                        err!(
-                        "unsigned duration {dur:?} for system time before \
-                         Unix epoch overflowed signed duration"
-                    )
-                    })?;
-                dur.checked_neg().ok_or_else(|| {
-                    err!("negating duration {dur:?} from before the Unix epoch \
-                     overflowed signed duration")
-                })
-            }
-        }
-    }
-
     /// Returns the number of whole hours in this duration.
     ///
     /// The value returned is negative when the duration is negative.
@@ -1643,6 +1611,118 @@ impl SignedDuration {
     #[inline]
     pub const fn is_negative(&self) -> bool {
         self.secs.is_negative() || self.nanos.is_negative()
+    }
+}
+
+/// Additional APIs for computing the duration between date and time values.
+impl SignedDuration {
+    pub(crate) fn zoned_until(
+        zoned1: &Zoned,
+        zoned2: &Zoned,
+    ) -> SignedDuration {
+        SignedDuration::timestamp_until(zoned1.timestamp(), zoned2.timestamp())
+    }
+
+    pub(crate) fn timestamp_until(
+        timestamp1: Timestamp,
+        timestamp2: Timestamp,
+    ) -> SignedDuration {
+        let dur1 = SignedDuration::from_timestamp(timestamp1);
+        let dur2 = SignedDuration::from_timestamp(timestamp2);
+        // OK because all the difference between any two timestamp values can
+        // fit into a signed duration.
+        dur2 - dur1
+    }
+
+    pub(crate) fn datetime_until(
+        datetime1: DateTime,
+        datetime2: DateTime,
+    ) -> SignedDuration {
+        let date_until =
+            SignedDuration::date_until(datetime1.date(), datetime2.date());
+        let time_until =
+            SignedDuration::time_until(datetime1.time(), datetime2.time());
+        // OK because the difference between any two datetimes can bit into a
+        // 96-bit integer of nanoseconds.
+        date_until + time_until
+    }
+
+    pub(crate) fn date_until(date1: Date, date2: Date) -> SignedDuration {
+        let days = date1.until_days_ranged(date2);
+        // OK because difference in days fits in an i32, and multiplying an
+        // i32 by 24 will never overflow an i64.
+        let hours = 24 * i64::from(days.get());
+        SignedDuration::from_hours(hours)
+    }
+
+    pub(crate) fn time_until(time1: Time, time2: Time) -> SignedDuration {
+        let nanos = time1.until_nanoseconds(time2);
+        SignedDuration::from_nanos(nanos.get())
+    }
+
+    pub(crate) fn offset_until(
+        offset1: Offset,
+        offset2: Offset,
+    ) -> SignedDuration {
+        let secs1 = i64::from(offset1.seconds());
+        let secs2 = i64::from(offset2.seconds());
+        // OK because subtracting any two i32 values will
+        // never overflow an i64.
+        let diff = secs2 - secs1;
+        SignedDuration::from_secs(diff)
+    }
+
+    /// Returns the duration from `time1` until `time2` where the times are
+    /// [`std::time::SystemTime`] values from the standard library.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the difference between the two time values
+    /// overflows the signed duration limits.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::time::{Duration, SystemTime};
+    /// use jiff::SignedDuration;
+    ///
+    /// let time1 = SystemTime::UNIX_EPOCH;
+    /// let time2 = time1.checked_add(Duration::from_secs(86_400)).unwrap();
+    /// assert_eq!(
+    ///     SignedDuration::system_until(time1, time2)?,
+    ///     SignedDuration::from_hours(24),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[cfg(feature = "std")]
+    #[inline]
+    pub fn system_until(
+        time1: std::time::SystemTime,
+        time2: std::time::SystemTime,
+    ) -> Result<SignedDuration, Error> {
+        match time2.duration_since(time1) {
+            Ok(dur) => SignedDuration::try_from(dur).with_context(|| {
+                err!(
+                    "unsigned duration {dur:?} for system time since \
+                     Unix epoch overflowed signed duration"
+                )
+            }),
+            Err(err) => {
+                let dur = err.duration();
+                let dur =
+                    SignedDuration::try_from(dur).with_context(|| {
+                        err!(
+                        "unsigned duration {dur:?} for system time before \
+                         Unix epoch overflowed signed duration"
+                    )
+                    })?;
+                dur.checked_neg().ok_or_else(|| {
+                    err!("negating duration {dur:?} from before the Unix epoch \
+                     overflowed signed duration")
+                })
+            }
+        }
     }
 }
 
