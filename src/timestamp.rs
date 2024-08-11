@@ -1,4 +1,7 @@
+use core::time::Duration as UnsignedDuration;
+
 use crate::{
+    duration::{Duration, SDuration},
     error::{err, Error, ErrorContext},
     fmt::{
         self,
@@ -675,16 +678,12 @@ impl Timestamp {
     ///
     /// ```
     /// use std::time::SystemTime;
-    /// use jiff::Timestamp;
+    /// use jiff::{SignedDuration, Timestamp};
     ///
     /// let unix_epoch = SystemTime::UNIX_EPOCH;
     /// let now = SystemTime::now();
-    /// let (duration, sign) = match now.duration_since(unix_epoch) {
-    ///     Ok(duration) => (duration, 1),
-    ///     Err(err) => (err.duration(), -1),
-    /// };
-    ///
-    /// let ts = Timestamp::from_signed_duration(sign, duration)?;
+    /// let duration = SignedDuration::system_until(unix_epoch, now)?;
+    /// let ts = Timestamp::from_jiff_duration(duration)?;
     /// assert!(ts > Timestamp::UNIX_EPOCH);
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -693,18 +692,6 @@ impl Timestamp {
     /// Of course, one should just use [`Timestamp::try_from`] for this
     /// instead. Indeed, the above example is copied almost exactly from the
     /// `TryFrom` implementation.
-    ///
-    /// # Example: a sign of 0 always results in `Timestamp::UNIX_EPOCH`
-    ///
-    /// ```
-    /// use jiff::Timestamp;
-    ///
-    /// let duration = std::time::Duration::new(5, 123_456_789);
-    /// let ts = Timestamp::from_signed_duration(0, duration)?;
-    /// assert_eq!(ts, Timestamp::UNIX_EPOCH);
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
     #[inline]
     pub fn from_jiff_duration(
         duration: SignedDuration,
@@ -1138,6 +1125,10 @@ impl Timestamp {
 
     /// Add the given span of time to this timestamp.
     ///
+    /// This operation accepts three different duration types: [`Span`],
+    /// [`SignedDuration`] or [`std::time::Duration`]. This is achieved via
+    /// `From` trait implementations for the [`TimestampArithmetic`] type.
+    ///
     /// # Properties
     ///
     /// Given a timestamp `ts1` and a span `s`, and assuming `ts2 = ts1 + s`
@@ -1213,8 +1204,45 @@ impl Timestamp {
     /// assert_eq!(ts.to_string(), "-009999-01-02T01:59:59Z");
     /// assert!(ts.checked_add(-1.nanosecond()).is_err());
     /// ```
+    ///
+    /// # Example: adding absolute durations
+    ///
+    /// This shows how to add signed and unsigned absolute durations to a
+    /// `Timestamp`.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use jiff::{SignedDuration, Timestamp};
+    ///
+    /// let ts1 = Timestamp::new(2_999_999_999, 0)?;
+    /// assert_eq!(ts1.to_string(), "2065-01-24T05:19:59Z");
+    ///
+    /// let dur = SignedDuration::new(60 * 60 + 30 * 60, 123);
+    /// assert_eq!(
+    ///     ts1.checked_add(dur)?.to_string(),
+    ///     "2065-01-24T06:49:59.000000123Z",
+    /// );
+    ///
+    /// let dur = Duration::new(60 * 60 + 30 * 60, 123);
+    /// assert_eq!(
+    ///     ts1.checked_add(dur)?.to_string(),
+    ///     "2065-01-24T06:49:59.000000123Z",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
-    pub fn checked_add(self, span: Span) -> Result<Timestamp, Error> {
+    pub fn checked_add<A: Into<TimestampArithmetic>>(
+        self,
+        duration: A,
+    ) -> Result<Timestamp, Error> {
+        let duration: TimestampArithmetic = duration.into();
+        duration.checked_add(self)
+    }
+
+    #[inline]
+    fn checked_add_span(self, span: Span) -> Result<Timestamp, Error> {
         if let Some(err) = span.smallest_non_time_non_zero_unit_error() {
             return Err(err);
         }
@@ -1236,6 +1264,18 @@ impl Timestamp {
         Ok(Timestamp::from_nanosecond_ranged(sum))
     }
 
+    #[inline]
+    fn checked_add_duration(
+        self,
+        duration: SignedDuration,
+    ) -> Result<Timestamp, Error> {
+        let start = self.as_jiff_duration();
+        let end = start.checked_add(duration).ok_or_else(|| {
+            err!("overflow when adding {duration:?} to {self}")
+        })?;
+        Timestamp::from_jiff_duration(end)
+    }
+
     /// This routine is identical to [`Timestamp::checked_add`] with the
     /// duration negated.
     ///
@@ -1249,7 +1289,7 @@ impl Timestamp {
     /// fails, it will result in a panic.
     ///
     /// ```
-    /// use jiff::{Timestamp, ToSpan};
+    /// use jiff::{SignedDuration, Timestamp, ToSpan};
     ///
     /// let ts1 = Timestamp::new(2_999_999_999, 0)?;
     /// assert_eq!(ts1.to_string(), "2065-01-24T05:19:59Z");
@@ -1259,34 +1299,38 @@ impl Timestamp {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    ///
+    /// # Example: use with [`SignedDuration`] and [`std::time::Duration`]
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use jiff::{SignedDuration, Timestamp};
+    ///
+    /// let ts1 = Timestamp::new(2_999_999_999, 0)?;
+    /// assert_eq!(ts1.to_string(), "2065-01-24T05:19:59Z");
+    ///
+    /// let dur = SignedDuration::new(60 * 60 + 30 * 60, 123);
+    /// assert_eq!(
+    ///     ts1.checked_sub(dur)?.to_string(),
+    ///     "2065-01-24T03:49:58.999999877Z",
+    /// );
+    ///
+    /// let dur = Duration::new(60 * 60 + 30 * 60, 123);
+    /// assert_eq!(
+    ///     ts1.checked_sub(dur)?.to_string(),
+    ///     "2065-01-24T03:49:58.999999877Z",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
-    pub fn checked_sub(self, span: Span) -> Result<Timestamp, Error> {
-        self.checked_add(span.negate())
-    }
-
-    /*
-    #[inline]
-    pub(crate) fn checked_add_seconds(
-        mut self,
-        seconds: i64,
+    pub fn checked_sub<A: Into<TimestampArithmetic>>(
+        self,
+        duration: A,
     ) -> Result<Timestamp, Error> {
-        let seconds = UnixSeconds::try_new("second", seconds)?;
-        self.second = self.second.try_checked_add("second", seconds)?;
-        Ok(self)
-    }
-    */
-
-    #[inline]
-    pub(crate) fn checked_sub_seconds(
-        mut self,
-        seconds: i64,
-    ) -> Result<Timestamp, Error> {
-        // We do this instead of `checked_add_seconds(-seconds)` because the
-        // `-seconds` can overflow when it's i64::MIN. We could check for that
-        // overflow specifically, or just let our ranged integers do it.
-        let seconds = UnixSeconds::try_new("second", seconds)?;
-        self.second = self.second.try_checked_sub("second", seconds)?;
-        Ok(self)
+        let duration: TimestampArithmetic = duration.into();
+        duration.checked_neg().and_then(|ta| ta.checked_add(self))
     }
 
     /// This routine is identical to [`Timestamp::checked_add`], except the
@@ -1305,7 +1349,7 @@ impl Timestamp {
     /// This example shows that arithmetic saturates on overflow.
     ///
     /// ```
-    /// use jiff::{Timestamp, ToSpan};
+    /// use jiff::{SignedDuration, Timestamp, ToSpan};
     ///
     /// assert_eq!(
     ///     Timestamp::MAX,
@@ -1315,22 +1359,36 @@ impl Timestamp {
     ///     Timestamp::MIN,
     ///     Timestamp::MIN.saturating_add(-1.nanosecond()),
     /// );
+    /// assert_eq!(
+    ///     Timestamp::MAX,
+    ///     Timestamp::UNIX_EPOCH.saturating_add(SignedDuration::MAX),
+    /// );
+    /// assert_eq!(
+    ///     Timestamp::MIN,
+    ///     Timestamp::UNIX_EPOCH.saturating_add(SignedDuration::MIN),
+    /// );
+    /// assert_eq!(
+    ///     Timestamp::MAX,
+    ///     Timestamp::UNIX_EPOCH.saturating_add(std::time::Duration::MAX),
+    /// );
     /// ```
     #[inline]
-    pub fn saturating_add(self, span: Span) -> Timestamp {
-        if let Some(err) = span.smallest_non_time_non_zero_unit_error() {
-            panic!(
-                "saturing Timestamp arithmetic \
-                 requires only time units: {err}"
-            )
-        }
-        self.checked_add(span).unwrap_or_else(|_| {
-            if span.is_negative() {
-                Timestamp::MIN
-            } else {
-                Timestamp::MAX
+    pub fn saturating_add<A: Into<TimestampArithmetic>>(
+        self,
+        duration: A,
+    ) -> Timestamp {
+        let duration: TimestampArithmetic = duration.into();
+        match duration.saturating_add(self) {
+            Ok(ts) => ts,
+            Err(err) => {
+                // FIXME: This should be an actual error.
+                // We'll do that in jiff 0.2.
+                panic!(
+                    "saturating Timestamp arithmetic \
+                     requires only time units: {err}"
+                )
             }
-        })
+        }
     }
 
     /// This routine is identical to [`Timestamp::saturating_add`] with the
@@ -1346,7 +1404,7 @@ impl Timestamp {
     /// This example shows that arithmetic saturates on overflow.
     ///
     /// ```
-    /// use jiff::{Timestamp, ToSpan};
+    /// use jiff::{SignedDuration, Timestamp, ToSpan};
     ///
     /// assert_eq!(
     ///     Timestamp::MIN,
@@ -1356,10 +1414,29 @@ impl Timestamp {
     ///     Timestamp::MAX,
     ///     Timestamp::MAX.saturating_sub(-1.nanosecond()),
     /// );
+    /// assert_eq!(
+    ///     Timestamp::MIN,
+    ///     Timestamp::UNIX_EPOCH.saturating_sub(SignedDuration::MAX),
+    /// );
+    /// assert_eq!(
+    ///     Timestamp::MAX,
+    ///     Timestamp::UNIX_EPOCH.saturating_sub(SignedDuration::MIN),
+    /// );
+    /// assert_eq!(
+    ///     Timestamp::MIN,
+    ///     Timestamp::UNIX_EPOCH.saturating_sub(std::time::Duration::MAX),
+    /// );
     /// ```
     #[inline]
-    pub fn saturating_sub(self, span: Span) -> Timestamp {
-        self.saturating_add(span.negate())
+    pub fn saturating_sub<A: Into<TimestampArithmetic>>(
+        self,
+        duration: A,
+    ) -> Timestamp {
+        let duration: TimestampArithmetic = duration.into();
+        let Ok(duration) = duration.checked_neg() else {
+            return Timestamp::MIN;
+        };
+        self.saturating_add(duration)
     }
 
     /// Returns a span representing the elapsed time from this timestamp until
@@ -1525,6 +1602,121 @@ impl Timestamp {
         } else {
             Ok(span)
         }
+    }
+
+    /// Returns an absolute duration representing the elapsed time from this
+    /// timestamp until the given `other` timestamp.
+    ///
+    /// When `other` occurs before this timestamp, then the duration returned
+    /// will be negative.
+    ///
+    /// Unlike [`Timestamp::until`], this always returns a duration
+    /// corresponding to a 96-bit integer of nanoseconds between two
+    /// timestamps.
+    ///
+    /// # Fallibility
+    ///
+    /// This routine never panics or returns an error. Since there are no
+    /// configuration options that can be incorrectly provided, no error is
+    /// possible when calling this routine. In contrast, [`Timestamp::until`]
+    /// can return an error in some cases due to misconfiguration. But like
+    /// this routine, [`Timestamp::until`] never panics or returns an error in
+    /// its default configuration.
+    ///
+    /// # When should I use this versus [`Timestamp::until`]?
+    ///
+    /// See the type documentation for [`SignedDuration`] for the section on
+    /// when one should use [`Span`] and when one should use `SignedDuration`.
+    /// In short, use `Span` (and therefore `Timestamp::until`) unless you have
+    /// a specific reason to do otherwise.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{Timestamp, SignedDuration};
+    ///
+    /// let earlier: Timestamp = "2006-08-24T22:30:00Z".parse()?;
+    /// let later: Timestamp = "2019-01-31 21:00:00Z".parse()?;
+    /// assert_eq!(
+    ///     earlier.duration_until(later),
+    ///     SignedDuration::from_secs(392509800),
+    /// );
+    ///
+    /// // Flipping the timestamps is fine, but you'll get a negative span.
+    /// assert_eq!(
+    ///     later.duration_until(earlier),
+    ///     SignedDuration::from_secs(-392509800),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: difference with [`Timestamp::until`]
+    ///
+    /// The primary difference between this routine and
+    /// `Timestamp::until`, other than the return type, is that this
+    /// routine is likely to be faster. Namely, it does simple 96-bit
+    /// integer math, where as `Timestamp::until` has to do a bit more
+    /// work to deal with the different types of units on a `Span`.
+    ///
+    /// Additionally, since the difference between two timestamps is always
+    /// expressed in units of hours or smaller, and units of hours or smaller
+    /// are always uniform, there is no "expressive" difference between this
+    /// routine and `Timestamp::until`. Because of this, one can always
+    /// convert between `Span` and `SignedDuration` as returned by methods
+    /// on `Timestamp` without a relative datetime:
+    ///
+    /// ```
+    /// use jiff::{SignedDuration, Span, Timestamp};
+    ///
+    /// let ts1: Timestamp = "2024-02-28T00:00:00Z".parse()?;
+    /// let ts2: Timestamp = "2024-03-01T00:00:00Z".parse()?;
+    /// let dur = ts1.duration_until(ts2);
+    /// // Guaranteed to never fail because the duration
+    /// // between two civil times never exceeds the limits
+    /// // of a `Span`.
+    /// let span = Span::try_from(dur).unwrap();
+    /// assert_eq!(span, Span::new().seconds(172_800));
+    /// // Guaranteed to succeed and always return the original
+    /// // duration because the units are always hours or smaller,
+    /// // and thus uniform. This means a relative datetime is
+    /// // never required to do this conversion.
+    /// let dur = SignedDuration::try_from(span).unwrap();
+    /// assert_eq!(dur, SignedDuration::from_secs(172_800));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// This conversion guarantee also applies to [`Timestamp::until`] since it
+    /// always returns a balanced span. That is, it never returns spans like
+    /// `1 second 1000 milliseconds`. (Those cannot be losslessly converted to
+    /// a `SignedDuration` since a `SignedDuration` is only represented as a
+    /// single 96-bit integer of nanoseconds.)
+    #[inline]
+    pub fn duration_until(self, other: Timestamp) -> SignedDuration {
+        SignedDuration::timestamp_until(self, other)
+    }
+
+    /// This routine is identical to [`Timestamp::duration_until`], but the
+    /// order of the parameters is flipped.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{SignedDuration, Timestamp};
+    ///
+    /// let earlier: Timestamp = "2006-08-24T22:30:00Z".parse()?;
+    /// let later: Timestamp = "2019-01-31 21:00:00Z".parse()?;
+    /// assert_eq!(
+    ///     later.duration_since(earlier),
+    ///     SignedDuration::from_secs(392509800),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn duration_since(self, other: Timestamp) -> SignedDuration {
+        SignedDuration::timestamp_until(other, self)
     }
 
     /// Rounds this timestamp according to the [`TimestampRound`] configuration
@@ -1833,10 +2025,6 @@ impl Timestamp {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    ///
-    /// Of course, one should just use [`Timestamp::try_from`] for this
-    /// instead. Indeed, the above example is copied almost exactly from the
-    /// `TryFrom` implementation.
     ///
     /// # Example: a sign of 0 always results in `Timestamp::UNIX_EPOCH`
     ///
@@ -2221,6 +2409,106 @@ impl core::ops::Sub for Timestamp {
     }
 }
 
+/// Adds a signed duration of time to a timestamp.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Timestamp::checked_add`].
+impl core::ops::Add<SignedDuration> for Timestamp {
+    type Output = Timestamp;
+
+    #[inline]
+    fn add(self, rhs: SignedDuration) -> Timestamp {
+        self.checked_add(rhs)
+            .expect("adding signed duration to timestamp overflowed")
+    }
+}
+
+/// Adds a signed duration of time to a timestamp in place.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Timestamp::checked_add`].
+impl core::ops::AddAssign<SignedDuration> for Timestamp {
+    #[inline]
+    fn add_assign(&mut self, rhs: SignedDuration) {
+        *self = *self + rhs
+    }
+}
+
+/// Subtracts a signed duration of time from a timestamp.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Timestamp::checked_sub`].
+impl core::ops::Sub<SignedDuration> for Timestamp {
+    type Output = Timestamp;
+
+    #[inline]
+    fn sub(self, rhs: SignedDuration) -> Timestamp {
+        self.checked_sub(rhs)
+            .expect("subtracting signed duration from timestamp overflowed")
+    }
+}
+
+/// Subtracts a signed duration of time from a timestamp in place.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Timestamp::checked_sub`].
+impl core::ops::SubAssign<SignedDuration> for Timestamp {
+    #[inline]
+    fn sub_assign(&mut self, rhs: SignedDuration) {
+        *self = *self - rhs
+    }
+}
+
+/// Adds an unsigned duration of time to a timestamp.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Timestamp::checked_add`].
+impl core::ops::Add<UnsignedDuration> for Timestamp {
+    type Output = Timestamp;
+
+    #[inline]
+    fn add(self, rhs: UnsignedDuration) -> Timestamp {
+        self.checked_add(rhs)
+            .expect("adding unsigned duration to timestamp overflowed")
+    }
+}
+
+/// Adds an unsigned duration of time to a timestamp in place.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Timestamp::checked_add`].
+impl core::ops::AddAssign<UnsignedDuration> for Timestamp {
+    #[inline]
+    fn add_assign(&mut self, rhs: UnsignedDuration) {
+        *self = *self + rhs
+    }
+}
+
+/// Subtracts an unsigned duration of time from a timestamp.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Timestamp::checked_sub`].
+impl core::ops::Sub<UnsignedDuration> for Timestamp {
+    type Output = Timestamp;
+
+    #[inline]
+    fn sub(self, rhs: UnsignedDuration) -> Timestamp {
+        self.checked_sub(rhs)
+            .expect("subtracting unsigned duration from timestamp overflowed")
+    }
+}
+
+/// Subtracts an unsigned duration of time from a timestamp in place.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Timestamp::checked_sub`].
+impl core::ops::SubAssign<UnsignedDuration> for Timestamp {
+    #[inline]
+    fn sub_assign(&mut self, rhs: UnsignedDuration) {
+        *self = *self - rhs
+    }
+}
+
 impl From<Zoned> for Timestamp {
     #[inline]
     fn from(zdt: Zoned) -> Timestamp {
@@ -2371,6 +2659,133 @@ impl Iterator for TimestampSeries {
         self.step = self.step.checked_add(1)?;
         let timestamp = self.start.checked_add(span).ok()?;
         Some(timestamp)
+    }
+}
+
+/// Options for [`Timestamp::checked_add`] and [`Timestamp::checked_sub`].
+///
+/// This type provides a way to ergonomically add one of a few different
+/// duration types to a [`Timestamp`].
+///
+/// The main way to construct values of this type is with its `From` trait
+/// implementations:
+///
+/// * `From<Span> for TimestampArithmetic` adds (or subtracts) the given span
+/// to the receiver timestamp.
+/// * `From<SignedDuration> for TimestampArithmetic` adds (or subtracts)
+/// the given signed duration to the receiver timestamp.
+/// * `From<std::time::Duration> for TimestampArithmetic` adds (or subtracts)
+/// the given unsigned duration to the receiver timestamp.
+///
+/// # Example
+///
+/// ```
+/// use std::time::Duration;
+///
+/// use jiff::{SignedDuration, Timestamp, ToSpan};
+///
+/// let ts: Timestamp = "2024-02-28T00:00:00Z".parse()?;
+/// assert_eq!(
+///     ts.checked_add(48.hours())?,
+///     "2024-03-01T00:00:00Z".parse()?,
+/// );
+/// assert_eq!(
+///     ts.checked_add(SignedDuration::from_hours(48))?,
+///     "2024-03-01T00:00:00Z".parse()?,
+/// );
+/// assert_eq!(
+///     ts.checked_add(Duration::from_secs(48 * 60 * 60))?,
+///     "2024-03-01T00:00:00Z".parse()?,
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct TimestampArithmetic {
+    duration: Duration,
+}
+
+impl TimestampArithmetic {
+    #[inline]
+    fn checked_add(self, ts: Timestamp) -> Result<Timestamp, Error> {
+        match self.duration.to_signed()? {
+            SDuration::Span(span) => ts.checked_add_span(span),
+            SDuration::Absolute(sdur) => ts.checked_add_duration(sdur),
+        }
+    }
+
+    #[inline]
+    fn saturating_add(self, ts: Timestamp) -> Result<Timestamp, Error> {
+        let Ok(signed) = self.duration.to_signed() else {
+            return Ok(Timestamp::MAX);
+        };
+        let result = match signed {
+            SDuration::Span(span) => {
+                if let Some(err) = span.smallest_non_time_non_zero_unit_error()
+                {
+                    return Err(err);
+                }
+                ts.checked_add_span(span)
+            }
+            SDuration::Absolute(sdur) => ts.checked_add_duration(sdur),
+        };
+        Ok(result.unwrap_or_else(|_| {
+            if self.is_negative() {
+                Timestamp::MIN
+            } else {
+                Timestamp::MAX
+            }
+        }))
+    }
+
+    #[inline]
+    fn checked_neg(self) -> Result<TimestampArithmetic, Error> {
+        let duration = self.duration.checked_neg()?;
+        Ok(TimestampArithmetic { duration })
+    }
+
+    #[inline]
+    fn is_negative(&self) -> bool {
+        self.duration.is_negative()
+    }
+}
+
+impl From<Span> for TimestampArithmetic {
+    fn from(span: Span) -> TimestampArithmetic {
+        let duration = Duration::from(span);
+        TimestampArithmetic { duration }
+    }
+}
+
+impl From<SignedDuration> for TimestampArithmetic {
+    fn from(sdur: SignedDuration) -> TimestampArithmetic {
+        let duration = Duration::from(sdur);
+        TimestampArithmetic { duration }
+    }
+}
+
+impl From<UnsignedDuration> for TimestampArithmetic {
+    fn from(udur: UnsignedDuration) -> TimestampArithmetic {
+        let duration = Duration::from(udur);
+        TimestampArithmetic { duration }
+    }
+}
+
+impl<'a> From<&'a Span> for TimestampArithmetic {
+    fn from(span: &'a Span) -> TimestampArithmetic {
+        TimestampArithmetic::from(*span)
+    }
+}
+
+impl<'a> From<&'a SignedDuration> for TimestampArithmetic {
+    fn from(sdur: &'a SignedDuration) -> TimestampArithmetic {
+        TimestampArithmetic::from(*sdur)
+    }
+}
+
+impl<'a> From<&'a UnsignedDuration> for TimestampArithmetic {
+    fn from(udur: &'a UnsignedDuration) -> TimestampArithmetic {
+        TimestampArithmetic::from(*udur)
     }
 }
 

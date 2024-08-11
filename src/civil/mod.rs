@@ -98,13 +98,15 @@ support time zones.
 */
 
 pub use self::{
-    date::{Date, DateDifference, DateSeries, DateWith},
+    date::{Date, DateArithmetic, DateDifference, DateSeries, DateWith},
     datetime::{
-        DateTime, DateTimeDifference, DateTimeRound, DateTimeSeries,
-        DateTimeWith,
+        DateTime, DateTimeArithmetic, DateTimeDifference, DateTimeRound,
+        DateTimeSeries, DateTimeWith,
     },
     iso_week_date::ISOWeekDate,
-    time::{Time, TimeDifference, TimeRound, TimeSeries, TimeWith},
+    time::{
+        Time, TimeArithmetic, TimeDifference, TimeRound, TimeSeries, TimeWith,
+    },
     weekday::{Weekday, WeekdaysForward, WeekdaysReverse},
 };
 

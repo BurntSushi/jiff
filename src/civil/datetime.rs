@@ -1,5 +1,8 @@
+use core::time::Duration as UnsignedDuration;
+
 use crate::{
     civil::{datetime, Date, DateWith, Era, Time, TimeWith, Weekday},
+    duration::{Duration, SDuration},
     error::{err, Error, ErrorContext},
     fmt::{
         self,
@@ -12,7 +15,7 @@ use crate::{
         t::{self, C},
     },
     zoned::Zoned,
-    RoundMode, Span, SpanRound, Unit,
+    RoundMode, SignedDuration, Span, SpanRound, Unit,
 };
 
 /// A representation of a civil datetime in the Gregorian calendar.
@@ -1429,6 +1432,10 @@ impl DateTime {
     /// Add the given span of time to this datetime. If the sum would overflow
     /// the minimum or maximum datetime values, then an error is returned.
     ///
+    /// This operation accepts three different duration types: [`Span`],
+    /// [`SignedDuration`] or [`std::time::Duration`]. This is achieved via
+    /// `From` trait implementations for the [`DateTimeArithmetic`] type.
+    ///
     /// # Properties
     ///
     /// This routine is _not_ reversible because some additions may
@@ -1439,7 +1446,8 @@ impl DateTime {
     /// the date we started with.
     ///
     /// If spans of time are limited to units of days (or less), then this
-    /// routine _is_ reversible.
+    /// routine _is_ reversible. This also implies that all operations with a
+    /// [`SignedDuration`] or a [`std::time::Duration`] are reversible.
     ///
     /// # Errors
     ///
@@ -1502,8 +1510,42 @@ impl DateTime {
     /// assert!(dt.checked_add(9000.years()).is_err());
     /// assert!(dt.checked_add(-19000.years()).is_err());
     /// ```
+    ///
+    /// # Example: adding absolute durations
+    ///
+    /// This shows how to add signed and unsigned absolute durations to a
+    /// `DateTime`.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use jiff::{civil::date, SignedDuration};
+    ///
+    /// let dt = date(2024, 2, 29).at(0, 0, 0, 0);
+    ///
+    /// let dur = SignedDuration::from_hours(25);
+    /// assert_eq!(dt.checked_add(dur)?, date(2024, 3, 1).at(1, 0, 0, 0));
+    /// assert_eq!(dt.checked_add(-dur)?, date(2024, 2, 27).at(23, 0, 0, 0));
+    ///
+    /// let dur = Duration::from_secs(25 * 60 * 60);
+    /// assert_eq!(dt.checked_add(dur)?, date(2024, 3, 1).at(1, 0, 0, 0));
+    /// // One cannot negate an unsigned duration,
+    /// // but you can subtract it!
+    /// assert_eq!(dt.checked_sub(dur)?, date(2024, 2, 27).at(23, 0, 0, 0));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
-    pub fn checked_add(self, span: Span) -> Result<DateTime, Error> {
+    pub fn checked_add<A: Into<DateTimeArithmetic>>(
+        self,
+        duration: A,
+    ) -> Result<DateTime, Error> {
+        let duration: DateTimeArithmetic = duration.into();
+        duration.checked_add(self)
+    }
+
+    #[inline]
+    fn checked_add_span(self, span: Span) -> Result<DateTime, Error> {
         let (date, time) = (self.date(), self.time());
         let span_date = span.without_lower(Unit::Day);
         let span_time = span.only_lower(Unit::Day);
@@ -1524,6 +1566,23 @@ impl DateTime {
         Ok(DateTime::from_parts(new_date, new_time))
     }
 
+    #[inline]
+    fn checked_add_duration(
+        self,
+        duration: SignedDuration,
+    ) -> Result<DateTime, Error> {
+        let (date, time) = (self.date(), self.time());
+        let (new_time, leftovers) = time.overflowing_add_duration(duration)?;
+        let new_date = date.checked_add(leftovers).with_context(|| {
+            err!(
+                "failed to add overflowing signed duration, {leftovers:?}, \
+                 from adding {duration:?} to {time},
+                 to {date}",
+            )
+        })?;
+        Ok(DateTime::from_parts(new_date, new_time))
+    }
+
     /// This routine is identical to [`DateTime::checked_add`] with the
     /// duration negated.
     ///
@@ -1537,15 +1596,31 @@ impl DateTime {
     /// fails, it will result in a panic.
     ///
     /// ```
-    /// use jiff::{civil::date, ToSpan};
+    /// use std::time::Duration;
+    ///
+    /// use jiff::{civil::date, SignedDuration, ToSpan};
     ///
     /// let dt = date(1995, 12, 7).at(3, 24, 30, 3_500);
-    /// let got = dt - 20.years().months(4).nanoseconds(500);
-    /// assert_eq!(got, date(1975, 8, 7).at(3, 24, 30, 3_000));
+    /// assert_eq!(
+    ///     dt - 20.years().months(4).nanoseconds(500),
+    ///     date(1975, 8, 7).at(3, 24, 30, 3_000),
+    /// );
+    ///
+    /// let dur = SignedDuration::new(24 * 60 * 60, 3_500);
+    /// assert_eq!(dt - dur, date(1995, 12, 6).at(3, 24, 30, 0));
+    ///
+    /// let dur = Duration::new(24 * 60 * 60, 3_500);
+    /// assert_eq!(dt - dur, date(1995, 12, 6).at(3, 24, 30, 0));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn checked_sub(self, span: Span) -> Result<DateTime, Error> {
-        self.checked_add(-span)
+    pub fn checked_sub<A: Into<DateTimeArithmetic>>(
+        self,
+        duration: A,
+    ) -> Result<DateTime, Error> {
+        let duration: DateTimeArithmetic = duration.into();
+        duration.checked_neg().and_then(|dta| dta.checked_add(self))
     }
 
     /// This routine is identical to [`DateTime::checked_add`], except the
@@ -1555,16 +1630,23 @@ impl DateTime {
     /// # Example
     ///
     /// ```
-    /// use jiff::{civil::{DateTime, date}, ToSpan};
+    /// use jiff::{civil::{DateTime, date}, SignedDuration, ToSpan};
     ///
     /// let dt = date(2024, 3, 31).at(13, 13, 13, 13);
     /// assert_eq!(DateTime::MAX, dt.saturating_add(9000.years()));
     /// assert_eq!(DateTime::MIN, dt.saturating_add(-19000.years()));
+    /// assert_eq!(DateTime::MAX, dt.saturating_add(SignedDuration::MAX));
+    /// assert_eq!(DateTime::MIN, dt.saturating_add(SignedDuration::MIN));
+    /// assert_eq!(DateTime::MAX, dt.saturating_add(std::time::Duration::MAX));
     /// ```
     #[inline]
-    pub fn saturating_add(self, span: Span) -> DateTime {
-        self.checked_add(span).unwrap_or_else(|_| {
-            if span.is_negative() {
+    pub fn saturating_add<A: Into<DateTimeArithmetic>>(
+        self,
+        duration: A,
+    ) -> DateTime {
+        let duration: DateTimeArithmetic = duration.into();
+        self.checked_add(duration).unwrap_or_else(|_| {
+            if duration.is_negative() {
                 DateTime::MIN
             } else {
                 DateTime::MAX
@@ -1578,15 +1660,25 @@ impl DateTime {
     /// # Example
     ///
     /// ```
-    /// use jiff::{civil::{DateTime, date}, ToSpan};
+    /// use jiff::{civil::{DateTime, date}, SignedDuration, ToSpan};
     ///
     /// let dt = date(2024, 3, 31).at(13, 13, 13, 13);
     /// assert_eq!(DateTime::MIN, dt.saturating_sub(19000.years()));
     /// assert_eq!(DateTime::MAX, dt.saturating_sub(-9000.years()));
+    /// assert_eq!(DateTime::MIN, dt.saturating_sub(SignedDuration::MAX));
+    /// assert_eq!(DateTime::MAX, dt.saturating_sub(SignedDuration::MIN));
+    /// assert_eq!(DateTime::MIN, dt.saturating_sub(std::time::Duration::MAX));
     /// ```
     #[inline]
-    pub fn saturating_sub(self, span: Span) -> DateTime {
-        self.saturating_add(-span)
+    pub fn saturating_sub<A: Into<DateTimeArithmetic>>(
+        self,
+        duration: A,
+    ) -> DateTime {
+        let duration: DateTimeArithmetic = duration.into();
+        let Ok(duration) = duration.checked_neg() else {
+            return DateTime::MIN;
+        };
+        self.saturating_add(duration)
     }
 
     /// Returns a span representing the elapsed time from this datetime until
@@ -1777,6 +1869,135 @@ impl DateTime {
         } else {
             Ok(span)
         }
+    }
+
+    /// Returns an absolute duration representing the elapsed time from this
+    /// datetime until the given `other` datetime.
+    ///
+    /// When `other` occurs before this datetime, then the duration returned
+    /// will be negative.
+    ///
+    /// Unlike [`DateTime::until`], this returns a duration corresponding to a
+    /// 96-bit integer of nanoseconds between two datetimes.
+    ///
+    /// # Fallibility
+    ///
+    /// This routine never panics or returns an error. Since there are no
+    /// configuration options that can be incorrectly provided, no error is
+    /// possible when calling this routine. In contrast, [`DateTime::until`]
+    /// can return an error in some cases due to misconfiguration. But like
+    /// this routine, [`DateTime::until`] never panics or returns an error in
+    /// its default configuration.
+    ///
+    /// # When should I use this versus [`DateTime::until`]?
+    ///
+    /// See the type documentation for [`SignedDuration`] for the section on
+    /// when one should use [`Span`] and when one should use `SignedDuration`.
+    /// In short, use `Span` (and therefore `DateTime::until`) unless you have
+    /// a specific reason to do otherwise.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::date, SignedDuration};
+    ///
+    /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0);
+    /// let later = date(2019, 1, 31).at(21, 0, 0, 0);
+    /// assert_eq!(
+    ///     earlier.duration_until(later),
+    ///     SignedDuration::from_hours(4542 * 24)
+    ///     + SignedDuration::from_hours(22)
+    ///     + SignedDuration::from_mins(30),
+    /// );
+    /// // Flipping the datetimes is fine, but you'll get a negative duration.
+    /// assert_eq!(
+    ///     later.duration_until(earlier),
+    ///     -SignedDuration::from_hours(4542 * 24)
+    ///     - SignedDuration::from_hours(22)
+    ///     - SignedDuration::from_mins(30),
+    /// );
+    /// ```
+    ///
+    /// # Example: difference with [`DateTime::until`]
+    ///
+    /// The main difference between this routine and `DateTime::until` is that
+    /// the latter can return units other than a 96-bit integer of nanoseconds.
+    /// While a 96-bit integer of nanoseconds can be converted into other units
+    /// like hours, this can only be done for uniform units. (Uniform units are
+    /// units for which each individual unit always corresponds to the same
+    /// elapsed time regardless of the datetime it is relative to.) This can't
+    /// be done for units like years or months.
+    ///
+    /// ```
+    /// use jiff::{civil::date, SignedDuration, Span, SpanRound, ToSpan, Unit};
+    ///
+    /// let dt1 = date(2024, 1, 1).at(0, 0, 0, 0);
+    /// let dt2 = date(2025, 4, 1).at(0, 0, 0, 0);
+    ///
+    /// let span = dt1.until((Unit::Year, dt2))?;
+    /// assert_eq!(span, 1.year().months(3));
+    ///
+    /// let duration = dt1.duration_until(dt2);
+    /// assert_eq!(duration, SignedDuration::from_hours(456 * 24));
+    /// // There's no way to extract years or months from the signed
+    /// // duration like one might extract hours (because every hour
+    /// // is the same length). Instead, you actually have to convert
+    /// // it to a span and then balance it by providing a relative date!
+    /// let options = SpanRound::new().largest(Unit::Year).relative(dt1);
+    /// let span = Span::try_from(duration)?.round(options)?;
+    /// assert_eq!(span, 1.year().months(3));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: getting an unsigned duration
+    ///
+    /// If you're looking to find the duration between two datetimes as a
+    /// [`std::time::Duration`], you'll need to use this method to get a
+    /// [`SignedDuration`] and then convert it to a `std::time::Duration`:
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use jiff::civil::date;
+    ///
+    /// let dt1 = date(2024, 7, 1).at(0, 0, 0, 0);
+    /// let dt2 = date(2024, 8, 1).at(0, 0, 0, 0);
+    /// let duration = Duration::try_from(dt1.duration_until(dt2))?;
+    /// assert_eq!(duration, Duration::from_secs(31 * 24 * 60 * 60));
+    ///
+    /// // Note that unsigned durations cannot represent all
+    /// // possible differences! If the duration would be negative,
+    /// // then the conversion fails:
+    /// assert!(Duration::try_from(dt2.duration_until(dt1)).is_err());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn duration_until(self, other: DateTime) -> SignedDuration {
+        SignedDuration::datetime_until(self, other)
+    }
+
+    /// This routine is identical to [`DateTime::duration_until`], but the
+    /// order of the parameters is flipped.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::date, SignedDuration};
+    ///
+    /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0);
+    /// let later = date(2019, 1, 31).at(21, 0, 0, 0);
+    /// assert_eq!(
+    ///     later.duration_since(earlier),
+    ///     SignedDuration::from_hours(4542 * 24)
+    ///     + SignedDuration::from_hours(22)
+    ///     + SignedDuration::from_mins(30),
+    /// );
+    /// ```
+    #[inline]
+    pub fn duration_since(self, other: DateTime) -> SignedDuration {
+        SignedDuration::datetime_until(other, self)
     }
 
     /// Rounds this datetime according to the [`DateTimeRound`] configuration
@@ -2171,12 +2392,115 @@ impl core::ops::SubAssign<Span> for DateTime {
 /// panic or fail in any way.
 ///
 /// To configure the largest unit or enable rounding, use [`DateTime::since`].
+///
+/// If you need a [`SignedDuration`] representing the span between two civil
+/// datetimes, then use [`DateTime::duration_since`].
 impl core::ops::Sub for DateTime {
     type Output = Span;
 
     #[inline]
     fn sub(self, rhs: DateTime) -> Span {
         self.since(rhs).expect("since never fails when given DateTime")
+    }
+}
+
+/// Adds a signed duration of time to a datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`DateTime::checked_add`].
+impl core::ops::Add<SignedDuration> for DateTime {
+    type Output = DateTime;
+
+    #[inline]
+    fn add(self, rhs: SignedDuration) -> DateTime {
+        self.checked_add(rhs)
+            .expect("adding signed duration to datetime overflowed")
+    }
+}
+
+/// Adds a signed duration of time to a datetime in place.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`DateTime::checked_add`].
+impl core::ops::AddAssign<SignedDuration> for DateTime {
+    #[inline]
+    fn add_assign(&mut self, rhs: SignedDuration) {
+        *self = *self + rhs
+    }
+}
+
+/// Subtracts a signed duration of time from a datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`DateTime::checked_sub`].
+impl core::ops::Sub<SignedDuration> for DateTime {
+    type Output = DateTime;
+
+    #[inline]
+    fn sub(self, rhs: SignedDuration) -> DateTime {
+        self.checked_sub(rhs)
+            .expect("subtracting signed duration from datetime overflowed")
+    }
+}
+
+/// Subtracts a signed duration of time from a datetime in place.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`DateTime::checked_sub`].
+impl core::ops::SubAssign<SignedDuration> for DateTime {
+    #[inline]
+    fn sub_assign(&mut self, rhs: SignedDuration) {
+        *self = *self - rhs
+    }
+}
+
+/// Adds an unsigned duration of time to a datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`DateTime::checked_add`].
+impl core::ops::Add<UnsignedDuration> for DateTime {
+    type Output = DateTime;
+
+    #[inline]
+    fn add(self, rhs: UnsignedDuration) -> DateTime {
+        self.checked_add(rhs)
+            .expect("adding unsigned duration to datetime overflowed")
+    }
+}
+
+/// Adds an unsigned duration of time to a datetime in place.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`DateTime::checked_add`].
+impl core::ops::AddAssign<UnsignedDuration> for DateTime {
+    #[inline]
+    fn add_assign(&mut self, rhs: UnsignedDuration) {
+        *self = *self + rhs
+    }
+}
+
+/// Subtracts an unsigned duration of time from a datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`DateTime::checked_sub`].
+impl core::ops::Sub<UnsignedDuration> for DateTime {
+    type Output = DateTime;
+
+    #[inline]
+    fn sub(self, rhs: UnsignedDuration) -> DateTime {
+        self.checked_sub(rhs)
+            .expect("subtracting unsigned duration from datetime overflowed")
+    }
+}
+
+/// Subtracts an unsigned duration of time from a datetime in place.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`DateTime::checked_sub`].
+impl core::ops::SubAssign<UnsignedDuration> for DateTime {
+    #[inline]
+    fn sub_assign(&mut self, rhs: UnsignedDuration) {
+        *self = *self - rhs
     }
 }
 
@@ -2271,6 +2595,109 @@ impl Iterator for DateTimeSeries {
         self.step = self.step.checked_add(1)?;
         let date = self.start.checked_add(span).ok()?;
         Some(date)
+    }
+}
+
+/// Options for [`DateTime::checked_add`] and [`DateTime::checked_sub`].
+///
+/// This type provides a way to ergonomically add one of a few different
+/// duration types to a [`DateTime`].
+///
+/// The main way to construct values of this type is with its `From` trait
+/// implementations:
+///
+/// * `From<Span> for DateTimeArithmetic` adds (or subtracts) the given span to
+/// the receiver datetime.
+/// * `From<SignedDuration> for DateTimeArithmetic` adds (or subtracts)
+/// the given signed duration to the receiver datetime.
+/// * `From<std::time::Duration> for DateTimeArithmetic` adds (or subtracts)
+/// the given unsigned duration to the receiver datetime.
+///
+/// # Example
+///
+/// ```
+/// use std::time::Duration;
+///
+/// use jiff::{civil::date, SignedDuration, ToSpan};
+///
+/// let dt = date(2024, 2, 29).at(0, 0, 0, 0);
+/// assert_eq!(
+///     dt.checked_add(1.year())?,
+///     date(2025, 2, 28).at(0, 0, 0, 0),
+/// );
+/// assert_eq!(
+///     dt.checked_add(SignedDuration::from_hours(24))?,
+///     date(2024, 3, 1).at(0, 0, 0, 0),
+/// );
+/// assert_eq!(
+///     dt.checked_add(Duration::from_secs(24 * 60 * 60))?,
+///     date(2024, 3, 1).at(0, 0, 0, 0),
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct DateTimeArithmetic {
+    duration: Duration,
+}
+
+impl DateTimeArithmetic {
+    #[inline]
+    fn checked_add(self, dt: DateTime) -> Result<DateTime, Error> {
+        match self.duration.to_signed()? {
+            SDuration::Span(span) => dt.checked_add_span(span),
+            SDuration::Absolute(sdur) => dt.checked_add_duration(sdur),
+        }
+    }
+
+    #[inline]
+    fn checked_neg(self) -> Result<DateTimeArithmetic, Error> {
+        let duration = self.duration.checked_neg()?;
+        Ok(DateTimeArithmetic { duration })
+    }
+
+    #[inline]
+    fn is_negative(&self) -> bool {
+        self.duration.is_negative()
+    }
+}
+
+impl From<Span> for DateTimeArithmetic {
+    fn from(span: Span) -> DateTimeArithmetic {
+        let duration = Duration::from(span);
+        DateTimeArithmetic { duration }
+    }
+}
+
+impl From<SignedDuration> for DateTimeArithmetic {
+    fn from(sdur: SignedDuration) -> DateTimeArithmetic {
+        let duration = Duration::from(sdur);
+        DateTimeArithmetic { duration }
+    }
+}
+
+impl From<UnsignedDuration> for DateTimeArithmetic {
+    fn from(udur: UnsignedDuration) -> DateTimeArithmetic {
+        let duration = Duration::from(udur);
+        DateTimeArithmetic { duration }
+    }
+}
+
+impl<'a> From<&'a Span> for DateTimeArithmetic {
+    fn from(span: &'a Span) -> DateTimeArithmetic {
+        DateTimeArithmetic::from(*span)
+    }
+}
+
+impl<'a> From<&'a SignedDuration> for DateTimeArithmetic {
+    fn from(sdur: &'a SignedDuration) -> DateTimeArithmetic {
+        DateTimeArithmetic::from(*sdur)
+    }
+}
+
+impl<'a> From<&'a UnsignedDuration> for DateTimeArithmetic {
+    fn from(udur: &'a UnsignedDuration) -> DateTimeArithmetic {
+        DateTimeArithmetic::from(*udur)
     }
 }
 
