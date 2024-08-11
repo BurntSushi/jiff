@@ -453,36 +453,6 @@ impl Offset {
             .checked_sub_seconds(i64::from(self.seconds()))
     }
 
-    /// Returns the span of time since the other offset given from this offset.
-    ///
-    /// When the `other` is more east (i.e., more positive) of the prime
-    /// meridian than this offset, then the span returned will be negative.
-    ///
-    /// # Properties
-    ///
-    /// Adding the span returned to the `other` offset will always equal this
-    /// offset.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use jiff::{tz, ToSpan};
-    ///
-    /// assert_eq!(
-    ///     tz::Offset::UTC.since(tz::offset(-5)),
-    ///     (5 * 60 * 60).seconds(),
-    /// );
-    /// // Flipping the operands in this case results in a negative span.
-    /// assert_eq!(
-    ///     tz::offset(-5).since(tz::Offset::UTC),
-    ///     -(5 * 60 * 60).seconds(),
-    /// );
-    /// ```
-    #[inline]
-    pub fn since(self, other: Offset) -> Span {
-        self.until(other).negate()
-    }
-
     /// Returns the span of time from this offset until the other given.
     ///
     /// When the `other` offset is more west (i.e., more negative) of the prime
@@ -512,6 +482,36 @@ impl Offset {
     pub fn until(self, other: Offset) -> Span {
         Span::new()
             .seconds_ranged(other.seconds_ranged() - self.seconds_ranged())
+    }
+
+    /// Returns the span of time since the other offset given from this offset.
+    ///
+    /// When the `other` is more east (i.e., more positive) of the prime
+    /// meridian than this offset, then the span returned will be negative.
+    ///
+    /// # Properties
+    ///
+    /// Adding the span returned to the `other` offset will always equal this
+    /// offset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use jiff::{tz, ToSpan};
+    ///
+    /// assert_eq!(
+    ///     tz::Offset::UTC.since(tz::offset(-5)),
+    ///     (5 * 60 * 60).seconds(),
+    /// );
+    /// // Flipping the operands in this case results in a negative span.
+    /// assert_eq!(
+    ///     tz::offset(-5).since(tz::Offset::UTC),
+    ///     -(5 * 60 * 60).seconds(),
+    /// );
+    /// ```
+    #[inline]
+    pub fn since(self, other: Offset) -> Span {
+        self.until(other).negate()
     }
 
     /// Adds the given span of time to this offset.

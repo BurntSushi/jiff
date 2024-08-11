@@ -2427,6 +2427,179 @@ impl Zoned {
     }
 
     /// Returns a span representing the elapsed time from this zoned datetime
+    /// until the given `other` zoned datetime.
+    ///
+    /// When `other` occurs before this datetime, then the span returned will
+    /// be negative.
+    ///
+    /// Depending on the input provided, the span returned is rounded. It may
+    /// also be balanced up to bigger units than the default. By default, the
+    /// span returned is balanced such that the biggest possible unit is hours.
+    ///
+    /// This operation is configured by providing a [`ZonedDifference`]
+    /// value. Since this routine accepts anything that implements
+    /// `Into<ZonedDifference>`, once can pass a `&Zoned` directly.
+    /// One can also pass a `(Unit, &Zoned)`, where `Unit` is treated as
+    /// [`ZonedDifference::largest`].
+    ///
+    /// # Properties
+    ///
+    /// It is guaranteed that if the returned span is subtracted from `other`,
+    /// and if no rounding is requested, and if the largest unit requested
+    /// is at most `Unit::Hour`, then the original zoned datetime will be
+    /// returned.
+    ///
+    /// This routine is equivalent to `self.since(other).map(|span| -span)`
+    /// if no rounding options are set. If rounding options are set, then
+    /// it's equivalent to
+    /// `self.since(other_without_rounding_options).map(|span| -span)`,
+    /// followed by a call to [`Span::round`] with the appropriate rounding
+    /// options set. This is because the negation of a span can result in
+    /// different rounding results depending on the rounding mode.
+    ///
+    /// # Errors
+    ///
+    /// An error can occur in some cases when the requested configuration
+    /// would result in a span that is beyond allowable limits. For example,
+    /// the nanosecond component of a span cannot represent the span of
+    /// time between the minimum and maximum zoned datetime supported by Jiff.
+    /// Therefore, if one requests a span with its largest unit set to
+    /// [`Unit::Nanosecond`], then it's possible for this routine to fail.
+    ///
+    /// An error can also occur if `ZonedDifference` is misconfigured. For
+    /// example, if the smallest unit provided is bigger than the largest unit.
+    ///
+    /// An error can also occur if units greater than `Unit::Hour` are
+    /// requested _and_ if the time zones in the provided zoned datetimes
+    /// are distinct. (See [`TimeZone`]'s section on equality for details on
+    /// how equality is determined.) This error occurs because the length of
+    /// a day may vary depending on the time zone. To work around this
+    /// restriction, convert one or both of the zoned datetimes into the same
+    /// time zone.
+    ///
+    /// It is guaranteed that if one provides a datetime with the default
+    /// [`ZonedDifference`] configuration, then this routine will never
+    /// fail.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::date, ToSpan};
+    ///
+    /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0).intz("America/New_York")?;
+    /// let later = date(2019, 1, 31).at(21, 0, 0, 0).intz("America/New_York")?;
+    /// assert_eq!(earlier.until(&later)?, 109_031.hours().minutes(30));
+    ///
+    /// // Flipping the dates is fine, but you'll get a negative span.
+    /// assert_eq!(later.until(&earlier)?, -109_031.hours().minutes(30));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: using bigger units
+    ///
+    /// This example shows how to expand the span returned to bigger units.
+    /// This makes use of a `From<(Unit, &Zoned)> for ZonedDifference`
+    /// trait implementation.
+    ///
+    /// ```
+    /// use jiff::{civil::date, Unit, ToSpan};
+    ///
+    /// let zdt1 = date(1995, 12, 07).at(3, 24, 30, 3500).intz("America/New_York")?;
+    /// let zdt2 = date(2019, 01, 31).at(15, 30, 0, 0).intz("America/New_York")?;
+    ///
+    /// // The default limits durations to using "hours" as the biggest unit.
+    /// let span = zdt1.until(&zdt2)?;
+    /// assert_eq!(span.to_string(), "PT202956h5m29.9999965s");
+    ///
+    /// // But we can ask for units all the way up to years.
+    /// let span = zdt1.until((Unit::Year, &zdt2))?;
+    /// assert_eq!(span.to_string(), "P23y1m24dT12h5m29.9999965s");
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: rounding the result
+    ///
+    /// This shows how one might find the difference between two zoned
+    /// datetimes and have the result rounded such that sub-seconds are
+    /// removed.
+    ///
+    /// In this case, we need to hand-construct a [`ZonedDifference`]
+    /// in order to gain full configurability.
+    ///
+    /// ```
+    /// use jiff::{civil::date, Unit, ToSpan, ZonedDifference};
+    ///
+    /// let zdt1 = date(1995, 12, 07).at(3, 24, 30, 3500).intz("America/New_York")?;
+    /// let zdt2 = date(2019, 01, 31).at(15, 30, 0, 0).intz("America/New_York")?;
+    ///
+    /// let span = zdt1.until(
+    ///     ZonedDifference::from(&zdt2).smallest(Unit::Second),
+    /// )?;
+    /// assert_eq!(span, 202_956.hours().minutes(5).seconds(29));
+    ///
+    /// // We can combine smallest and largest units too!
+    /// let span = zdt1.until(
+    ///     ZonedDifference::from(&zdt2)
+    ///         .smallest(Unit::Second)
+    ///         .largest(Unit::Year),
+    /// )?;
+    /// assert_eq!(span, 23.years().months(1).days(24).hours(12).minutes(5).seconds(29));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: units biggers than days inhibit reversibility
+    ///
+    /// If you ask for units bigger than hours, then adding the span returned
+    /// to the `other` zoned datetime is not guaranteed to result in the
+    /// original zoned datetime. For example:
+    ///
+    /// ```
+    /// use jiff::{civil::date, Unit, ToSpan};
+    ///
+    /// let zdt1 = date(2024, 3, 2).at(0, 0, 0, 0).intz("America/New_York")?;
+    /// let zdt2 = date(2024, 5, 1).at(0, 0, 0, 0).intz("America/New_York")?;
+    ///
+    /// let span = zdt1.until((Unit::Month, &zdt2))?;
+    /// assert_eq!(span, 1.month().days(29));
+    /// let maybe_original = zdt2.checked_sub(span)?;
+    /// // Not the same as the original datetime!
+    /// assert_eq!(
+    ///     maybe_original,
+    ///     date(2024, 3, 3).at(0, 0, 0, 0).intz("America/New_York")?,
+    /// );
+    ///
+    /// // But in the default configuration, hours are always the biggest unit
+    /// // and reversibility is guaranteed.
+    /// let span = zdt1.until(&zdt2)?;
+    /// assert_eq!(span, 1439.hours());
+    /// let is_original = zdt2.checked_sub(span)?;
+    /// assert_eq!(is_original, zdt1);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// This occurs because spans are added as if by adding the biggest units
+    /// first, and then the smaller units. Because months vary in length,
+    /// their meaning can change depending on how the span is added. In this
+    /// case, adding one month to `2024-03-02` corresponds to 31 days, but
+    /// subtracting one month from `2024-05-01` corresponds to 30 days.
+    #[inline]
+    pub fn until<'a, A: Into<ZonedDifference<'a>>>(
+        &self,
+        other: A,
+    ) -> Result<Span, Error> {
+        let args: ZonedDifference = other.into();
+        let span = args.until_with_largest_unit(self)?;
+        if args.rounding_may_change_span() {
+            span.round(args.round.relative(self))
+        } else {
+            Ok(span)
+        }
+    }
+
+    /// Returns a span representing the elapsed time from this zoned datetime
     /// since the given `other` zoned datetime.
     ///
     /// When `other` occurs after this datetime, then the span returned will
@@ -2610,179 +2783,6 @@ impl Zoned {
     ) -> Result<Span, Error> {
         let args: ZonedDifference = other.into();
         let span = -args.until_with_largest_unit(self)?;
-        if args.rounding_may_change_span() {
-            span.round(args.round.relative(self))
-        } else {
-            Ok(span)
-        }
-    }
-
-    /// Returns a span representing the elapsed time from this zoned datetime
-    /// until the given `other` zoned datetime.
-    ///
-    /// When `other` occurs before this datetime, then the span returned will
-    /// be negative.
-    ///
-    /// Depending on the input provided, the span returned is rounded. It may
-    /// also be balanced up to bigger units than the default. By default, the
-    /// span returned is balanced such that the biggest possible unit is hours.
-    ///
-    /// This operation is configured by providing a [`ZonedDifference`]
-    /// value. Since this routine accepts anything that implements
-    /// `Into<ZonedDifference>`, once can pass a `&Zoned` directly.
-    /// One can also pass a `(Unit, &Zoned)`, where `Unit` is treated as
-    /// [`ZonedDifference::largest`].
-    ///
-    /// # Properties
-    ///
-    /// It is guaranteed that if the returned span is subtracted from `other`,
-    /// and if no rounding is requested, and if the largest unit requested
-    /// is at most `Unit::Hour`, then the original zoned datetime will be
-    /// returned.
-    ///
-    /// This routine is equivalent to `self.since(other).map(|span| -span)`
-    /// if no rounding options are set. If rounding options are set, then
-    /// it's equivalent to
-    /// `self.since(other_without_rounding_options).map(|span| -span)`,
-    /// followed by a call to [`Span::round`] with the appropriate rounding
-    /// options set. This is because the negation of a span can result in
-    /// different rounding results depending on the rounding mode.
-    ///
-    /// # Errors
-    ///
-    /// An error can occur in some cases when the requested configuration
-    /// would result in a span that is beyond allowable limits. For example,
-    /// the nanosecond component of a span cannot represent the span of
-    /// time between the minimum and maximum zoned datetime supported by Jiff.
-    /// Therefore, if one requests a span with its largest unit set to
-    /// [`Unit::Nanosecond`], then it's possible for this routine to fail.
-    ///
-    /// An error can also occur if `ZonedDifference` is misconfigured. For
-    /// example, if the smallest unit provided is bigger than the largest unit.
-    ///
-    /// An error can also occur if units greater than `Unit::Hour` are
-    /// requested _and_ if the time zones in the provided zoned datetimes
-    /// are distinct. (See [`TimeZone`]'s section on equality for details on
-    /// how equality is determined.) This error occurs because the length of
-    /// a day may vary depending on the time zone. To work around this
-    /// restriction, convert one or both of the zoned datetimes into the same
-    /// time zone.
-    ///
-    /// It is guaranteed that if one provides a datetime with the default
-    /// [`ZonedDifference`] configuration, then this routine will never
-    /// fail.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0).intz("America/New_York")?;
-    /// let later = date(2019, 1, 31).at(21, 0, 0, 0).intz("America/New_York")?;
-    /// assert_eq!(earlier.until(&later)?, 109_031.hours().minutes(30));
-    ///
-    /// // Flipping the dates is fine, but you'll get a negative span.
-    /// assert_eq!(later.until(&earlier)?, -109_031.hours().minutes(30));
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: using bigger units
-    ///
-    /// This example shows how to expand the span returned to bigger units.
-    /// This makes use of a `From<(Unit, &Zoned)> for ZonedDifference`
-    /// trait implementation.
-    ///
-    /// ```
-    /// use jiff::{civil::date, Unit, ToSpan};
-    ///
-    /// let zdt1 = date(1995, 12, 07).at(3, 24, 30, 3500).intz("America/New_York")?;
-    /// let zdt2 = date(2019, 01, 31).at(15, 30, 0, 0).intz("America/New_York")?;
-    ///
-    /// // The default limits durations to using "hours" as the biggest unit.
-    /// let span = zdt1.until(&zdt2)?;
-    /// assert_eq!(span.to_string(), "PT202956h5m29.9999965s");
-    ///
-    /// // But we can ask for units all the way up to years.
-    /// let span = zdt1.until((Unit::Year, &zdt2))?;
-    /// assert_eq!(span.to_string(), "P23y1m24dT12h5m29.9999965s");
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: rounding the result
-    ///
-    /// This shows how one might find the difference between two zoned
-    /// datetimes and have the result rounded such that sub-seconds are
-    /// removed.
-    ///
-    /// In this case, we need to hand-construct a [`ZonedDifference`]
-    /// in order to gain full configurability.
-    ///
-    /// ```
-    /// use jiff::{civil::date, Unit, ToSpan, ZonedDifference};
-    ///
-    /// let zdt1 = date(1995, 12, 07).at(3, 24, 30, 3500).intz("America/New_York")?;
-    /// let zdt2 = date(2019, 01, 31).at(15, 30, 0, 0).intz("America/New_York")?;
-    ///
-    /// let span = zdt1.until(
-    ///     ZonedDifference::from(&zdt2).smallest(Unit::Second),
-    /// )?;
-    /// assert_eq!(span, 202_956.hours().minutes(5).seconds(29));
-    ///
-    /// // We can combine smallest and largest units too!
-    /// let span = zdt1.until(
-    ///     ZonedDifference::from(&zdt2)
-    ///         .smallest(Unit::Second)
-    ///         .largest(Unit::Year),
-    /// )?;
-    /// assert_eq!(span, 23.years().months(1).days(24).hours(12).minutes(5).seconds(29));
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: units biggers than days inhibit reversibility
-    ///
-    /// If you ask for units bigger than hours, then adding the span returned
-    /// to the `other` zoned datetime is not guaranteed to result in the
-    /// original zoned datetime. For example:
-    ///
-    /// ```
-    /// use jiff::{civil::date, Unit, ToSpan};
-    ///
-    /// let zdt1 = date(2024, 3, 2).at(0, 0, 0, 0).intz("America/New_York")?;
-    /// let zdt2 = date(2024, 5, 1).at(0, 0, 0, 0).intz("America/New_York")?;
-    ///
-    /// let span = zdt1.until((Unit::Month, &zdt2))?;
-    /// assert_eq!(span, 1.month().days(29));
-    /// let maybe_original = zdt2.checked_sub(span)?;
-    /// // Not the same as the original datetime!
-    /// assert_eq!(
-    ///     maybe_original,
-    ///     date(2024, 3, 3).at(0, 0, 0, 0).intz("America/New_York")?,
-    /// );
-    ///
-    /// // But in the default configuration, hours are always the biggest unit
-    /// // and reversibility is guaranteed.
-    /// let span = zdt1.until(&zdt2)?;
-    /// assert_eq!(span, 1439.hours());
-    /// let is_original = zdt2.checked_sub(span)?;
-    /// assert_eq!(is_original, zdt1);
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// This occurs because spans are added as if by adding the biggest units
-    /// first, and then the smaller units. Because months vary in length,
-    /// their meaning can change depending on how the span is added. In this
-    /// case, adding one month to `2024-03-02` corresponds to 31 days, but
-    /// subtracting one month from `2024-05-01` corresponds to 30 days.
-    #[inline]
-    pub fn until<'a, A: Into<ZonedDifference<'a>>>(
-        &self,
-        other: A,
-    ) -> Result<Span, Error> {
-        let args: ZonedDifference = other.into();
-        let span = args.until_with_largest_unit(self)?;
         if args.rounding_may_change_span() {
             span.round(args.round.relative(self))
         } else {

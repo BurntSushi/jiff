@@ -1146,6 +1146,79 @@ impl Time {
         Ok((time, Span::new().days_ranged(days)))
     }
 
+    /// Returns a span representing the elapsed time from this time until
+    /// the given `other` time.
+    ///
+    /// When `other` is earlier than this time, the span returned will be
+    /// negative.
+    ///
+    /// Depending on the input provided, the span returned is rounded. It may
+    /// also be balanced down to smaller units than the default. By default,
+    /// the span returned is balanced such that the biggest possible unit is
+    /// hours.
+    ///
+    /// This operation is configured by providing a [`TimeDifference`]
+    /// value. Since this routine accepts anything that implements
+    /// `Into<TimeDifference>`, once can pass a `Time` directly. One
+    /// can also pass a `(Unit, Time)`, where `Unit` is treated as
+    /// [`TimeDifference::largest`].
+    ///
+    /// # Properties
+    ///
+    /// As long as no rounding is requested, it is guaranteed that adding the
+    /// span returned to the `other` time will always equal this time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use jiff::{civil::Time, ToSpan};
+    ///
+    /// let t1 = Time::constant(22, 35, 1, 0);
+    /// let t2 = Time::constant(22, 35, 3, 500_000_000);
+    /// assert_eq!(t1.until(t2)?, 2.seconds().milliseconds(500));
+    /// // Flipping the dates is fine, but you'll get a negative span.
+    /// assert_eq!(t2.until(t1)?, -2.seconds().milliseconds(500));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: using smaller units
+    ///
+    /// This example shows how to contract the span returned to smaller units.
+    /// This makes use of a `From<(Unit, Time)> for TimeDifference`
+    /// trait implementation.
+    ///
+    /// ```
+    /// use jiff::{civil::Time, Unit, ToSpan};
+    ///
+    /// let t1 = Time::constant(3, 24, 30, 3500);
+    /// let t2 = Time::constant(15, 30, 0, 0);
+    ///
+    /// // The default limits spans to using "hours" as the biggest unit.
+    /// let span = t1.until(t2)?;
+    /// assert_eq!(span.to_string(), "PT12h5m29.9999965s");
+    ///
+    /// // But we can ask for smaller units, like capping the biggest unit
+    /// // to minutes instead of hours.
+    /// let span = t1.until((Unit::Minute, t2))?;
+    /// assert_eq!(span.to_string(), "PT725m29.9999965s");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn until<A: Into<TimeDifference>>(
+        self,
+        other: A,
+    ) -> Result<Span, Error> {
+        let args: TimeDifference = other.into();
+        let span = args.until_with_largest_unit(self)?;
+        if args.rounding_may_change_span() {
+            span.round(args.round)
+        } else {
+            Ok(span)
+        }
+    }
+
     /// Returns a span representing the elapsed time from this time since
     /// the given `other` time.
     ///
@@ -1235,79 +1308,6 @@ impl Time {
     ) -> Result<Span, Error> {
         let args: TimeDifference = other.into();
         let span = -args.until_with_largest_unit(self)?;
-        if args.rounding_may_change_span() {
-            span.round(args.round)
-        } else {
-            Ok(span)
-        }
-    }
-
-    /// Returns a span representing the elapsed time from this time until
-    /// the given `other` time.
-    ///
-    /// When `other` is earlier than this time, the span returned will be
-    /// negative.
-    ///
-    /// Depending on the input provided, the span returned is rounded. It may
-    /// also be balanced down to smaller units than the default. By default,
-    /// the span returned is balanced such that the biggest possible unit is
-    /// hours.
-    ///
-    /// This operation is configured by providing a [`TimeDifference`]
-    /// value. Since this routine accepts anything that implements
-    /// `Into<TimeDifference>`, once can pass a `Time` directly. One
-    /// can also pass a `(Unit, Time)`, where `Unit` is treated as
-    /// [`TimeDifference::largest`].
-    ///
-    /// # Properties
-    ///
-    /// As long as no rounding is requested, it is guaranteed that adding the
-    /// span returned to the `other` time will always equal this time.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use jiff::{civil::Time, ToSpan};
-    ///
-    /// let t1 = Time::constant(22, 35, 1, 0);
-    /// let t2 = Time::constant(22, 35, 3, 500_000_000);
-    /// assert_eq!(t1.until(t2)?, 2.seconds().milliseconds(500));
-    /// // Flipping the dates is fine, but you'll get a negative span.
-    /// assert_eq!(t2.until(t1)?, -2.seconds().milliseconds(500));
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: using smaller units
-    ///
-    /// This example shows how to contract the span returned to smaller units.
-    /// This makes use of a `From<(Unit, Time)> for TimeDifference`
-    /// trait implementation.
-    ///
-    /// ```
-    /// use jiff::{civil::Time, Unit, ToSpan};
-    ///
-    /// let t1 = Time::constant(3, 24, 30, 3500);
-    /// let t2 = Time::constant(15, 30, 0, 0);
-    ///
-    /// // The default limits spans to using "hours" as the biggest unit.
-    /// let span = t1.until(t2)?;
-    /// assert_eq!(span.to_string(), "PT12h5m29.9999965s");
-    ///
-    /// // But we can ask for smaller units, like capping the biggest unit
-    /// // to minutes instead of hours.
-    /// let span = t1.until((Unit::Minute, t2))?;
-    /// assert_eq!(span.to_string(), "PT725m29.9999965s");
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    #[inline]
-    pub fn until<A: Into<TimeDifference>>(
-        self,
-        other: A,
-    ) -> Result<Span, Error> {
-        let args: TimeDifference = other.into();
-        let span = args.until_with_largest_unit(self)?;
         if args.rounding_may_change_span() {
             span.round(args.round)
         } else {
