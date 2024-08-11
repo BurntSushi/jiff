@@ -1627,6 +1627,162 @@ impl Date {
         self.saturating_add(span.negate())
     }
 
+    /// Returns a span representing the elapsed time from this date until
+    /// the given `other` date.
+    ///
+    /// When `other` occurs before this date, then the span returned will be
+    /// negative.
+    ///
+    /// Depending on the input provided, the span returned is rounded. It may
+    /// also be balanced up to bigger units than the default. By default, the
+    /// span returned is balanced such that the biggest and smallest possible
+    /// unit is days.
+    ///
+    /// This operation is configured by providing a [`DateDifference`]
+    /// value. Since this routine accepts anything that implements
+    /// `Into<DateDifference>`, once can pass a `Date` directly. One
+    /// can also pass a `(Unit, Date)`, where `Unit` is treated as
+    /// [`DateDifference::largest`].
+    ///
+    /// # Properties
+    ///
+    /// It is guaranteed that if the returned span is subtracted from `other`,
+    /// and if no rounding is requested, and if the largest unit request is at
+    /// most `Unit::Day`, then the original date will be returned.
+    ///
+    /// This routine is equivalent to `self.since(other).map(|span| -span)`
+    /// if no rounding options are set. If rounding options are set, then
+    /// it's equivalent to
+    /// `self.since(other_without_rounding_options).map(|span| -span)`,
+    /// followed by a call to [`Span::round`] with the appropriate rounding
+    /// options set. This is because the negation of a span can result in
+    /// different rounding results depending on the rounding mode.
+    ///
+    /// # Errors
+    ///
+    /// An error can occur if `DateDifference` is misconfigured. For example,
+    /// if the smallest unit provided is bigger than the largest unit.
+    ///
+    /// It is guaranteed that if one provides a date with the default
+    /// [`DateDifference`] configuration, then this routine will never fail.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use jiff::{civil::Date, ToSpan};
+    ///
+    /// let earlier = Date::constant(2006, 8, 24);
+    /// let later = Date::constant(2019, 1, 31);
+    /// assert_eq!(earlier.until(later)?, 4543.days());
+    ///
+    /// // Flipping the dates is fine, but you'll get a negative span.
+    /// let earlier = Date::constant(2006, 8, 24);
+    /// let later = Date::constant(2019, 1, 31);
+    /// assert_eq!(later.until(earlier)?, -4543.days());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: using bigger units
+    ///
+    /// This example shows how to expand the span returned to bigger units.
+    /// This makes use of a `From<(Unit, Date)> for DateDifference` trait
+    /// implementation.
+    ///
+    /// ```
+    /// use jiff::{civil::Date, Unit, ToSpan};
+    ///
+    /// let d1 = Date::constant(1995, 12, 07);
+    /// let d2 = Date::constant(2019, 01, 31);
+    ///
+    /// // The default limits durations to using "days" as the biggest unit.
+    /// let span = d1.until(d2)?;
+    /// assert_eq!(span.to_string(), "P8456d");
+    ///
+    /// // But we can ask for units all the way up to years.
+    /// let span = d1.until((Unit::Year, d2))?;
+    /// assert_eq!(span.to_string(), "P23y1m24d");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: rounding the result
+    ///
+    /// This shows how one might find the difference between two dates and
+    /// have the result rounded to the nearest month.
+    ///
+    /// In this case, we need to hand-construct a [`DateDifference`]
+    /// in order to gain full configurability.
+    ///
+    /// ```
+    /// use jiff::{civil::{Date, DateDifference}, Unit, ToSpan};
+    ///
+    /// let d1 = Date::constant(1995, 12, 07);
+    /// let d2 = Date::constant(2019, 02, 06);
+    ///
+    /// let span = d1.until(DateDifference::from(d2).smallest(Unit::Month))?;
+    /// assert_eq!(span, 277.months());
+    ///
+    /// // Or even include years to make the span a bit more comprehensible.
+    /// let span = d1.until(
+    ///     DateDifference::from(d2)
+    ///         .smallest(Unit::Month)
+    ///         .largest(Unit::Year),
+    /// )?;
+    /// // Notice that we are one day shy of 23y2m. Rounding spans computed
+    /// // between dates uses truncation by default.
+    /// assert_eq!(span, 23.years().months(1));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: units biggers than days inhibit reversibility
+    ///
+    /// If you ask for units bigger than days, then adding the span
+    /// returned to the `other` date is not guaranteed to result in the
+    /// original date. For example:
+    ///
+    /// ```
+    /// use jiff::{civil::Date, Unit, ToSpan};
+    ///
+    /// let d1 = Date::constant(2024, 3, 2);
+    /// let d2 = Date::constant(2024, 5, 1);
+    ///
+    /// let span = d1.until((Unit::Month, d2))?;
+    /// assert_eq!(span, 1.month().days(29));
+    /// let maybe_original = d2.checked_sub(span)?;
+    /// // Not the same as the original datetime!
+    /// assert_eq!(maybe_original, Date::constant(2024, 3, 3));
+    ///
+    /// // But in the default configuration, days are always the biggest unit
+    /// // and reversibility is guaranteed.
+    /// let span = d1.until(d2)?;
+    /// assert_eq!(span, 60.days());
+    /// let is_original = d2.checked_sub(span)?;
+    /// assert_eq!(is_original, d1);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// This occurs because spans are added as if by adding the biggest units
+    /// first, and then the smaller units. Because months vary in length,
+    /// their meaning can change depending on how the span is added. In this
+    /// case, adding one month to `2024-03-02` corresponds to 31 days, but
+    /// subtracting one month from `2024-05-01` corresponds to 30 days.
+    #[inline]
+    pub fn until<A: Into<DateDifference>>(
+        self,
+        other: A,
+    ) -> Result<Span, Error> {
+        let args: DateDifference = other.into();
+        let span = args.until_with_largest_unit(self)?;
+        if args.rounding_may_change_span() {
+            span.round(args.round.relative(self))
+        } else {
+            Ok(span)
+        }
+    }
+
     /// Returns a span representing the elapsed time from this date since
     /// the given `other` date.
     ///
@@ -1790,162 +1946,6 @@ impl Date {
     ) -> Result<Span, Error> {
         let args: DateDifference = other.into();
         let span = -args.until_with_largest_unit(self)?;
-        if args.rounding_may_change_span() {
-            span.round(args.round.relative(self))
-        } else {
-            Ok(span)
-        }
-    }
-
-    /// Returns a span representing the elapsed time from this date until
-    /// the given `other` date.
-    ///
-    /// When `other` occurs before this date, then the span returned will be
-    /// negative.
-    ///
-    /// Depending on the input provided, the span returned is rounded. It may
-    /// also be balanced up to bigger units than the default. By default, the
-    /// span returned is balanced such that the biggest and smallest possible
-    /// unit is days.
-    ///
-    /// This operation is configured by providing a [`DateDifference`]
-    /// value. Since this routine accepts anything that implements
-    /// `Into<DateDifference>`, once can pass a `Date` directly. One
-    /// can also pass a `(Unit, Date)`, where `Unit` is treated as
-    /// [`DateDifference::largest`].
-    ///
-    /// # Properties
-    ///
-    /// It is guaranteed that if the returned span is subtracted from `other`,
-    /// and if no rounding is requested, and if the largest unit request is at
-    /// most `Unit::Day`, then the original date will be returned.
-    ///
-    /// This routine is equivalent to `self.since(other).map(|span| -span)`
-    /// if no rounding options are set. If rounding options are set, then
-    /// it's equivalent to
-    /// `self.since(other_without_rounding_options).map(|span| -span)`,
-    /// followed by a call to [`Span::round`] with the appropriate rounding
-    /// options set. This is because the negation of a span can result in
-    /// different rounding results depending on the rounding mode.
-    ///
-    /// # Errors
-    ///
-    /// An error can occur if `DateDifference` is misconfigured. For example,
-    /// if the smallest unit provided is bigger than the largest unit.
-    ///
-    /// It is guaranteed that if one provides a date with the default
-    /// [`DateDifference`] configuration, then this routine will never fail.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use jiff::{civil::Date, ToSpan};
-    ///
-    /// let earlier = Date::constant(2006, 8, 24);
-    /// let later = Date::constant(2019, 1, 31);
-    /// assert_eq!(earlier.until(later)?, 4543.days());
-    ///
-    /// // Flipping the dates is fine, but you'll get a negative span.
-    /// let earlier = Date::constant(2006, 8, 24);
-    /// let later = Date::constant(2019, 1, 31);
-    /// assert_eq!(later.until(earlier)?, -4543.days());
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: using bigger units
-    ///
-    /// This example shows how to expand the span returned to bigger units.
-    /// This makes use of a `From<(Unit, Date)> for DateDifference` trait
-    /// implementation.
-    ///
-    /// ```
-    /// use jiff::{civil::Date, Unit, ToSpan};
-    ///
-    /// let d1 = Date::constant(1995, 12, 07);
-    /// let d2 = Date::constant(2019, 01, 31);
-    ///
-    /// // The default limits durations to using "days" as the biggest unit.
-    /// let span = d1.until(d2)?;
-    /// assert_eq!(span.to_string(), "P8456d");
-    ///
-    /// // But we can ask for units all the way up to years.
-    /// let span = d1.until((Unit::Year, d2))?;
-    /// assert_eq!(span.to_string(), "P23y1m24d");
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: rounding the result
-    ///
-    /// This shows how one might find the difference between two dates and
-    /// have the result rounded to the nearest month.
-    ///
-    /// In this case, we need to hand-construct a [`DateDifference`]
-    /// in order to gain full configurability.
-    ///
-    /// ```
-    /// use jiff::{civil::{Date, DateDifference}, Unit, ToSpan};
-    ///
-    /// let d1 = Date::constant(1995, 12, 07);
-    /// let d2 = Date::constant(2019, 02, 06);
-    ///
-    /// let span = d1.until(DateDifference::from(d2).smallest(Unit::Month))?;
-    /// assert_eq!(span, 277.months());
-    ///
-    /// // Or even include years to make the span a bit more comprehensible.
-    /// let span = d1.until(
-    ///     DateDifference::from(d2)
-    ///         .smallest(Unit::Month)
-    ///         .largest(Unit::Year),
-    /// )?;
-    /// // Notice that we are one day shy of 23y2m. Rounding spans computed
-    /// // between dates uses truncation by default.
-    /// assert_eq!(span, 23.years().months(1));
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: units biggers than days inhibit reversibility
-    ///
-    /// If you ask for units bigger than days, then adding the span
-    /// returned to the `other` date is not guaranteed to result in the
-    /// original date. For example:
-    ///
-    /// ```
-    /// use jiff::{civil::Date, Unit, ToSpan};
-    ///
-    /// let d1 = Date::constant(2024, 3, 2);
-    /// let d2 = Date::constant(2024, 5, 1);
-    ///
-    /// let span = d1.until((Unit::Month, d2))?;
-    /// assert_eq!(span, 1.month().days(29));
-    /// let maybe_original = d2.checked_sub(span)?;
-    /// // Not the same as the original datetime!
-    /// assert_eq!(maybe_original, Date::constant(2024, 3, 3));
-    ///
-    /// // But in the default configuration, days are always the biggest unit
-    /// // and reversibility is guaranteed.
-    /// let span = d1.until(d2)?;
-    /// assert_eq!(span, 60.days());
-    /// let is_original = d2.checked_sub(span)?;
-    /// assert_eq!(is_original, d1);
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// This occurs because spans are added as if by adding the biggest units
-    /// first, and then the smaller units. Because months vary in length,
-    /// their meaning can change depending on how the span is added. In this
-    /// case, adding one month to `2024-03-02` corresponds to 31 days, but
-    /// subtracting one month from `2024-05-01` corresponds to 30 days.
-    #[inline]
-    pub fn until<A: Into<DateDifference>>(
-        self,
-        other: A,
-    ) -> Result<Span, Error> {
-        let args: DateDifference = other.into();
-        let span = args.until_with_largest_unit(self)?;
         if args.rounding_may_change_span() {
             span.round(args.round.relative(self))
         } else {

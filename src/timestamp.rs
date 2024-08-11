@@ -1418,6 +1418,135 @@ impl Timestamp {
         self.saturating_add(span.negate())
     }
 
+    /// Returns a span representing the elapsed time from this timestamp until
+    /// the given `other` timestamp.
+    ///
+    /// When `other` occurs before this timestamp, then the span returned will
+    /// be negative.
+    ///
+    /// Depending on the input provided, the span returned is rounded. It may
+    /// also be balanced up to bigger units than the default. By default,
+    /// the span returned is balanced such that the biggest possible unit is
+    /// seconds.
+    ///
+    /// This operation is configured by providing a [`TimestampDifference`]
+    /// value. Since this routine accepts anything that implements
+    /// `Into<TimestampDifference>`, once can pass a `Timestamp` directly.
+    /// One can also pass a `(Unit, Timestamp)`, where `Unit` is treated as
+    /// [`TimestampDifference::largest`].
+    ///
+    /// # Properties
+    ///
+    /// It is guaranteed that if the returned span is subtracted from `other`,
+    /// and if no rounding is requested, then the original timestamp will be
+    /// returned.
+    ///
+    /// This routine is equivalent to `self.since(other).map(|span| -span)`
+    /// if no rounding options are set. If rounding options are set, then
+    /// it's equivalent to
+    /// `self.since(other_without_rounding_options).map(|span| -span)`,
+    /// followed by a call to [`Span::round`] with the appropriate rounding
+    /// options set. This is because the negation of a span can result in
+    /// different rounding results depending on the rounding mode.
+    ///
+    /// # Errors
+    ///
+    /// An error can occur in some cases when the requested configuration
+    /// would result in a span that is beyond allowable limits. For example,
+    /// the nanosecond component of a span cannot represent the span of
+    /// time between the minimum and maximum timestamps supported by Jiff.
+    /// Therefore, if one requests a span with its largest unit set to
+    /// [`Unit::Nanosecond`], then it's possible for this routine to fail.
+    ///
+    /// An error can also occur if `TimestampDifference` is misconfigured. For
+    /// example, if the smallest unit provided is bigger than the largest unit,
+    /// or if the largest unit provided is bigger than hours. (To use bigger
+    /// units with an instant in time, use [`Zoned::until`] instead.)
+    ///
+    /// It is guaranteed that if one provides a timestamp with the default
+    /// [`TimestampDifference`] configuration, then this routine will never
+    /// fail.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{Timestamp, ToSpan};
+    ///
+    /// let earlier: Timestamp = "2006-08-24T22:30:00Z".parse()?;
+    /// let later: Timestamp = "2019-01-31 21:00:00Z".parse()?;
+    /// assert_eq!(earlier.until(later)?, 392509800.seconds());
+    ///
+    /// // Flipping the timestamps is fine, but you'll get a negative span.
+    /// assert_eq!(later.until(earlier)?, -392509800.seconds());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: using bigger units
+    ///
+    /// This example shows how to expand the span returned to bigger units.
+    /// This makes use of a `From<(Unit, Timestamp)> for TimestampDifference`
+    /// trait implementation.
+    ///
+    /// ```
+    /// use jiff::{Timestamp, ToSpan, Unit};
+    ///
+    /// let ts1: Timestamp = "1995-12-07T03:24:30.000003500Z".parse()?;
+    /// let ts2: Timestamp = "2019-01-31 15:30:00Z".parse()?;
+    ///
+    /// // The default limits durations to using "seconds" as the biggest unit.
+    /// let span = ts1.until(ts2)?;
+    /// assert_eq!(span.to_string(), "PT730641929.9999965s");
+    ///
+    /// // But we can ask for units all the way up to hours.
+    /// let span = ts1.until((Unit::Hour, ts2))?;
+    /// assert_eq!(span.to_string(), "PT202956h5m29.9999965s");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: rounding the result
+    ///
+    /// This shows how one might find the difference between two timestamps and
+    /// have the result rounded such that sub-seconds are removed.
+    ///
+    /// In this case, we need to hand-construct a [`TimestampDifference`]
+    /// in order to gain full configurability.
+    ///
+    /// ```
+    /// use jiff::{Timestamp, TimestampDifference, ToSpan, Unit};
+    ///
+    /// let ts1: Timestamp = "1995-12-07 03:24:30.000003500Z".parse()?;
+    /// let ts2: Timestamp = "2019-01-31 15:30:00Z".parse()?;
+    ///
+    /// let span = ts1.until(
+    ///     TimestampDifference::from(ts2).smallest(Unit::Second),
+    /// )?;
+    /// assert_eq!(span, 730641929.seconds());
+    ///
+    /// // We can combine smallest and largest units too!
+    /// let span = ts1.until(
+    ///     TimestampDifference::from(ts2)
+    ///         .smallest(Unit::Second)
+    ///         .largest(Unit::Hour),
+    /// )?;
+    /// assert_eq!(span, 202956.hours().minutes(5).seconds(29));
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn until<A: Into<TimestampDifference>>(
+        self,
+        other: A,
+    ) -> Result<Span, Error> {
+        let args: TimestampDifference = other.into();
+        let span = args.until_with_largest_unit(self)?;
+        if args.rounding_may_change_span() {
+            span.round(args.round)
+        } else {
+            Ok(span)
+        }
+    }
+
     /// Returns a span representing the elapsed time from this timestamp since
     /// the given `other` timestamp.
     ///
@@ -1555,135 +1684,6 @@ impl Timestamp {
     ) -> Result<Span, Error> {
         let args: TimestampDifference = other.into();
         let span = -args.until_with_largest_unit(self)?;
-        if args.rounding_may_change_span() {
-            span.round(args.round)
-        } else {
-            Ok(span)
-        }
-    }
-
-    /// Returns a span representing the elapsed time from this timestamp until
-    /// the given `other` timestamp.
-    ///
-    /// When `other` occurs before this timestamp, then the span returned will
-    /// be negative.
-    ///
-    /// Depending on the input provided, the span returned is rounded. It may
-    /// also be balanced up to bigger units than the default. By default,
-    /// the span returned is balanced such that the biggest possible unit is
-    /// seconds.
-    ///
-    /// This operation is configured by providing a [`TimestampDifference`]
-    /// value. Since this routine accepts anything that implements
-    /// `Into<TimestampDifference>`, once can pass a `Timestamp` directly.
-    /// One can also pass a `(Unit, Timestamp)`, where `Unit` is treated as
-    /// [`TimestampDifference::largest`].
-    ///
-    /// # Properties
-    ///
-    /// It is guaranteed that if the returned span is subtracted from `other`,
-    /// and if no rounding is requested, then the original timestamp will be
-    /// returned.
-    ///
-    /// This routine is equivalent to `self.since(other).map(|span| -span)`
-    /// if no rounding options are set. If rounding options are set, then
-    /// it's equivalent to
-    /// `self.since(other_without_rounding_options).map(|span| -span)`,
-    /// followed by a call to [`Span::round`] with the appropriate rounding
-    /// options set. This is because the negation of a span can result in
-    /// different rounding results depending on the rounding mode.
-    ///
-    /// # Errors
-    ///
-    /// An error can occur in some cases when the requested configuration
-    /// would result in a span that is beyond allowable limits. For example,
-    /// the nanosecond component of a span cannot represent the span of
-    /// time between the minimum and maximum timestamps supported by Jiff.
-    /// Therefore, if one requests a span with its largest unit set to
-    /// [`Unit::Nanosecond`], then it's possible for this routine to fail.
-    ///
-    /// An error can also occur if `TimestampDifference` is misconfigured. For
-    /// example, if the smallest unit provided is bigger than the largest unit,
-    /// or if the largest unit provided is bigger than hours. (To use bigger
-    /// units with an instant in time, use [`Zoned::until`] instead.)
-    ///
-    /// It is guaranteed that if one provides a timestamp with the default
-    /// [`TimestampDifference`] configuration, then this routine will never
-    /// fail.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use jiff::{Timestamp, ToSpan};
-    ///
-    /// let earlier: Timestamp = "2006-08-24T22:30:00Z".parse()?;
-    /// let later: Timestamp = "2019-01-31 21:00:00Z".parse()?;
-    /// assert_eq!(earlier.until(later)?, 392509800.seconds());
-    ///
-    /// // Flipping the timestamps is fine, but you'll get a negative span.
-    /// assert_eq!(later.until(earlier)?, -392509800.seconds());
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: using bigger units
-    ///
-    /// This example shows how to expand the span returned to bigger units.
-    /// This makes use of a `From<(Unit, Timestamp)> for TimestampDifference`
-    /// trait implementation.
-    ///
-    /// ```
-    /// use jiff::{Timestamp, ToSpan, Unit};
-    ///
-    /// let ts1: Timestamp = "1995-12-07T03:24:30.000003500Z".parse()?;
-    /// let ts2: Timestamp = "2019-01-31 15:30:00Z".parse()?;
-    ///
-    /// // The default limits durations to using "seconds" as the biggest unit.
-    /// let span = ts1.until(ts2)?;
-    /// assert_eq!(span.to_string(), "PT730641929.9999965s");
-    ///
-    /// // But we can ask for units all the way up to hours.
-    /// let span = ts1.until((Unit::Hour, ts2))?;
-    /// assert_eq!(span.to_string(), "PT202956h5m29.9999965s");
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: rounding the result
-    ///
-    /// This shows how one might find the difference between two timestamps and
-    /// have the result rounded such that sub-seconds are removed.
-    ///
-    /// In this case, we need to hand-construct a [`TimestampDifference`]
-    /// in order to gain full configurability.
-    ///
-    /// ```
-    /// use jiff::{Timestamp, TimestampDifference, ToSpan, Unit};
-    ///
-    /// let ts1: Timestamp = "1995-12-07 03:24:30.000003500Z".parse()?;
-    /// let ts2: Timestamp = "2019-01-31 15:30:00Z".parse()?;
-    ///
-    /// let span = ts1.until(
-    ///     TimestampDifference::from(ts2).smallest(Unit::Second),
-    /// )?;
-    /// assert_eq!(span, 730641929.seconds());
-    ///
-    /// // We can combine smallest and largest units too!
-    /// let span = ts1.until(
-    ///     TimestampDifference::from(ts2)
-    ///         .smallest(Unit::Second)
-    ///         .largest(Unit::Hour),
-    /// )?;
-    /// assert_eq!(span, 202956.hours().minutes(5).seconds(29));
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    #[inline]
-    pub fn until<A: Into<TimestampDifference>>(
-        self,
-        other: A,
-    ) -> Result<Span, Error> {
-        let args: TimestampDifference = other.into();
-        let span = args.until_with_largest_unit(self)?;
         if args.rounding_may_change_span() {
             span.round(args.round)
         } else {
