@@ -2722,17 +2722,22 @@ impl Span {
     pub(crate) fn smallest_non_time_non_zero_unit_error(
         &self,
     ) -> Option<Error> {
-        if self.days != 0 {
-            Some(t::SpanDays::error("days", self.days.get()))
+        let non_time_unit = if self.days != 0 {
+            Unit::Day
         } else if self.weeks != 0 {
-            Some(t::SpanWeeks::error("weeks", self.weeks.get()))
+            Unit::Week
         } else if self.months != 0 {
-            Some(t::SpanMonths::error("months", self.months.get()))
+            Unit::Month
         } else if self.years != 0 {
-            Some(t::SpanYears::error("years", self.years.get()))
+            Unit::Year
         } else {
-            None
-        }
+            return None;
+        };
+        Some(err!(
+            "operation can only be performed with units of hours \
+             or smaller, but found non-zero {unit} units",
+            unit = non_time_unit.singular(),
+        ))
     }
 
     /// Returns the largest non-zero unit in this span.
