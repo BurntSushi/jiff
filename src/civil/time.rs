@@ -74,10 +74,10 @@ use crate::{
 /// of `60`, then it is automatically constrained to `59`:
 ///
 /// ```
-/// use jiff::civil::Time;
+/// use jiff::civil::{Time, time};
 ///
 /// let t: Time = "23:59:60".parse()?;
-/// assert_eq!(t, Time::constant(23, 59, 59, 0));
+/// assert_eq!(t, time(23, 59, 59, 0));
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -89,10 +89,10 @@ use crate::{
 /// then `t1 < t2`. For example:
 ///
 /// ```
-/// use jiff::civil::Time;
+/// use jiff::civil::time;
 ///
-/// let t1 = Time::constant(7, 30, 1, 0);
-/// let t2 = Time::constant(8, 10, 0, 0);
+/// let t1 = time(7, 30, 1, 0);
+/// let t2 = time(8, 10, 0, 0);
 /// assert!(t1 < t2);
 /// ```
 ///
@@ -117,16 +117,16 @@ use crate::{
 /// trait implementations:
 ///
 /// ```
-/// use jiff::{civil::Time, ToSpan};
+/// use jiff::{civil::time, ToSpan};
 ///
-/// let time = Time::constant(20, 10, 1, 0);
+/// let t = time(20, 10, 1, 0);
 /// let span = 1.hours().minutes(49).seconds(59);
-/// assert_eq!(time + span, Time::constant(22, 0, 0, 0));
+/// assert_eq!(t + span, time(22, 0, 0, 0));
 ///
 /// // Overflow will result in wrap-around unless using checked
 /// // arithmetic explicitly.
-/// let time = Time::constant(23, 59, 59, 999_999_999);
-/// assert_eq!(Time::constant(0, 0, 0, 0), time + 1.nanoseconds());
+/// let t = time(23, 59, 59, 999_999_999);
+/// assert_eq!(time(0, 0, 0, 0), t + 1.nanoseconds());
 /// ```
 ///
 /// Wrapping arithmetic is used by default because it corresponds to how clocks
@@ -137,10 +137,10 @@ use crate::{
 /// `Time` values directly via a `Sub` trait implementation:
 ///
 /// ```
-/// use jiff::{civil::Time, ToSpan};
+/// use jiff::{civil::time, ToSpan};
 ///
-/// let time1 = Time::constant(22, 0, 0, 0);
-/// let time2 = Time::constant(20, 10, 1, 0);
+/// let time1 = time(22, 0, 0, 0);
+/// let time2 = time(20, 10, 1, 0);
 /// assert_eq!(time1 - time2, 1.hours().minutes(49).seconds(59));
 /// ```
 ///
@@ -149,10 +149,10 @@ use crate::{
 /// (as exemplified above), but we can ask for smaller units:
 ///
 /// ```
-/// use jiff::{civil::Time, ToSpan, Unit};
+/// use jiff::{civil::time, ToSpan, Unit};
 ///
-/// let time1 = Time::constant(23, 30, 0, 0);
-/// let time2 = Time::constant(7, 0, 0, 0);
+/// let time1 = time(23, 30, 0, 0);
+/// let time2 = time(7, 0, 0, 0);
 /// assert_eq!(
 ///     time1.since((Unit::Minute, time2))?,
 ///     990.minutes(),
@@ -164,10 +164,10 @@ use crate::{
 /// Or even round the span returned:
 ///
 /// ```
-/// use jiff::{civil::{Time, TimeDifference}, RoundMode, ToSpan, Unit};
+/// use jiff::{civil::{TimeDifference, time}, RoundMode, ToSpan, Unit};
 ///
-/// let time1 = Time::constant(23, 30, 0, 0);
-/// let time2 = Time::constant(23, 35, 59, 0);
+/// let time1 = time(23, 30, 0, 0);
+/// let time2 = time(23, 35, 59, 0);
 /// assert_eq!(
 ///     time1.until(
 ///         TimeDifference::new(time2).smallest(Unit::Minute),
@@ -196,16 +196,16 @@ use crate::{
 /// to round to the nearest third hour:
 ///
 /// ```
-/// use jiff::{civil::{Time, TimeRound}, Unit};
+/// use jiff::{civil::{TimeRound, time}, Unit};
 ///
-/// let t = Time::constant(16, 27, 29, 999_999_999);
+/// let t = time(16, 27, 29, 999_999_999);
 /// assert_eq!(
 ///     t.round(TimeRound::new().smallest(Unit::Hour).increment(3))?,
-///     Time::constant(15, 0, 0, 0),
+///     time(15, 0, 0, 0),
 /// );
 /// // Or alternatively, make use of the `From<(Unit, i64)> for TimeRound`
 /// // trait implementation:
-/// assert_eq!(t.round((Unit::Hour, 3))?, Time::constant(15, 0, 0, 0));
+/// assert_eq!(t.round((Unit::Hour, 3))?, time(15, 0, 0, 0));
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -402,9 +402,9 @@ impl Time {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Time;
+    /// use jiff::civil::time;
     ///
-    /// let t = Time::constant(13, 35, 56, 123_456_789);
+    /// let t = time(13, 35, 56, 123_456_789);
     /// assert_eq!(t.hour(), 13);
     /// ```
     #[inline]
@@ -417,9 +417,9 @@ impl Time {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Time;
+    /// use jiff::civil::time;
     ///
-    /// let t = Time::constant(13, 35, 56, 123_456_789);
+    /// let t = time(13, 35, 56, 123_456_789);
     /// assert_eq!(t.minute(), 35);
     /// ```
     #[inline]
@@ -432,9 +432,9 @@ impl Time {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Time;
+    /// use jiff::civil::time;
     ///
-    /// let t = Time::constant(13, 35, 56, 123_456_789);
+    /// let t = time(13, 35, 56, 123_456_789);
     /// assert_eq!(t.second(), 56);
     /// ```
     #[inline]
@@ -447,9 +447,9 @@ impl Time {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Time;
+    /// use jiff::civil::time;
     ///
-    /// let t = Time::constant(13, 35, 56, 123_456_789);
+    /// let t = time(13, 35, 56, 123_456_789);
     /// assert_eq!(t.millisecond(), 123);
     /// ```
     #[inline]
@@ -462,9 +462,9 @@ impl Time {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Time;
+    /// use jiff::civil::time;
     ///
-    /// let t = Time::constant(13, 35, 56, 123_456_789);
+    /// let t = time(13, 35, 56, 123_456_789);
     /// assert_eq!(t.microsecond(), 456);
     /// ```
     #[inline]
@@ -477,9 +477,9 @@ impl Time {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Time;
+    /// use jiff::civil::time;
     ///
-    /// let t = Time::constant(13, 35, 56, 123_456_789);
+    /// let t = time(13, 35, 56, 123_456_789);
     /// assert_eq!(t.nanosecond(), 789);
     /// ```
     #[inline]
@@ -601,23 +601,23 @@ impl Time {
     /// This routine can be used via the `+` operator.
     ///
     /// ```
-    /// use jiff::{civil::Time, ToSpan};
+    /// use jiff::{civil::time, ToSpan};
     ///
-    /// let t = Time::constant(20, 10, 1, 0);
+    /// let t = time(20, 10, 1, 0);
     /// assert_eq!(
     ///     t + 1.hours().minutes(49).seconds(59),
-    ///     Time::constant(22, 0, 0, 0),
+    ///     time(22, 0, 0, 0),
     /// );
     /// ```
     ///
     /// # Example: add nanoseconds to a `Time`
     ///
     /// ```
-    /// use jiff::{civil::Time, ToSpan};
+    /// use jiff::{civil::time, ToSpan};
     ///
-    /// let t = Time::constant(22, 35, 1, 0);
+    /// let t = time(22, 35, 1, 0);
     /// assert_eq!(
-    ///     Time::constant(22, 35, 3, 500_000_000),
+    ///     time(22, 35, 3, 500_000_000),
     ///     t.wrapping_add(2_500_000_000i64.nanoseconds()),
     /// );
     /// ```
@@ -625,11 +625,11 @@ impl Time {
     /// # Example: add span with multiple units
     ///
     /// ```
-    /// use jiff::{civil::Time, ToSpan};
+    /// use jiff::{civil::time, ToSpan};
     ///
-    /// let t = Time::constant(20, 10, 1, 0);
+    /// let t = time(20, 10, 1, 0);
     /// assert_eq!(
-    ///     Time::constant(22, 0, 0, 0),
+    ///     time(22, 0, 0, 0),
     ///     t.wrapping_add(1.hours().minutes(49).seconds(59)),
     /// );
     /// ```
@@ -637,19 +637,19 @@ impl Time {
     /// # Example: adding an empty span is a no-op
     ///
     /// ```
-    /// use jiff::{civil::Time, Span};
+    /// use jiff::{civil::time, Span};
     ///
-    /// let t = Time::constant(20, 10, 1, 0);
+    /// let t = time(20, 10, 1, 0);
     /// assert_eq!(t, t.wrapping_add(Span::new()));
     /// ```
     ///
     /// # Example: addition wraps on overflow
     ///
     /// ```
-    /// use jiff::{civil::Time, ToSpan};
+    /// use jiff::{civil::time, ToSpan};
     ///
-    /// let t = Time::constant(23, 59, 59, 999_999_999);
-    /// assert_eq!(Time::constant(0, 0, 0, 0), t.wrapping_add(1.nanoseconds()));
+    /// let t = time(23, 59, 59, 999_999_999);
+    /// assert_eq!(time(0, 0, 0, 0), t.wrapping_add(1.nanoseconds()));
     /// ```
     ///
     /// Similarly, if there are any non-zero units greater than hours in the
@@ -657,10 +657,10 @@ impl Time {
     /// ignored):
     ///
     /// ```
-    /// use jiff::{civil::Time, ToSpan};
+    /// use jiff::{civil::time, ToSpan};
     ///
     /// // doesn't matter what our time value is in this example
-    /// let t = Time::constant(0, 0, 0, 0);
+    /// let t = time(0, 0, 0, 0);
     /// assert_eq!(t, t.wrapping_add(1.days()));
     /// ```
     #[inline]
@@ -696,86 +696,18 @@ impl Time {
         Time::from_nanosecond(civil_day_nanosecond)
     }
 
-    /// Subtract the given span from this time and wrap around on overflow.
+    /// This routine is identical to [`Time::wrapping_add`] with the duration
+    /// negated.
     ///
-    /// # Properties
-    ///
-    /// Given times `t1` and `t2`, and a span `s`, with `t2 = t1 - s`, it
-    /// follows then that `t1 = t2 + s` for all values of `t1` and `s` whose
-    /// difference is `t2`.
-    ///
-    /// In short, adding the given span from the difference returned by this
-    /// function is guaranteed to result in precisely the original time.
-    ///
-    /// # Example: available via subtraction operator
-    ///
-    /// This routine can be used via the `-` operator.
+    /// # Example
     ///
     /// ```
-    /// use jiff::{civil::Time, ToSpan};
+    /// use jiff::{civil::time, ToSpan};
     ///
-    /// let t = Time::constant(22, 0, 0, 0);
     /// assert_eq!(
-    ///     t - 1.hours().minutes(49).seconds(59),
-    ///     Time::constant(20, 10, 1, 0),
+    ///     time(0, 0, 0, 0).wrapping_sub(1.nanoseconds()),
+    ///     time(23, 59, 59, 999_999_999),
     /// );
-    /// ```
-    ///
-    /// # Example: subtract nanoseconds from a `Time`
-    ///
-    /// ```
-    /// use jiff::{civil::Time, ToSpan};
-    ///
-    /// let t = Time::constant(22, 35, 1, 0);
-    /// assert_eq!(
-    ///     Time::constant(22, 34, 58, 500_000_000),
-    ///     t.wrapping_sub(2_500_000_000i64.nanoseconds()),
-    /// );
-    /// ```
-    ///
-    /// # Example: subtract span with multiple units
-    ///
-    /// ```
-    /// use jiff::{civil::Time, ToSpan};
-    ///
-    /// let t = Time::constant(22, 0, 0, 0);
-    /// assert_eq!(
-    ///     Time::constant(20, 10, 1, 0),
-    ///     t.wrapping_sub(1.hours().minutes(49).seconds(59)),
-    /// );
-    /// ```
-    ///
-    /// # Example: addition wraps on overflow
-    ///
-    /// ```
-    /// use jiff::{civil::Time, Span};
-    ///
-    /// let t = Time::constant(20, 10, 1, 0);
-    /// assert_eq!(t, t.wrapping_sub(Span::new()));
-    /// ```
-    ///
-    /// # Example: subtraction wraps on overflow
-    ///
-    /// ```
-    /// use jiff::{civil::Time, ToSpan};
-    ///
-    /// let t = Time::constant(0, 0, 0, 0);
-    /// assert_eq!(
-    ///     Time::constant(23, 59, 59, 999_999_999),
-    ///     t.wrapping_sub(1.nanoseconds()),
-    /// );
-    /// ```
-    ///
-    /// Similarly, if there are any non-zero units greater than hours in the
-    /// given span, then they also result in wrapping behavior (i.e., they are
-    /// ignored):
-    ///
-    /// ```
-    /// use jiff::{civil::Time, ToSpan};
-    ///
-    /// // doesn't matter what our time value is in this example
-    /// let t = Time::constant(23, 59, 59, 999_999_999);
-    /// assert_eq!(t, t.wrapping_sub(1.days()));
     /// ```
     #[inline]
     pub fn wrapping_sub(self, span: Span) -> Time {
@@ -805,11 +737,11 @@ impl Time {
     /// # Example: add nanoseconds to a `Time`
     ///
     /// ```
-    /// use jiff::{civil::Time, ToSpan};
+    /// use jiff::{civil::time, ToSpan};
     ///
-    /// let t = Time::constant(22, 35, 1, 0);
+    /// let t = time(22, 35, 1, 0);
     /// assert_eq!(
-    ///     Time::constant(22, 35, 3, 500_000_000),
+    ///     time(22, 35, 3, 500_000_000),
     ///     t.checked_add(2_500_000_000i64.nanoseconds())?,
     /// );
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -818,11 +750,11 @@ impl Time {
     /// # Example: add span with multiple units
     ///
     /// ```
-    /// use jiff::{civil::Time, ToSpan};
+    /// use jiff::{civil::time, ToSpan};
     ///
-    /// let t = Time::constant(20, 10, 1, 0);
+    /// let t = time(20, 10, 1, 0);
     /// assert_eq!(
-    ///     Time::constant(22, 0, 0, 0),
+    ///     time(22, 0, 0, 0),
     ///     t.checked_add(1.hours().minutes(49).seconds(59))?,
     /// );
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -831,9 +763,9 @@ impl Time {
     /// # Example: adding an empty span is a no-op
     ///
     /// ```
-    /// use jiff::{civil::Time, Span};
+    /// use jiff::{civil::time, Span};
     ///
-    /// let t = Time::constant(20, 10, 1, 0);
+    /// let t = time(20, 10, 1, 0);
     /// assert_eq!(t, t.checked_add(Span::new())?);
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -862,10 +794,10 @@ impl Time {
     /// given span, then they also result in overflow (and thus an error):
     ///
     /// ```
-    /// use jiff::{civil::Time, ToSpan};
+    /// use jiff::{civil::time, ToSpan};
     ///
     /// // doesn't matter what our time value is in this example
-    /// let t = Time::constant(0, 0, 0, 0);
+    /// let t = time(0, 0, 0, 0);
     /// assert!(t.checked_add(1.days()).is_err());
     /// ```
     #[inline]
@@ -877,136 +809,35 @@ impl Time {
         Ok(time)
     }
 
-    /// Subtract the given span from this time and return an error if the
-    /// result would otherwise overflow.
-    ///
-    /// # Properties
-    ///
-    /// Given a time `t1` and a span `s`, and assuming `t2 = t1 - s` exists, it
-    /// follows then that `t1 = t2 + s` for all values of `t1` and `s` whose
-    /// difference is a valid `t2`.
-    ///
-    /// In short, adding the given span from the difference returned by this
-    /// function is guaranteed to result in precisely the original time.
+    /// This routine is identical to [`Time::checked_add`] with the duration
+    /// negated.
     ///
     /// # Errors
     ///
-    /// This returns an error in two cases:
+    /// This has the same error conditions as [`Time::checked_add`].
     ///
-    /// 1. When the given span's interval overflows the maximum allowed
-    /// duration.
-    /// 2. When subtracting the span to a time value would exceed the minimum
-    /// allowed value (`00:00:00.000000000`). This also automatically happens
-    /// whenever the given span has any non-zero values for units bigger than
-    /// hours.
-    ///
-    /// # Example: subtract nanoseconds to a `Time`
-    ///
-    /// ```
-    /// use jiff::{civil::Time, ToSpan};
-    ///
-    /// let t = Time::constant(22, 35, 1, 0);
-    /// assert_eq!(
-    ///     Time::constant(22, 34, 58, 500_000_000),
-    ///     t.checked_sub(2_500_000_000i64.nanoseconds())?,
-    /// );
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: subtract span with multiple units
-    ///
-    /// ```
-    /// use jiff::{civil::Time, ToSpan};
-    ///
-    /// let t = Time::constant(22, 0, 0, 0);
-    /// assert_eq!(
-    ///     Time::constant(20, 10, 1, 0),
-    ///     t.checked_sub(1.hours().minutes(49).seconds(59))?,
-    /// );
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: subtracting an empty span is a no-op
-    ///
-    /// ```
-    /// use jiff::{civil::Time, Span};
-    ///
-    /// let t = Time::constant(20, 10, 1, 0);
-    /// assert_eq!(t, t.checked_sub(Span::new())?);
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: error on overflow
+    /// # Example
     ///
     /// ```
     /// use jiff::{civil::time, ToSpan};
     ///
-    /// // okay
-    /// let t = time(0, 0, 0, 1);
+    /// let t = time(22, 0, 0, 0);
     /// assert_eq!(
-    ///     t.with().nanosecond(0).build()?,
-    ///     t.checked_sub(1.nanoseconds())?,
+    ///     time(20, 10, 1, 0),
+    ///     t.checked_sub(1.hours().minutes(49).seconds(59))?,
     /// );
-    ///
-    /// // not okay
-    /// let t = time(0, 0, 0, 0);
-    /// assert!(t.checked_sub(1.nanoseconds()).is_err());
-    ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// Similarly, if there are any non-zero units greater than hours in the
-    /// given span, then they also result in overflow (and thus an error):
-    ///
-    /// ```
-    /// use jiff::{civil::Time, ToSpan};
-    ///
-    /// // doesn't matter what our time value is in this example
-    /// let t = Time::constant(23, 59, 59, 999_999_999);
-    /// assert!(t.checked_sub(1.days()).is_err());
     /// ```
     #[inline]
     pub fn checked_sub(self, span: Span) -> Result<Time, Error> {
         self.checked_add(span.negate())
     }
 
-    /// Add the given span to this time and saturate if the addition would
-    /// otherwise overflow.
+    /// This routine is identical to [`Time::checked_add`], except the
+    /// result saturates on overflow. That is, instead of overflow, either
+    /// [`Time::MIN`] or [`Time::MAX`] is returned.
     ///
-    /// # Example: add nanoseconds to a `Time`
-    ///
-    /// ```
-    /// use jiff::{civil::Time, ToSpan};
-    ///
-    /// let t = Time::constant(22, 35, 1, 0);
-    /// assert_eq!(
-    ///     Time::constant(22, 35, 3, 500_000_000),
-    ///     t.saturating_add(2_500_000_000i64.nanoseconds()),
-    /// );
-    /// ```
-    ///
-    /// # Example: add span with multiple units
-    ///
-    /// ```
-    /// use jiff::{civil::Time, ToSpan};
-    ///
-    /// let t = Time::constant(20, 10, 1, 0);
-    /// assert_eq!(
-    ///     Time::constant(22, 0, 0, 0),
-    ///     t.saturating_add(1.hours().minutes(49).seconds(59)),
-    /// );
-    /// ```
-    ///
-    /// # Example: adding an empty span is a no-op
-    ///
-    /// ```
-    /// use jiff::{civil::Time, Span};
-    ///
-    /// let t = Time::constant(20, 10, 1, 0);
-    /// assert_eq!(t, t.saturating_add(Span::new()));
-    /// ```
-    ///
-    /// # Example: saturate on overflow
+    /// # Example
     ///
     /// ```
     /// use jiff::{civil::{Time, time}, ToSpan};
@@ -1046,43 +877,10 @@ impl Time {
         })
     }
 
-    /// Subtract the given span from this time and saturate if the subtraction
-    /// would otherwise overflow.
+    /// This routine is identical to [`Time::saturating_add`] with the duration
+    /// negated.
     ///
-    /// # Example: subtract nanoseconds to a `Time`
-    ///
-    /// ```
-    /// use jiff::{civil::Time, ToSpan};
-    ///
-    /// let t = Time::constant(22, 35, 1, 0);
-    /// assert_eq!(
-    ///     Time::constant(22, 34, 58, 500_000_000),
-    ///     t.saturating_sub(2_500_000_000i64.nanoseconds()),
-    /// );
-    /// ```
-    ///
-    /// # Example: subtract span with multiple units
-    ///
-    /// ```
-    /// use jiff::{civil::Time, ToSpan};
-    ///
-    /// let t = Time::constant(22, 0, 0, 0);
-    /// assert_eq!(
-    ///     Time::constant(20, 10, 1, 0),
-    ///     t.saturating_sub(1.hours().minutes(49).seconds(59)),
-    /// );
-    /// ```
-    ///
-    /// # Example: subtracting an empty span is a no-op
-    ///
-    /// ```
-    /// use jiff::{civil::Time, Span};
-    ///
-    /// let t = Time::constant(20, 10, 1, 0);
-    /// assert_eq!(t, t.saturating_sub(Span::new()));
-    /// ```
-    ///
-    /// # Example: saturate on overflow
+    /// # Example
     ///
     /// ```
     /// use jiff::{civil::{Time, time}, ToSpan};
@@ -1099,17 +897,6 @@ impl Time {
     /// assert_eq!(Time::MIN, t.saturating_sub(1.nanoseconds()));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// Similarly, if there are any non-zero units greater than hours in the
-    /// given span, then they also result in overflow (and thus saturation):
-    ///
-    /// ```
-    /// use jiff::{civil::{Time, time}, ToSpan};
-    ///
-    /// // doesn't matter what our time value is in this example
-    /// let t = time(23, 59, 59, 999_999_999);
-    /// assert_eq!(Time::MIN, t.saturating_sub(1.days()));
     /// ```
     #[inline]
     pub fn saturating_sub(self, span: Span) -> Time {
@@ -1171,10 +958,10 @@ impl Time {
     /// # Examples
     ///
     /// ```
-    /// use jiff::{civil::Time, ToSpan};
+    /// use jiff::{civil::time, ToSpan};
     ///
-    /// let t1 = Time::constant(22, 35, 1, 0);
-    /// let t2 = Time::constant(22, 35, 3, 500_000_000);
+    /// let t1 = time(22, 35, 1, 0);
+    /// let t2 = time(22, 35, 3, 500_000_000);
     /// assert_eq!(t1.until(t2)?, 2.seconds().milliseconds(500));
     /// // Flipping the dates is fine, but you'll get a negative span.
     /// assert_eq!(t2.until(t1)?, -2.seconds().milliseconds(500));
@@ -1189,10 +976,10 @@ impl Time {
     /// trait implementation.
     ///
     /// ```
-    /// use jiff::{civil::Time, Unit, ToSpan};
+    /// use jiff::{civil::time, Unit, ToSpan};
     ///
-    /// let t1 = Time::constant(3, 24, 30, 3500);
-    /// let t2 = Time::constant(15, 30, 0, 0);
+    /// let t1 = time(3, 24, 30, 3500);
+    /// let t2 = time(15, 30, 0, 0);
     ///
     /// // The default limits spans to using "hours" as the biggest unit.
     /// let span = t1.until(t2)?;
@@ -1219,87 +1006,25 @@ impl Time {
         }
     }
 
-    /// Returns a span representing the elapsed time from this time since
-    /// the given `other` time.
-    ///
-    /// When `other` is later than this time, the span returned will be
-    /// negative.
-    ///
-    /// Depending on the input provided, the span returned is rounded. It may
-    /// also be balanced down to smaller units than the default. By default,
-    /// the span returned is balanced such that the biggest possible unit is
-    /// hours.
-    ///
-    /// This operation is configured by providing a [`TimeDifference`]
-    /// value. Since this routine accepts anything that implements
-    /// `Into<TimeDifference>`, once can pass a `Time` directly. One
-    /// can also pass a `(Unit, Time)`, where `Unit` is treated as
-    /// [`TimeDifference::largest`].
-    ///
-    /// # Properties
-    ///
-    /// As long as no rounding is requested, it is guaranteed that adding the
-    /// span returned to the `other` time will always equal this time.
+    /// This routine is identical to [`Time::until`], but the order of the
+    /// parameters is flipped.
     ///
     /// # Errors
     ///
-    /// An error can occur if `TimeDifference` is misconfigured. For example,
-    /// if the smallest unit provided is bigger than the largest unit. Or if
-    /// a unit greater than `Unit::Hour` is provided.
+    /// This has the same error conditions as [`Time::until`].
     ///
-    /// It is guaranteed that if one provides a time with the default
-    /// [`TimeDifference`] configuration, then this routine will never fail.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use jiff::{civil::Time, ToSpan};
-    ///
-    /// let t1 = Time::constant(22, 35, 1, 0);
-    /// let t2 = Time::constant(22, 35, 3, 500_000_000);
-    /// assert_eq!(t2.since(t1)?, 2.seconds().milliseconds(500));
-    /// // Flipping the dates is fine, but you'll get a negative span.
-    /// assert_eq!(t1.since(t2)?, -2.seconds().milliseconds(500));
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: available via subtraction operator
+    /// # Example
     ///
     /// This routine can be used via the `-` operator. Since the default
     /// configuration is used and because a `Span` can represent the difference
     /// between any two possible times, it will never panic.
     ///
     /// ```
-    /// use jiff::{civil::Time, ToSpan};
+    /// use jiff::{civil::time, ToSpan};
     ///
-    /// let earlier = Time::constant(1, 0, 0, 0);
-    /// let later = Time::constant(22, 30, 0, 0);
+    /// let earlier = time(1, 0, 0, 0);
+    /// let later = time(22, 30, 0, 0);
     /// assert_eq!(later - earlier, 21.hours().minutes(30));
-    /// ```
-    ///
-    /// # Example: using smaller units
-    ///
-    /// This example shows how to contract the span returned to smaller units.
-    /// This makes use of a `From<(Unit, Time)> for TimeDifference`
-    /// trait implementation.
-    ///
-    /// ```
-    /// use jiff::{civil::Time, Unit, ToSpan};
-    ///
-    /// let t1 = Time::constant(3, 24, 30, 3500);
-    /// let t2 = Time::constant(15, 30, 0, 0);
-    ///
-    /// // The default limits spans to using "hours" as the biggest unit.
-    /// let span = t2.since(t1)?;
-    /// assert_eq!(span.to_string(), "PT12h5m29.9999965s");
-    ///
-    /// // But we can ask for smaller units, like capping the biggest unit
-    /// // to minutes instead of hours.
-    /// let span = t2.since((Unit::Minute, t1))?;
-    /// assert_eq!(span.to_string(), "PT725m29.9999965s");
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
     pub fn since<A: Into<TimeDifference>>(
@@ -1357,17 +1082,17 @@ impl Time {
     /// smallest unit directly, instead of constructing a `TimeRound` manually.
     ///
     /// ```
-    /// use jiff::{civil::Time, Unit};
+    /// use jiff::{civil::time, Unit};
     ///
-    /// let t = Time::constant(15, 45, 10, 123_456_789);
+    /// let t = time(15, 45, 10, 123_456_789);
     /// assert_eq!(
     ///     t.round(Unit::Second)?,
-    ///     Time::constant(15, 45, 10, 0),
+    ///     time(15, 45, 10, 0),
     /// );
-    /// let t = Time::constant(15, 45, 10, 500_000_001);
+    /// let t = time(15, 45, 10, 500_000_001);
     /// assert_eq!(
     ///     t.round(Unit::Second)?,
-    ///     Time::constant(15, 45, 11, 0),
+    ///     time(15, 45, 11, 0),
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1380,12 +1105,12 @@ impl Time {
     /// [`RoundMode::Trunc`] can be used too:
     ///
     /// ```
-    /// use jiff::{civil::{Time, TimeRound}, RoundMode, Unit};
+    /// use jiff::{civil::{TimeRound, time}, RoundMode, Unit};
     ///
-    /// let t = Time::constant(15, 45, 10, 999_999_999);
+    /// let t = time(15, 45, 10, 999_999_999);
     /// assert_eq!(
     ///     t.round(Unit::Second)?,
-    ///     Time::constant(15, 45, 11, 0),
+    ///     time(15, 45, 11, 0),
     /// );
     /// // The default will round up to the next second for any fraction
     /// // greater than or equal to 0.5. But truncation will always round
@@ -1394,7 +1119,7 @@ impl Time {
     ///     t.round(
     ///         TimeRound::new().smallest(Unit::Second).mode(RoundMode::Trunc),
     ///     )?,
-    ///     Time::constant(15, 45, 10, 0),
+    ///     time(15, 45, 10, 0),
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1403,14 +1128,14 @@ impl Time {
     /// # Example: rounding to the nearest 5 minute increment
     ///
     /// ```
-    /// use jiff::{civil::Time, Unit};
+    /// use jiff::{civil::time, Unit};
     ///
     /// // rounds down
-    /// let t = Time::constant(15, 27, 29, 999_999_999);
-    /// assert_eq!(t.round((Unit::Minute, 5))?, Time::constant(15, 25, 0, 0));
+    /// let t = time(15, 27, 29, 999_999_999);
+    /// assert_eq!(t.round((Unit::Minute, 5))?, time(15, 25, 0, 0));
     /// // rounds up
-    /// let t = Time::constant(15, 27, 30, 0);
-    /// assert_eq!(t.round((Unit::Minute, 5))?, Time::constant(15, 30, 0, 0));
+    /// let t = time(15, 27, 30, 0);
+    /// assert_eq!(t.round((Unit::Minute, 5))?, time(15, 30, 0, 0));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1446,37 +1171,37 @@ impl Time {
     /// This shows how to visit each third hour of a 24 hour time interval:
     ///
     /// ```
-    /// use jiff::{civil::Time, ToSpan};
+    /// use jiff::{civil::{Time, time}, ToSpan};
     ///
     /// let start = Time::MIN;
     /// let mut every_third_hour = vec![];
-    /// for time in start.series(3.hours()) {
-    ///     every_third_hour.push(time);
+    /// for t in start.series(3.hours()) {
+    ///     every_third_hour.push(t);
     /// }
     /// assert_eq!(every_third_hour, vec![
-    ///     Time::constant(0, 0, 0, 0),
-    ///     Time::constant(3, 0, 0, 0),
-    ///     Time::constant(6, 0, 0, 0),
-    ///     Time::constant(9, 0, 0, 0),
-    ///     Time::constant(12, 0, 0, 0),
-    ///     Time::constant(15, 0, 0, 0),
-    ///     Time::constant(18, 0, 0, 0),
-    ///     Time::constant(21, 0, 0, 0),
+    ///     time(0, 0, 0, 0),
+    ///     time(3, 0, 0, 0),
+    ///     time(6, 0, 0, 0),
+    ///     time(9, 0, 0, 0),
+    ///     time(12, 0, 0, 0),
+    ///     time(15, 0, 0, 0),
+    ///     time(18, 0, 0, 0),
+    ///     time(21, 0, 0, 0),
     /// ]);
     /// ```
     ///
     /// Or go backwards every 6.5 hours:
     ///
     /// ```
-    /// use jiff::{civil::Time, ToSpan};
+    /// use jiff::{civil::{Time, time}, ToSpan};
     ///
-    /// let start = Time::constant(23, 0, 0, 0);
+    /// let start = time(23, 0, 0, 0);
     /// let times: Vec<Time> = start.series(-6.hours().minutes(30)).collect();
     /// assert_eq!(times, vec![
-    ///     Time::constant(23, 0, 0, 0),
-    ///     Time::constant(16, 30, 0, 0),
-    ///     Time::constant(10, 0, 0, 0),
-    ///     Time::constant(3, 30, 0, 0),
+    ///     time(23, 0, 0, 0),
+    ///     time(16, 30, 0, 0),
+    ///     time(10, 0, 0, 0),
+    ///     time(3, 30, 0, 0),
     /// ]);
     /// ```
     #[inline]
@@ -2264,13 +1989,13 @@ impl<'a> From<(Unit, &'a Zoned)> for TimeDifference {
 /// This example shows how to round a time to the nearest second:
 ///
 /// ```
-/// use jiff::{civil::Time, Unit};
+/// use jiff::{civil::{Time, time}, Unit};
 ///
 /// let t: Time = "16:24:59.5".parse()?;
 /// assert_eq!(
 ///     t.round(Unit::Second)?,
 ///     // The second rounds up and causes minutes to increase.
-///     Time::constant(16, 25, 0, 0),
+///     time(16, 25, 0, 0),
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -2283,7 +2008,7 @@ impl<'a> From<(Unit, &'a Zoned)> for TimeDifference {
 /// [`RoundMode`].
 ///
 /// ```
-/// use jiff::{civil::{Time, TimeRound}, RoundMode, Unit};
+/// use jiff::{civil::{Time, TimeRound, time}, RoundMode, Unit};
 ///
 /// let t: Time = "2024-06-20 16:24:59.5".parse()?;
 /// assert_eq!(
@@ -2291,7 +2016,7 @@ impl<'a> From<(Unit, &'a Zoned)> for TimeDifference {
 ///         TimeRound::new().smallest(Unit::Second).mode(RoundMode::Trunc),
 ///     )?,
 ///     // The second just gets truncated as if it wasn't there.
-///     Time::constant(16, 24, 59, 0),
+///     time(16, 24, 59, 0),
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -2331,15 +2056,15 @@ impl TimeRound {
     /// # Example
     ///
     /// ```
-    /// use jiff::{civil::{Time, TimeRound}, Unit};
+    /// use jiff::{civil::{TimeRound, time}, Unit};
     ///
-    /// let t = Time::constant(3, 25, 30, 0);
+    /// let t = time(3, 25, 30, 0);
     /// assert_eq!(
     ///     t.round(TimeRound::new().smallest(Unit::Minute))?,
-    ///     Time::constant(3, 26, 0, 0),
+    ///     time(3, 26, 0, 0),
     /// );
     /// // Or, utilize the `From<Unit> for TimeRound` impl:
-    /// assert_eq!(t.round(Unit::Minute)?, Time::constant(3, 26, 0, 0));
+    /// assert_eq!(t.round(Unit::Minute)?, time(3, 26, 0, 0));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2359,7 +2084,7 @@ impl TimeRound {
     /// This shows how to always round times up towards positive infinity.
     ///
     /// ```
-    /// use jiff::{civil::{Time, TimeRound}, RoundMode, Unit};
+    /// use jiff::{civil::{Time, TimeRound, time}, RoundMode, Unit};
     ///
     /// let t: Time = "03:25:01".parse()?;
     /// assert_eq!(
@@ -2368,7 +2093,7 @@ impl TimeRound {
     ///             .smallest(Unit::Minute)
     ///             .mode(RoundMode::Ceil),
     ///     )?,
-    ///     Time::constant(3, 26, 0, 0),
+    ///     time(3, 26, 0, 0),
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -2402,10 +2127,10 @@ impl TimeRound {
     /// increment.
     ///
     /// ```
-    /// use jiff::{civil::{Time, TimeRound}, RoundMode, Unit};
+    /// use jiff::{civil::{Time, TimeRound, time}, RoundMode, Unit};
     ///
     /// let t: Time = "03:24:59".parse()?;
-    /// assert_eq!(t.round((Unit::Minute, 10))?, Time::constant(3, 20, 0, 0));
+    /// assert_eq!(t.round((Unit::Minute, 10))?, time(3, 20, 0, 0));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2830,7 +2555,7 @@ impl TimeWith {
 
 #[cfg(test)]
 mod tests {
-    use crate::ToSpan;
+    use crate::{civil::time, ToSpan};
 
     use super::*;
 
@@ -2870,32 +2595,32 @@ mod tests {
 
     #[test]
     fn rounding_cross_midnight() {
-        let t1 = Time::constant(23, 59, 59, 999_999_999);
+        let t1 = time(23, 59, 59, 999_999_999);
 
         let t2 = t1.round(Unit::Nanosecond).unwrap();
         assert_eq!(t2, t1);
 
         let t2 = t1.round(Unit::Millisecond).unwrap();
-        assert_eq!(t2, Time::constant(0, 0, 0, 0));
+        assert_eq!(t2, time(0, 0, 0, 0));
 
         let t2 = t1.round(Unit::Microsecond).unwrap();
-        assert_eq!(t2, Time::constant(0, 0, 0, 0));
+        assert_eq!(t2, time(0, 0, 0, 0));
 
         let t2 = t1.round(Unit::Millisecond).unwrap();
-        assert_eq!(t2, Time::constant(0, 0, 0, 0));
+        assert_eq!(t2, time(0, 0, 0, 0));
 
         let t2 = t1.round(Unit::Second).unwrap();
-        assert_eq!(t2, Time::constant(0, 0, 0, 0));
+        assert_eq!(t2, time(0, 0, 0, 0));
 
         let t2 = t1.round(Unit::Minute).unwrap();
-        assert_eq!(t2, Time::constant(0, 0, 0, 0));
+        assert_eq!(t2, time(0, 0, 0, 0));
 
         let t2 = t1.round(Unit::Hour).unwrap();
-        assert_eq!(t2, Time::constant(0, 0, 0, 0));
+        assert_eq!(t2, time(0, 0, 0, 0));
 
-        let t1 = Time::constant(22, 15, 0, 0);
+        let t1 = time(22, 15, 0, 0);
         assert_eq!(
-            Time::constant(22, 30, 0, 0),
+            time(22, 30, 0, 0),
             t1.round(TimeRound::new().smallest(Unit::Minute).increment(30))
                 .unwrap()
         );
@@ -2985,15 +2710,15 @@ mod tests {
 
     #[test]
     fn overflowing_add() {
-        let t1 = Time::constant(23, 30, 0, 0);
+        let t1 = time(23, 30, 0, 0);
         let (t2, span) = t1.overflowing_add(5.hours()).unwrap();
-        assert_eq!(t2, Time::constant(4, 30, 0, 0));
+        assert_eq!(t2, time(4, 30, 0, 0));
         assert_eq!(span, 1.days());
     }
 
     #[test]
     fn overflowing_add_overflows() {
-        let t1 = Time::constant(23, 30, 0, 0);
+        let t1 = time(23, 30, 0, 0);
         let span = Span::new()
             .hours(t::SpanHours::MAX_REPR)
             .minutes(t::SpanMinutes::MAX_REPR)

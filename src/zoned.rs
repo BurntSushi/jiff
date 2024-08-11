@@ -2071,62 +2071,14 @@ impl Zoned {
         Ok(ts.to_zoned(tz.clone()))
     }
 
-    /// Subtract the given span of time from this zoned datetime. If the
-    /// difference would overflow the minimum or maximum zoned datetime values,
-    /// then an error is returned.
-    ///
-    /// # Properties
-    ///
-    /// This routine is _not_ reversible because some additions may
-    /// be ambiguous. For example, adding `1 month` to the zoned
-    /// datetime `2024-03-31T00:00:00[America/New_York]` will produce
-    /// `2024-04-30T00:00:00[America/New_York]` since April has
-    /// only 30 days in a month. Moreover, subtracting `1 month`
-    /// from `2024-04-30T00:00:00[America/New_York]` will produce
-    /// `2024-03-30T00:00:00[America/New_York]`, which is not the date we
-    /// started with.
-    ///
-    /// A similar argument applies for days, since with zoned datetimes,
-    /// different days can be different lengths.
-    ///
-    /// If spans of time are limited to units of hours (or less), then this
-    /// routine _is_ reversible.
+    /// This routine is identical to [`Zoned::checked_add`] with the
+    /// duration negated.
     ///
     /// # Errors
     ///
-    /// If the span subtracted from this zoned datetime would result in a zoned
-    /// datetime that exceeds the range of a `Zoned`, then this will return an
-    /// error.
+    /// This has the same error conditions as [`Zoned::checked_add`].
     ///
     /// # Example
-    ///
-    /// This shows a few examples of subtracting spans of time to various zoned
-    /// datetimes. We make use of the [`ToSpan`](crate::ToSpan) trait for
-    /// convenient creation of spans.
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let zdt = date(1995, 12, 7)
-    ///     .at(3, 24, 30, 3_500)
-    ///     .intz("America/New_York")?;
-    /// let got = zdt.checked_sub(20.years().months(4).nanoseconds(500))?;
-    /// assert_eq!(
-    ///     got,
-    ///     date(1975, 8, 7).at(3, 24, 30, 3_000).intz("America/New_York")?,
-    /// );
-    ///
-    /// let zdt = date(2019, 2, 28).at(15, 30, 0, 0).intz("America/New_York")?;
-    /// let got = zdt.checked_sub(1.months())?;
-    /// assert_eq!(
-    ///     got,
-    ///     date(2019, 1, 28).at(15, 30, 0, 0).intz("America/New_York")?,
-    /// );
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: available via subtraction operator
     ///
     /// This routine can be used via the `-` operator. Note though that if it
     /// fails, it will result in a panic. Note that we use `&zdt - ...` instead
@@ -2147,180 +2099,22 @@ impl Zoned {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    ///
-    /// # Example: zone aware arithmetic
-    ///
-    /// This example demonstrates the difference between "subtract 1 day" and
-    /// "subtract 24 hours." In the former case, 1 day might not correspond to
-    /// 24 hours if there is a time zone transition in the intervening period.
-    /// However, subtracting 24 hours always means subtracting exactly 24
-    /// hours.
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let zdt = date(2024, 3, 11).at(0, 0, 0, 0).intz("America/New_York")?;
-    ///
-    /// let one_day_earlier = zdt.checked_sub(1.day())?;
-    /// assert_eq!(
-    ///     one_day_earlier.to_string(),
-    ///     "2024-03-10T00:00:00-05:00[America/New_York]",
-    /// );
-    ///
-    /// let twenty_four_hours_earlier = zdt.checked_sub(24.hours())?;
-    /// assert_eq!(
-    ///     twenty_four_hours_earlier.to_string(),
-    ///     "2024-03-09T23:00:00-05:00[America/New_York]",
-    /// );
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: automatic disambiguation
-    ///
-    /// This example demonstrates what happens when subtracting a span
-    /// of time results in an ambiguous zoned datetime. Zone aware
-    /// arithmetic uses automatic disambiguation corresponding to the
-    /// [`Disambiguation::Compatible`]
-    /// strategy for resolving an ambiguous datetime to a precise instant.
-    /// For example, in the case below, there is a gap in the clocks for 1
-    /// hour starting at `2024-03-10 02:00:00` in `America/New_York`. The
-    /// "compatible" strategy chooses the later time in a gap:.
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let zdt = date(2024, 3, 11).at(2, 30, 0, 0).intz("America/New_York")?;
-    /// let one_day_later = zdt.checked_sub(1.day())?;
-    /// assert_eq!(
-    ///     one_day_later.to_string(),
-    ///     "2024-03-10T03:30:00-04:00[America/New_York]",
-    /// );
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// And this example demonstrates the "compatible" strategy when arithmetic
-    /// results in an ambiguous datetime in a fold. In this case, we make use
-    /// of the fact that the 1 o'clock hour was repeated on `2024-11-03`.
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let zdt = date(2024, 11, 4).at(1, 30, 0, 0).intz("America/New_York")?;
-    /// let one_day_later = zdt.checked_sub(1.day())?;
-    /// assert_eq!(
-    ///     one_day_later.to_string(),
-    ///     // This corresponds to the first iteration of the 1 o'clock hour,
-    ///     // i.e., when DST is still in effect. It's the earlier time.
-    ///     "2024-11-03T01:30:00-04:00[America/New_York]",
-    /// );
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: negative spans are supported
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let zdt = date(2024, 3, 31)
-    ///     .at(19, 5, 59, 999_999_999)
-    ///     .intz("America/New_York")?;
-    /// assert_eq!(
-    ///     zdt.checked_sub(-1.months())?,
-    ///     date(2024, 4, 30).
-    ///         at(19, 5, 59, 999_999_999)
-    ///         .intz("America/New_York")?,
-    /// );
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: error on overflow
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let zdt = date(2024, 3, 31).at(13, 13, 13, 13).intz("America/New_York")?;
-    /// assert!(zdt.checked_sub(19000.years()).is_err());
-    /// assert!(zdt.checked_sub(-9000.years()).is_err());
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
     #[inline]
     pub fn checked_sub(&self, span: Span) -> Result<Zoned, Error> {
         self.checked_add(-span)
     }
 
-    /// Add the given span of time to this zoned datetime. If the sum would
-    /// overflow the minimum or maximum zoned datetime values, then the result
-    /// saturates.
+    /// This routine is identical to [`Zoned::checked_add`], except the
+    /// result saturates on overflow. That is, instead of overflow, either
+    /// [`Timestamp::MIN`] or [`Timestamp::MAX`] (in this `Zoned` value's time
+    /// zone) is returned.
     ///
     /// # Properties
     ///
-    /// This routine is _not_ reversible because some additions may
-    /// be ambiguous. For example, adding `1 month` to the zoned
-    /// datetime `2024-03-31T00:00:00[America/New_York]` will produce
-    /// `2024-04-30T00:00:00[America/New_York]` since April has
-    /// only 30 days in a month. Moreover, subtracting `1 month`
-    /// from `2024-04-30T00:00:00[America/New_York]` will produce
-    /// `2024-03-30T00:00:00[America/New_York]`, which is not the date we
-    /// started with.
-    ///
-    /// A similar argument applies for days, since with zoned datetimes,
-    /// different days can be different lengths.
-    ///
-    /// If spans of time are limited to units of hours (or less), and no
-    /// saturation occurs, then this routine _is_ reversible.
+    /// The properties of this routine are identical to [`Zoned::checked_add`],
+    /// except that if saturation occurs, then the result is not reversible.
     ///
     /// # Example
-    ///
-    /// This shows a few examples of adding spans of time to various dates.
-    /// We make use of the [`ToSpan`](crate::ToSpan) trait for convenient
-    /// creation of spans.
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let zdt = date(1995, 12, 7)
-    ///     .at(3, 24, 30, 3_500)
-    ///     .intz("America/New_York")?;
-    /// let got = zdt.saturating_add(20.years().months(4).nanoseconds(500));
-    /// assert_eq!(
-    ///     got,
-    ///     date(2016, 4, 7).at(3, 24, 30, 4_000).intz("America/New_York")?,
-    /// );
-    ///
-    /// let zdt = date(2019, 1, 31).at(15, 30, 0, 0).intz("America/New_York")?;
-    /// let got = zdt.saturating_add(1.months());
-    /// assert_eq!(
-    ///     got,
-    ///     date(2019, 2, 28).at(15, 30, 0, 0).intz("America/New_York")?,
-    /// );
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: negative spans are supported
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let zdt = date(2024, 3, 31)
-    ///     .at(19, 5, 59, 999_999_999)
-    ///     .intz("America/New_York")?;
-    /// assert_eq!(
-    ///     zdt.saturating_add(-1.months()),
-    ///     date(2024, 2, 29)
-    ///         .at(19, 5, 59, 999_999_999)
-    ///         .intz("America/New_York")?,
-    /// );
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: saturation on overflow
     ///
     /// ```
     /// use jiff::{civil::date, Timestamp, ToSpan};
@@ -2343,74 +2137,10 @@ impl Zoned {
         })
     }
 
-    /// Subtract the given span of time from this zoned datetime. If the
-    /// difference would overflow the minimum or maximum zoned datetime values,
-    /// then the result saturates.
-    ///
-    /// # Properties
-    ///
-    /// This routine is _not_ reversible because some additions may
-    /// be ambiguous. For example, adding `1 month` to the zoned
-    /// datetime `2024-03-31T00:00:00[America/New_York]` will produce
-    /// `2024-04-30T00:00:00[America/New_York]` since April has
-    /// only 30 days in a month. Moreover, subtracting `1 month`
-    /// from `2024-04-30T00:00:00[America/New_York]` will produce
-    /// `2024-03-30T00:00:00[America/New_York]`, which is not the date we
-    /// started with.
-    ///
-    /// A similar argument applies for days, since with zoned datetimes,
-    /// different days can be different lengths.
-    ///
-    /// If spans of time are limited to units of hours (or less), and no
-    /// saturation occurs, then this routine _is_ reversible.
+    /// This routine is identical to [`Zoned::saturating_add`] with the span
+    /// parameter negated.
     ///
     /// # Example
-    ///
-    /// This shows a few examples of adding spans of time to various dates.
-    /// We make use of the [`ToSpan`](crate::ToSpan) trait for convenient
-    /// creation of spans.
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let zdt = date(1995, 12, 7)
-    ///     .at(3, 24, 30, 3_500)
-    ///     .intz("America/New_York")?;
-    /// let got = zdt.saturating_sub(20.years().months(4).nanoseconds(500));
-    /// assert_eq!(
-    ///     got,
-    ///     date(1975, 8, 7).at(3, 24, 30, 3_000).intz("America/New_York")?,
-    /// );
-    ///
-    /// let zdt = date(2019, 2, 28).at(15, 30, 0, 0).intz("America/New_York")?;
-    /// let got = zdt.saturating_sub(1.months());
-    /// assert_eq!(
-    ///     got,
-    ///     date(2019, 1, 28).at(15, 30, 0, 0).intz("America/New_York")?,
-    /// );
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: negative spans are supported
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let zdt = date(2024, 3, 31)
-    ///     .at(19, 5, 59, 999_999_999)
-    ///     .intz("America/New_York")?;
-    /// assert_eq!(
-    ///     zdt.saturating_sub(-1.months()),
-    ///     date(2024, 4, 30)
-    ///         .at(19, 5, 59, 999_999_999)
-    ///         .intz("America/New_York")?,
-    /// );
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: saturation on overflow
     ///
     /// ```
     /// use jiff::{civil::date, Timestamp, ToSpan};
@@ -2599,76 +2329,14 @@ impl Zoned {
         }
     }
 
-    /// Returns a span representing the elapsed time from this zoned datetime
-    /// since the given `other` zoned datetime.
-    ///
-    /// When `other` occurs after this datetime, then the span returned will
-    /// be negative.
-    ///
-    /// Depending on the input provided, the span returned is rounded. It may
-    /// also be balanced up to bigger units than the default. By default, the
-    /// span returned is balanced such that the biggest possible unit is hours.
-    ///
-    /// This operation is configured by providing a [`ZonedDifference`]
-    /// value. Since this routine accepts anything that implements
-    /// `Into<ZonedDifference>`, once can pass a `&Zoned` directly.
-    /// One can also pass a `(Unit, &Zoned)`, where `Unit` is treated as
-    /// [`ZonedDifference::largest`].
-    ///
-    /// # Properties
-    ///
-    /// It is guaranteed that if the returned span is added to `other`, and if
-    /// no rounding is requested, and if the largest unit requested is at most
-    /// `Unit::Hour`, then the original zoned datetime will be returned.
-    ///
-    /// This routine is equivalent to `self.until(other).map(|span| -span)`
-    /// if no rounding options are set. If rounding options are set, then
-    /// it's equivalent to
-    /// `self.until(other_without_rounding_options).map(|span| -span)`,
-    /// followed by a call to [`Span::round`] with the appropriate rounding
-    /// options set. This is because the negation of a span can result in
-    /// different rounding results depending on the rounding mode.
+    /// This routine is identical to [`Zoned::until`], but the order of the
+    /// parameters is flipped.
     ///
     /// # Errors
     ///
-    /// An error can occur in some cases when the requested configuration
-    /// would result in a span that is beyond allowable limits. For example,
-    /// the nanosecond component of a span cannot represent the span of
-    /// time between the minimum and maximum zoned datetime supported by Jiff.
-    /// Therefore, if one requests a span with its largest unit set to
-    /// [`Unit::Nanosecond`], then it's possible for this routine to fail.
-    ///
-    /// An error can also occur if `ZonedDifference` is misconfigured. For
-    /// example, if the smallest unit provided is bigger than the largest unit.
-    ///
-    /// An error can also occur if units greater than `Unit::Hour` are
-    /// requested _and_ if the time zones in the provided zoned datetimes
-    /// are distinct. (See [`TimeZone`]'s section on equality for details on
-    /// how equality is determined.) This error occurs because the length of
-    /// a day may vary depending on the time zone. To work around this
-    /// restriction, convert one or both of the zoned datetimes into the same
-    /// time zone.
-    ///
-    /// It is guaranteed that if one provides a datetime with the default
-    /// [`ZonedDifference`] configuration, then this routine will never
-    /// fail.
+    /// This has the same error conditions as [`Zoned::until`].
     ///
     /// # Example
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0).intz("America/New_York")?;
-    /// let later = date(2019, 1, 31).at(21, 0, 0, 0).intz("America/New_York")?;
-    /// assert_eq!(later.since(&earlier)?, 109_031.hours().minutes(30));
-    ///
-    /// // Flipping the dates is fine, but you'll get a negative span.
-    /// assert_eq!(earlier.since(&later)?, -109_031.hours().minutes(30));
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: available via subtraction operator
     ///
     /// This routine can be used via the `-` operator. Since the default
     /// configuration is used and because a `Span` can represent the difference
@@ -2686,96 +2354,6 @@ impl Zoned {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    ///
-    /// # Example: using bigger units
-    ///
-    /// This example shows how to expand the span returned to bigger units.
-    /// This makes use of a `From<(Unit, &Zoned)> for ZonedDifference`
-    /// trait implementation.
-    ///
-    /// ```
-    /// use jiff::{civil::date, Unit, ToSpan};
-    ///
-    /// let zdt1 = date(1995, 12, 07).at(3, 24, 30, 3500).intz("America/New_York")?;
-    /// let zdt2 = date(2019, 01, 31).at(15, 30, 0, 0).intz("America/New_York")?;
-    ///
-    /// // The default limits durations to using "hours" as the biggest unit.
-    /// let span = zdt2.since(&zdt1)?;
-    /// assert_eq!(span.to_string(), "PT202956h5m29.9999965s");
-    ///
-    /// // But we can ask for units all the way up to years.
-    /// let span = zdt2.since((Unit::Year, &zdt1))?;
-    /// assert_eq!(span.to_string(), "P23y1m24dT12h5m29.9999965s");
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: rounding the result
-    ///
-    /// This shows how one might find the difference between two zoned
-    /// datetimes and have the result rounded such that sub-seconds are
-    /// removed.
-    ///
-    /// In this case, we need to hand-construct a [`ZonedDifference`]
-    /// in order to gain full configurability.
-    ///
-    /// ```
-    /// use jiff::{civil::date, Unit, ToSpan, ZonedDifference};
-    ///
-    /// let zdt1 = date(1995, 12, 07).at(3, 24, 30, 3500).intz("America/New_York")?;
-    /// let zdt2 = date(2019, 01, 31).at(15, 30, 0, 0).intz("America/New_York")?;
-    ///
-    /// let span = zdt2.since(
-    ///     ZonedDifference::from(&zdt1).smallest(Unit::Second),
-    /// )?;
-    /// assert_eq!(span, 202_956.hours().minutes(5).seconds(29));
-    ///
-    /// // We can combine smallest and largest units too!
-    /// let span = zdt2.since(
-    ///     ZonedDifference::from(&zdt1)
-    ///         .smallest(Unit::Second)
-    ///         .largest(Unit::Year),
-    /// )?;
-    /// assert_eq!(span, 23.years().months(1).days(24).hours(12).minutes(5).seconds(29));
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: units biggers than days inhibit reversibility
-    ///
-    /// If you ask for units bigger than hours, then adding the span returned
-    /// to the `other` zoned datetime is not guaranteed to result in the
-    /// original zoned datetime. For example:
-    ///
-    /// ```
-    /// use jiff::{civil::date, Unit, ToSpan};
-    ///
-    /// let zdt1 = date(2024, 3, 2).at(0, 0, 0, 0).intz("America/New_York")?;
-    /// let zdt2 = date(2024, 5, 1).at(0, 0, 0, 0).intz("America/New_York")?;
-    ///
-    /// let span = zdt2.since((Unit::Month, &zdt1))?;
-    /// assert_eq!(span, 1.month().days(30));
-    /// let maybe_original = zdt1.checked_add(span)?;
-    /// // Not the same as the original datetime!
-    /// assert_eq!(
-    ///     maybe_original,
-    ///     date(2024, 5, 2).at(0, 0, 0, 0).intz("America/New_York")?,
-    /// );
-    ///
-    /// // But in the default configuration, hours are always the biggest unit
-    /// // and reversibility is guaranteed.
-    /// let span = zdt2.since(&zdt1)?;
-    /// assert_eq!(span, 1439.hours());
-    /// let is_original = zdt1.checked_add(span)?;
-    /// assert_eq!(is_original, zdt2);
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// This occurs because spans are added as if by adding the biggest units
-    /// first, and then the smaller units. Because months vary in length,
-    /// their meaning can change depending on how the span is added. In this
-    /// case, adding one month to `2024-03-02` corresponds to 31 days, but
-    /// subtracting one month from `2024-05-01` corresponds to 30 days.
     #[inline]
     pub fn since<'a, A: Into<ZonedDifference<'a>>>(
         &self,

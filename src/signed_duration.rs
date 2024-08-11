@@ -117,8 +117,8 @@ use crate::util::libm::Float;
 /// to `i64::MAX`, which is less than `u64::MAX`.
 /// * There are some additional APIs that don't make sense on an unsigned
 /// duration, like [`SignedDuration::abs`] and [`SignedDuration::checked_neg`].
-/// * A [`SignedDuration::until`] routine is provided as a replacement for
-/// [`std::time::SystemTime::duration_since`], but with signed durations.
+/// * A [`SignedDuration::system_until`] routine is provided as a replacement
+/// for [`std::time::SystemTime::duration_since`], but with signed durations.
 /// * Constructors and getters for units of hours and minutes are provided,
 /// where as these routines are unstable in the standard library.
 /// * Unlike the standard library, this type implements the `std::fmt::Display`
