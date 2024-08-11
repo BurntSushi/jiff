@@ -596,21 +596,14 @@ impl Offset {
         Ok(Offset::from_seconds_ranged(seconds))
     }
 
-    /// Subtracts the given span of time from this offset.
-    ///
-    /// Since time zone offsets have second resolution, any fractional seconds
-    /// in the span given are ignored.
+    /// This routine is identical to [`Offset::checked_add`] with the duration
+    /// negated.
     ///
     /// # Errors
     ///
-    /// This returns an error if the result of subtracting the given span would
-    /// exceed the minimum or maximum allowed `Offset` value.
+    /// This has the same error conditions as [`Offset::checked_add`].
     ///
     /// # Example
-    ///
-    /// This example shows how to subtract one hour to an offset (if the offset
-    /// corresponds to DST, then subtracting an hour will usually give you
-    /// standard time):
     ///
     /// ```
     /// use jiff::{tz, ToSpan};
@@ -618,57 +611,14 @@ impl Offset {
     /// let off = tz::offset(-4);
     /// assert_eq!(off.checked_sub(1.hours()).unwrap(), tz::offset(-5));
     /// ```
-    ///
-    /// And note that while fractional seconds are ignored, units less than
-    /// seconds aren't ignored if they sum up to a duration at least as big
-    /// as one second:
-    ///
-    /// ```
-    /// use jiff::{tz, ToSpan};
-    ///
-    /// let off = tz::offset(5);
-    /// let span = 900.milliseconds()
-    ///     .microseconds(50_000)
-    ///     .nanoseconds(50_000_000);
-    /// assert_eq!(
-    ///     off.checked_sub(span).unwrap(),
-    ///     tz::Offset::from_seconds((5 * 60 * 60) - 1).unwrap(),
-    /// );
-    /// // Any leftover fractional part is ignored.
-    /// let span = 901.milliseconds()
-    ///     .microseconds(50_001)
-    ///     .nanoseconds(50_000_001);
-    /// assert_eq!(
-    ///     off.checked_sub(span).unwrap(),
-    ///     tz::Offset::from_seconds((5 * 60 * 60) - 1).unwrap(),
-    /// );
-    /// ```
-    ///
-    /// This example shows some cases where checked subtraction will fail.
-    ///
-    /// ```
-    /// use jiff::{tz::Offset, ToSpan};
-    ///
-    /// // Subtracting units above 'hour' always results in an error.
-    /// assert!(Offset::UTC.checked_sub(1.day()).is_err());
-    /// assert!(Offset::UTC.checked_sub(1.week()).is_err());
-    /// assert!(Offset::UTC.checked_sub(1.month()).is_err());
-    /// assert!(Offset::UTC.checked_sub(1.year()).is_err());
-    ///
-    /// // Adding even 1 second to the max, or subtracting 1 from the min,
-    /// // will result in overflow and thus an error will be returned.
-    /// assert!(Offset::MIN.checked_sub(1.seconds()).is_err());
-    /// assert!(Offset::MAX.checked_sub(-1.seconds()).is_err());
-    /// ```
     #[inline]
     pub fn checked_sub(self, span: Span) -> Result<Offset, Error> {
         self.checked_add(span.negate())
     }
 
-    /// Adds the given span of time to this offset, saturating on overflow.
-    ///
-    /// Since time zone offsets have second resolution, any fractional seconds
-    /// in the span given are ignored.
+    /// This routine is identical to [`Offset::checked_add`], except the
+    /// result saturates on overflow. That is, instead of overflow, either
+    /// [`Offset::MIN`] or [`Offset::MAX`] is returned.
     ///
     /// # Example
     ///
@@ -698,11 +648,8 @@ impl Offset {
         })
     }
 
-    /// Subtracts the given span of time from this offset, saturating on
-    /// overflow.
-    ///
-    /// Since time zone offsets have second resolution, any fractional seconds
-    /// in the span given are ignored.
+    /// This routine is identical to [`Offset::saturating_add`] with the span
+    /// parameter negated.
     ///
     /// # Example
     ///

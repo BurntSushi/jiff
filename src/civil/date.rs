@@ -73,10 +73,10 @@ use crate::{
 /// then `d1 < d2`. For example:
 ///
 /// ```
-/// use jiff::civil::Date;
+/// use jiff::civil::date;
 ///
-/// let d1 = Date::constant(2024, 3, 11);
-/// let d2 = Date::constant(2025, 1, 31);
+/// let d1 = date(2024, 3, 11);
+/// let d2 = date(2025, 1, 31);
 /// assert!(d1 < d2);
 /// ```
 ///
@@ -96,11 +96,11 @@ use crate::{
 /// trait implementations. When the result overflows, a panic occurs.
 ///
 /// ```
-/// use jiff::{civil::Date, ToSpan};
+/// use jiff::{civil::date, ToSpan};
 ///
-/// let start = Date::constant(2024, 2, 25);
+/// let start = date(2024, 2, 25);
 /// let one_week_later = start + 1.weeks();
-/// assert_eq!(one_week_later, Date::constant(2024, 3, 3));
+/// assert_eq!(one_week_later, date(2024, 3, 3));
 /// ```
 ///
 /// One can compute the span of time between two dates using either
@@ -108,10 +108,10 @@ use crate::{
 /// `Date` values directly via a `Sub` trait implementation:
 ///
 /// ```
-/// use jiff::{civil::Date, ToSpan};
+/// use jiff::{civil::date, ToSpan};
 ///
-/// let date1 = Date::constant(2024, 3, 3);
-/// let date2 = Date::constant(2024, 2, 25);
+/// let date1 = date(2024, 3, 3);
+/// let date2 = date(2024, 2, 25);
 /// assert_eq!(date1 - date2, 7.days());
 /// ```
 ///
@@ -120,10 +120,10 @@ use crate::{
 /// (as exemplified above), but we can ask for bigger units:
 ///
 /// ```
-/// use jiff::{civil::Date, ToSpan, Unit};
+/// use jiff::{civil::date, ToSpan, Unit};
 ///
-/// let date1 = Date::constant(2024, 5, 3);
-/// let date2 = Date::constant(2024, 2, 25);
+/// let date1 = date(2024, 5, 3);
+/// let date2 = date(2024, 2, 25);
 /// assert_eq!(
 ///     date1.since((Unit::Year, date2))?,
 ///     2.months().days(7),
@@ -135,10 +135,10 @@ use crate::{
 /// Or even round the span returned:
 ///
 /// ```
-/// use jiff::{civil::{Date, DateDifference}, RoundMode, ToSpan, Unit};
+/// use jiff::{civil::{DateDifference, date}, RoundMode, ToSpan, Unit};
 ///
-/// let date1 = Date::constant(2024, 5, 15);
-/// let date2 = Date::constant(2024, 2, 25);
+/// let date1 = date(2024, 5, 15);
+/// let date2 = date(2024, 2, 25);
 /// assert_eq!(
 ///     date1.since(
 ///         DateDifference::new(date2)
@@ -315,27 +315,27 @@ impl Date {
     /// ISO 8601 week date to a Gregorian date.
     ///
     /// ```
-    /// use jiff::civil::{Date, ISOWeekDate, Weekday};
+    /// use jiff::civil::{Date, ISOWeekDate, Weekday, date};
     ///
     /// let weekdate = ISOWeekDate::new(1994, 52, Weekday::Sunday).unwrap();
-    /// let date = Date::from_iso_week_date(weekdate);
-    /// assert_eq!(date, Date::constant(1995, 1, 1));
+    /// let d = Date::from_iso_week_date(weekdate);
+    /// assert_eq!(d, date(1995, 1, 1));
     ///
     /// let weekdate = ISOWeekDate::new(1997, 1, Weekday::Tuesday).unwrap();
-    /// let date = Date::from_iso_week_date(weekdate);
-    /// assert_eq!(date, Date::constant(1996, 12, 31));
+    /// let d = Date::from_iso_week_date(weekdate);
+    /// assert_eq!(d, date(1996, 12, 31));
     ///
     /// let weekdate = ISOWeekDate::new(2020, 1, Weekday::Monday).unwrap();
-    /// let date = Date::from_iso_week_date(weekdate);
-    /// assert_eq!(date, Date::constant(2019, 12, 30));
+    /// let d = Date::from_iso_week_date(weekdate);
+    /// assert_eq!(d, date(2019, 12, 30));
     ///
     /// let weekdate = ISOWeekDate::new(2024, 10, Weekday::Saturday).unwrap();
-    /// let date = Date::from_iso_week_date(weekdate);
-    /// assert_eq!(date, Date::constant(2024, 3, 9));
+    /// let d = Date::from_iso_week_date(weekdate);
+    /// assert_eq!(d, date(2024, 3, 9));
     ///
     /// let weekdate = ISOWeekDate::new(9999, 52, Weekday::Friday).unwrap();
-    /// let date = Date::from_iso_week_date(weekdate);
-    /// assert_eq!(date, Date::constant(9999, 12, 31));
+    /// let d = Date::from_iso_week_date(weekdate);
+    /// assert_eq!(d, date(9999, 12, 31));
     /// ```
     #[inline]
     pub fn from_iso_week_date(weekdate: ISOWeekDate) -> Date {
@@ -415,15 +415,15 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Date;
+    /// use jiff::civil::date;
     ///
-    /// let d1 = Date::constant(2024, 3, 9);
+    /// let d1 = date(2024, 3, 9);
     /// assert_eq!(d1.year(), 2024);
     ///
-    /// let d2 = Date::constant(-2024, 3, 9);
+    /// let d2 = date(-2024, 3, 9);
     /// assert_eq!(d2.year(), -2024);
     ///
-    /// let d3 = Date::constant(0, 3, 9);
+    /// let d3 = date(0, 3, 9);
     /// assert_eq!(d3.year(), 0);
     /// ```
     #[inline]
@@ -445,24 +445,24 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::{Date, Era};
+    /// use jiff::civil::{Era, date};
     ///
-    /// let d = Date::constant(2024, 10, 3);
+    /// let d = date(2024, 10, 3);
     /// assert_eq!(d.era_year(), (2024, Era::CE));
     ///
-    /// let d = Date::constant(1, 10, 3);
+    /// let d = date(1, 10, 3);
     /// assert_eq!(d.era_year(), (1, Era::CE));
     ///
-    /// let d = Date::constant(0, 10, 3);
+    /// let d = date(0, 10, 3);
     /// assert_eq!(d.era_year(), (1, Era::BCE));
     ///
-    /// let d = Date::constant(-1, 10, 3);
+    /// let d = date(-1, 10, 3);
     /// assert_eq!(d.era_year(), (2, Era::BCE));
     ///
-    /// let d = Date::constant(-10, 10, 3);
+    /// let d = date(-10, 10, 3);
     /// assert_eq!(d.era_year(), (11, Era::BCE));
     ///
-    /// let d = Date::constant(-9_999, 10, 3);
+    /// let d = date(-9_999, 10, 3);
     /// assert_eq!(d.era_year(), (10_000, Era::BCE));
     /// ```
     #[inline]
@@ -485,9 +485,9 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Date;
+    /// use jiff::civil::date;
     ///
-    /// let d1 = Date::constant(2024, 3, 9);
+    /// let d1 = date(2024, 3, 9);
     /// assert_eq!(d1.month(), 3);
     /// ```
     #[inline]
@@ -500,9 +500,9 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Date;
+    /// use jiff::civil::date;
     ///
-    /// let d1 = Date::constant(2024, 2, 29);
+    /// let d1 = date(2024, 2, 29);
     /// assert_eq!(d1.day(), 29);
     /// ```
     #[inline]
@@ -515,10 +515,10 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::{Date, Weekday};
+    /// use jiff::civil::{Weekday, date};
     ///
     /// // The Unix epoch was on a Thursday.
-    /// let d1 = Date::constant(1970, 1, 1);
+    /// let d1 = date(1970, 1, 1);
     /// assert_eq!(d1.weekday(), Weekday::Thursday);
     /// // One can also get the weekday as an offset in a variety of schemes.
     /// assert_eq!(d1.weekday().to_monday_zero_offset(), 3);
@@ -539,15 +539,15 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Date;
+    /// use jiff::civil::date;
     ///
-    /// let d = Date::constant(2006, 8, 24);
+    /// let d = date(2006, 8, 24);
     /// assert_eq!(d.day_of_year(), 236);
     ///
-    /// let d = Date::constant(2023, 12, 31);
+    /// let d = date(2023, 12, 31);
     /// assert_eq!(d.day_of_year(), 365);
     ///
-    /// let d = Date::constant(2024, 12, 31);
+    /// let d = date(2024, 12, 31);
     /// assert_eq!(d.day_of_year(), 366);
     /// ```
     #[inline]
@@ -571,18 +571,18 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Date;
+    /// use jiff::civil::date;
     ///
-    /// let d = Date::constant(2006, 8, 24);
+    /// let d = date(2006, 8, 24);
     /// assert_eq!(d.day_of_year_no_leap(), Some(236));
     ///
-    /// let d = Date::constant(2023, 12, 31);
+    /// let d = date(2023, 12, 31);
     /// assert_eq!(d.day_of_year_no_leap(), Some(365));
     ///
-    /// let d = Date::constant(2024, 12, 31);
+    /// let d = date(2024, 12, 31);
     /// assert_eq!(d.day_of_year_no_leap(), Some(365));
     ///
-    /// let d = Date::constant(2024, 2, 29);
+    /// let d = date(2024, 2, 29);
     /// assert_eq!(d.day_of_year_no_leap(), None);
     /// ```
     #[inline]
@@ -604,10 +604,10 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Date;
+    /// use jiff::civil::date;
     ///
-    /// let d = Date::constant(2024, 2, 29);
-    /// assert_eq!(d.first_of_month(), Date::constant(2024, 2, 1));
+    /// let d = date(2024, 2, 29);
+    /// assert_eq!(d.first_of_month(), date(2024, 2, 1));
     /// ```
     #[inline]
     pub fn first_of_month(self) -> Date {
@@ -620,10 +620,10 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Date;
+    /// use jiff::civil::date;
     ///
-    /// let d = Date::constant(2024, 2, 5);
-    /// assert_eq!(d.last_of_month(), Date::constant(2024, 2, 29));
+    /// let d = date(2024, 2, 5);
+    /// assert_eq!(d.last_of_month(), date(2024, 2, 29));
     /// ```
     #[inline]
     pub fn last_of_month(self) -> Date {
@@ -641,15 +641,15 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Date;
+    /// use jiff::civil::date;
     ///
-    /// let d = Date::constant(2024, 2, 10);
+    /// let d = date(2024, 2, 10);
     /// assert_eq!(d.days_in_month(), 29);
     ///
-    /// let d = Date::constant(2023, 2, 10);
+    /// let d = date(2023, 2, 10);
     /// assert_eq!(d.days_in_month(), 28);
     ///
-    /// let d = Date::constant(2024, 8, 15);
+    /// let d = date(2024, 8, 15);
     /// assert_eq!(d.days_in_month(), 31);
     /// ```
     #[inline]
@@ -662,10 +662,10 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Date;
+    /// use jiff::civil::date;
     ///
-    /// let d = Date::constant(2024, 2, 29);
-    /// assert_eq!(d.first_of_year(), Date::constant(2024, 1, 1));
+    /// let d = date(2024, 2, 29);
+    /// assert_eq!(d.first_of_year(), date(2024, 1, 1));
     /// ```
     #[inline]
     pub fn first_of_year(self) -> Date {
@@ -678,10 +678,10 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Date;
+    /// use jiff::civil::date;
     ///
-    /// let d = Date::constant(2024, 2, 5);
-    /// assert_eq!(d.last_of_year(), Date::constant(2024, 12, 31));
+    /// let d = date(2024, 2, 5);
+    /// assert_eq!(d.last_of_year(), date(2024, 12, 31));
     /// ```
     #[inline]
     pub fn last_of_year(self) -> Date {
@@ -697,12 +697,12 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Date;
+    /// use jiff::civil::date;
     ///
-    /// let d = Date::constant(2024, 7, 10);
+    /// let d = date(2024, 7, 10);
     /// assert_eq!(d.days_in_year(), 366);
     ///
-    /// let d = Date::constant(2023, 7, 10);
+    /// let d = date(2023, 7, 10);
     /// assert_eq!(d.days_in_year(), 365);
     /// ```
     #[inline]
@@ -720,10 +720,10 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Date;
+    /// use jiff::civil::date;
     ///
-    /// assert!(Date::constant(2024, 1, 1).in_leap_year());
-    /// assert!(!Date::constant(2023, 12, 31).in_leap_year());
+    /// assert!(date(2024, 1, 1).in_leap_year());
+    /// assert!(!date(2023, 12, 31).in_leap_year());
     /// ```
     #[inline]
     pub fn in_leap_year(self) -> bool {
@@ -739,10 +739,10 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Date;
+    /// use jiff::civil::{Date, date};
     ///
-    /// let d = Date::constant(2024, 2, 28);
-    /// assert_eq!(d.tomorrow()?, Date::constant(2024, 2, 29));
+    /// let d = date(2024, 2, 28);
+    /// assert_eq!(d.tomorrow()?, date(2024, 2, 29));
     ///
     /// // The max doesn't have a tomorrow.
     /// assert!(Date::MAX.tomorrow().is_err());
@@ -765,10 +765,10 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::Date;
+    /// use jiff::civil::{Date, date};
     ///
-    /// let d = Date::constant(2024, 3, 1);
-    /// assert_eq!(d.yesterday()?, Date::constant(2024, 2, 29));
+    /// let d = date(2024, 3, 1);
+    /// assert_eq!(d.yesterday()?, date(2024, 2, 29));
     ///
     /// // The min doesn't have a yesterday.
     /// assert!(Date::MIN.yesterday().is_err());
@@ -801,11 +801,11 @@ impl Date {
     /// beginning of the month:
     ///
     /// ```
-    /// use jiff::civil::{Date, Weekday};
+    /// use jiff::civil::{Weekday, date};
     ///
-    /// let month = Date::constant(2017, 3, 1);
+    /// let month = date(2017, 3, 1);
     /// let second_friday = month.nth_weekday_of_month(2, Weekday::Friday)?;
-    /// assert_eq!(second_friday, Date::constant(2017, 3, 10));
+    /// assert_eq!(second_friday, date(2017, 3, 10));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -814,16 +814,16 @@ impl Date {
     /// weekday in a month:
     ///
     /// ```
-    /// use jiff::civil::{Date, Weekday};
+    /// use jiff::civil::{Weekday, date};
     ///
-    /// let month = Date::constant(2024, 3, 1);
+    /// let month = date(2024, 3, 1);
     /// let last_thursday = month.nth_weekday_of_month(-1, Weekday::Thursday)?;
-    /// assert_eq!(last_thursday, Date::constant(2024, 3, 28));
+    /// assert_eq!(last_thursday, date(2024, 3, 28));
     /// let second_last_thursday = month.nth_weekday_of_month(
     ///     -2,
     ///     Weekday::Thursday,
     /// )?;
-    /// assert_eq!(second_last_thursday, Date::constant(2024, 3, 21));
+    /// assert_eq!(second_last_thursday, date(2024, 3, 21));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -832,11 +832,11 @@ impl Date {
     /// for this month. For example, March 2024 only has 4 Mondays:
     ///
     /// ```
-    /// use jiff::civil::{Date, Weekday};
+    /// use jiff::civil::{Weekday, date};
     ///
-    /// let month = Date::constant(2024, 3, 25);
+    /// let month = date(2024, 3, 25);
     /// let fourth_monday = month.nth_weekday_of_month(4, Weekday::Monday)?;
-    /// assert_eq!(fourth_monday, Date::constant(2024, 3, 25));
+    /// assert_eq!(fourth_monday, date(2024, 3, 25));
     /// // There is no 5th Monday.
     /// assert!(month.nth_weekday_of_month(5, Weekday::Monday).is_err());
     /// // Same goes for counting backwards.
@@ -906,24 +906,24 @@ impl Date {
     /// time:
     ///
     /// ```
-    /// use jiff::civil::{Date, Weekday};
+    /// use jiff::civil::{Weekday, date};
     ///
     /// // Use a Sunday in March as our start date.
-    /// let d = Date::constant(2024, 3, 10);
+    /// let d = date(2024, 3, 10);
     /// assert_eq!(d.weekday(), Weekday::Sunday);
     ///
     /// // The first next Monday is tomorrow!
     /// let next_monday = d.nth_weekday(1, Weekday::Monday)?;
-    /// assert_eq!(next_monday, Date::constant(2024, 3, 11));
+    /// assert_eq!(next_monday, date(2024, 3, 11));
     ///
     /// // But the next Sunday is a week away, because this doesn't
     /// // include the current weekday.
     /// let next_sunday = d.nth_weekday(1, Weekday::Sunday)?;
-    /// assert_eq!(next_sunday, Date::constant(2024, 3, 17));
+    /// assert_eq!(next_sunday, date(2024, 3, 17));
     ///
     /// // "not this Thursday, but next Thursday"
     /// let next_next_thursday = d.nth_weekday(2, Weekday::Thursday)?;
-    /// assert_eq!(next_next_thursday, Date::constant(2024, 3, 21));
+    /// assert_eq!(next_next_thursday, date(2024, 3, 21));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -932,23 +932,23 @@ impl Date {
     /// time:
     ///
     /// ```
-    /// use jiff::civil::{Date, Weekday};
+    /// use jiff::civil::{Weekday, date};
     ///
     /// // Use a Sunday in March as our start date.
-    /// let d = Date::constant(2024, 3, 10);
+    /// let d = date(2024, 3, 10);
     /// assert_eq!(d.weekday(), Weekday::Sunday);
     ///
     /// // "last Saturday" was yesterday!
     /// let last_saturday = d.nth_weekday(-1, Weekday::Saturday)?;
-    /// assert_eq!(last_saturday, Date::constant(2024, 3, 9));
+    /// assert_eq!(last_saturday, date(2024, 3, 9));
     ///
     /// // "last Sunday" was a week ago.
     /// let last_sunday = d.nth_weekday(-1, Weekday::Sunday)?;
-    /// assert_eq!(last_sunday, Date::constant(2024, 3, 3));
+    /// assert_eq!(last_sunday, date(2024, 3, 3));
     ///
     /// // "not last Thursday, but the one before"
     /// let prev_prev_thursday = d.nth_weekday(-2, Weekday::Thursday)?;
-    /// assert_eq!(prev_prev_thursday, Date::constant(2024, 2, 29));
+    /// assert_eq!(prev_prev_thursday, date(2024, 2, 29));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -975,12 +975,12 @@ impl Date {
     /// that date using both `nth_weekday` and [`Date::nth_weekday_of_month`]:
     ///
     /// ```
-    /// use jiff::civil::{Date, Weekday};
+    /// use jiff::civil::{Weekday, date};
     ///
-    /// let march = Date::constant(2024, 3, 1);
+    /// let march = date(2024, 3, 1);
     /// let last_sunday = march.nth_weekday_of_month(-1, Weekday::Sunday)?;
     /// let dst_starts_on = last_sunday.nth_weekday(-1, Weekday::Friday)?;
-    /// assert_eq!(dst_starts_on, Date::constant(2024, 3, 29));
+    /// assert_eq!(dst_starts_on, date(2024, 3, 29));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -993,15 +993,15 @@ impl Date {
     /// both.
     ///
     /// ```
-    /// use jiff::civil::{Date, Weekday};
+    /// use jiff::civil::{Weekday, date};
     ///
-    /// let d = Date::constant(2024, 3, 15);
+    /// let d = date(2024, 3, 15);
     /// // For weeks starting with Sunday.
     /// let start_of_week = d.tomorrow()?.nth_weekday(-1, Weekday::Sunday)?;
-    /// assert_eq!(start_of_week, Date::constant(2024, 3, 10));
+    /// assert_eq!(start_of_week, date(2024, 3, 10));
     /// // For weeks starting with Monday.
     /// let start_of_week = d.tomorrow()?.nth_weekday(-1, Weekday::Monday)?;
-    /// assert_eq!(start_of_week, Date::constant(2024, 3, 11));
+    /// assert_eq!(start_of_week, date(2024, 3, 11));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1011,16 +1011,16 @@ impl Date {
     /// works as expected even at the boundaries of a week:
     ///
     /// ```
-    /// use jiff::civil::{Date, Weekday};
+    /// use jiff::civil::{Weekday, date};
     ///
     /// // The start of the week.
-    /// let d = Date::constant(2024, 3, 10);
+    /// let d = date(2024, 3, 10);
     /// let start_of_week = d.tomorrow()?.nth_weekday(-1, Weekday::Sunday)?;
-    /// assert_eq!(start_of_week, Date::constant(2024, 3, 10));
+    /// assert_eq!(start_of_week, date(2024, 3, 10));
     /// // The end of the week.
-    /// let d = Date::constant(2024, 3, 16);
+    /// let d = date(2024, 3, 16);
     /// let start_of_week = d.tomorrow()?.nth_weekday(-1, Weekday::Sunday)?;
-    /// assert_eq!(start_of_week, Date::constant(2024, 3, 10));
+    /// assert_eq!(start_of_week, date(2024, 3, 10));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1072,24 +1072,24 @@ impl Date {
     /// ISO 8601 week date to a Gregorian date.
     ///
     /// ```
-    /// use jiff::civil::{Date, Weekday};
+    /// use jiff::civil::{Date, Weekday, date};
     ///
-    /// let weekdate = Date::constant(1995, 1, 1).to_iso_week_date();
+    /// let weekdate = date(1995, 1, 1).to_iso_week_date();
     /// assert_eq!(weekdate.year(), 1994);
     /// assert_eq!(weekdate.week(), 52);
     /// assert_eq!(weekdate.weekday(), Weekday::Sunday);
     ///
-    /// let weekdate = Date::constant(1996, 12, 31).to_iso_week_date();
+    /// let weekdate = date(1996, 12, 31).to_iso_week_date();
     /// assert_eq!(weekdate.year(), 1997);
     /// assert_eq!(weekdate.week(), 1);
     /// assert_eq!(weekdate.weekday(), Weekday::Tuesday);
     ///
-    /// let weekdate = Date::constant(2019, 12, 30).to_iso_week_date();
+    /// let weekdate = date(2019, 12, 30).to_iso_week_date();
     /// assert_eq!(weekdate.year(), 2020);
     /// assert_eq!(weekdate.week(), 1);
     /// assert_eq!(weekdate.weekday(), Weekday::Monday);
     ///
-    /// let weekdate = Date::constant(2024, 3, 9).to_iso_week_date();
+    /// let weekdate = date(2024, 3, 9).to_iso_week_date();
     /// assert_eq!(weekdate.year(), 2024);
     /// assert_eq!(weekdate.week(), 10);
     /// assert_eq!(weekdate.weekday(), Weekday::Saturday);
@@ -1260,10 +1260,10 @@ impl Date {
     /// # Example
     ///
     /// ```
-    /// use jiff::civil::{Date, DateTime, Time};
+    /// use jiff::civil::{DateTime, date, time};
     ///
-    /// let date = Date::constant(2010, 3, 14);
-    /// let time = Time::constant(2, 30, 0, 0);
+    /// let date = date(2010, 3, 14);
+    /// let time = time(2, 30, 0, 0);
     /// assert_eq!(DateTime::from_parts(date, time), date.to_datetime(time));
     /// ```
     #[inline]
@@ -1335,19 +1335,19 @@ impl Date {
     /// creation of spans.
     ///
     /// ```
-    /// use jiff::{civil::Date, ToSpan};
+    /// use jiff::{civil::date, ToSpan};
     ///
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.checked_add(1.months())?, Date::constant(2024, 4, 30));
+    /// let d = date(2024, 3, 31);
+    /// assert_eq!(d.checked_add(1.months())?, date(2024, 4, 30));
     /// // Adding two months gives us May 31, not May 30.
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.checked_add(2.months())?, Date::constant(2024, 5, 31));
+    /// let d = date(2024, 3, 31);
+    /// assert_eq!(d.checked_add(2.months())?, date(2024, 5, 31));
     /// // Any time in the span that does not exceed a day is ignored.
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.checked_add(23.hours())?, Date::constant(2024, 3, 31));
+    /// let d = date(2024, 3, 31);
+    /// assert_eq!(d.checked_add(23.hours())?, date(2024, 3, 31));
     /// // But if the time exceeds a day, that is accounted for!
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.checked_add(28.hours())?, Date::constant(2024, 4, 1));
+    /// let d = date(2024, 3, 31);
+    /// assert_eq!(d.checked_add(28.hours())?, date(2024, 4, 1));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1358,21 +1358,21 @@ impl Date {
     /// fails, it will result in a panic.
     ///
     /// ```
-    /// use jiff::{civil::Date, ToSpan};
+    /// use jiff::{civil::date, ToSpan};
     ///
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d + 1.months(), Date::constant(2024, 4, 30));
+    /// let d = date(2024, 3, 31);
+    /// assert_eq!(d + 1.months(), date(2024, 4, 30));
     /// ```
     ///
     /// # Example: negative spans are supported
     ///
     /// ```
-    /// use jiff::{civil::Date, ToSpan};
+    /// use jiff::{civil::date, ToSpan};
     ///
-    /// let d = Date::constant(2024, 3, 31);
+    /// let d = date(2024, 3, 31);
     /// assert_eq!(
     ///     d.checked_add(-1.months())?,
-    ///     Date::constant(2024, 2, 29),
+    ///     date(2024, 2, 29),
     /// );
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1380,9 +1380,9 @@ impl Date {
     /// # Example: error on overflow
     ///
     /// ```
-    /// use jiff::{civil::Date, ToSpan};
+    /// use jiff::{civil::date, ToSpan};
     ///
-    /// let d = Date::constant(2024, 3, 31);
+    /// let d = date(2024, 3, 31);
     /// assert!(d.checked_add(9000.years()).is_err());
     /// assert!(d.checked_add(-19000.years()).is_err());
     /// ```
@@ -1413,143 +1413,47 @@ impl Date {
         Ok(Date::from_unix_epoch_days(days))
     }
 
-    /// Subtract the given span of time from this date. If the difference would
-    /// overflow the minimum or maximum date values, then an error is returned.
-    ///
-    /// # Properties
-    ///
-    /// This routine is _not_ commutative because some additions may be
-    /// ambiguous. For example, adding `1 month` to the date `2024-03-31` will
-    /// produce `2024-04-30` since April has only 30 days in a month. Moreover,
-    /// subtracting `1 month` from `2024-04-30` will produce `2024-03-30`,
-    /// which is not the date we started with.
-    ///
-    /// If spans of time are limited to units of days (or less), then this
-    /// routine _is_ commutative.
+    /// This routine is identical to [`Date::checked_add`] with the duration
+    /// negated.
     ///
     /// # Errors
     ///
-    /// If the span subtracted from this date would result in a date that
-    /// exceeds the range of a `Date`, then this will return an error.
+    /// This has the same error conditions as [`Date::checked_add`].
     ///
-    /// # Examples
-    ///
-    /// This shows a few examples of subtracting spans of time to various
-    /// dates. We make use of the [`ToSpan`](crate::ToSpan) trait for
-    /// convenient creation of spans.
+    /// # Example
     ///
     /// ```
-    /// use jiff::{civil::Date, ToSpan};
+    /// use jiff::{civil::date, ToSpan};
     ///
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.checked_sub(1.months())?, Date::constant(2024, 2, 29));
+    /// let d = date(2024, 3, 31);
+    /// assert_eq!(d.checked_sub(1.months())?, date(2024, 2, 29));
     /// // Adding subtracting two months gives us Jan 31, not Jan 30.
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.checked_sub(2.months())?, Date::constant(2024, 1, 31));
+    /// let d = date(2024, 3, 31);
+    /// assert_eq!(d.checked_sub(2.months())?, date(2024, 1, 31));
     /// // Any time in the span that does not exceed a day is ignored.
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.checked_sub(23.hours())?, Date::constant(2024, 3, 31));
+    /// let d = date(2024, 3, 31);
+    /// assert_eq!(d.checked_sub(23.hours())?, date(2024, 3, 31));
     /// // But if the time exceeds a day, that is accounted for!
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.checked_sub(28.hours())?, Date::constant(2024, 3, 30));
+    /// let d = date(2024, 3, 31);
+    /// assert_eq!(d.checked_sub(28.hours())?, date(2024, 3, 30));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: available via subtraction operator
-    ///
-    /// This routine can be used via the `-` operator. Note though that if it
-    /// fails, it will result in a panic.
-    ///
-    /// ```
-    /// use jiff::{civil::Date, ToSpan};
-    ///
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d - 1.months(), Date::constant(2024, 2, 29));
-    /// ```
-    ///
-    /// # Example: negative spans are supported
-    ///
-    /// ```
-    /// use jiff::{civil::Date, ToSpan};
-    ///
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(
-    ///     d.checked_sub(-1.months())?,
-    ///     Date::constant(2024, 4, 30),
-    /// );
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: error on overflow
-    ///
-    /// ```
-    /// use jiff::{civil::Date, ToSpan};
-    ///
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert!(d.checked_sub(19000.years()).is_err());
-    /// assert!(d.checked_sub(-9000.years()).is_err());
     /// ```
     #[inline]
     pub fn checked_sub(self, span: Span) -> Result<Date, Error> {
         self.checked_add(span.negate())
     }
 
-    /// Add the given span of time to this date. If the sum would overflow the
-    /// minimum or maximum date values, then the result saturates.
+    /// This routine is identical to [`Date::checked_add`], except the
+    /// result saturates on overflow. That is, instead of overflow, either
+    /// [`Date::MIN`] or [`Date::MAX`] is returned.
     ///
-    /// # Properties
-    ///
-    /// This routine is _not_ commutative (even putting aside cases where
-    /// saturation occurs) because some additions may be ambiguous. For
-    /// example, adding `1 month` to the date `2024-03-31` will produce
-    /// `2024-04-30` since April has only 30 days in a month. Moreover,
-    /// subtracting `1 month` from `2024-04-30` will produce `2024-03-30`,
-    /// which is not the date we started with.
-    ///
-    /// If spans of time are limited to units of days (or less), then this
-    /// routine _is_ commutative.
-    ///
-    /// # Examples
-    ///
-    /// This shows a few examples of adding spans of time to various dates.
-    /// We make use of the [`ToSpan`](crate::ToSpan) trait for convenient
-    /// creation of spans.
+    /// # Example
     ///
     /// ```
-    /// use jiff::{civil::Date, ToSpan};
+    /// use jiff::{civil::{Date, date}, ToSpan};
     ///
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.saturating_add(1.months()), Date::constant(2024, 4, 30));
-    /// // Adding two months gives us May 31, not May 30.
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.saturating_add(2.months()), Date::constant(2024, 5, 31));
-    /// // Any time in the span that does not exceed a day is ignored.
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.saturating_add(23.hours()), Date::constant(2024, 3, 31));
-    /// // But if the time exceeds a day, that is accounted for!
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.saturating_add(28.hours()), Date::constant(2024, 4, 1));
-    /// ```
-    ///
-    /// # Example: negative spans are supported
-    ///
-    /// ```
-    /// use jiff::{civil::Date, ToSpan};
-    ///
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(
-    ///     d.saturating_add(-1.months()),
-    ///     Date::constant(2024, 2, 29),
-    /// );
-    /// ```
-    ///
-    /// # Example: saturation on overflow
-    ///
-    /// ```
-    /// use jiff::{civil::Date, ToSpan};
-    ///
-    /// let d = Date::constant(2024, 3, 31);
+    /// let d = date(2024, 3, 31);
     /// assert_eq!(Date::MAX, d.saturating_add(9000.years()));
     /// assert_eq!(Date::MIN, d.saturating_add(-19000.years()));
     /// ```
@@ -1564,61 +1468,15 @@ impl Date {
         })
     }
 
-    /// Subtract the given span of time from this date. If the difference would
-    /// overflow the minimum or maximum date values, then the result saturates.
+    /// This routine is identical to [`Date::saturating_add`] with the span
+    /// parameter negated.
     ///
-    /// # Properties
-    ///
-    /// This routine is _not_ commutative (even putting aside cases where
-    /// saturation occurs) because some additions may be ambiguous. For
-    /// example, adding `1 month` to the date `2024-03-31` will produce
-    /// `2024-04-30` since April has only 30 days in a month. Moreover,
-    /// subtracting `1 month` from `2024-04-30` will produce `2024-03-30`,
-    /// which is not the date we started with.
-    ///
-    /// If spans of time are limited to units of days (or less), then this
-    /// routine _is_ commutative.
-    ///
-    /// # Examples
-    ///
-    /// This shows a few examples of subtracting spans of time to various
-    /// dates. We make use of the [`ToSpan`](crate::ToSpan) trait for
-    /// convenient creation of spans.
+    /// # Example
     ///
     /// ```
-    /// use jiff::{civil::Date, ToSpan};
+    /// use jiff::{civil::{Date, date}, ToSpan};
     ///
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.saturating_sub(1.months()), Date::constant(2024, 2, 29));
-    /// // Adding subtracting two months gives us Jan 31, not Jan 30.
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.saturating_sub(2.months()), Date::constant(2024, 1, 31));
-    /// // Any time in the span that does not exceed a day is ignored.
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.saturating_sub(23.hours()), Date::constant(2024, 3, 31));
-    /// // But if the time exceeds a day, that is accounted for!
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(d.saturating_sub(28.hours()), Date::constant(2024, 3, 30));
-    /// ```
-    ///
-    /// # Example: negative spans are supported
-    ///
-    /// ```
-    /// use jiff::{civil::Date, ToSpan};
-    ///
-    /// let d = Date::constant(2024, 3, 31);
-    /// assert_eq!(
-    ///     d.saturating_sub(-1.months()),
-    ///     Date::constant(2024, 4, 30),
-    /// );
-    /// ```
-    ///
-    /// # Example: saturation on overflow
-    ///
-    /// ```
-    /// use jiff::{civil::Date, ToSpan};
-    ///
-    /// let d = Date::constant(2024, 3, 31);
+    /// let d = date(2024, 3, 31);
     /// assert_eq!(Date::MIN, d.saturating_sub(19000.years()));
     /// assert_eq!(Date::MAX, d.saturating_sub(-9000.years()));
     /// ```
@@ -1669,15 +1527,15 @@ impl Date {
     /// # Examples
     ///
     /// ```
-    /// use jiff::{civil::Date, ToSpan};
+    /// use jiff::{civil::date, ToSpan};
     ///
-    /// let earlier = Date::constant(2006, 8, 24);
-    /// let later = Date::constant(2019, 1, 31);
+    /// let earlier = date(2006, 8, 24);
+    /// let later = date(2019, 1, 31);
     /// assert_eq!(earlier.until(later)?, 4543.days());
     ///
     /// // Flipping the dates is fine, but you'll get a negative span.
-    /// let earlier = Date::constant(2006, 8, 24);
-    /// let later = Date::constant(2019, 1, 31);
+    /// let earlier = date(2006, 8, 24);
+    /// let later = date(2019, 1, 31);
     /// assert_eq!(later.until(earlier)?, -4543.days());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1690,10 +1548,10 @@ impl Date {
     /// implementation.
     ///
     /// ```
-    /// use jiff::{civil::Date, Unit, ToSpan};
+    /// use jiff::{civil::date, Unit, ToSpan};
     ///
-    /// let d1 = Date::constant(1995, 12, 07);
-    /// let d2 = Date::constant(2019, 01, 31);
+    /// let d1 = date(1995, 12, 07);
+    /// let d2 = date(2019, 01, 31);
     ///
     /// // The default limits durations to using "days" as the biggest unit.
     /// let span = d1.until(d2)?;
@@ -1715,10 +1573,10 @@ impl Date {
     /// in order to gain full configurability.
     ///
     /// ```
-    /// use jiff::{civil::{Date, DateDifference}, Unit, ToSpan};
+    /// use jiff::{civil::{date, DateDifference}, Unit, ToSpan};
     ///
-    /// let d1 = Date::constant(1995, 12, 07);
-    /// let d2 = Date::constant(2019, 02, 06);
+    /// let d1 = date(1995, 12, 07);
+    /// let d2 = date(2019, 02, 06);
     ///
     /// let span = d1.until(DateDifference::from(d2).smallest(Unit::Month))?;
     /// assert_eq!(span, 277.months());
@@ -1743,16 +1601,16 @@ impl Date {
     /// original date. For example:
     ///
     /// ```
-    /// use jiff::{civil::Date, Unit, ToSpan};
+    /// use jiff::{civil::date, Unit, ToSpan};
     ///
-    /// let d1 = Date::constant(2024, 3, 2);
-    /// let d2 = Date::constant(2024, 5, 1);
+    /// let d1 = date(2024, 3, 2);
+    /// let d2 = date(2024, 5, 1);
     ///
     /// let span = d1.until((Unit::Month, d2))?;
     /// assert_eq!(span, 1.month().days(29));
     /// let maybe_original = d2.checked_sub(span)?;
     /// // Not the same as the original datetime!
-    /// assert_eq!(maybe_original, Date::constant(2024, 3, 3));
+    /// assert_eq!(maybe_original, date(2024, 3, 3));
     ///
     /// // But in the default configuration, days are always the biggest unit
     /// // and reversibility is guaranteed.
@@ -1783,162 +1641,28 @@ impl Date {
         }
     }
 
-    /// Returns a span representing the elapsed time from this date since
-    /// the given `other` date.
-    ///
-    /// When `other` occurs after this date, then the span returned will be
-    /// negative.
-    ///
-    /// Depending on the input provided, the span returned is rounded. It may
-    /// also be balanced up to bigger units than the default. By default, the
-    /// span returned is balanced such that the biggest and smallest possible
-    /// unit is days.
-    ///
-    /// This operation is configured by providing a [`DateDifference`]
-    /// value. Since this routine accepts anything that implements
-    /// `Into<DateDifference>`, once can pass a `Date` directly. One
-    /// can also pass a `(Unit, Date)`, where `Unit` is treated as
-    /// [`DateDifference::largest`].
-    ///
-    /// # Properties
-    ///
-    /// It is guaranteed that if the returned span is added to `other`, and if
-    /// no rounding is requested, and if the largest unit requested is at most
-    /// `Unit::Day`, then the original date will be returned.
-    ///
-    /// This routine is equivalent to `self.until(other).map(|span| -span)`
-    /// if no rounding options are set. If rounding options are set, then
-    /// it's equivalent to
-    /// `self.until(other_without_rounding_options).map(|span| -span)`,
-    /// followed by a call to [`Span::round`] with the appropriate rounding
-    /// options set. This is because the negation of a span can result in
-    /// different rounding results depending on the rounding mode.
+    /// This routine is identical to [`Date::until`], but the order of the
+    /// parameters is flipped.
     ///
     /// # Errors
     ///
-    /// An error can occur if `DateDifference` is misconfigured. For example,
-    /// if the smallest unit provided is bigger than the largest unit.
+    /// This has the same error conditions as [`Date::until`].
     ///
-    /// It is guaranteed that if one provides a date with the default
-    /// [`DateDifference`] configuration, then this routine will never fail.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use jiff::{civil::Date, ToSpan};
-    ///
-    /// let earlier = Date::constant(2006, 8, 24);
-    /// let later = Date::constant(2019, 1, 31);
-    /// assert_eq!(later.since(earlier)?, 4543.days());
-    ///
-    /// // Flipping the dates is fine, but you'll get a negative span.
-    /// let earlier = Date::constant(2006, 8, 24);
-    /// let later = Date::constant(2019, 1, 31);
-    /// assert_eq!(earlier.since(later)?, -4543.days());
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: available via subtraction operator
+    /// # Example
     ///
     /// This routine can be used via the `-` operator. Since the default
     /// configuration is used and because a `Span` can represent the difference
     /// between any two possible dates, it will never panic.
     ///
     /// ```
-    /// use jiff::{civil::Date, ToSpan};
+    /// use jiff::{civil::date, ToSpan};
     ///
-    /// let earlier = Date::constant(2006, 8, 24);
-    /// let later = Date::constant(2019, 1, 31);
+    /// let earlier = date(2006, 8, 24);
+    /// let later = date(2019, 1, 31);
     /// assert_eq!(later - earlier, 4543.days());
+    /// // Equivalent to:
+    /// assert_eq!(later.since(earlier).unwrap(), 4543.days());
     /// ```
-    ///
-    /// # Example: using bigger units
-    ///
-    /// This example shows how to expand the span returned to bigger units.
-    /// This makes use of a `From<(Unit, Date)> for DateDifference` trait
-    /// implementation.
-    ///
-    /// ```
-    /// use jiff::{civil::Date, Unit, ToSpan};
-    ///
-    /// let d1 = Date::constant(1995, 12, 07);
-    /// let d2 = Date::constant(2019, 01, 31);
-    ///
-    /// // The default limits durations to using "days" as the biggest unit.
-    /// let span = d2.since(d1)?;
-    /// assert_eq!(span.to_string(), "P8456d");
-    ///
-    /// // But we can ask for units all the way up to years.
-    /// let span = d2.since((Unit::Year, d1))?;
-    /// assert_eq!(span.to_string(), "P23y1m24d");
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: rounding the result
-    ///
-    /// This shows how one might find the difference between two dates and
-    /// have the result rounded to the nearest month.
-    ///
-    /// In this case, we need to hand-construct a [`DateDifference`]
-    /// in order to gain full configurability.
-    ///
-    /// ```
-    /// use jiff::{civil::{Date, DateDifference}, Unit, ToSpan};
-    ///
-    /// let d1 = Date::constant(1995, 12, 07);
-    /// let d2 = Date::constant(2019, 02, 06);
-    ///
-    /// let span = d2.since(DateDifference::from(d1).smallest(Unit::Month))?;
-    /// assert_eq!(span, 277.months());
-    ///
-    /// // Or even include years to make the span a bit more comprehensible.
-    /// let span = d2.since(
-    ///     DateDifference::from(d1)
-    ///         .smallest(Unit::Month)
-    ///         .largest(Unit::Year),
-    /// )?;
-    /// // Notice that we are one day shy of 23y2m. Rounding spans computed
-    /// // between dates uses truncation by default.
-    /// assert_eq!(span, 23.years().months(1));
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: units biggers than days inhibit reversibility
-    ///
-    /// If you ask for units bigger than days, then adding the span
-    /// returned to the `other` date is not guaranteed to result in the
-    /// original date. For example:
-    ///
-    /// ```
-    /// use jiff::{civil::Date, Unit, ToSpan};
-    ///
-    /// let d1 = Date::constant(2024, 3, 2);
-    /// let d2 = Date::constant(2024, 5, 1);
-    ///
-    /// let span = d2.since((Unit::Month, d1))?;
-    /// assert_eq!(span, 1.month().days(30));
-    /// let maybe_original = d1.checked_add(span)?;
-    /// // Not the same as the original datetime!
-    /// assert_eq!(maybe_original, Date::constant(2024, 5, 2));
-    ///
-    /// // But in the default configuration, days are always the biggest unit
-    /// // and reversibility is guaranteed.
-    /// let span = d2.since(d1)?;
-    /// assert_eq!(span, 60.days());
-    /// let is_original = d1.checked_add(span)?;
-    /// assert_eq!(is_original, d2);
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// This occurs because spans are added as if by adding the biggest units
-    /// first, and then the smaller units. Because months vary in length,
-    /// their meaning can change depending on how the span is added. In this
-    /// case, adding one month to `2024-03-02` corresponds to 31 days, but
-    /// subtracting one month from `2024-05-01` corresponds to 30 days.
     #[inline]
     pub fn since<A: Into<DateDifference>>(
         self,
@@ -1967,9 +1691,9 @@ impl Date {
     /// 2020s.
     ///
     /// ```
-    /// use jiff::{civil::{Date, Weekday}, ToSpan};
+    /// use jiff::{civil::{Weekday, date}, ToSpan};
     ///
-    /// let start = Date::constant(2020, 10, 31);
+    /// let start = date(2020, 10, 31);
     /// let mut halloween_days_of_week = vec![];
     /// for halloween in start.series(1.years()).take(10) {
     ///     halloween_days_of_week.push(
@@ -1997,10 +1721,10 @@ impl Date {
     /// 2024?
     ///
     /// ```
-    /// use jiff::{civil::Date, ToSpan};
+    /// use jiff::{ToSpan, civil::date};
     ///
-    /// let start = Date::constant(2024, 5, 1);
-    /// let end = Date::constant(2024, 10, 31);
+    /// let start = date(2024, 5, 1);
+    /// let end = date(2024, 10, 31);
     /// let mows = start
     ///     .series(1.weeks().days(3).hours(12))
     ///     .take_while(|&d| d <= end)
@@ -2014,19 +1738,19 @@ impl Date {
     /// granularity of a day, some dates may be repeated.
     ///
     /// ```
-    /// use jiff::{civil::Date, ToSpan};
+    /// use jiff::{civil::{Date, date}, ToSpan};
     ///
-    /// let start = Date::constant(2024, 3, 11);
+    /// let start = date(2024, 3, 11);
     /// let every_five_hours: Vec<Date> =
     ///     start.series(15.hours()).take(7).collect();
     /// assert_eq!(every_five_hours, vec![
-    ///     Date::constant(2024, 3, 11),
-    ///     Date::constant(2024, 3, 11),
-    ///     Date::constant(2024, 3, 12),
-    ///     Date::constant(2024, 3, 12),
-    ///     Date::constant(2024, 3, 13),
-    ///     Date::constant(2024, 3, 14),
-    ///     Date::constant(2024, 3, 14),
+    ///     date(2024, 3, 11),
+    ///     date(2024, 3, 11),
+    ///     date(2024, 3, 12),
+    ///     date(2024, 3, 12),
+    ///     date(2024, 3, 13),
+    ///     date(2024, 3, 14),
+    ///     date(2024, 3, 14),
     /// ]);
     /// ```
     ///
@@ -2035,9 +1759,9 @@ impl Date {
     /// When did the most recent Friday the 13th occur?
     ///
     /// ```
-    /// use jiff::{civil::{Date, Weekday}, ToSpan};
+    /// use jiff::{civil::{Weekday, date}, ToSpan};
     ///
-    /// let start = Date::constant(2024, 3, 13);
+    /// let start = date(2024, 3, 13);
     /// let mut found = None;
     /// for date in start.series(-1.months()) {
     ///     if date.weekday() == Weekday::Friday {
@@ -2045,7 +1769,7 @@ impl Date {
     ///         break;
     ///     }
     /// }
-    /// assert_eq!(found, Some(Date::constant(2023, 10, 13)));
+    /// assert_eq!(found, Some(date(2023, 10, 13)));
     /// ```
     #[inline]
     pub fn series(self, period: Span) -> DateSeries {
@@ -3551,29 +3275,29 @@ mod tests {
         }
 
         assert_eq!(
-            Date::constant(1970, 1, 1),
+            date(1970, 1, 1),
             date_from_timestamp(Timestamp::new(0, 0).unwrap()),
         );
         assert_eq!(
-            Date::constant(1969, 12, 31),
+            date(1969, 12, 31),
             date_from_timestamp(Timestamp::new(-1, 0).unwrap()),
         );
         assert_eq!(
-            Date::constant(1969, 12, 31),
+            date(1969, 12, 31),
             date_from_timestamp(Timestamp::new(-86_400, 0).unwrap()),
         );
         assert_eq!(
-            Date::constant(1969, 12, 30),
+            date(1969, 12, 30),
             date_from_timestamp(Timestamp::new(-86_401, 0).unwrap()),
         );
         assert_eq!(
-            Date::constant(-9999, 1, 2),
+            date(-9999, 1, 2),
             date_from_timestamp(
                 Timestamp::new(t::UnixSeconds::MIN_REPR, 0).unwrap()
             ),
         );
         assert_eq!(
-            Date::constant(9999, 12, 30),
+            date(9999, 12, 30),
             date_from_timestamp(
                 Timestamp::new(t::UnixSeconds::MAX_REPR, 0).unwrap()
             ),
@@ -3600,7 +3324,7 @@ mod tests {
             for month in Month::MIN_REPR..=Month::MAX_REPR {
                 let month = Month::new(month).unwrap();
                 for day in 1..=days_in_month(year, month).get() {
-                    let date = Date::constant(year.get(), month.get(), day);
+                    let date = date(year.get(), month.get(), day);
                     let rd = date.to_unix_epoch_days();
                     let got = Date::from_unix_epoch_days(rd);
                     assert_eq!(date, got, "for date {date:?}");
@@ -3619,7 +3343,7 @@ mod tests {
             for month in [1, 2, 4] {
                 let month = Month::new(month).unwrap();
                 for day in 20..=days_in_month(year, month).get() {
-                    let date = Date::constant(year.get(), month.get(), day);
+                    let date = date(year.get(), month.get(), day);
                     let wd = date.to_iso_week_date();
                     let got = wd.to_date();
                     assert_eq!(
@@ -3635,29 +3359,29 @@ mod tests {
     fn add_constrained() {
         use crate::ToSpan;
 
-        let d1 = Date::constant(2023, 3, 31);
+        let d1 = date(2023, 3, 31);
         let d2 = d1.checked_add(1.months().days(1)).unwrap();
-        assert_eq!(d2, Date::constant(2023, 5, 1));
+        assert_eq!(d2, date(2023, 5, 1));
     }
 
     #[test]
     fn since_years() {
-        let d1 = Date::constant(2023, 4, 15);
-        let d2 = Date::constant(2019, 2, 22);
+        let d1 = date(2023, 4, 15);
+        let d2 = date(2019, 2, 22);
         let span = d1.since((Unit::Year, d2)).unwrap();
         assert_eq!(span, 4.years().months(1).days(21));
         let span = d2.since((Unit::Year, d1)).unwrap();
         assert_eq!(span, -4.years().months(1).days(24));
 
-        let d1 = Date::constant(2023, 2, 22);
-        let d2 = Date::constant(2019, 4, 15);
+        let d1 = date(2023, 2, 22);
+        let d2 = date(2019, 4, 15);
         let span = d1.since((Unit::Year, d2)).unwrap();
         assert_eq!(span, 3.years().months(10).days(7));
         let span = d2.since((Unit::Year, d1)).unwrap();
         assert_eq!(span, -3.years().months(10).days(7));
 
-        let d1 = Date::constant(9999, 12, 31);
-        let d2 = Date::constant(-9999, 1, 1);
+        let d1 = date(9999, 12, 31);
+        let d2 = date(-9999, 1, 1);
         let span = d1.since((Unit::Year, d2)).unwrap();
         assert_eq!(span, 19998.years().months(11).days(30));
         let span = d2.since((Unit::Year, d1)).unwrap();
@@ -3666,8 +3390,8 @@ mod tests {
 
     #[test]
     fn since_months() {
-        let d1 = Date::constant(2024, 7, 24);
-        let d2 = Date::constant(2024, 2, 22);
+        let d1 = date(2024, 7, 24);
+        let d2 = date(2024, 2, 22);
         let span = d1.since((Unit::Month, d2)).unwrap();
         assert_eq!(span, 5.months().days(2));
         let span = d2.since((Unit::Month, d1)).unwrap();
@@ -3675,8 +3399,8 @@ mod tests {
         assert_eq!(d2, d1.checked_sub(5.months().days(2)).unwrap());
         assert_eq!(d1, d2.checked_sub(-5.months().days(2)).unwrap());
 
-        let d1 = Date::constant(2024, 7, 15);
-        let d2 = Date::constant(2024, 2, 22);
+        let d1 = date(2024, 7, 15);
+        let d2 = date(2024, 2, 22);
         let span = d1.since((Unit::Month, d2)).unwrap();
         assert_eq!(span, 4.months().days(22));
         let span = d2.since((Unit::Month, d1)).unwrap();
@@ -3684,8 +3408,8 @@ mod tests {
         assert_eq!(d2, d1.checked_sub(4.months().days(22)).unwrap());
         assert_eq!(d1, d2.checked_sub(-4.months().days(23)).unwrap());
 
-        let d1 = Date::constant(2023, 4, 15);
-        let d2 = Date::constant(2023, 2, 22);
+        let d1 = date(2023, 4, 15);
+        let d2 = date(2023, 2, 22);
         let span = d1.since((Unit::Month, d2)).unwrap();
         assert_eq!(span, 1.month().days(21));
         let span = d2.since((Unit::Month, d1)).unwrap();
@@ -3693,8 +3417,8 @@ mod tests {
         assert_eq!(d2, d1.checked_sub(1.month().days(21)).unwrap());
         assert_eq!(d1, d2.checked_sub(-1.month().days(24)).unwrap());
 
-        let d1 = Date::constant(2023, 4, 15);
-        let d2 = Date::constant(2019, 2, 22);
+        let d1 = date(2023, 4, 15);
+        let d2 = date(2019, 2, 22);
         let span = d1.since((Unit::Month, d2)).unwrap();
         assert_eq!(span, 49.months().days(21));
         let span = d2.since((Unit::Month, d1)).unwrap();
@@ -3703,8 +3427,8 @@ mod tests {
 
     #[test]
     fn since_weeks() {
-        let d1 = Date::constant(2024, 7, 15);
-        let d2 = Date::constant(2024, 6, 22);
+        let d1 = date(2024, 7, 15);
+        let d2 = date(2024, 6, 22);
         let span = d1.since((Unit::Week, d2)).unwrap();
         assert_eq!(span, 3.weeks().days(2));
         let span = d2.since((Unit::Week, d1)).unwrap();
@@ -3713,8 +3437,8 @@ mod tests {
 
     #[test]
     fn since_days() {
-        let d1 = Date::constant(2024, 7, 15);
-        let d2 = Date::constant(2024, 2, 22);
+        let d1 = date(2024, 7, 15);
+        let d2 = date(2024, 2, 22);
         let span = d1.since((Unit::Day, d2)).unwrap();
         assert_eq!(span, 144.days());
         let span = d2.since((Unit::Day, d1)).unwrap();
@@ -3723,9 +3447,9 @@ mod tests {
 
     #[test]
     fn until_month_lengths() {
-        let jan1 = Date::constant(2020, 1, 1);
-        let feb1 = Date::constant(2020, 2, 1);
-        let mar1 = Date::constant(2020, 3, 1);
+        let jan1 = date(2020, 1, 1);
+        let feb1 = date(2020, 2, 1);
+        let mar1 = date(2020, 3, 1);
 
         assert_eq!(jan1.until(feb1).unwrap(), 31.days());
         assert_eq!(jan1.until((Unit::Month, feb1)).unwrap(), 1.month());
@@ -3742,8 +3466,8 @@ mod tests {
         // // => P2M
         // Temporal.PlainDate.from("2020-02-29").until("2020-04-30", {largestUnit: "months"})
         // // => P2M1D
-        let d1 = Date::constant(2020, 4, 30);
-        let d2 = Date::constant(2020, 2, 29);
+        let d1 = date(2020, 4, 30);
+        let d2 = date(2020, 2, 29);
 
         let since = d1.since((Unit::Month, d2)).unwrap();
         assert_eq!(since, 2.months());
@@ -3757,8 +3481,8 @@ mod tests {
     fn until_weeks_round() {
         use crate::{RoundMode, SpanRound};
 
-        let earlier = Date::constant(2019, 1, 8);
-        let later = Date::constant(2021, 9, 7);
+        let earlier = date(2019, 1, 8);
+        let later = date(2021, 9, 7);
         let span = earlier.until((Unit::Week, later)).unwrap();
         assert_eq!(span, 139.weeks());
 

@@ -1524,48 +1524,14 @@ impl DateTime {
         Ok(DateTime::from_parts(new_date, new_time))
     }
 
-    /// Subtract the given span of time from this datetime. If the difference
-    /// would overflow the minimum or maximum datetime values, then an error is
-    /// returned.
-    ///
-    /// # Properties
-    ///
-    /// This routine is _not_ reversible because some additions may
-    /// be ambiguous. For example, adding `1 month` to the datetime
-    /// `2024-03-31T00:00:00` will produce `2024-04-30T00:00:00` since April
-    /// has only 30 days in a month. Moreover, subtracting `1 month` from
-    /// `2024-04-30T00:00:00` will produce `2024-03-30T00:00:00`, which is not
-    /// the date we started with.
-    ///
-    /// If spans of time are limited to units of days (or less), then this
-    /// routine _is_ reversible.
+    /// This routine is identical to [`DateTime::checked_add`] with the
+    /// duration negated.
     ///
     /// # Errors
     ///
-    /// If the span subtracted from this datetime would result in a datetime
-    /// that exceeds the range of a `DateTime`, then this will return an error.
+    /// This has the same error conditions as [`DateTime::checked_add`].
     ///
     /// # Example
-    ///
-    /// This shows a few examples of subtracting spans of time to various
-    /// dates. We make use of the [`ToSpan`](crate::ToSpan) trait for
-    /// convenient creation of spans.
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let dt = date(1995, 12, 7).at(3, 24, 30, 3_500);
-    /// let got = dt.checked_sub(20.years().months(4).nanoseconds(500))?;
-    /// assert_eq!(got, date(1975, 8, 7).at(3, 24, 30, 3_000));
-    ///
-    /// let dt = date(2019, 2, 28).at(15, 30, 0, 0);
-    /// let got = dt.checked_sub(1.months())?;
-    /// assert_eq!(got, date(2019, 1, 28).at(15, 30, 0, 0));
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: available via subtraction operator
     ///
     /// This routine can be used via the `-` operator. Note though that if it
     /// fails, it will result in a panic.
@@ -1577,81 +1543,16 @@ impl DateTime {
     /// let got = dt - 20.years().months(4).nanoseconds(500);
     /// assert_eq!(got, date(1975, 8, 7).at(3, 24, 30, 3_000));
     /// ```
-    ///
-    /// # Example: negative spans are supported
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let dt = date(2024, 3, 31).at(19, 5, 59, 999_999_999);
-    /// assert_eq!(
-    ///     dt.checked_sub(-1.months())?,
-    ///     date(2024, 4, 30).at(19, 5, 59, 999_999_999),
-    /// );
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: error on overflow
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let dt = date(2024, 3, 31).at(13, 13, 13, 13);
-    /// assert!(dt.checked_sub(19000.years()).is_err());
-    /// assert!(dt.checked_sub(-9000.years()).is_err());
-    /// ```
     #[inline]
     pub fn checked_sub(self, span: Span) -> Result<DateTime, Error> {
         self.checked_add(-span)
     }
 
-    /// Add the given span of time to this datetime. If the sum would overflow
-    /// the minimum or maximum datetime values, then the result saturates.
-    ///
-    /// # Properties
-    ///
-    /// This routine is _not_ reversible because some additions may
-    /// be ambiguous. For example, adding `1 month` to the datetime
-    /// `2024-03-31T00:00:00` will produce `2024-04-30T00:00:00` since April
-    /// has only 30 days in a month. Moreover, subtracting `1 month` from
-    /// `2024-04-30T00:00:00` will produce `2024-03-30T00:00:00`, which is not
-    /// the date we started with.
-    ///
-    /// If spans of time are limited to units of days (or less), and no
-    /// saturation occurs, then this routine _is_ reversible.
+    /// This routine is identical to [`DateTime::checked_add`], except the
+    /// result saturates on overflow. That is, instead of overflow, either
+    /// [`DateTime::MIN`] or [`DateTime::MAX`] is returned.
     ///
     /// # Example
-    ///
-    /// This shows a few examples of adding spans of time to various dates.
-    /// We make use of the [`ToSpan`](crate::ToSpan) trait for convenient
-    /// creation of spans.
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let dt = date(1995, 12, 7).at(3, 24, 30, 3_500);
-    /// let got = dt.saturating_add(20.years().months(4).nanoseconds(500));
-    /// assert_eq!(got, date(2016, 4, 7).at(3, 24, 30, 4_000));
-    ///
-    /// let dt = date(2019, 1, 31).at(15, 30, 0, 0);
-    /// let got = dt.saturating_add(1.months());
-    /// assert_eq!(got, date(2019, 2, 28).at(15, 30, 0, 0));
-    /// ```
-    ///
-    /// # Example: negative spans are supported
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let dt = date(2024, 3, 31).at(19, 5, 59, 999_999_999);
-    /// assert_eq!(
-    ///     dt.saturating_add(-1.months()),
-    ///     date(2024, 2, 29).at(19, 5, 59, 999_999_999),
-    /// );
-    /// ```
-    ///
-    /// # Example: saturation on overflow
     ///
     /// ```
     /// use jiff::{civil::{DateTime, date}, ToSpan};
@@ -1671,53 +1572,10 @@ impl DateTime {
         })
     }
 
-    /// Subtract the given span of time from this datetime. If the difference
-    /// would overflow the minimum or maximum datetime values, then the result
-    /// saturates.
-    ///
-    /// # Properties
-    ///
-    /// This routine is _not_ reversible because some additions may
-    /// be ambiguous. For example, adding `1 month` to the datetime
-    /// `2024-03-31T00:00:00` will produce `2024-04-30T00:00:00` since April
-    /// has only 30 days in a month. Moreover, subtracting `1 month` from
-    /// `2024-04-30T00:00:00` will produce `2024-03-30T00:00:00`, which is not
-    /// the date we started with.
-    ///
-    /// If spans of time are limited to units of days (or less), and no
-    /// saturation occurs, then this routine _is_ reversible.
+    /// This routine is identical to [`DateTime::saturating_add`] with the span
+    /// parameter negated.
     ///
     /// # Example
-    ///
-    /// This shows a few examples of subtracting spans of time to various
-    /// dates. We make use of the [`ToSpan`](crate::ToSpan) trait for
-    /// convenient creation of spans.
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let dt = date(1995, 12, 7).at(3, 24, 30, 3_500);
-    /// let got = dt.saturating_sub(20.years().months(4).nanoseconds(500));
-    /// assert_eq!(got, date(1975, 8, 7).at(3, 24, 30, 3_000));
-    ///
-    /// let dt = date(2019, 2, 28).at(15, 30, 0, 0);
-    /// let got = dt.saturating_sub(1.months());
-    /// assert_eq!(got, date(2019, 1, 28).at(15, 30, 0, 0));
-    /// ```
-    ///
-    /// # Example: negative spans are supported
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let dt = date(2024, 3, 31).at(19, 5, 59, 999_999_999);
-    /// assert_eq!(
-    ///     dt.saturating_sub(-1.months()),
-    ///     date(2024, 4, 30).at(19, 5, 59, 999_999_999),
-    /// );
-    /// ```
-    ///
-    /// # Example: saturation on overflow
     ///
     /// ```
     /// use jiff::{civil::{DateTime, date}, ToSpan};
@@ -1887,68 +1745,14 @@ impl DateTime {
         }
     }
 
-    /// Returns a span representing the elapsed time from this datetime since
-    /// the given `other` datetime.
-    ///
-    /// When `other` occurs after this datetime, then the span returned will
-    /// be negative.
-    ///
-    /// Depending on the input provided, the span returned is rounded. It may
-    /// also be balanced up to bigger units than the default. By default, the
-    /// span returned is balanced such that the biggest possible unit is days.
-    ///
-    /// This operation is configured by providing a [`DateTimeDifference`]
-    /// value. Since this routine accepts anything that implements
-    /// `Into<DateTimeDifference>`, once can pass a `DateTime` directly.
-    /// One can also pass a `(Unit, DateTime)`, where `Unit` is treated as
-    /// [`DateTimeDifference::largest`].
-    ///
-    /// # Properties
-    ///
-    /// It is guaranteed that if the returned span is added to `other`, and if
-    /// no rounding is requested, and if the largest unit requested is at most
-    /// `Unit::Day`, then the original datetime will be returned.
-    ///
-    /// This routine is equivalent to `self.until(other).map(|span| -span)`
-    /// if no rounding options are set. If rounding options are set, then
-    /// it's equivalent to
-    /// `self.until(other_without_rounding_options).map(|span| -span)`,
-    /// followed by a call to [`Span::round`] with the appropriate rounding
-    /// options set. This is because the negation of a span can result in
-    /// different rounding results depending on the rounding mode.
+    /// This routine is identical to [`DateTime::until`], but the order of the
+    /// parameters is flipped.
     ///
     /// # Errors
     ///
-    /// An error can occur in some cases when the requested configuration
-    /// would result in a span that is beyond allowable limits. For example,
-    /// the nanosecond component of a span cannot represent the span of
-    /// time between the minimum and maximum datetime supported by Jiff.
-    /// Therefore, if one requests a span with its largest unit set to
-    /// [`Unit::Nanosecond`], then it's possible for this routine to fail.
-    ///
-    /// An error can also occur if `DateTimeDifference` is misconfigured. For
-    /// example, if the smallest unit provided is bigger than the largest unit.
-    ///
-    /// It is guaranteed that if one provides a datetime with the default
-    /// [`DateTimeDifference`] configuration, then this routine will never
-    /// fail.
+    /// This has the same error conditions as [`DateTime::until`].
     ///
     /// # Example
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0);
-    /// let later = date(2019, 1, 31).at(21, 0, 0, 0);
-    /// assert_eq!(later.since(earlier)?, 4542.days().hours(22).minutes(30));
-    ///
-    /// // Flipping the dates is fine, but you'll get a negative span.
-    /// assert_eq!(earlier.since(later)?, -4542.days().hours(22).minutes(30));
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: available via subtraction operator
     ///
     /// This routine can be used via the `-` operator. Since the default
     /// configuration is used and because a `Span` can represent the difference
@@ -1961,91 +1765,6 @@ impl DateTime {
     /// let later = date(2019, 1, 31).at(21, 0, 0, 0);
     /// assert_eq!(later - earlier, 4542.days().hours(22).minutes(30));
     /// ```
-    ///
-    /// # Example: using bigger units
-    ///
-    /// This example shows how to expand the span returned to bigger units.
-    /// This makes use of a `From<(Unit, DateTime)> for DateTimeDifference`
-    /// trait implementation.
-    ///
-    /// ```
-    /// use jiff::{civil::date, Unit, ToSpan};
-    ///
-    /// let dt1 = date(1995, 12, 07).at(3, 24, 30, 3500);
-    /// let dt2 = date(2019, 01, 31).at(15, 30, 0, 0);
-    ///
-    /// // The default limits durations to using "days" as the biggest unit.
-    /// let span = dt2.since(dt1)?;
-    /// assert_eq!(span.to_string(), "P8456dT12h5m29.9999965s");
-    ///
-    /// // But we can ask for units all the way up to years.
-    /// let span = dt2.since((Unit::Year, dt1))?;
-    /// assert_eq!(span.to_string(), "P23y1m24dT12h5m29.9999965s");
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: rounding the result
-    ///
-    /// This shows how one might find the difference between two datetimes and
-    /// have the result rounded such that sub-seconds are removed.
-    ///
-    /// In this case, we need to hand-construct a [`DateTimeDifference`]
-    /// in order to gain full configurability.
-    ///
-    /// ```
-    /// use jiff::{civil::{DateTimeDifference, date}, Unit, ToSpan};
-    ///
-    /// let dt1 = date(1995, 12, 07).at(3, 24, 30, 3500);
-    /// let dt2 = date(2019, 01, 31).at(15, 30, 0, 0);
-    ///
-    /// let span = dt2.since(
-    ///     DateTimeDifference::from(dt1).smallest(Unit::Second),
-    /// )?;
-    /// assert_eq!(span, 8456.days().hours(12).minutes(5).seconds(29));
-    ///
-    /// // We can combine smallest and largest units too!
-    /// let span = dt2.since(
-    ///     DateTimeDifference::from(dt1)
-    ///         .smallest(Unit::Second)
-    ///         .largest(Unit::Year),
-    /// )?;
-    /// assert_eq!(span, 23.years().months(1).days(24).hours(12).minutes(5).seconds(29));
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: units biggers than days inhibit reversibility
-    ///
-    /// If you ask for units bigger than days, then adding the span
-    /// returned to the `other` datetime is not guaranteed to result in the
-    /// original datetime. For example:
-    ///
-    /// ```
-    /// use jiff::{civil::date, Unit, ToSpan};
-    ///
-    /// let dt1 = date(2024, 3, 2).at(0, 0, 0, 0);
-    /// let dt2 = date(2024, 5, 1).at(0, 0, 0, 0);
-    ///
-    /// let span = dt2.since((Unit::Month, dt1))?;
-    /// assert_eq!(span, 1.month().days(30));
-    /// let maybe_original = dt1.checked_add(span)?;
-    /// // Not the same as the original datetime!
-    /// assert_eq!(maybe_original, date(2024, 5, 2).at(0, 0, 0, 0));
-    ///
-    /// // But in the default configuration, days are always the biggest unit
-    /// // and reversibility is guaranteed.
-    /// let span = dt2.since(dt1)?;
-    /// assert_eq!(span, 60.days());
-    /// let is_original = dt1.checked_add(span)?;
-    /// assert_eq!(is_original, dt2);
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// This occurs because spans are added as if by adding the biggest units
-    /// first, and then the smaller units. Because months vary in length,
-    /// their meaning can change depending on how the span is added. In this
-    /// case, adding one month to `2024-03-02` corresponds to 31 days, but
-    /// subtracting one month from `2024-05-01` corresponds to 30 days.
     #[inline]
     pub fn since<A: Into<DateTimeDifference>>(
         self,

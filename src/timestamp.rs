@@ -1236,54 +1236,14 @@ impl Timestamp {
         Ok(Timestamp::from_nanosecond_ranged(sum))
     }
 
-    /// Subtract the given span of time from this timestamp.
-    ///
-    /// # Properties
-    ///
-    /// Given a timestamp `ts1` and a span `s`, and assuming `ts2 = ts1 - s`
-    /// exists, it follows then that `ts1 = ts2 + s` for all values of `ts1`
-    /// and `s` that have a valid difference of `ts2`.
-    ///
-    /// In short, adding the given span to the difference returned by this
-    /// function is guaranteed to result in precisely the original timestamp.
+    /// This routine is identical to [`Timestamp::checked_add`] with the
+    /// duration negated.
     ///
     /// # Errors
     ///
-    /// If the difference would overflow the minimum or maximum timestamp
-    /// values, then an error is returned.
-    ///
-    /// This also returns an error if the given span has any non-zero units
-    /// greater than hours. If you want to use bigger units, convert this
-    /// timestamp to a `Zoned` and use [`Zoned::checked_sub`].
+    /// This has the same error conditions as [`Timestamp::checked_add`].
     ///
     /// # Example
-    ///
-    /// This shows how to subtract `5` hours from the Unix epoch:
-    ///
-    /// ```
-    /// use jiff::{Timestamp, ToSpan};
-    ///
-    /// let ts = Timestamp::UNIX_EPOCH.checked_sub(5.hours())?;
-    /// assert_eq!(ts.to_string(), "1969-12-31T19:00:00Z");
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: negative spans are supported
-    ///
-    /// This shows how to subtract `-5` hours to the Unix epoch. This is the
-    /// same as adding `5` hours from the Unix epoch.
-    ///
-    /// ```
-    /// use jiff::{Timestamp, ToSpan};
-    ///
-    /// let ts = Timestamp::UNIX_EPOCH.checked_sub(-5.hours())?;
-    /// assert_eq!(ts.to_string(), "1970-01-01T05:00:00Z");
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: available via subtraction operator
     ///
     /// This routine can be used via the `-` operator. Note though that if it
     /// fails, it will result in a panic.
@@ -1298,20 +1258,6 @@ impl Timestamp {
     /// assert_eq!(ts2.to_string(), "2065-01-24T03:49:58.999999877Z");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: error on overflow
-    ///
-    /// ```
-    /// use jiff::{Timestamp, ToSpan};
-    ///
-    /// let ts = Timestamp::MIN;
-    /// assert_eq!(ts.to_string(), "-009999-01-02T01:59:59Z");
-    /// assert!(ts.checked_sub(1.nanosecond()).is_err());
-    ///
-    /// let ts = Timestamp::MAX;
-    /// assert_eq!(ts.to_string(), "9999-12-30T22:00:00.999999999Z");
-    /// assert!(ts.checked_sub(-1.nanosecond()).is_err());
     /// ```
     #[inline]
     pub fn checked_sub(self, span: Span) -> Result<Timestamp, Error> {
@@ -1343,8 +1289,9 @@ impl Timestamp {
         Ok(self)
     }
 
-    /// Add the given span of time to this timestamp. If the sum would overflow
-    /// the minimum or maximum timestamp values, then the result saturates.
+    /// This routine is identical to [`Timestamp::checked_add`], except the
+    /// result saturates on overflow. That is, instead of overflow, either
+    /// [`Timestamp::MIN`] or [`Timestamp::MAX`] is returned.
     ///
     /// # Panics
     ///
@@ -1386,16 +1333,13 @@ impl Timestamp {
         })
     }
 
-    /// Subtract the given span of time from this timestamp. If the difference
-    /// would overflow the minimum or maximum timestamp values, then the result
-    /// saturates.
+    /// This routine is identical to [`Timestamp::saturating_add`] with the
+    /// span parameter negated.
     ///
     /// # Panics
     ///
-    /// This panics if the given `Span` contains any non-zero units greater
-    /// than hours. In `jiff 0.2`, this panic will be changed to an error. It
-    /// panics in `jiff 0.1` to avoid giving incorrect results. (It was an
-    /// oversight to make this method infallible.)
+    /// This routine panics under the same conditions as
+    /// [`Timestamp::saturating_add`].
     ///
     /// # Example
     ///
@@ -1547,70 +1491,14 @@ impl Timestamp {
         }
     }
 
-    /// Returns a span representing the elapsed time from this timestamp since
-    /// the given `other` timestamp.
-    ///
-    /// When `other` occurs after this timestamp, then the span returned will
-    /// be negative.
-    ///
-    /// Depending on the input provided, the span returned is rounded. It may
-    /// also be balanced up to bigger units than the default. By default,
-    /// the span returned is balanced such that the biggest possible unit is
-    /// seconds.
-    ///
-    /// This operation is configured by providing a [`TimestampDifference`]
-    /// value. Since this routine accepts anything that implements
-    /// `Into<TimestampDifference>`, once can pass a `Timestamp` directly.
-    /// One can also pass a `(Unit, Timestamp)`, where `Unit` is treated as
-    /// [`TimestampDifference::largest`].
-    ///
-    /// # Properties
-    ///
-    /// It is guaranteed that if the returned span is added to `other`, and if
-    /// no rounding is requested, then the original timestamp will be returned.
-    ///
-    /// This routine is equivalent to `self.until(other).map(|span| -span)`
-    /// if no rounding options are set. If rounding options are set, then
-    /// it's equivalent to
-    /// `self.until(other_without_rounding_options).map(|span| -span)`,
-    /// followed by a call to [`Span::round`] with the appropriate rounding
-    /// options set. This is because the negation of a span can result in
-    /// different rounding results depending on the rounding mode.
+    /// This routine is identical to [`Timestamp::until`], but the order of the
+    /// parameters is flipped.
     ///
     /// # Errors
     ///
-    /// An error can occur in some cases when the requested configuration
-    /// would result in a span that is beyond allowable limits. For example,
-    /// the nanosecond component of a span cannot represent the span of
-    /// time between the minimum and maximum timestamps supported by Jiff.
-    /// Therefore, if one requests a span with its largest unit set to
-    /// [`Unit::Nanosecond`], then it's possible for this routine to fail.
-    ///
-    /// An error can also occur if `TimestampDifference` is misconfigured. For
-    /// example, if the smallest unit provided is bigger than the largest unit,
-    /// or if the largest unit provided is bigger than hours. (To use bigger
-    /// units with an instant in time, use [`Zoned::since`] instead.)
-    ///
-    /// It is guaranteed that if one provides a timestamp with the default
-    /// [`TimestampDifference`] configuration, then this routine will never
-    /// fail.
+    /// This has the same error conditions as [`Timestamp::until`].
     ///
     /// # Example
-    ///
-    /// ```
-    /// use jiff::{Timestamp, ToSpan};
-    ///
-    /// let earlier: Timestamp = "2006-08-24T22:30:00Z".parse()?;
-    /// let later: Timestamp = "2019-01-31 21:00:00Z".parse()?;
-    /// assert_eq!(later.since(earlier)?, 392509800.seconds());
-    ///
-    /// // Flipping the timestamps is fine, but you'll get a negative span.
-    /// assert_eq!(earlier.since(later)?, -392509800.seconds());
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: available via subtraction operator
     ///
     /// This routine can be used via the `-` operator. Since the default
     /// configuration is used and because a `Span` can represent the difference
@@ -1623,58 +1511,6 @@ impl Timestamp {
     /// let later: Timestamp = "2019-01-31 21:00:00Z".parse()?;
     /// assert_eq!(later - earlier, 392509800.seconds());
     ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: using bigger units
-    ///
-    /// This example shows how to expand the span returned to bigger units.
-    /// This makes use of a `From<(Unit, Timestamp)> for TimestampDifference`
-    /// trait implementation.
-    ///
-    /// ```
-    /// use jiff::{Timestamp, ToSpan, Unit};
-    ///
-    /// let ts1: Timestamp = "1995-12-07T03:24:30.000003500Z".parse()?;
-    /// let ts2: Timestamp = "2019-01-31 15:30:00Z".parse()?;
-    ///
-    /// // The default limits durations to using "seconds" as the biggest unit.
-    /// let span = ts2.since(ts1)?;
-    /// assert_eq!(span.to_string(), "PT730641929.9999965s");
-    ///
-    /// // But we can ask for units all the way up to hours.
-    /// let span = ts2.since((Unit::Hour, ts1))?;
-    /// assert_eq!(span.to_string(), "PT202956h5m29.9999965s");
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: rounding the result
-    ///
-    /// This shows how one might find the difference between two timestamps and
-    /// have the result rounded such that sub-seconds are removed.
-    ///
-    /// In this case, we need to hand-construct a [`TimestampDifference`]
-    /// in order to gain full configurability.
-    ///
-    /// ```
-    /// use jiff::{Timestamp, TimestampDifference, ToSpan, Unit};
-    ///
-    /// let ts1: Timestamp = "1995-12-07 03:24:30.000003500Z".parse()?;
-    /// let ts2: Timestamp = "2019-01-31 15:30:00Z".parse()?;
-    ///
-    /// let span = ts2.since(
-    ///     TimestampDifference::from(ts1).smallest(Unit::Second),
-    /// )?;
-    /// assert_eq!(span, 730641929.seconds());
-    ///
-    /// // We can combine smallest and largest units too!
-    /// let span = ts2.since(
-    ///     TimestampDifference::from(ts1)
-    ///         .smallest(Unit::Second)
-    ///         .largest(Unit::Hour),
-    /// )?;
-    /// assert_eq!(span, 202956.hours().minutes(5).seconds(29));
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
