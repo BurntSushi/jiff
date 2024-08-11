@@ -654,16 +654,18 @@ pub use crate::{
         SpanTotal, ToSpan, Unit,
     },
     timestamp::{
-        Timestamp, TimestampDifference, TimestampRound, TimestampSeries,
+        Timestamp, TimestampArithmetic, TimestampDifference, TimestampRound,
+        TimestampSeries,
     },
     util::round::mode::RoundMode,
-    zoned::{Zoned, ZonedDifference, ZonedRound, ZonedWith},
+    zoned::{Zoned, ZonedArithmetic, ZonedDifference, ZonedRound, ZonedWith},
 };
 
 #[macro_use]
 mod logging;
 
 pub mod civil;
+mod duration;
 mod error;
 pub mod fmt;
 #[cfg(feature = "std")]

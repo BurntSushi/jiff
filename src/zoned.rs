@@ -1,5 +1,8 @@
+use core::time::Duration as UnsignedDuration;
+
 use crate::{
     civil::{Date, DateTime, DateTimeRound, DateTimeWith, Era, Time, Weekday},
+    duration::{Duration, SDuration},
     error::{err, Error, ErrorContext},
     fmt::{
         self,
@@ -10,7 +13,7 @@ use crate::{
         rangeint::{RInto, TryRFrom},
         t::{self, ZonedDayNanoseconds, C},
     },
-    RoundMode, Span, SpanRound, Timestamp, Unit,
+    RoundMode, SignedDuration, Span, SpanRound, Timestamp, Unit,
 };
 
 /// A time zone aware instant in time.
@@ -1850,6 +1853,10 @@ impl Zoned {
     /// overflow the minimum or maximum zoned datetime values, then an error is
     /// returned.
     ///
+    /// This operation accepts three different duration types: [`Span`],
+    /// [`SignedDuration`] or [`std::time::Duration`]. This is achieved via
+    /// `From` trait implementations for the [`ZonedArithmetic`] type.
+    ///
     /// # Properties
     ///
     /// This routine is _not_ reversible because some additions may
@@ -1865,7 +1872,8 @@ impl Zoned {
     /// different days can be different lengths.
     ///
     /// If spans of time are limited to units of hours (or less), then this
-    /// routine _is_ reversible.
+    /// routine _is_ reversible. This also implies that all operations with a
+    /// [`SignedDuration`] or a [`std::time::Duration`] are reversible.
     ///
     /// # Errors
     ///
@@ -2022,8 +2030,54 @@ impl Zoned {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    ///
+    /// # Example: adding absolute durations
+    ///
+    /// This shows how to add signed and unsigned absolute durations to a
+    /// `Zoned`.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use jiff::{civil::date, SignedDuration};
+    ///
+    /// let zdt = date(2024, 2, 29).at(0, 0, 0, 0).intz("US/Eastern")?;
+    ///
+    /// let dur = SignedDuration::from_hours(25);
+    /// assert_eq!(
+    ///     zdt.checked_add(dur)?,
+    ///     date(2024, 3, 1).at(1, 0, 0, 0).intz("US/Eastern")?,
+    /// );
+    /// assert_eq!(
+    ///     zdt.checked_add(-dur)?,
+    ///     date(2024, 2, 27).at(23, 0, 0, 0).intz("US/Eastern")?,
+    /// );
+    ///
+    /// let dur = Duration::from_secs(25 * 60 * 60);
+    /// assert_eq!(
+    ///     zdt.checked_add(dur)?,
+    ///     date(2024, 3, 1).at(1, 0, 0, 0).intz("US/Eastern")?,
+    /// );
+    /// // One cannot negate an unsigned duration,
+    /// // but you can subtract it!
+    /// assert_eq!(
+    ///     zdt.checked_sub(dur)?,
+    ///     date(2024, 2, 27).at(23, 0, 0, 0).intz("US/Eastern")?,
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
-    pub fn checked_add(&self, span: Span) -> Result<Zoned, Error> {
+    pub fn checked_add<A: Into<ZonedArithmetic>>(
+        &self,
+        duration: A,
+    ) -> Result<Zoned, Error> {
+        let duration: ZonedArithmetic = duration.into();
+        duration.checked_add(self)
+    }
+
+    #[inline]
+    fn checked_add_span(&self, span: Span) -> Result<Zoned, Error> {
         let span_calendar = span.without_lower(Unit::Day);
         // If our duration only consists of "time" (hours, minutes, etc), then
         // we can short-circuit and do timestamp math. This also avoids dealing
@@ -2071,6 +2125,16 @@ impl Zoned {
         Ok(ts.to_zoned(tz.clone()))
     }
 
+    #[inline]
+    fn checked_add_duration(
+        &self,
+        duration: SignedDuration,
+    ) -> Result<Zoned, Error> {
+        self.timestamp()
+            .checked_add(duration)
+            .map(|ts| ts.to_zoned(self.time_zone().clone()))
+    }
+
     /// This routine is identical to [`Zoned::checked_add`] with the
     /// duration negated.
     ///
@@ -2086,7 +2150,9 @@ impl Zoned {
     /// This is because `Zoned` is not `Copy`.
     ///
     /// ```
-    /// use jiff::{civil::date, ToSpan};
+    /// use std::time::Duration;
+    ///
+    /// use jiff::{civil::date, SignedDuration, ToSpan};
     ///
     /// let zdt = date(1995, 12, 7)
     ///     .at(3, 24, 30, 3_500)
@@ -2097,11 +2163,27 @@ impl Zoned {
     ///     date(1975, 8, 7).at(3, 24, 30, 3_000).intz("America/New_York")?,
     /// );
     ///
+    /// let dur = SignedDuration::new(24 * 60 * 60, 500);
+    /// assert_eq!(
+    ///     &zdt - dur,
+    ///     date(1995, 12, 6).at(3, 24, 30, 3_000).intz("America/New_York")?,
+    /// );
+    ///
+    /// let dur = Duration::new(24 * 60 * 60, 500);
+    /// assert_eq!(
+    ///     &zdt - dur,
+    ///     date(1995, 12, 6).at(3, 24, 30, 3_000).intz("America/New_York")?,
+    /// );
+    ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn checked_sub(&self, span: Span) -> Result<Zoned, Error> {
-        self.checked_add(-span)
+    pub fn checked_sub<A: Into<ZonedArithmetic>>(
+        &self,
+        duration: A,
+    ) -> Result<Zoned, Error> {
+        let duration: ZonedArithmetic = duration.into();
+        duration.checked_neg().and_then(|za| za.checked_add(self))
     }
 
     /// This routine is identical to [`Zoned::checked_add`], except the
@@ -2117,18 +2199,25 @@ impl Zoned {
     /// # Example
     ///
     /// ```
-    /// use jiff::{civil::date, Timestamp, ToSpan};
+    /// use jiff::{civil::date, SignedDuration, Timestamp, ToSpan};
     ///
     /// let zdt = date(2024, 3, 31).at(13, 13, 13, 13).intz("America/New_York")?;
     /// assert_eq!(Timestamp::MAX, zdt.saturating_add(9000.years()).timestamp());
     /// assert_eq!(Timestamp::MIN, zdt.saturating_add(-19000.years()).timestamp());
+    /// assert_eq!(Timestamp::MAX, zdt.saturating_add(SignedDuration::MAX).timestamp());
+    /// assert_eq!(Timestamp::MIN, zdt.saturating_add(SignedDuration::MIN).timestamp());
+    /// assert_eq!(Timestamp::MAX, zdt.saturating_add(std::time::Duration::MAX).timestamp());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn saturating_add(&self, span: Span) -> Zoned {
-        self.checked_add(span).unwrap_or_else(|_| {
-            let ts = if span.is_negative() {
+    pub fn saturating_add<A: Into<ZonedArithmetic>>(
+        &self,
+        duration: A,
+    ) -> Zoned {
+        let duration: ZonedArithmetic = duration.into();
+        self.checked_add(duration).unwrap_or_else(|_| {
+            let ts = if duration.is_negative() {
                 Timestamp::MIN
             } else {
                 Timestamp::MAX
@@ -2143,17 +2232,27 @@ impl Zoned {
     /// # Example
     ///
     /// ```
-    /// use jiff::{civil::date, Timestamp, ToSpan};
+    /// use jiff::{civil::date, SignedDuration, Timestamp, ToSpan};
     ///
     /// let zdt = date(2024, 3, 31).at(13, 13, 13, 13).intz("America/New_York")?;
     /// assert_eq!(Timestamp::MIN, zdt.saturating_sub(19000.years()).timestamp());
     /// assert_eq!(Timestamp::MAX, zdt.saturating_sub(-9000.years()).timestamp());
+    /// assert_eq!(Timestamp::MIN, zdt.saturating_sub(SignedDuration::MAX).timestamp());
+    /// assert_eq!(Timestamp::MAX, zdt.saturating_sub(SignedDuration::MIN).timestamp());
+    /// assert_eq!(Timestamp::MIN, zdt.saturating_sub(std::time::Duration::MAX).timestamp());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn saturating_sub(&self, span: Span) -> Zoned {
-        self.saturating_add(-span)
+    pub fn saturating_sub<A: Into<ZonedArithmetic>>(
+        &self,
+        duration: A,
+    ) -> Zoned {
+        let duration: ZonedArithmetic = duration.into();
+        let Ok(duration) = duration.checked_neg() else {
+            return Timestamp::MIN.to_zoned(self.time_zone().clone());
+        };
+        self.saturating_add(duration)
     }
 
     /// Returns a span representing the elapsed time from this zoned datetime
@@ -2366,6 +2465,136 @@ impl Zoned {
         } else {
             Ok(span)
         }
+    }
+
+    /// Returns an absolute duration representing the elapsed time from this
+    /// zoned datetime until the given `other` zoned datetime.
+    ///
+    /// When `other` occurs before this zoned datetime, then the duration
+    /// returned will be negative.
+    ///
+    /// Unlike [`Zoned::until`], this always returns a duration
+    /// corresponding to a 96-bit integer of nanoseconds between two
+    /// zoned datetimes.
+    ///
+    /// # Fallibility
+    ///
+    /// This routine never panics or returns an error. Since there are no
+    /// configuration options that can be incorrectly provided, no error is
+    /// possible when calling this routine. In contrast, [`Zoned::until`]
+    /// can return an error in some cases due to misconfiguration. But like
+    /// this routine, [`Zoned::until`] never panics or returns an error in
+    /// its default configuration.
+    ///
+    /// # When should I use this versus [`Zoned::until`]?
+    ///
+    /// See the type documentation for [`SignedDuration`] for the section on
+    /// when one should use [`Span`] and when one should use `SignedDuration`.
+    /// In short, use `Span` (and therefore `Timestamp::until`) unless you have
+    /// a specific reason to do otherwise.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::date, SignedDuration};
+    ///
+    /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0).intz("US/Eastern")?;
+    /// let later = date(2019, 1, 31).at(21, 0, 0, 0).intz("US/Eastern")?;
+    /// assert_eq!(
+    ///     earlier.duration_until(&later),
+    ///     SignedDuration::from_hours(109_031) + SignedDuration::from_mins(30),
+    /// );
+    ///
+    /// // Flipping the dates is fine, but you'll get a negative span.
+    /// assert_eq!(
+    ///     later.duration_until(&earlier),
+    ///     -SignedDuration::from_hours(109_031) + -SignedDuration::from_mins(30),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: difference with [`Zoned::until`]
+    ///
+    /// The main difference between this routine and `Zoned::until` is that
+    /// the latter can return units other than a 96-bit integer of nanoseconds.
+    /// While a 96-bit integer of nanoseconds can be converted into other units
+    /// like hours, this can only be done for uniform units. (Uniform units are
+    /// units for which each individual unit always corresponds to the same
+    /// elapsed time regardless of the datetime it is relative to.) This can't
+    /// be done for units like years, months or days.
+    ///
+    /// ```
+    /// use jiff::{civil::date, SignedDuration, Span, SpanRound, ToSpan, Unit};
+    ///
+    /// let zdt1 = date(2024, 3, 10).at(0, 0, 0, 0).intz("US/Eastern")?;
+    /// let zdt2 = date(2024, 3, 11).at(0, 0, 0, 0).intz("US/Eastern")?;
+    ///
+    /// let span = zdt1.until((Unit::Day, &zdt2))?;
+    /// assert_eq!(span, 1.day());
+    ///
+    /// let duration = zdt1.duration_until(&zdt2);
+    /// // This day was only 23 hours long!
+    /// assert_eq!(duration, SignedDuration::from_hours(23));
+    /// // There's no way to extract years, months or days from the signed
+    /// // duration like one might extract hours (because every hour
+    /// // is the same length). Instead, you actually have to convert
+    /// // it to a span and then balance it by providing a relative date!
+    /// let options = SpanRound::new().largest(Unit::Day).relative(&zdt1);
+    /// let span = Span::try_from(duration)?.round(options)?;
+    /// assert_eq!(span, 1.day());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: getting an unsigned duration
+    ///
+    /// If you're looking to find the duration between two zoned datetimes as
+    /// a [`std::time::Duration`], you'll need to use this method to get a
+    /// [`SignedDuration`] and then convert it to a `std::time::Duration`:
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use jiff::civil::date;
+    ///
+    /// let zdt1 = date(2024, 7, 1).at(0, 0, 0, 0).intz("US/Eastern")?;
+    /// let zdt2 = date(2024, 8, 1).at(0, 0, 0, 0).intz("US/Eastern")?;
+    /// let duration = Duration::try_from(zdt1.duration_until(&zdt2))?;
+    /// assert_eq!(duration, Duration::from_secs(31 * 24 * 60 * 60));
+    ///
+    /// // Note that unsigned durations cannot represent all
+    /// // possible differences! If the duration would be negative,
+    /// // then the conversion fails:
+    /// assert!(Duration::try_from(zdt2.duration_until(&zdt1)).is_err());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn duration_until(&self, other: &Zoned) -> SignedDuration {
+        SignedDuration::zoned_until(self, other)
+    }
+
+    /// This routine is identical to [`Zoned::duration_until`], but the
+    /// order of the parameters is flipped.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::date, SignedDuration};
+    ///
+    /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0).intz("US/Eastern")?;
+    /// let later = date(2019, 1, 31).at(21, 0, 0, 0).intz("US/Eastern")?;
+    /// assert_eq!(
+    ///     later.duration_since(&earlier),
+    ///     SignedDuration::from_hours(109_031) + SignedDuration::from_mins(30),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn duration_since(&self, other: &Zoned) -> SignedDuration {
+        SignedDuration::zoned_until(other, self)
     }
 
     /// Rounds this zoned datetime according to the [`ZonedRound`]
@@ -2908,6 +3137,108 @@ impl<'a> core::ops::Sub for &'a Zoned {
     }
 }
 
+/// Adds a signed duration of time to a zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_add`].
+impl<'a> core::ops::Add<SignedDuration> for &'a Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn add(self, rhs: SignedDuration) -> Zoned {
+        self.checked_add(rhs)
+            .expect("adding signed duration to zoned datetime overflowed")
+    }
+}
+
+/// Adds a signed duration of time to a zoned datetime in place.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_add`].
+impl core::ops::AddAssign<SignedDuration> for Zoned {
+    #[inline]
+    fn add_assign(&mut self, rhs: SignedDuration) {
+        *self = &*self + rhs
+    }
+}
+
+/// Subtracts a signed duration of time from a zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_sub`].
+impl<'a> core::ops::Sub<SignedDuration> for &'a Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn sub(self, rhs: SignedDuration) -> Zoned {
+        self.checked_sub(rhs).expect(
+            "subtracting signed duration from zoned datetime overflowed",
+        )
+    }
+}
+
+/// Subtracts a signed duration of time from a zoned datetime in place.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_sub`].
+impl core::ops::SubAssign<SignedDuration> for Zoned {
+    #[inline]
+    fn sub_assign(&mut self, rhs: SignedDuration) {
+        *self = &*self - rhs
+    }
+}
+
+/// Adds an unsigned duration of time to a zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_add`].
+impl<'a> core::ops::Add<UnsignedDuration> for &'a Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn add(self, rhs: UnsignedDuration) -> Zoned {
+        self.checked_add(rhs)
+            .expect("adding unsigned duration to zoned datetime overflowed")
+    }
+}
+
+/// Adds an unsigned duration of time to a zoned datetime in place.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_add`].
+impl core::ops::AddAssign<UnsignedDuration> for Zoned {
+    #[inline]
+    fn add_assign(&mut self, rhs: UnsignedDuration) {
+        *self = &*self + rhs
+    }
+}
+
+/// Subtracts an unsigned duration of time from a zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_sub`].
+impl<'a> core::ops::Sub<UnsignedDuration> for &'a Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn sub(self, rhs: UnsignedDuration) -> Zoned {
+        self.checked_sub(rhs).expect(
+            "subtracting unsigned duration from zoned datetime overflowed",
+        )
+    }
+}
+
+/// Subtracts an unsigned duration of time from a zoned datetime in place.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_sub`].
+impl core::ops::SubAssign<UnsignedDuration> for Zoned {
+    #[inline]
+    fn sub_assign(&mut self, rhs: UnsignedDuration) {
+        *self = &*self - rhs
+    }
+}
+
 #[cfg(feature = "serde")]
 impl serde::Serialize for Zoned {
     #[inline]
@@ -3014,6 +3345,109 @@ impl Iterator for ZonedSeries {
     }
 }
 */
+
+/// Options for [`Timestamp::checked_add`] and [`Timestamp::checked_sub`].
+///
+/// This type provides a way to ergonomically add one of a few different
+/// duration types to a [`Timestamp`].
+///
+/// The main way to construct values of this type is with its `From` trait
+/// implementations:
+///
+/// * `From<Span> for ZonedArithmetic` adds (or subtracts) the given span
+/// to the receiver timestamp.
+/// * `From<SignedDuration> for ZonedArithmetic` adds (or subtracts)
+/// the given signed duration to the receiver timestamp.
+/// * `From<std::time::Duration> for ZonedArithmetic` adds (or subtracts)
+/// the given unsigned duration to the receiver timestamp.
+///
+/// # Example
+///
+/// ```
+/// use std::time::Duration;
+///
+/// use jiff::{SignedDuration, Timestamp, ToSpan};
+///
+/// let ts: Timestamp = "2024-02-28T00:00:00Z".parse()?;
+/// assert_eq!(
+///     ts.checked_add(48.hours())?,
+///     "2024-03-01T00:00:00Z".parse()?,
+/// );
+/// assert_eq!(
+///     ts.checked_add(SignedDuration::from_hours(48))?,
+///     "2024-03-01T00:00:00Z".parse()?,
+/// );
+/// assert_eq!(
+///     ts.checked_add(Duration::from_secs(48 * 60 * 60))?,
+///     "2024-03-01T00:00:00Z".parse()?,
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct ZonedArithmetic {
+    duration: Duration,
+}
+
+impl ZonedArithmetic {
+    #[inline]
+    fn checked_add(self, zdt: &Zoned) -> Result<Zoned, Error> {
+        match self.duration.to_signed()? {
+            SDuration::Span(span) => zdt.checked_add_span(span),
+            SDuration::Absolute(sdur) => zdt.checked_add_duration(sdur),
+        }
+    }
+
+    #[inline]
+    fn checked_neg(self) -> Result<ZonedArithmetic, Error> {
+        let duration = self.duration.checked_neg()?;
+        Ok(ZonedArithmetic { duration })
+    }
+
+    #[inline]
+    fn is_negative(&self) -> bool {
+        self.duration.is_negative()
+    }
+}
+
+impl From<Span> for ZonedArithmetic {
+    fn from(span: Span) -> ZonedArithmetic {
+        let duration = Duration::from(span);
+        ZonedArithmetic { duration }
+    }
+}
+
+impl From<SignedDuration> for ZonedArithmetic {
+    fn from(sdur: SignedDuration) -> ZonedArithmetic {
+        let duration = Duration::from(sdur);
+        ZonedArithmetic { duration }
+    }
+}
+
+impl From<UnsignedDuration> for ZonedArithmetic {
+    fn from(udur: UnsignedDuration) -> ZonedArithmetic {
+        let duration = Duration::from(udur);
+        ZonedArithmetic { duration }
+    }
+}
+
+impl<'a> From<&'a Span> for ZonedArithmetic {
+    fn from(span: &'a Span) -> ZonedArithmetic {
+        ZonedArithmetic::from(*span)
+    }
+}
+
+impl<'a> From<&'a SignedDuration> for ZonedArithmetic {
+    fn from(sdur: &'a SignedDuration) -> ZonedArithmetic {
+        ZonedArithmetic::from(*sdur)
+    }
+}
+
+impl<'a> From<&'a UnsignedDuration> for ZonedArithmetic {
+    fn from(udur: &'a UnsignedDuration) -> ZonedArithmetic {
+        ZonedArithmetic::from(*udur)
+    }
+}
 
 /// Options for [`Zoned::since`] and [`Zoned::until`].
 ///

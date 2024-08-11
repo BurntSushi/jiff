@@ -99,7 +99,7 @@ use self::{posix::ReasonablePosixTimeZone, tzif::Tzif};
 
 pub use self::{
     db::{db, TimeZoneDatabase, TimeZoneNameIter},
-    offset::{Dst, Offset, OffsetConflict},
+    offset::{Dst, Offset, OffsetArithmetic, OffsetConflict},
 };
 
 mod db;

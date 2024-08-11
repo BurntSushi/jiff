@@ -19,6 +19,12 @@ pub(crate) type Sign = ri8<-1, 1>;
 /// everything uniform.
 pub(crate) type NoUnits = ri64<{ i64::MIN as i128 }, { i64::MAX as i128 }>;
 
+/// A type alias for a ranged 96-bit integer with no units.
+///
+/// This is like `NoUnits`, but useful in contexts where one wants to limit
+/// values to what can be represented to 96 bits.
+pub(crate) type NoUnits96 = ri128<{ -(1 << 95) }, { (1 << 95) - 1 }>;
+
 /// A type alias for a ranged 128-bit integer with no units.
 ///
 /// This is like `NoUnits`, but useful in contexts where one wants to limit

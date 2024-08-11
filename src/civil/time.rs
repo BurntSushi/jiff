@@ -1,19 +1,22 @@
+use core::time::Duration as UnsignedDuration;
+
 use crate::{
     civil::{Date, DateTime},
-    error::{err, Error},
+    duration::{Duration, SDuration},
+    error::{err, Error, ErrorContext},
     fmt::{
         self,
         temporal::{DEFAULT_DATETIME_PARSER, DEFAULT_DATETIME_PRINTER},
     },
     util::{
-        rangeint::{RFrom, RInto},
+        rangeint::{RFrom, RInto, TryRFrom},
         round::increment,
         t::{
             self, CivilDayNanosecond, Hour, Microsecond, Millisecond, Minute,
             Nanosecond, Second, SubsecNanosecond, C,
         },
     },
-    RoundMode, Span, SpanRound, Unit, Zoned,
+    RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
 };
 
 /// A representation of civil "wall clock" time.
@@ -587,6 +590,10 @@ impl Time {
 
     /// Add the given span to this time and wrap around on overflow.
     ///
+    /// This operation accepts three different duration types: [`Span`],
+    /// [`SignedDuration`] or [`std::time::Duration`]. This is achieved via
+    /// `From` trait implementations for the [`TimeArithmetic`] type.
+    ///
     /// # Properties
     ///
     /// Given times `t1` and `t2`, and a span `s`, with `t2 = t1 + s`, it
@@ -646,10 +653,21 @@ impl Time {
     /// # Example: addition wraps on overflow
     ///
     /// ```
-    /// use jiff::{civil::time, ToSpan};
+    /// use jiff::{civil::time, SignedDuration, ToSpan};
     ///
     /// let t = time(23, 59, 59, 999_999_999);
-    /// assert_eq!(time(0, 0, 0, 0), t.wrapping_add(1.nanoseconds()));
+    /// assert_eq!(
+    ///     t.wrapping_add(1.nanoseconds()),
+    ///     time(0, 0, 0, 0),
+    /// );
+    /// assert_eq!(
+    ///     t.wrapping_add(SignedDuration::from_nanos(1)),
+    ///     time(0, 0, 0, 0),
+    /// );
+    /// assert_eq!(
+    ///     t.wrapping_add(std::time::Duration::from_nanos(1)),
+    ///     time(0, 0, 0, 0),
+    /// );
     /// ```
     ///
     /// Similarly, if there are any non-zero units greater than hours in the
@@ -664,7 +682,13 @@ impl Time {
     /// assert_eq!(t, t.wrapping_add(1.days()));
     /// ```
     #[inline]
-    pub fn wrapping_add(self, span: Span) -> Time {
+    pub fn wrapping_add<A: Into<TimeArithmetic>>(self, duration: A) -> Time {
+        let duration: TimeArithmetic = duration.into();
+        duration.wrapping_add(self)
+    }
+
+    #[inline]
+    fn wrapping_add_span(self, span: Span) -> Time {
         let mut sum = self.to_nanosecond().without_bounds();
         sum = sum.wrapping_add(
             span.get_hours_ranged()
@@ -696,26 +720,88 @@ impl Time {
         Time::from_nanosecond(civil_day_nanosecond)
     }
 
+    #[inline]
+    fn wrapping_add_signed_duration(self, duration: SignedDuration) -> Time {
+        let start = t::NoUnits128::rfrom(self.to_nanosecond());
+        let duration = t::NoUnits128::new_unchecked(duration.as_nanos());
+        let end = start.wrapping_add(duration) % t::NANOS_PER_CIVIL_DAY;
+        Time::from_nanosecond(end)
+    }
+
+    #[inline]
+    fn wrapping_add_unsigned_duration(
+        self,
+        duration: UnsignedDuration,
+    ) -> Time {
+        let start = t::NoUnits128::rfrom(self.to_nanosecond());
+        // OK because 96-bit unsigned integer can't overflow i128.
+        let duration = i128::try_from(duration.as_nanos()).unwrap();
+        let duration = t::NoUnits128::new_unchecked(duration);
+        let duration = duration % t::NANOS_PER_CIVIL_DAY;
+        let end = start.wrapping_add(duration) % t::NANOS_PER_CIVIL_DAY;
+        Time::from_nanosecond(end)
+    }
+
     /// This routine is identical to [`Time::wrapping_add`] with the duration
     /// negated.
     ///
     /// # Example
     ///
     /// ```
-    /// use jiff::{civil::time, ToSpan};
+    /// use jiff::{civil::time, SignedDuration, ToSpan};
+    ///
+    /// let t = time(0, 0, 0, 0);
+    /// assert_eq!(
+    ///     t.wrapping_sub(1.nanoseconds()),
+    ///     time(23, 59, 59, 999_999_999),
+    /// );
+    /// assert_eq!(
+    ///     t.wrapping_sub(SignedDuration::from_nanos(1)),
+    ///     time(23, 59, 59, 999_999_999),
+    /// );
+    /// assert_eq!(
+    ///     t.wrapping_sub(std::time::Duration::from_nanos(1)),
+    ///     time(23, 59, 59, 999_999_999),
+    /// );
     ///
     /// assert_eq!(
-    ///     time(0, 0, 0, 0).wrapping_sub(1.nanoseconds()),
-    ///     time(23, 59, 59, 999_999_999),
+    ///     t.wrapping_sub(SignedDuration::MIN),
+    ///     time(15, 30, 8, 999_999_999),
+    /// );
+    /// assert_eq!(
+    ///     t.wrapping_sub(SignedDuration::MAX),
+    ///     time(8, 29, 52, 1),
+    /// );
+    /// assert_eq!(
+    ///     t.wrapping_sub(std::time::Duration::MAX),
+    ///     time(16, 59, 44, 1),
     /// );
     /// ```
     #[inline]
-    pub fn wrapping_sub(self, span: Span) -> Time {
-        self.wrapping_add(span.negate())
+    pub fn wrapping_sub<A: Into<TimeArithmetic>>(self, duration: A) -> Time {
+        let duration: TimeArithmetic = duration.into();
+        duration.wrapping_sub(self)
+    }
+
+    #[inline]
+    fn wrapping_sub_unsigned_duration(
+        self,
+        duration: UnsignedDuration,
+    ) -> Time {
+        let start = t::NoUnits128::rfrom(self.to_nanosecond());
+        // OK because 96-bit unsigned integer can't overflow i128.
+        let duration = i128::try_from(duration.as_nanos()).unwrap();
+        let duration = t::NoUnits128::new_unchecked(duration);
+        let end = start.wrapping_sub(duration) % t::NANOS_PER_CIVIL_DAY;
+        Time::from_nanosecond(end)
     }
 
     /// Add the given span to this time and return an error if the result would
     /// otherwise overflow.
+    ///
+    /// This operation accepts three different duration types: [`Span`],
+    /// [`SignedDuration`] or [`std::time::Duration`]. This is achieved via
+    /// `From` trait implementations for the [`TimeArithmetic`] type.
     ///
     /// # Properties
     ///
@@ -800,13 +886,70 @@ impl Time {
     /// let t = time(0, 0, 0, 0);
     /// assert!(t.checked_add(1.days()).is_err());
     /// ```
+    ///
+    /// # Example: adding absolute durations
+    ///
+    /// This shows how to add signed and unsigned absolute durations to a
+    /// `Time`. As with adding a `Span`, any overflow that occurs results in
+    /// an error.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use jiff::{civil::time, SignedDuration};
+    ///
+    /// let t = time(23, 0, 0, 0);
+    ///
+    /// let dur = SignedDuration::from_mins(30);
+    /// assert_eq!(t.checked_add(dur)?, time(23, 30, 0, 0));
+    /// assert_eq!(t.checked_add(-dur)?, time(22, 30, 0, 0));
+    ///
+    /// let dur = Duration::new(0, 1);
+    /// assert_eq!(t.checked_add(dur)?, time(23, 0, 0, 1));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
-    pub fn checked_add(self, span: Span) -> Result<Time, Error> {
+    pub fn checked_add<A: Into<TimeArithmetic>>(
+        self,
+        duration: A,
+    ) -> Result<Time, Error> {
+        let duration: TimeArithmetic = duration.into();
+        duration.checked_add(self)
+    }
+
+    #[inline]
+    fn checked_add_span(self, span: Span) -> Result<Time, Error> {
         let (time, span) = self.overflowing_add(span)?;
         if let Some(err) = span.smallest_non_time_non_zero_unit_error() {
             return Err(err);
         }
         Ok(time)
+    }
+
+    #[inline]
+    fn checked_add_duration(
+        self,
+        duration: SignedDuration,
+    ) -> Result<Time, Error> {
+        let original = duration;
+        let start = t::NoUnits128::rfrom(self.to_nanosecond());
+        let duration = t::NoUnits128::new_unchecked(duration.as_nanos());
+        // This can never fail because the maximum duration fits into a
+        // 96-bit integer, and adding any 96-bit integer to any 64-bit
+        // integer can never overflow a 128-bit integer.
+        let end = start.try_checked_add("nanoseconds", duration).unwrap();
+        let end = CivilDayNanosecond::try_rfrom("nanoseconds", end)
+            .with_context(|| {
+                err!(
+                    "adding signed duration {duration:?}, equal to
+                     {nanos} nanoseconds, to {time} overflowed",
+                    duration = original,
+                    nanos = original.as_nanos(),
+                    time = self,
+                )
+            })?;
+        Ok(Time::from_nanosecond(end))
     }
 
     /// This routine is identical to [`Time::checked_add`] with the duration
@@ -819,18 +962,32 @@ impl Time {
     /// # Example
     ///
     /// ```
-    /// use jiff::{civil::time, ToSpan};
+    /// use std::time::Duration;
+    ///
+    /// use jiff::{civil::time, SignedDuration, ToSpan};
     ///
     /// let t = time(22, 0, 0, 0);
     /// assert_eq!(
-    ///     time(20, 10, 1, 0),
     ///     t.checked_sub(1.hours().minutes(49).seconds(59))?,
+    ///     time(20, 10, 1, 0),
+    /// );
+    /// assert_eq!(
+    ///     t.checked_sub(SignedDuration::from_hours(1))?,
+    ///     time(21, 0, 0, 0),
+    /// );
+    /// assert_eq!(
+    ///     t.checked_sub(Duration::from_secs(60 * 60))?,
+    ///     time(21, 0, 0, 0),
     /// );
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn checked_sub(self, span: Span) -> Result<Time, Error> {
-        self.checked_add(span.negate())
+    pub fn checked_sub<A: Into<TimeArithmetic>>(
+        self,
+        duration: A,
+    ) -> Result<Time, Error> {
+        let duration: TimeArithmetic = duration.into();
+        duration.checked_neg().and_then(|ta| ta.checked_add(self))
     }
 
     /// This routine is identical to [`Time::checked_add`], except the
@@ -840,7 +997,7 @@ impl Time {
     /// # Example
     ///
     /// ```
-    /// use jiff::{civil::{Time, time}, ToSpan};
+    /// use jiff::{civil::{Time, time}, SignedDuration, ToSpan};
     ///
     /// // no saturation
     /// let t = time(23, 59, 59, 999_999_998);
@@ -852,6 +1009,9 @@ impl Time {
     /// // saturates
     /// let t = time(23, 59, 59, 999_999_999);
     /// assert_eq!(Time::MAX, t.saturating_add(1.nanoseconds()));
+    /// assert_eq!(Time::MAX, t.saturating_add(SignedDuration::MAX));
+    /// assert_eq!(Time::MIN, t.saturating_add(SignedDuration::MIN));
+    /// assert_eq!(Time::MAX, t.saturating_add(std::time::Duration::MAX));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -867,9 +1027,10 @@ impl Time {
     /// assert_eq!(Time::MAX, t.saturating_add(1.days()));
     /// ```
     #[inline]
-    pub fn saturating_add(self, span: Span) -> Time {
-        self.checked_add(span).unwrap_or_else(|_| {
-            if span.is_negative() {
+    pub fn saturating_add<A: Into<TimeArithmetic>>(self, duration: A) -> Time {
+        let duration: TimeArithmetic = duration.into();
+        self.checked_add(duration).unwrap_or_else(|_| {
+            if duration.is_negative() {
                 Time::MIN
             } else {
                 Time::MAX
@@ -883,7 +1044,7 @@ impl Time {
     /// # Example
     ///
     /// ```
-    /// use jiff::{civil::{Time, time}, ToSpan};
+    /// use jiff::{civil::{Time, time}, SignedDuration, ToSpan};
     ///
     /// // no saturation
     /// let t = time(0, 0, 0, 1);
@@ -895,12 +1056,17 @@ impl Time {
     /// // saturates
     /// let t = time(0, 0, 0, 0);
     /// assert_eq!(Time::MIN, t.saturating_sub(1.nanoseconds()));
+    /// assert_eq!(Time::MIN, t.saturating_sub(SignedDuration::MAX));
+    /// assert_eq!(Time::MAX, t.saturating_sub(SignedDuration::MIN));
+    /// assert_eq!(Time::MIN, t.saturating_sub(std::time::Duration::MAX));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn saturating_sub(self, span: Span) -> Time {
-        self.saturating_add(span.negate())
+    pub fn saturating_sub<A: Into<TimeArithmetic>>(self, duration: A) -> Time {
+        let duration: TimeArithmetic = duration.into();
+        let Ok(duration) = duration.checked_neg() else { return Time::MIN };
+        self.saturating_add(duration)
     }
 
     /// Adds the given span to the this time value, and returns the resulting
@@ -933,6 +1099,32 @@ impl Time {
         Ok((time, Span::new().days_ranged(days)))
     }
 
+    /// Like `overflowing_add`, but with `SignedDuration`.
+    ///
+    /// This is used for datetime arithmetic, when adding to the time
+    /// component overflows into days (always 24 hours).
+    #[inline]
+    pub(crate) fn overflowing_add_duration(
+        self,
+        duration: SignedDuration,
+    ) -> Result<(Time, SignedDuration), Error> {
+        let start = t::NoUnits128::rfrom(self.to_nanosecond());
+        let duration = t::NoUnits96::new_unchecked(duration.as_nanos());
+        // This can never fail because the maximum duration fits into a
+        // 96-bit integer, and adding any 96-bit integer to any 64-bit
+        // integer can never overflow a 128-bit integer.
+        let sum = start.try_checked_add("nanoseconds", duration).unwrap();
+        let days = t::SpanDays::try_new(
+            "overflowing-days",
+            sum.div_floor(t::NANOS_PER_CIVIL_DAY),
+        )?;
+        let time_nanos = sum.rem_floor(t::NANOS_PER_CIVIL_DAY);
+        let time = Time::from_nanosecond(time_nanos);
+        // OK because of the constraint imposed by t::SpanDays.
+        let hours = i64::from(days).checked_mul(24).unwrap();
+        Ok((time, SignedDuration::from_hours(hours)))
+    }
+
     /// Returns a span representing the elapsed time from this time until
     /// the given `other` time.
     ///
@@ -954,6 +1146,15 @@ impl Time {
     ///
     /// As long as no rounding is requested, it is guaranteed that adding the
     /// span returned to the `other` time will always equal this time.
+    ///
+    /// # Errors
+    ///
+    /// An error can occur if `TimeDifference` is misconfigured. For example,
+    /// if the smallest unit provided is bigger than the largest unit, or if
+    /// the largest unit is bigger than [`Unit::Hour`].
+    ///
+    /// It is guaranteed that if one provides a time with the default
+    /// [`TimeDifference`] configuration, then this routine will never fail.
     ///
     /// # Examples
     ///
@@ -1038,6 +1239,129 @@ impl Time {
         } else {
             Ok(span)
         }
+    }
+
+    /// Returns an absolute duration representing the elapsed time from this
+    /// time until the given `other` time.
+    ///
+    /// When `other` occurs before this time, then the duration returned will
+    /// be negative.
+    ///
+    /// Unlike [`Time::until`], this returns a duration corresponding to a
+    /// 96-bit integer of nanoseconds between two times. In this case of
+    /// computing durations between civil times where all days are assumed to
+    /// be 24 hours long, the duration returned will always be less than 24
+    /// hours.
+    ///
+    /// # Fallibility
+    ///
+    /// This routine never panics or returns an error. Since there are no
+    /// configuration options that can be incorrectly provided, no error is
+    /// possible when calling this routine. In contrast, [`Time::until`] can
+    /// return an error in some cases due to misconfiguration. But like this
+    /// routine, [`Time::until`] never panics or returns an error in its
+    /// default configuration.
+    ///
+    /// # When should I use this versus [`Time::until`]?
+    ///
+    /// See the type documentation for [`SignedDuration`] for the section on
+    /// when one should use [`Span`] and when one should use `SignedDuration`.
+    /// In short, use `Span` (and therefore `Time::until`) unless you have a
+    /// specific reason to do otherwise.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::time, SignedDuration};
+    ///
+    /// let t1 = time(22, 35, 1, 0);
+    /// let t2 = time(22, 35, 3, 500_000_000);
+    /// assert_eq!(t1.duration_until(t2), SignedDuration::new(2, 500_000_000));
+    /// // Flipping the time is fine, but you'll get a negative duration.
+    /// assert_eq!(t2.duration_until(t1), -SignedDuration::new(2, 500_000_000));
+    /// ```
+    ///
+    /// # Example: difference with [`Time::until`]
+    ///
+    /// Since the difference between two civil times is always expressed in
+    /// units of hours or smaller, and units of hours or smaller are always
+    /// uniform, there is no "expressive" difference between this routine and
+    /// `Time::until`. The only difference is that this routine returns a
+    /// `SignedDuration` and `Time::until` returns a [`Span`]. Moreover, since
+    /// the difference is always less than 24 hours, the return values can
+    /// always be infallibly and losslessly converted between each other:
+    ///
+    /// ```
+    /// use jiff::{civil::time, SignedDuration, Span};
+    ///
+    /// let t1 = time(22, 35, 1, 0);
+    /// let t2 = time(22, 35, 3, 500_000_000);
+    /// let dur = t1.duration_until(t2);
+    /// // Guaranteed to never fail because the duration
+    /// // between two civil times never exceeds the limits
+    /// // of a `Span`.
+    /// let span = Span::try_from(dur).unwrap();
+    /// assert_eq!(span, Span::new().seconds(2).milliseconds(500));
+    /// // Guaranteed to succeed and always return the original
+    /// // duration because the units are always hours or smaller,
+    /// // and thus uniform. This means a relative datetime is
+    /// // never required to do this conversion.
+    /// let dur = SignedDuration::try_from(span).unwrap();
+    /// assert_eq!(dur, SignedDuration::new(2, 500_000_000));
+    /// ```
+    ///
+    /// This conversion guarantee also applies to [`Time::until`] since it
+    /// always returns a balanced span. That is, it never returns spans like
+    /// `1 second 1000 milliseconds`. (Those cannot be losslessly converted to
+    /// a `SignedDuration` since a `SignedDuration` is only represented as a
+    /// single 96-bit integer of nanoseconds.)
+    ///
+    /// # Example: getting an unsigned duration
+    ///
+    /// If you're looking to find the duration between two times as a
+    /// [`std::time::Duration`], you'll need to use this method to get a
+    /// [`SignedDuration`] and then convert it to a `std::time::Duration`:
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use jiff::{civil::time, SignedDuration, Span};
+    ///
+    /// let t1 = time(22, 35, 1, 0);
+    /// let t2 = time(22, 35, 3, 500_000_000);
+    /// let dur = Duration::try_from(t1.duration_until(t2))?;;
+    /// assert_eq!(dur, Duration::new(2, 500_000_000));
+    ///
+    /// // Note that unsigned durations cannot represent all
+    /// // possible differences! If the duration would be negative,
+    /// // then the conversion fails:
+    /// assert!(Duration::try_from(t2.duration_until(t1)).is_err());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn duration_until(self, other: Time) -> SignedDuration {
+        SignedDuration::time_until(self, other)
+    }
+
+    /// This routine is identical to [`Time::duration_until`], but the order of
+    /// the parameters is flipped.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::time, SignedDuration};
+    ///
+    /// let earlier = time(1, 0, 0, 0);
+    /// let later = time(22, 30, 0, 0);
+    /// assert_eq!(
+    ///     later.duration_since(earlier),
+    ///     SignedDuration::from_secs((21 * 60 * 60) + (30 * 60)),
+    /// );
+    /// ```
+    #[inline]
+    pub fn duration_since(self, other: Time) -> SignedDuration {
+        SignedDuration::time_until(other, self)
     }
 
     /// Rounds this time according to the [`TimeRound`] configuration given.
@@ -1522,6 +1846,95 @@ impl core::ops::Sub for Time {
     }
 }
 
+/// Adds a signed duration of time. This uses wrapping arithmetic.
+///
+/// For checked arithmetic, see [`Time::checked_add`].
+impl core::ops::Add<SignedDuration> for Time {
+    type Output = Time;
+
+    #[inline]
+    fn add(self, rhs: SignedDuration) -> Time {
+        self.wrapping_add(rhs)
+    }
+}
+
+/// Adds a signed duration of time in place. This uses wrapping arithmetic.
+///
+/// For checked arithmetic, see [`Time::checked_add`].
+impl core::ops::AddAssign<SignedDuration> for Time {
+    #[inline]
+    fn add_assign(&mut self, rhs: SignedDuration) {
+        *self = *self + rhs;
+    }
+}
+
+/// Subtracts a signed duration of time. This uses wrapping arithmetic.
+///
+/// For checked arithmetic, see [`Time::checked_sub`].
+impl core::ops::Sub<SignedDuration> for Time {
+    type Output = Time;
+
+    #[inline]
+    fn sub(self, rhs: SignedDuration) -> Time {
+        self.wrapping_sub(rhs)
+    }
+}
+
+/// Subtracts a signed duration of time in place. This uses wrapping arithmetic.
+///
+/// For checked arithmetic, see [`Time::checked_sub`].
+impl core::ops::SubAssign<SignedDuration> for Time {
+    #[inline]
+    fn sub_assign(&mut self, rhs: SignedDuration) {
+        *self = *self - rhs;
+    }
+}
+
+/// Adds an unsigned duration of time. This uses wrapping arithmetic.
+///
+/// For checked arithmetic, see [`Time::checked_add`].
+impl core::ops::Add<UnsignedDuration> for Time {
+    type Output = Time;
+
+    #[inline]
+    fn add(self, rhs: UnsignedDuration) -> Time {
+        self.wrapping_add(rhs)
+    }
+}
+
+/// Adds an unsigned duration of time in place. This uses wrapping arithmetic.
+///
+/// For checked arithmetic, see [`Time::checked_add`].
+impl core::ops::AddAssign<UnsignedDuration> for Time {
+    #[inline]
+    fn add_assign(&mut self, rhs: UnsignedDuration) {
+        *self = *self + rhs;
+    }
+}
+
+/// Subtracts an unsigned duration of time. This uses wrapping arithmetic.
+///
+/// For checked arithmetic, see [`Time::checked_sub`].
+impl core::ops::Sub<UnsignedDuration> for Time {
+    type Output = Time;
+
+    #[inline]
+    fn sub(self, rhs: UnsignedDuration) -> Time {
+        self.wrapping_sub(rhs)
+    }
+}
+
+/// Subtracts an unsigned duration of time in place. This uses wrapping
+/// arithmetic.
+///
+/// For checked arithmetic, see [`Time::checked_sub`].
+impl core::ops::SubAssign<UnsignedDuration> for Time {
+    #[inline]
+    fn sub_assign(&mut self, rhs: UnsignedDuration) {
+        *self = *self - rhs;
+    }
+}
+
 impl From<DateTime> for Time {
     #[inline]
     fn from(dt: DateTime) -> Time {
@@ -1647,6 +2060,132 @@ impl Iterator for TimeSeries {
         self.step = self.step.checked_add(1)?;
         let time = self.start.checked_add(span).ok()?;
         Some(time)
+    }
+}
+
+/// Options for [`Time::checked_add`] and [`Time::checked_sub`].
+///
+/// This type provides a way to ergonomically add one of a few different
+/// duration types to a [`Time`].
+///
+/// The main way to construct values of this type is with its `From` trait
+/// implementations:
+///
+/// * `From<Span> for TimeArithmetic` adds (or subtracts) the given span to the
+/// receiver time.
+/// * `From<SignedDuration> for TimeArithmetic` adds (or subtracts)
+/// the given signed duration to the receiver time.
+/// * `From<std::time::Duration> for TimeArithmetic` adds (or subtracts)
+/// the given unsigned duration to the receiver time.
+///
+/// # Example
+///
+/// ```
+/// use std::time::Duration;
+///
+/// use jiff::{civil::time, SignedDuration, ToSpan};
+///
+/// let t = time(0, 0, 0, 0);
+/// assert_eq!(t.checked_add(2.hours())?, time(2, 0, 0, 0));
+/// assert_eq!(t.checked_add(SignedDuration::from_hours(2))?, time(2, 0, 0, 0));
+/// assert_eq!(t.checked_add(Duration::from_secs(2 * 60 * 60))?, time(2, 0, 0, 0));
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct TimeArithmetic {
+    duration: Duration,
+}
+
+impl TimeArithmetic {
+    #[inline]
+    fn wrapping_add(self, time: Time) -> Time {
+        match self.duration {
+            Duration::Span(span) => time.wrapping_add_span(span),
+            Duration::Signed(sdur) => time.wrapping_add_signed_duration(sdur),
+            Duration::Unsigned(udur) => {
+                time.wrapping_add_unsigned_duration(udur)
+            }
+        }
+    }
+
+    #[inline]
+    fn wrapping_sub(self, time: Time) -> Time {
+        match self.duration {
+            Duration::Span(span) => time.wrapping_add_span(span.negate()),
+            Duration::Signed(sdur) => {
+                if let Some(sdur) = sdur.checked_neg() {
+                    time.wrapping_add_signed_duration(sdur)
+                } else {
+                    let udur = UnsignedDuration::new(
+                        i64::MIN.unsigned_abs(),
+                        sdur.subsec_nanos().unsigned_abs(),
+                    );
+                    time.wrapping_add_unsigned_duration(udur)
+                }
+            }
+            Duration::Unsigned(udur) => {
+                time.wrapping_sub_unsigned_duration(udur)
+            }
+        }
+    }
+
+    #[inline]
+    fn checked_add(self, time: Time) -> Result<Time, Error> {
+        match self.duration.to_signed()? {
+            SDuration::Span(span) => time.checked_add_span(span),
+            SDuration::Absolute(sdur) => time.checked_add_duration(sdur),
+        }
+    }
+
+    #[inline]
+    fn checked_neg(self) -> Result<TimeArithmetic, Error> {
+        let duration = self.duration.checked_neg()?;
+        Ok(TimeArithmetic { duration })
+    }
+
+    #[inline]
+    fn is_negative(&self) -> bool {
+        self.duration.is_negative()
+    }
+}
+
+impl From<Span> for TimeArithmetic {
+    fn from(span: Span) -> TimeArithmetic {
+        let duration = Duration::from(span);
+        TimeArithmetic { duration }
+    }
+}
+
+impl From<SignedDuration> for TimeArithmetic {
+    fn from(sdur: SignedDuration) -> TimeArithmetic {
+        let duration = Duration::from(sdur);
+        TimeArithmetic { duration }
+    }
+}
+
+impl From<UnsignedDuration> for TimeArithmetic {
+    fn from(udur: UnsignedDuration) -> TimeArithmetic {
+        let duration = Duration::from(udur);
+        TimeArithmetic { duration }
+    }
+}
+
+impl<'a> From<&'a Span> for TimeArithmetic {
+    fn from(span: &'a Span) -> TimeArithmetic {
+        TimeArithmetic::from(*span)
+    }
+}
+
+impl<'a> From<&'a SignedDuration> for TimeArithmetic {
+    fn from(sdur: &'a SignedDuration) -> TimeArithmetic {
+        TimeArithmetic::from(*sdur)
+    }
+}
+
+impl<'a> From<&'a UnsignedDuration> for TimeArithmetic {
+    fn from(udur: &'a UnsignedDuration) -> TimeArithmetic {
+        TimeArithmetic::from(*udur)
     }
 }
 
@@ -2739,5 +3278,36 @@ mod tests {
         {
             assert_eq!(8, core::mem::size_of::<Time>());
         }
+    }
+
+    // This test checks that a wrapping subtraction with the minimum signed
+    // duration is as expected.
+    #[test]
+    fn wrapping_sub_signed_duration_min() {
+        let max = -SignedDuration::MIN.as_nanos();
+        let got = time(15, 30, 8, 999_999_999).to_nanosecond();
+        let expected = max.rem_euclid(t::NANOS_PER_CIVIL_DAY.bound());
+        assert_eq!(got, expected);
+    }
+
+    // This test checks that a wrapping subtraction with the maximum signed
+    // duration is as expected.
+    #[test]
+    fn wrapping_sub_signed_duration_max() {
+        let max = -SignedDuration::MAX.as_nanos();
+        let got = time(8, 29, 52, 1).to_nanosecond();
+        let expected = max.rem_euclid(t::NANOS_PER_CIVIL_DAY.bound());
+        assert_eq!(got, expected);
+    }
+
+    // This test checks that a wrapping subtraction with the maximum unsigned
+    // duration is as expected.
+    #[test]
+    fn wrapping_sub_unsigned_duration_max() {
+        let max =
+            -i128::try_from(std::time::Duration::MAX.as_nanos()).unwrap();
+        let got = time(16, 59, 44, 1).to_nanosecond();
+        let expected = max.rem_euclid(t::NANOS_PER_CIVIL_DAY.bound());
+        assert_eq!(got, expected);
     }
 }

@@ -10,8 +10,6 @@ use crate::{
 #[cfg(not(feature = "std"))]
 use crate::util::libm::Float;
 
-// BREADCRUMBS: Update relevant portions of crate documentation too.
-
 /// A signed duration of time represented as a 96-bit integer of nanoseconds.
 ///
 /// Each duration is made up of a 64-bit integer of whole seconds and a
@@ -279,7 +277,7 @@ impl SignedDuration {
         // same sign.
         if nanos == 0 || secs == 0 || secs.signum() == (nanos.signum() as i64)
         {
-            return SignedDuration { secs, nanos };
+            return SignedDuration::new_unchecked(secs, nanos);
         }
         // Otherwise, the only work we have to do is to balance negative nanos
         // into positive seconds, or positive nanos into negative seconds.
@@ -308,6 +306,39 @@ impl SignedDuration {
             // MSRV(1.79): Consider using `unchecked_add` here.
             nanos += NANOS_PER_SEC;
         }
+        SignedDuration::new_unchecked(secs, nanos)
+    }
+
+    /// Creates a new signed duration without handling nanosecond overflow.
+    ///
+    /// This might produce tighter code in some cases.
+    ///
+    /// # Panics
+    ///
+    /// When `|nanos|` is greater than or equal to 1 second.
+    #[inline]
+    pub(crate) const fn new_without_nano_overflow(
+        secs: i64,
+        nanos: i32,
+    ) -> SignedDuration {
+        assert!(nanos <= 999_999_999);
+        assert!(nanos >= -999_999_999);
+        SignedDuration::new_unchecked(secs, nanos)
+    }
+
+    /// Creates a new signed duration without handling nanosecond overflow.
+    ///
+    /// This might produce tighter code in some cases.
+    ///
+    /// In debug mode only, when `|nanos|` is greater than or equal to 1
+    /// second.
+    ///
+    /// This is not exported so that code outside this module can rely on
+    /// `|nanos|` being less than a second for purposes of memory safety.
+    #[inline]
+    const fn new_unchecked(secs: i64, nanos: i32) -> SignedDuration {
+        debug_assert!(nanos <= 999_999_999);
+        debug_assert!(nanos >= -999_999_999);
         SignedDuration { secs, nanos }
     }
 
@@ -324,7 +355,7 @@ impl SignedDuration {
     /// ```
     #[inline]
     pub const fn from_secs(secs: i64) -> SignedDuration {
-        SignedDuration { secs, nanos: 0 }
+        SignedDuration::new_unchecked(secs, 0)
     }
 
     /// Creates a new `SignedDuration` from the given number of whole
@@ -356,7 +387,7 @@ impl SignedDuration {
         // millis % MILLIS_PER_SEC can be at most 999, and 999 * 1_000_000
         // never overflows i32.
         let nanos = (millis % MILLIS_PER_SEC) as i32 * NANOS_PER_MILLI;
-        SignedDuration { secs, nanos }
+        SignedDuration::new_unchecked(secs, nanos)
     }
 
     /// Creates a new `SignedDuration` from the given number of whole
@@ -388,7 +419,7 @@ impl SignedDuration {
         // millis % MICROS_PER_SEC can be at most 999, and 999 * 1_000_000
         // never overflows i32.
         let nanos = (micros % MICROS_PER_SEC) as i32 * NANOS_PER_MICRO;
-        SignedDuration { secs, nanos }
+        SignedDuration::new_unchecked(secs, nanos)
     }
 
     /// Creates a new `SignedDuration` from the given number of whole
@@ -418,7 +449,7 @@ impl SignedDuration {
         let secs = nanos / (NANOS_PER_SEC as i64);
         // OK because NANOS_PER_SEC!={-1,0}.
         let nanos = (nanos % (NANOS_PER_SEC as i64)) as i32;
-        SignedDuration { secs, nanos }
+        SignedDuration::new_unchecked(secs, nanos)
     }
 
     /// Creates a new `SignedDuration` from the given number of hours. Every
@@ -513,10 +544,10 @@ impl SignedDuration {
     /// `SignedDuration` with the same guarantees (except with smaller limits),
     /// we can avoid a fair bit of case analysis done in `SignedDuration::new`.
     pub(crate) fn from_timestamp(timestamp: Timestamp) -> SignedDuration {
-        SignedDuration {
-            secs: timestamp.as_second(),
-            nanos: timestamp.subsec_nanosecond(),
-        }
+        SignedDuration::new_unchecked(
+            timestamp.as_second(),
+            timestamp.subsec_nanosecond(),
+        )
     }
 
     /// Returns true if this duration spans no time.
@@ -797,7 +828,7 @@ impl SignedDuration {
                 nanos += NANOS_PER_SEC;
             }
         }
-        Some(SignedDuration { secs, nanos })
+        Some(SignedDuration::new_unchecked(secs, nanos))
     }
 
     /// Add two signed durations together. If overflow occurs, then arithmetic
@@ -909,7 +940,7 @@ impl SignedDuration {
         let nanos = (nanos % (NANOS_PER_SEC as i64)) as i32;
         let Some(secs) = self.secs.checked_mul(rhs) else { return None };
         let Some(secs) = secs.checked_add(addsecs) else { return None };
-        Some(SignedDuration { secs, nanos })
+        Some(SignedDuration::new_unchecked(secs, nanos))
     }
 
     /// Multiply this signed duration by an integer. If the multiplication
@@ -987,7 +1018,7 @@ impl SignedDuration {
             (addsecs * (NANOS_PER_SEC as i64)) + (addnanos as i64);
         nanos += (leftover_nanos / (rhs as i64)) as i32;
         debug_assert!(nanos < NANOS_PER_SEC);
-        Some(SignedDuration { secs, nanos })
+        Some(SignedDuration::new_unchecked(secs, nanos))
     }
 
     /// Returns the number of seconds, with a possible fractional nanosecond
@@ -1184,7 +1215,7 @@ impl SignedDuration {
         }
         let nanos = (secs.fract() * (NANOS_PER_SEC as f64)).round() as i32;
         let secs = secs.trunc() as i64;
-        Ok(SignedDuration { secs, nanos })
+        Ok(SignedDuration::new_unchecked(secs, nanos))
     }
 
     /// Returns a signed duration corresponding to the number of seconds
@@ -1241,7 +1272,7 @@ impl SignedDuration {
         }
         let nanos = (secs.fract() * (NANOS_PER_SEC as f32)).round() as i32;
         let secs = secs.trunc() as i64;
-        Ok(SignedDuration { secs, nanos })
+        Ok(SignedDuration::new_unchecked(secs, nanos))
     }
 
     /// Returns the result of multiplying this duration by the given 64-bit
@@ -1490,7 +1521,7 @@ impl SignedDuration {
     /// ```
     #[inline]
     pub const fn abs(self) -> SignedDuration {
-        SignedDuration { secs: self.secs.abs(), nanos: self.nanos.abs() }
+        SignedDuration::new_unchecked(self.secs.abs(), self.nanos.abs())
     }
 
     /// Returns the absolute value of this signed duration as a
@@ -1547,11 +1578,11 @@ impl SignedDuration {
     #[inline]
     pub const fn checked_neg(self) -> Option<SignedDuration> {
         let Some(secs) = self.secs.checked_neg() else { return None };
-        Some(SignedDuration {
+        Some(SignedDuration::new_unchecked(
             secs,
             // Always OK because `-999_999_999 <= self.nanos <= 999_999_999`.
-            nanos: -self.nanos,
-        })
+            -self.nanos,
+        ))
     }
 
     /// Returns a number that represents the sign of this duration.
@@ -1627,11 +1658,9 @@ impl SignedDuration {
         timestamp1: Timestamp,
         timestamp2: Timestamp,
     ) -> SignedDuration {
-        let dur1 = SignedDuration::from_timestamp(timestamp1);
-        let dur2 = SignedDuration::from_timestamp(timestamp2);
         // OK because all the difference between any two timestamp values can
         // fit into a signed duration.
-        dur2 - dur1
+        timestamp2.as_jiff_duration() - timestamp1.as_jiff_duration()
     }
 
     pub(crate) fn datetime_until(
@@ -1760,7 +1789,7 @@ impl TryFrom<Duration> for SignedDuration {
         })?;
         // Guaranteed to succeed since 0<=nanos<=999,999,999.
         let nanos = i32::try_from(d.subsec_nanos()).unwrap();
-        Ok(SignedDuration { secs, nanos })
+        Ok(SignedDuration::new_unchecked(secs, nanos))
     }
 }
 

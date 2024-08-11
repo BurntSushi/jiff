@@ -1,7 +1,11 @@
-use core::ops::{Add, AddAssign, Neg, Sub, SubAssign};
+use core::{
+    ops::{Add, AddAssign, Neg, Sub, SubAssign},
+    time::Duration as UnsignedDuration,
+};
 
 use crate::{
     civil,
+    duration::{Duration, SDuration},
     error::{err, Error, ErrorContext},
     span::Span,
     timestamp::Timestamp,
@@ -10,6 +14,7 @@ use crate::{
         rangeint::{RFrom, RInto, TryRFrom},
         t::{self, C},
     },
+    SignedDuration,
 };
 
 /// An enum indicating whether a particular datetime  is in DST or not.
@@ -448,15 +453,17 @@ impl Offset {
         self,
         dt: civil::DateTime,
     ) -> Result<Timestamp, Error> {
-        // datetime_zulu_to_timestamp(dt)?.checked_sub(self.to_span())
-        datetime_zulu_to_timestamp(dt)?
-            .checked_sub_seconds(i64::from(self.seconds()))
+        datetime_zulu_to_timestamp(dt, self)
     }
 
     /// Adds the given span of time to this offset.
     ///
     /// Since time zone offsets have second resolution, any fractional seconds
-    /// in the span given are ignored.
+    /// in the duration given are ignored.
+    ///
+    /// This operation accepts three different duration types: [`Span`],
+    /// [`SignedDuration`] or [`std::time::Duration`]. This is achieved via
+    /// `From` trait implementations for the [`OffsetArithmetic`] type.
     ///
     /// # Errors
     ///
@@ -520,8 +527,41 @@ impl Offset {
     /// assert!(Offset::MIN.checked_add(-1.seconds()).is_err());
     /// assert!(Offset::MAX.checked_add(1.seconds()).is_err());
     /// ```
+    ///
+    /// # Example: adding absolute durations
+    ///
+    /// This shows how to add signed and unsigned absolute durations to an
+    /// `Offset`. Like with `Span`s, any fractional seconds are ignored.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use jiff::{tz::offset, SignedDuration};
+    ///
+    /// let off = offset(-10);
+    ///
+    /// let dur = SignedDuration::from_hours(11);
+    /// assert_eq!(off.checked_add(dur)?, offset(1));
+    /// assert_eq!(off.checked_add(-dur)?, offset(-21));
+    ///
+    /// // Any leftover time is truncated. That is, only
+    /// // whole seconds from the duration are considered.
+    /// let dur = Duration::new(3 * 60 * 60, 999_999_999);
+    /// assert_eq!(off.checked_add(dur)?, offset(-7));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
-    pub fn checked_add(self, span: Span) -> Result<Offset, Error> {
+    pub fn checked_add<A: Into<OffsetArithmetic>>(
+        self,
+        duration: A,
+    ) -> Result<Offset, Error> {
+        let duration: OffsetArithmetic = duration.into();
+        duration.checked_add(self)
+    }
+
+    #[inline]
+    fn checked_add_span(self, span: Span) -> Result<Offset, Error> {
         if let Some(err) = span.smallest_non_time_non_zero_unit_error() {
             return Err(err);
         }
@@ -535,6 +575,31 @@ impl Offset {
         Ok(Offset::from_seconds_ranged(seconds))
     }
 
+    #[inline]
+    fn checked_add_duration(
+        self,
+        duration: SignedDuration,
+    ) -> Result<Offset, Error> {
+        let duration =
+            t::SpanZoneOffset::try_new("duration-seconds", duration.as_secs())
+                .with_context(|| {
+                    err!(
+                        "adding signed duration {duration:?} \
+                         to offset {self} overflowed maximum offset seconds"
+                    )
+                })?;
+        let offset_seconds = self.seconds_ranged();
+        let seconds = offset_seconds
+            .try_checked_add("offset-seconds", duration)
+            .with_context(|| {
+                err!(
+                    "adding signed duration {duration:?} \
+                     to offset {self} overflowed"
+                )
+            })?;
+        Ok(Offset::from_seconds_ranged(seconds))
+    }
+
     /// This routine is identical to [`Offset::checked_add`] with the duration
     /// negated.
     ///
@@ -545,14 +610,33 @@ impl Offset {
     /// # Example
     ///
     /// ```
-    /// use jiff::{tz, ToSpan};
+    /// use std::time::Duration;
+    ///
+    /// use jiff::{tz, SignedDuration, ToSpan};
     ///
     /// let off = tz::offset(-4);
-    /// assert_eq!(off.checked_sub(1.hours()).unwrap(), tz::offset(-5));
+    /// assert_eq!(
+    ///     off.checked_sub(1.hours())?,
+    ///     tz::offset(-5),
+    /// );
+    /// assert_eq!(
+    ///     off.checked_sub(SignedDuration::from_hours(1))?,
+    ///     tz::offset(-5),
+    /// );
+    /// assert_eq!(
+    ///     off.checked_sub(Duration::from_secs(60 * 60))?,
+    ///     tz::offset(-5),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn checked_sub(self, span: Span) -> Result<Offset, Error> {
-        self.checked_add(span.negate())
+    pub fn checked_sub<A: Into<OffsetArithmetic>>(
+        self,
+        duration: A,
+    ) -> Result<Offset, Error> {
+        let duration: OffsetArithmetic = duration.into();
+        duration.checked_neg().and_then(|oa| oa.checked_add(self))
     }
 
     /// This routine is identical to [`Offset::checked_add`], except the
@@ -564,7 +648,7 @@ impl Offset {
     /// This example shows some cases where saturation will occur.
     ///
     /// ```
-    /// use jiff::{tz::Offset, ToSpan};
+    /// use jiff::{tz::Offset, SignedDuration, ToSpan};
     ///
     /// // Adding units above 'day' always results in saturation.
     /// assert_eq!(Offset::UTC.saturating_add(1.weeks()), Offset::MAX);
@@ -575,11 +659,20 @@ impl Offset {
     /// // will result in saturationg.
     /// assert_eq!(Offset::MIN.saturating_add(-1.seconds()), Offset::MIN);
     /// assert_eq!(Offset::MAX.saturating_add(1.seconds()), Offset::MAX);
+    ///
+    /// // Adding absolute durations also saturates as expected.
+    /// assert_eq!(Offset::UTC.saturating_add(SignedDuration::MAX), Offset::MAX);
+    /// assert_eq!(Offset::UTC.saturating_add(SignedDuration::MIN), Offset::MIN);
+    /// assert_eq!(Offset::UTC.saturating_add(std::time::Duration::MAX), Offset::MAX);
     /// ```
     #[inline]
-    pub fn saturating_add(self, span: Span) -> Offset {
-        self.checked_add(span).unwrap_or_else(|_| {
-            if span.is_negative() {
+    pub fn saturating_add<A: Into<OffsetArithmetic>>(
+        self,
+        duration: A,
+    ) -> Offset {
+        let duration: OffsetArithmetic = duration.into();
+        self.checked_add(duration).unwrap_or_else(|_| {
+            if duration.is_negative() {
                 Offset::MIN
             } else {
                 Offset::MAX
@@ -595,7 +688,7 @@ impl Offset {
     /// This example shows some cases where saturation will occur.
     ///
     /// ```
-    /// use jiff::{tz::Offset, ToSpan};
+    /// use jiff::{tz::Offset, SignedDuration, ToSpan};
     ///
     /// // Adding units above 'day' always results in saturation.
     /// assert_eq!(Offset::UTC.saturating_sub(1.weeks()), Offset::MIN);
@@ -606,10 +699,20 @@ impl Offset {
     /// // will result in saturationg.
     /// assert_eq!(Offset::MIN.saturating_sub(1.seconds()), Offset::MIN);
     /// assert_eq!(Offset::MAX.saturating_sub(-1.seconds()), Offset::MAX);
+    ///
+    /// // Adding absolute durations also saturates as expected.
+    /// assert_eq!(Offset::UTC.saturating_sub(SignedDuration::MAX), Offset::MIN);
+    /// assert_eq!(Offset::UTC.saturating_sub(SignedDuration::MIN), Offset::MAX);
+    /// assert_eq!(Offset::UTC.saturating_sub(std::time::Duration::MAX), Offset::MIN);
     /// ```
     #[inline]
-    pub fn saturating_sub(self, span: Span) -> Offset {
-        self.saturating_add(span.negate())
+    pub fn saturating_sub<A: Into<OffsetArithmetic>>(
+        self,
+        duration: A,
+    ) -> Offset {
+        let duration: OffsetArithmetic = duration.into();
+        let Ok(duration) = duration.checked_neg() else { return Offset::MIN };
+        self.saturating_add(duration)
     }
 
     /// Returns the span of time from this offset until the other given.
@@ -673,11 +776,77 @@ impl Offset {
         self.until(other).negate()
     }
 
+    /// Returns an absolute duration representing the difference in time from
+    /// this offset until the given `other` offset.
+    ///
+    /// When the `other` offset is more west (i.e., more negative) of the prime
+    /// meridian than this offset, then the duration returned will be negative.
+    ///
+    /// Unlike [`Offset::until`], this returns a duration corresponding to a
+    /// 96-bit integer of nanoseconds between two offsets.
+    ///
+    /// # When should I use this versus [`Offset::until`]?
+    ///
+    /// See the type documentation for [`SignedDuration`] for the section on
+    /// when one should use [`Span`] and when one should use `SignedDuration`.
+    /// In short, use `Span` (and therefore `Offset::until`) unless you have a
+    /// specific reason to do otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use jiff::{tz, SignedDuration};
+    ///
+    /// assert_eq!(
+    ///     tz::offset(-5).duration_until(tz::Offset::UTC),
+    ///     SignedDuration::from_hours(5),
+    /// );
+    /// // Flipping the operands in this case results in a negative span.
+    /// assert_eq!(
+    ///     tz::Offset::UTC.duration_until(tz::offset(-5)),
+    ///     SignedDuration::from_hours(-5),
+    /// );
+    /// ```
+    #[inline]
+    pub fn duration_until(self, other: Offset) -> SignedDuration {
+        SignedDuration::offset_until(self, other)
+    }
+
+    /// This routine is identical to [`Offset::duration_until`], but the order
+    /// of the parameters is flipped.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use jiff::{tz, SignedDuration};
+    ///
+    /// assert_eq!(
+    ///     tz::Offset::UTC.duration_since(tz::offset(-5)),
+    ///     SignedDuration::from_hours(5),
+    /// );
+    /// assert_eq!(
+    ///     tz::offset(-5).duration_since(tz::Offset::UTC),
+    ///     SignedDuration::from_hours(-5),
+    /// );
+    /// ```
+    #[inline]
+    pub fn duration_since(self, other: Offset) -> SignedDuration {
+        SignedDuration::offset_until(other, self)
+    }
+
     /// Returns this offset as a [`Span`].
     #[inline]
     pub(crate) fn to_span(self) -> Span {
         Span::new().seconds_ranged(self.seconds_ranged())
     }
+
+    /*
+    /// Returns this offset as a [`SignedDuration`].
+    #[inline]
+    pub(crate) fn to_duration(self) -> SignedDuration {
+        SignedDuration::from_secs(i64::from(self.seconds()))
+    }
+    */
 }
 
 impl Offset {
@@ -840,6 +1009,106 @@ impl Sub for Offset {
     }
 }
 
+/// Adds a signed duration of time to an offset. This panics on overflow.
+///
+/// For checked arithmetic, see [`Offset::checked_add`].
+impl Add<SignedDuration> for Offset {
+    type Output = Offset;
+
+    #[inline]
+    fn add(self, rhs: SignedDuration) -> Offset {
+        self.checked_add(rhs)
+            .expect("adding signed duration to offset should not overflow")
+    }
+}
+
+/// Adds a signed duration of time to an offset in place. This panics on
+/// overflow.
+///
+/// For checked arithmetic, see [`Offset::checked_add`].
+impl AddAssign<SignedDuration> for Offset {
+    #[inline]
+    fn add_assign(&mut self, rhs: SignedDuration) {
+        *self = self.add(rhs);
+    }
+}
+
+/// Subtracts a signed duration of time from an offset. This panics on
+/// overflow.
+///
+/// For checked arithmetic, see [`Offset::checked_sub`].
+impl Sub<SignedDuration> for Offset {
+    type Output = Offset;
+
+    #[inline]
+    fn sub(self, rhs: SignedDuration) -> Offset {
+        self.checked_sub(rhs).expect(
+            "subtracting signed duration from offsetsshould not overflow",
+        )
+    }
+}
+
+/// Subtracts a signed duration of time from an offset in place. This panics on
+/// overflow.
+///
+/// For checked arithmetic, see [`Offset::checked_sub`].
+impl SubAssign<SignedDuration> for Offset {
+    #[inline]
+    fn sub_assign(&mut self, rhs: SignedDuration) {
+        *self = self.sub(rhs);
+    }
+}
+
+/// Adds an unsigned duration of time to an offset. This panics on overflow.
+///
+/// For checked arithmetic, see [`Offset::checked_add`].
+impl Add<UnsignedDuration> for Offset {
+    type Output = Offset;
+
+    #[inline]
+    fn add(self, rhs: UnsignedDuration) -> Offset {
+        self.checked_add(rhs)
+            .expect("adding unsigned duration to offset should not overflow")
+    }
+}
+
+/// Adds an unsigned duration of time to an offset in place. This panics on
+/// overflow.
+///
+/// For checked arithmetic, see [`Offset::checked_add`].
+impl AddAssign<UnsignedDuration> for Offset {
+    #[inline]
+    fn add_assign(&mut self, rhs: UnsignedDuration) {
+        *self = self.add(rhs);
+    }
+}
+
+/// Subtracts an unsigned duration of time from an offset. This panics on
+/// overflow.
+///
+/// For checked arithmetic, see [`Offset::checked_sub`].
+impl Sub<UnsignedDuration> for Offset {
+    type Output = Offset;
+
+    #[inline]
+    fn sub(self, rhs: UnsignedDuration) -> Offset {
+        self.checked_sub(rhs).expect(
+            "subtracting unsigned duration from offsetsshould not overflow",
+        )
+    }
+}
+
+/// Subtracts an unsigned duration of time from an offset in place. This panics
+/// on overflow.
+///
+/// For checked arithmetic, see [`Offset::checked_sub`].
+impl SubAssign<UnsignedDuration> for Offset {
+    #[inline]
+    fn sub_assign(&mut self, rhs: UnsignedDuration) {
+        *self = self.sub(rhs);
+    }
+}
+
 /// Negate this offset.
 ///
 /// A positive offset becomes negative and vice versa. This is a no-op for the
@@ -852,6 +1121,100 @@ impl Neg for Offset {
     #[inline]
     fn neg(self) -> Offset {
         self.negate()
+    }
+}
+
+/// Options for [`Offset::checked_add`] and [`Offset::checked_sub`].
+///
+/// This type provides a way to ergonomically add one of a few different
+/// duration types to a [`Offset`].
+///
+/// The main way to construct values of this type is with its `From` trait
+/// implementations:
+///
+/// * `From<Span> for OffsetArithmetic` adds (or subtracts) the given span to
+/// the receiver offset.
+/// * `From<SignedDuration> for OffsetArithmetic` adds (or subtracts)
+/// the given signed duration to the receiver offset.
+/// * `From<std::time::Duration> for OffsetArithmetic` adds (or subtracts)
+/// the given unsigned duration to the receiver offset.
+///
+/// # Example
+///
+/// ```
+/// use std::time::Duration;
+///
+/// use jiff::{tz::offset, SignedDuration, ToSpan};
+///
+/// let off = offset(-10);
+/// assert_eq!(off.checked_add(11.hours())?, offset(1));
+/// assert_eq!(off.checked_add(SignedDuration::from_hours(11))?, offset(1));
+/// assert_eq!(off.checked_add(Duration::from_secs(11 * 60 * 60))?, offset(1));
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct OffsetArithmetic {
+    duration: Duration,
+}
+
+impl OffsetArithmetic {
+    #[inline]
+    fn checked_add(self, offset: Offset) -> Result<Offset, Error> {
+        match self.duration.to_signed()? {
+            SDuration::Span(span) => offset.checked_add_span(span),
+            SDuration::Absolute(sdur) => offset.checked_add_duration(sdur),
+        }
+    }
+
+    #[inline]
+    fn checked_neg(self) -> Result<OffsetArithmetic, Error> {
+        let duration = self.duration.checked_neg()?;
+        Ok(OffsetArithmetic { duration })
+    }
+
+    #[inline]
+    fn is_negative(&self) -> bool {
+        self.duration.is_negative()
+    }
+}
+
+impl From<Span> for OffsetArithmetic {
+    fn from(span: Span) -> OffsetArithmetic {
+        let duration = Duration::from(span);
+        OffsetArithmetic { duration }
+    }
+}
+
+impl From<SignedDuration> for OffsetArithmetic {
+    fn from(sdur: SignedDuration) -> OffsetArithmetic {
+        let duration = Duration::from(sdur);
+        OffsetArithmetic { duration }
+    }
+}
+
+impl From<UnsignedDuration> for OffsetArithmetic {
+    fn from(udur: UnsignedDuration) -> OffsetArithmetic {
+        let duration = Duration::from(udur);
+        OffsetArithmetic { duration }
+    }
+}
+
+impl<'a> From<&'a Span> for OffsetArithmetic {
+    fn from(span: &'a Span) -> OffsetArithmetic {
+        OffsetArithmetic::from(*span)
+    }
+}
+
+impl<'a> From<&'a SignedDuration> for OffsetArithmetic {
+    fn from(sdur: &'a SignedDuration) -> OffsetArithmetic {
+        OffsetArithmetic::from(*sdur)
+    }
+}
+
+impl<'a> From<&'a UnsignedDuration> for OffsetArithmetic {
+    fn from(udur: &'a UnsignedDuration) -> OffsetArithmetic {
+        OffsetArithmetic::from(*udur)
     }
 }
 
@@ -1244,6 +1607,7 @@ fn timestamp_to_datetime_zulu(
 
 fn datetime_zulu_to_timestamp(
     dt: civil::DateTime,
+    offset: Offset,
 ) -> Result<Timestamp, Error> {
     let (date, time) = (dt.date(), dt.time());
     let day = date.to_unix_epoch_days().without_bounds();
@@ -1267,10 +1631,22 @@ fn datetime_zulu_to_timestamp(
 
     let day = day + delta_day;
     let second = day * t::SECONDS_PER_CIVIL_DAY + second + delta_second;
+    // This can overflow our Timestamp limits, so we need to make sure we're
+    // doing arithmetic using `UnixSeconds` boundaries. This is precisely the
+    // point at which a DateTime->Timestamp conversion can fail, and is a
+    // result of guaranteeing that all Timestamp->DateTime conversions succeed.
+    let second = t::UnixSeconds::rfrom(second)
+        .try_checked_sub("offset-second", offset.seconds_ranged())
+        .with_context(|| {
+            err!(
+                "converting {dt} with offset {offset} to timestamp overflowed \
+                 (second={second}, nanosecond={nanosecond})",
+            )
+        })?;
     let nanosecond = nanosecond + delta_nanosecond;
     Timestamp::new_ranged(second, nanosecond).with_context(|| {
         err!(
-            "converting {dt} to timestamp overflowed \
+            "converting {dt} with offset {offset} to timestamp overflowed \
              (second={second}, nanosecond={nanosecond})",
         )
     })
