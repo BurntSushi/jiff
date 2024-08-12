@@ -413,6 +413,44 @@ impl Zoned {
             .expect("system time is valid")
     }
 
+    /// Returns the current system time with the specific time zone.
+    ///
+    /// This is a convenience function for
+    /// `Zoned::new(Timestamp::now(), time_zone)`.
+    ///
+    /// # Panics
+    ///
+    /// This panics if the system clock is set to a time value outside of the
+    /// range `-009999-01-01T00:00:00Z..=9999-12-31T11:59:59.999999999Z`. The
+    /// justification here is that it is reasonable to expect the system clock
+    /// to be set to a somewhat sane, if imprecise, value.
+    ///
+    /// If you want to get the current Unix time fallibly, use
+    /// [`Zoned::try_from`] with a `std::time::SystemTime` as input.
+    ///
+    /// This may also panic when `SystemTime::now()` itself panics. The most
+    /// common context in which this happens is on the `wasm32-unknown-unknown`
+    /// target. If you're using that target in the context of the web (for
+    /// example, via `wasm-pack`), and you're an application, then you should
+    /// enable Jiff's `js` feature. This will automatically instruct Jiff in
+    /// this very specific circumstance to execute JavaScript code to determine
+    /// the current time from the web browser.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{Timestamp, Zoned};
+    /// use jiff::tz::TimeZone;
+    ///
+    /// let zdt = Zoned::now_with_time_zone(TimeZone::UTC);
+    /// assert!(zdt.timestamp() > Timestamp::UNIX_EPOCH);
+    /// ```
+    #[cfg(feature = "std")]
+    #[inline]
+    pub fn now_with_time_zone(time_zone: TimeZone) -> Zoned {
+        Zoned::new(Timestamp::now(), time_zone)
+    }
+
     /// Creates a new `Zoned` value from a specific instant in a particular
     /// time zone. The time zone determines how to render the instant in time
     /// into civil time. (Also known as "clock," "wall," "local" or "naive"
