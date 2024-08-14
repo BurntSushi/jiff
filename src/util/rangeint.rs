@@ -113,6 +113,7 @@ macro_rules! define_ranged {
                 val: impl Into<i64>,
             ) -> Result<Self, Error> {
                 let val = val.into();
+                #[allow(irrefutable_let_patterns)]
                 let Ok(val) = <$repr>::try_from(val) else {
                     return Err(Error::signed(
                         what,
@@ -130,6 +131,7 @@ macro_rules! define_ranged {
                 val: impl Into<i128>,
             ) -> Result<Self, Error> {
                 let val = val.into();
+                #[allow(irrefutable_let_patterns)]
                 let Ok(val) = <$repr>::try_from(val) else {
                     return Err(Error::signed(
                         what,
@@ -926,6 +928,7 @@ macro_rules! define_ranged {
                     // that can't fit in the actual integer representation.
                     // This makes doing things like `number % one-plus-max`
                     // much more convenient.
+                    #[allow(irrefutable_let_patterns)]
                     let Ok(val) = <$repr>::try_from(c.value()) else {
                         panic!(
                             "{c:?} does not fit in {name:?}",
