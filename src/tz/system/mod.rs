@@ -1,14 +1,14 @@
 #![allow(dead_code)] // REMOVE ME
 
-use std::{sync::RwLock, time::Duration};
-
-use alloc::{string::ToString, sync::Arc};
+use std::{format, println, sync::RwLock, thread, time::Duration};
 
 use crate::{
     error::{err, Error, ErrorContext},
     tz::{posix::PosixTz, TimeZone, TimeZoneDatabase},
-    util::cache::Expiration,
 };
+use alloc::{string::ToString, sync::Arc};
+use std::prelude::v1::String;
+use std::thread::{sleep, JoinHandle};
 
 #[cfg(unix)]
 #[path = "unix.rs"]
@@ -45,7 +45,9 @@ mod sys {
 }
 
 /// The duration of time that a cached time zone should be considered valid.
-static TTL: Duration = Duration::new(5 * 60, 0);
+const TTL: Duration = Duration::new(20, 0);
+
+const THREAD_NAME: &str = "jiff_time_zone_fetcher";
 
 /// A cached time zone.
 ///
@@ -76,13 +78,63 @@ static CACHE: RwLock<Cache> = RwLock::new(Cache::empty());
 /// a way to reset this cache and force a re-creation of the time zone.
 struct Cache {
     tz: Option<TimeZone>,
-    expiration: Expiration,
+    ttl: Duration,
+    // if the cache isn't used after updating, the updating thread will be stopped.
+    in_use: bool,
+    handle: Option<JoinHandle<()>>,
 }
 
 impl Cache {
     /// Create an empty cache. The default state.
     const fn empty() -> Cache {
-        Cache { tz: None, expiration: Expiration::expired() }
+        Cache { tz: None, ttl: TTL, in_use: false, handle: None }
+    }
+
+    fn try_schedule_update_time_zone(
+        &mut self,
+        db: &'static TimeZoneDatabase,
+    ) {
+        println!("try_update_time_zone");
+        if self.handle.is_some() {
+            // Thread race happens here, other thread has already
+            // started the thread, so return directly.
+            return;
+        }
+        let ttl = self.ttl.clone();
+        let handle = thread::Builder::new()
+            .name(THREAD_NAME.to_string())
+            .spawn(move || {
+            loop {
+                sleep(ttl);
+
+                let tz_result = get_force(db);
+                let mut cache = CACHE.write().unwrap();
+                match tz_result {
+                    Ok(tz) => {
+                        if cache.in_use {
+                            println!(
+                                "cache is still using, so update the tz."
+                            );
+                            cache.tz = Some(tz);
+                            cache.in_use = false;
+                        } else {
+                            println!("cache is not used so far, so stop this thread.");
+                            cache.handle = None;
+                            cache.tz = None;
+                            break;
+                        }
+                    }
+                    Err(_) => {
+                        // Get tz fails, so stop this updating thread.
+                        cache.handle = None;
+                        cache.tz = None;
+                        break;
+                    }
+                };
+            }
+        })
+            .expect(&format!("failed to spawn {} thread", THREAD_NAME));
+        self.handle = Some(handle);
     }
 }
 
@@ -99,15 +151,34 @@ impl Cache {
 /// it is just impractical to determine the time zone name. For example, when
 /// `/etc/localtime` is a hard link to a TZif file instead of a symlink and
 /// when the time zone name isn't recorded in any of the other obvious places.
-pub(crate) fn get(db: &TimeZoneDatabase) -> Result<TimeZone, Error> {
+pub(crate) fn get(db: &'static TimeZoneDatabase) -> Result<TimeZone, Error> {
+    let mut result: Option<TimeZone> = None;
+
     {
         let cache = CACHE.read().unwrap();
         if let Some(ref tz) = cache.tz {
-            if !cache.expiration.is_expired() {
-                return Ok(tz.clone());
+            let tz = tz.clone();
+            if cache.in_use {
+                // Most of the case: It's already in use, so don't need to update.
+                return Ok(tz);
+            } else {
+                // The first call after updating the timezone.
+                // update the in_use to true in the next code block(needs write lock).
+                result = Some(tz);
             }
         }
     }
+
+    {
+        // Cache has tz, but it's not used so far. We need update in_use to true.
+        if let Some(tz) = result {
+            let mut cache = CACHE.write().unwrap();
+            cache.in_use = true;
+            return Ok(tz);
+        }
+    }
+
+    // The cache is empty, update the tz and try_schedule_update_time_zone.
     let tz = get_force(db)?;
     {
         // It's okay that we race here. We basically assume that any
@@ -117,7 +188,7 @@ pub(crate) fn get(db: &TimeZoneDatabase) -> Result<TimeZone, Error> {
         // will eventually be true in any sane environment.
         let mut cache = CACHE.write().unwrap();
         cache.tz = Some(tz.clone());
-        cache.expiration = Expiration::after(TTL);
+        cache.try_schedule_update_time_zone(db);
     }
     Ok(tz)
 }

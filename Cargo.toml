@@ -15,7 +15,6 @@ keywords = ["date", "time", "temporal", "zone", "iana"]
 edition = "2021"
 exclude = ["/.github", "/tmp"]
 autotests = false
-autoexamples = false
 rust-version = "1.70"
 
 [workspace]
@@ -23,7 +22,6 @@ members = [
   "jiff-cli",
   "jiff-tzdb",
   "jiff-tzdb-platform",
-  "examples/*",
 ]
 
 # Features are documented in the "Crate features" section of the crate docs:
