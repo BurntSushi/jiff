@@ -19,6 +19,11 @@ name = "jiff-bench"
 harness = false
 path = "src/bench.rs"
 
+[[bench]]
+name = "default_time_zone_benchmark"
+harness = false
+path = "src/default_time_zone_benchmark.rs"
+
 [dependencies]
 criterion = "0.5.1"
 jiff = { version = "0.1.0", path = ".." }
