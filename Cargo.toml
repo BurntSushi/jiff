@@ -72,7 +72,7 @@ tzdb-zoneinfo = ["std"]
 # on Jiff directly and enable the `js` feature themselves.
 #
 # (This is the same dependency setup that the `getrandom` crate uses.)
-js = ["wasm-bindgen", "js-sys"]
+js = ["dep:wasm-bindgen", "dep:js-sys"]
 
 [dependencies]
 jiff-tzdb = { version = "0.1.0", path = "jiff-tzdb", optional = true }
