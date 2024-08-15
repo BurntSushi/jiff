@@ -1367,8 +1367,6 @@ impl Date {
     /// # Example: negative spans are supported
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::Date, ToSpan};
     ///
     /// let d = Date::constant(2024, 3, 31);
@@ -1382,8 +1380,6 @@ impl Date {
     /// # Example: error on overflow
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::Date, ToSpan};
     ///
     /// let d = Date::constant(2024, 3, 31);
@@ -1475,8 +1471,6 @@ impl Date {
     /// # Example: negative spans are supported
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::Date, ToSpan};
     ///
     /// let d = Date::constant(2024, 3, 31);
@@ -1490,8 +1484,6 @@ impl Date {
     /// # Example: error on overflow
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::Date, ToSpan};
     ///
     /// let d = Date::constant(2024, 3, 31);
@@ -1543,8 +1535,6 @@ impl Date {
     /// # Example: negative spans are supported
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::Date, ToSpan};
     ///
     /// let d = Date::constant(2024, 3, 31);
@@ -1557,8 +1547,6 @@ impl Date {
     /// # Example: saturation on overflow
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::Date, ToSpan};
     ///
     /// let d = Date::constant(2024, 3, 31);
@@ -1616,8 +1604,6 @@ impl Date {
     /// # Example: negative spans are supported
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::Date, ToSpan};
     ///
     /// let d = Date::constant(2024, 3, 31);
@@ -1630,8 +1616,6 @@ impl Date {
     /// # Example: saturation on overflow
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::Date, ToSpan};
     ///
     /// let d = Date::constant(2024, 3, 31);
@@ -1685,8 +1669,6 @@ impl Date {
     /// # Examples
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::Date, ToSpan};
     ///
     /// let earlier = Date::constant(2006, 8, 24);
@@ -1857,8 +1839,6 @@ impl Date {
     /// # Examples
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::Date, ToSpan};
     ///
     /// let earlier = Date::constant(2006, 8, 24);
@@ -2055,8 +2035,6 @@ impl Date {
     /// When did the most recent Friday the 13th occur?
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::{Date, Weekday}, ToSpan};
     ///
     /// let start = Date::constant(2024, 3, 13);
@@ -2711,8 +2689,6 @@ impl DateDifference {
     /// This shows how to always round "up" towards positive infinity.
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{civil::{Date, DateDifference}, RoundMode, ToSpan, Unit};
     ///
     /// let d1 = "2024-01-15".parse::<Date>()?;

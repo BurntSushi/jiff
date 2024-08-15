@@ -1223,8 +1223,6 @@ impl Timestamp {
     /// as subtracting `5` hours from the Unix epoch.
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{Timestamp, ToSpan};
     ///
     /// let ts = Timestamp::UNIX_EPOCH.checked_add(-5.hours())?;
@@ -1253,8 +1251,6 @@ impl Timestamp {
     /// # Example: error on overflow
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{Timestamp, ToSpan};
     ///
     /// let ts = Timestamp::MAX;
@@ -1327,8 +1323,6 @@ impl Timestamp {
     /// same as adding `5` hours from the Unix epoch.
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{Timestamp, ToSpan};
     ///
     /// let ts = Timestamp::UNIX_EPOCH.checked_sub(-5.hours())?;
@@ -1357,8 +1351,6 @@ impl Timestamp {
     /// # Example: error on overflow
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{Timestamp, ToSpan};
     ///
     /// let ts = Timestamp::MIN;
@@ -1414,8 +1406,6 @@ impl Timestamp {
     /// This example shows that arithmetic saturates on overflow.
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{Timestamp, ToSpan};
     ///
     /// assert_eq!(
@@ -1460,8 +1450,6 @@ impl Timestamp {
     /// This example shows that arithmetic saturates on overflow.
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{Timestamp, ToSpan};
     ///
     /// assert_eq!(
@@ -1529,8 +1517,6 @@ impl Timestamp {
     /// # Example
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{Timestamp, ToSpan};
     ///
     /// let earlier: Timestamp = "2006-08-24T22:30:00Z".parse()?;
@@ -1676,8 +1662,6 @@ impl Timestamp {
     /// # Example
     ///
     /// ```
-    /// # // See: https://github.com/rust-lang/rust/pull/121364
-    /// # #![allow(unknown_lints, ambiguous_negative_literals)]
     /// use jiff::{Timestamp, ToSpan};
     ///
     /// let earlier: Timestamp = "2006-08-24T22:30:00Z".parse()?;

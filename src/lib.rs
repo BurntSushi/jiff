@@ -606,6 +606,8 @@ specifiers and other APIs.
 #![deny(missing_docs)]
 // See: https://github.com/rust-lang/rust/pull/121364
 #![allow(unknown_lints, ambiguous_negative_literals)]
+// See: https://github.com/rust-lang/rust/pull/121364
+#![doc(test(attr(allow(unknown_lints, ambiguous_negative_literals))))]
 
 // It should be possible to support other pointer widths, but this library
 // hasn't been tested nor thought about much in contexts with pointers less
