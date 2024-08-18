@@ -31,3 +31,6 @@ time = { version = "0.3.36", features = ["macros", "parsing"] }
 
 [profile.release]
 debug = true
+
+[profile.bench]
+debug = true

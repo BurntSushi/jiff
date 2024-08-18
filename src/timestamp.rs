@@ -1249,13 +1249,15 @@ impl Timestamp {
         if span.is_zero() {
             return Ok(self);
         }
-        // PERF: We could probably special case here where if span has only
-        // seconds, then we could just add it directly to the timestamp
-        // without doing a conversion dance. Or perhaps we should offer a
-        // separate API for that... That probably makes more sense, to avoid
-        // materializing a `Span` and doing the checking required.
-        //
-        // See: https://github.com/BurntSushi/jiff/issues/21
+        // The common case is probably a span without fractional seconds, so
+        // we specialize for that since it requires a fair bit less math.
+        if let Some(span_seconds) = span.to_invariant_seconds() {
+            let time_seconds = self.as_second_ranged();
+            let sum = time_seconds
+                .try_checked_add("span", span_seconds)
+                .with_context(|| err!("adding {span} to {self} overflowed"))?;
+            return Ok(Timestamp::from_second_ranged(sum));
+        }
         let time_nanos = self.as_nanosecond_ranged();
         let span_nanos = span.to_invariant_nanoseconds();
         let sum = time_nanos
@@ -2153,6 +2155,11 @@ impl Timestamp {
             second: (second + delta_second).rinto(),
             nanosecond: (nanosecond + delta_nanosecond).rinto(),
         })
+    }
+
+    #[inline]
+    fn from_second_ranged(second: UnixSeconds) -> Timestamp {
+        Timestamp { second, nanosecond: FractionalNanosecond::N::<0>() }
     }
 
     #[inline]

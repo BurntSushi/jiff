@@ -18,6 +18,7 @@ impl Duration {
     ///
     /// This returns an error only in the case where this is an unsigned
     /// duration with a number of whole seconds that exceeds `|i64::MIN|`.
+    #[inline]
     pub(crate) fn to_signed(self) -> Result<SDuration, Error> {
         match self {
             Duration::Span(span) => Ok(SDuration::Span(span)),
@@ -54,6 +55,7 @@ impl Duration {
     /// be different, the actual end result is the same (failure).
     ///
     /// TODO: Write unit tests for this.
+    #[inline]
     pub(crate) fn checked_neg(self) -> Result<Duration, Error> {
         match self {
             Duration::Span(span) => Ok(Duration::Span(span.negate())),
@@ -110,18 +112,21 @@ impl Duration {
 }
 
 impl From<Span> for Duration {
+    #[inline]
     fn from(span: Span) -> Duration {
         Duration::Span(span)
     }
 }
 
 impl From<SignedDuration> for Duration {
+    #[inline]
     fn from(sdur: SignedDuration) -> Duration {
         Duration::Signed(sdur)
     }
 }
 
 impl From<UnsignedDuration> for Duration {
+    #[inline]
     fn from(udur: UnsignedDuration) -> Duration {
         Duration::Unsigned(udur)
     }

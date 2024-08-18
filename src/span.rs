@@ -2816,6 +2816,34 @@ impl Span {
         nanos
     }
 
+    /// Converts the non-variable units of this `Span` to a total number of
+    /// seconds if there is no fractional second component. Otherwise,
+    /// `None` is returned.
+    ///
+    /// This is useful for short-circuiting in arithmetic operations when
+    /// it's faster to only deal with seconds. And in particular, acknowledges
+    /// that nanosecond precision durations are somewhat rare.
+    ///
+    /// This includes days, even though they can be of irregular length during
+    /// time zone transitions. If this applies, then callers should set the
+    /// days to `0` before calling this routine.
+    ///
+    /// All units above days are always ignored.
+    #[inline]
+    pub(crate) fn to_invariant_seconds(&self) -> Option<NoUnits> {
+        if self.has_fractional_seconds() {
+            return None;
+        }
+        let mut seconds = NoUnits::rfrom(self.get_seconds_ranged());
+        seconds +=
+            NoUnits::rfrom(self.get_minutes_ranged()) * t::SECONDS_PER_MINUTE;
+        seconds +=
+            NoUnits::rfrom(self.get_hours_ranged()) * t::SECONDS_PER_HOUR;
+        seconds +=
+            NoUnits::rfrom(self.get_days_ranged()) * t::SECONDS_PER_CIVIL_DAY;
+        Some(seconds)
+    }
+
     /// Rebalances the invariant units (days or lower) on this span so that
     /// the largest possible non-zero unit is the one given.
     ///
@@ -2834,6 +2862,59 @@ impl Span {
     #[inline]
     pub(crate) fn rebalance(self, unit: Unit) -> Result<Span, Error> {
         Span::from_invariant_nanoseconds(unit, self.to_invariant_nanoseconds())
+    }
+
+    /// Returns true if and only if this span has at least one non-zero
+    /// fractional second unit.
+    #[inline]
+    pub(crate) fn has_fractional_seconds(&self) -> bool {
+        self.milliseconds != 0
+            || self.microseconds != 0
+            || self.nanoseconds != 0
+    }
+
+    /// Returns an equivalent span, but with all non-calendar (units below
+    /// days) set to zero.
+    #[inline(always)]
+    pub(crate) fn only_calendar(self) -> Span {
+        let mut span = self;
+        span.hours = t::SpanHours::N::<0>();
+        span.minutes = t::SpanMinutes::N::<0>();
+        span.seconds = t::SpanSeconds::N::<0>();
+        span.milliseconds = t::SpanMilliseconds::N::<0>();
+        span.microseconds = t::SpanMicroseconds::N::<0>();
+        span.nanoseconds = t::SpanNanoseconds::N::<0>();
+        if span.sign != 0
+            && span.years == 0
+            && span.months == 0
+            && span.weeks == 0
+            && span.days == 0
+        {
+            span.sign = t::Sign::N::<0>();
+        }
+        span
+    }
+
+    /// Returns an equivalent span, but with all calendar (units above
+    /// hours) set to zero.
+    #[inline(always)]
+    pub(crate) fn only_time(self) -> Span {
+        let mut span = self;
+        span.years = t::SpanYears::N::<0>();
+        span.months = t::SpanMonths::N::<0>();
+        span.weeks = t::SpanWeeks::N::<0>();
+        span.days = t::SpanDays::N::<0>();
+        if span.sign != 0
+            && span.hours == 0
+            && span.minutes == 0
+            && span.seconds == 0
+            && span.milliseconds == 0
+            && span.microseconds == 0
+            && span.nanoseconds == 0
+        {
+            span.sign = t::Sign::N::<0>();
+        }
+        span
     }
 
     /// Returns an equivalent span, but with all units greater than or equal to
@@ -2915,22 +2996,29 @@ impl Span {
     pub(crate) fn smallest_non_time_non_zero_unit_error(
         &self,
     ) -> Option<Error> {
-        let non_time_unit = if self.days != 0 {
-            Unit::Day
-        } else if self.weeks != 0 {
-            Unit::Week
-        } else if self.months != 0 {
-            Unit::Month
-        } else if self.years != 0 {
-            Unit::Year
-        } else {
-            return None;
-        };
+        let non_time_unit = self.largest_calendar_unit()?;
         Some(err!(
             "operation can only be performed with units of hours \
              or smaller, but found non-zero {unit} units",
             unit = non_time_unit.singular(),
         ))
+    }
+
+    /// Returns the largest non-zero calendar unit, or `None` if there are no
+    /// non-zero calendar units.
+    #[inline]
+    pub(crate) fn largest_calendar_unit(&self) -> Option<Unit> {
+        if self.days != 0 {
+            Some(Unit::Day)
+        } else if self.weeks != 0 {
+            Some(Unit::Week)
+        } else if self.months != 0 {
+            Some(Unit::Month)
+        } else if self.years != 0 {
+            Some(Unit::Year)
+        } else {
+            None
+        }
     }
 
     /// Returns the largest non-zero unit in this span.

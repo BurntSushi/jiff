@@ -329,12 +329,38 @@ fn offset_to_timestamp(c: &mut Criterion) {
     }
 }
 
+/// Benchmarks how long it takes to add 2 hours 500 nanos to a timestamp.
+fn timestamp_add_time_duration(c: &mut Criterion) {
+    const NAME: &str = "timestamp_add_time";
+    const STAMP: i128 = 1719755160_000_000_000;
+    const EXPECTED: i128 = STAMP + (2 * 60 * 60 * 1_000_000_000) + 500;
+
+    let expected = jiff::Timestamp::from_nanosecond(EXPECTED).unwrap();
+    let start = jiff::Timestamp::from_nanosecond(STAMP).unwrap();
+
+    let span = jiff::Span::new().hours(2).nanoseconds(500);
+    c.bench_function(&format!("jiff/{NAME}_span"), |b| {
+        b.iter(|| {
+            let end = bb(&start).checked_add(bb(span)).unwrap();
+            assert_eq!(end, expected);
+        })
+    });
+
+    let duration = jiff::SignedDuration::new(2 * 60 * 60, 500);
+    c.bench_function(&format!("jiff/{NAME}_duration"), |b| {
+        b.iter(|| {
+            let end = bb(&start).checked_add(bb(duration)).unwrap();
+            assert_eq!(end, expected);
+        })
+    });
+}
+
 /// Benchmarks how long it takes to add 24 hours to a zone-aware datetime.
 ///
 /// Note that we used a fixed offset as our time zone in order to accommodate
 /// the lowest common denominator.
 fn zoned_add_time_duration(c: &mut Criterion) {
-    const NAME: &str = "zoned_add_time_duration";
+    const NAME: &str = "zoned_add_time";
     const OFFSET: i8 = -4;
     const STAMP: i64 = 1719755160;
     const EXPECTED: i64 = STAMP + (24 * 60 * 60);
@@ -345,9 +371,16 @@ fn zoned_add_time_duration(c: &mut Criterion) {
     let start =
         jiff::Timestamp::from_second(STAMP).unwrap().to_zoned(tz.clone());
     let span = jiff::Span::new().hours(24);
-    c.bench_function(&format!("jiff/{NAME}"), |b| {
+    c.bench_function(&format!("jiff/{NAME}_span"), |b| {
         b.iter(|| {
             let end = bb(&start).checked_add(bb(span)).unwrap();
+            assert_eq!(end, expected);
+        })
+    });
+    let duration = jiff::SignedDuration::from_hours(24);
+    c.bench_function(&format!("jiff/{NAME}_duration"), |b| {
+        b.iter(|| {
+            let end = bb(&start).checked_add(bb(duration)).unwrap();
             assert_eq!(end, expected);
         })
     });
@@ -360,7 +393,7 @@ fn zoned_add_time_duration(c: &mut Criterion) {
         let expected = (&tz).timestamp_opt(EXPECTED, 0).single().unwrap();
         let start = (&tz).timestamp_opt(STAMP, 0).single().unwrap();
         let delta = chrono::TimeDelta::hours(24);
-        c.bench_function(&format!("chrono/{NAME}"), |b| {
+        c.bench_function(&format!("chrono/{NAME}_duration"), |b| {
             b.iter(|| {
                 let end = bb(start).checked_add_signed(bb(delta)).unwrap();
                 assert_eq!(end, expected);
@@ -377,7 +410,7 @@ fn zoned_add_time_duration(c: &mut Criterion) {
             .unwrap()
             .to_offset(offset);
         let duration = time::Duration::hours(24);
-        c.bench_function(&format!("time/{NAME}"), |b| {
+        c.bench_function(&format!("time/{NAME}_duration"), |b| {
             b.iter(|| {
                 let end = bb(start).checked_add(bb(duration)).unwrap();
                 assert_eq!(end, expected);
@@ -569,6 +602,7 @@ criterion::criterion_group!(
     instant_to_civil_datetime_offset,
     offset_to_civil_datetime,
     offset_to_timestamp,
+    timestamp_add_time_duration,
     zoned_add_time_duration,
     parse_civil_datetime,
     parse_rfc2822,
