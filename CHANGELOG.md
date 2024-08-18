@@ -1,3 +1,17 @@
+0.1.7 (2024-08-18)
+==================
+This release relaxes Jiff's dependency on `windows-sys` to include multiple
+semver incompatible releases. The purpose of this relaxation is to enable
+Jiff to work with different versions of `windows-sys` in the hopes that this
+reduces the likelihood that multiple copies of `windows-sys` are included in
+your dependency tree.
+
+Dependencies:
+
+* [#106](https://github.com/BurntSushi/jiff/pull/106):
+Relax `windows-sys` dependency constraint to `>=0.52.0, <=0.59.*`.
+
+
 0.1.6 (2024-08-18)
 ==================
 This release includes a new top-level type, `SignedDuration`, that provides a
