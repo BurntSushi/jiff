@@ -115,9 +115,11 @@ fn civil_datetime_to_instant_static(c: &mut Criterion) {
 /// human readable representation (i.e., what you might see on a clock) in a
 /// specific time zone.
 fn instant_to_civil_datetime_static(c: &mut Criterion) {
-    fn define(c: &mut Criterion, tz_name: &str, timestamp: i64) {
-        const NAME: &str = "instant_to_civil_datetime_static";
+    const NAME: &str = "instant_to_civil_datetime_static";
+    const TZ_NEW_YORK: &str = "America/New_York";
+    const TZ_SHANGHAI: &str = "Asia/Shanghai";
 
+    fn define(c: &mut Criterion, tz_name: &str, timestamp: i64) {
         if let Ok(tz) = jiff::tz::TimeZone::get(tz_name) {
             let expected = jiff::civil::date(2024, 6, 30).at(9, 46, 0, 0);
 
@@ -175,9 +177,6 @@ fn instant_to_civil_datetime_static(c: &mut Criterion) {
 
         // The `time` crate doesn't support this.
     }
-
-    const TZ_NEW_YORK: &str = "America/New_York";
-    const TZ_SHANGHAI: &str = "Asia/Shanghai";
 
     define(c, TZ_NEW_YORK, 1719755160);
     define(c, TZ_SHANGHAI, 1719711960);
