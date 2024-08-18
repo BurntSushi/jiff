@@ -834,19 +834,11 @@ impl Offset {
         SignedDuration::offset_until(other, self)
     }
 
-    /// Returns this offset as a [`Span`].
-    #[inline]
-    pub(crate) fn to_span(self) -> Span {
-        Span::new().seconds_ranged(self.seconds_ranged())
-    }
-
-    /*
     /// Returns this offset as a [`SignedDuration`].
     #[inline]
     pub(crate) fn to_duration(self) -> SignedDuration {
         SignedDuration::from_secs(i64::from(self.seconds()))
     }
-    */
 }
 
 impl Offset {

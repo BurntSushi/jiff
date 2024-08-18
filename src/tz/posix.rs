@@ -69,6 +69,7 @@ use crate::{
         rangeint::{ri16, ri8, RFrom, RInto},
         t::{self, Minute, Month, Second, Sign, SpanZoneOffset, Year, C},
     },
+    SignedDuration,
 };
 
 /// A self-imposed limit on the size of a time zone abbreviation, in bytes.
@@ -723,17 +724,17 @@ impl PosixDateTimeSpec {
 
         let Some(date) = self.date.to_civil_date(year) else { return mkmax() };
         let mut dt = date.to_datetime(Time::MIN);
-        let span_transition = self.time().to_span();
-        let span_offset = offset.to_span();
-        dt = dt.checked_add(span_transition).unwrap_or_else(|_| {
-            if span_transition.is_negative() {
+        let dur_transition = self.time().to_duration();
+        let dur_offset = offset.to_duration();
+        dt = dt.checked_add(dur_transition).unwrap_or_else(|_| {
+            if dur_transition.is_negative() {
                 mkmin()
             } else {
                 mkmax()
             }
         });
-        dt = dt.checked_sub(span_offset).unwrap_or_else(|_| {
-            if span_transition.is_negative() {
+        dt = dt.checked_sub(dur_offset).unwrap_or_else(|_| {
+            if dur_transition.is_negative() {
                 mkmax()
             } else {
                 mkmin()
@@ -911,12 +912,13 @@ impl PosixTimeSpec {
         ))
     }
 
-    /// Returns this time specification as a span of time.
-    fn to_span(&self) -> Span {
-        Span::new()
-            .hours_ranged(self.hour * self.sign())
-            .minutes_ranged(self.minute.unwrap_or(C(0).rinto()))
-            .seconds_ranged(self.second.unwrap_or(C(0).rinto()))
+    /// Returns this time specification as a duration of time.
+    fn to_duration(&self) -> SignedDuration {
+        let sign = i64::from(self.sign());
+        let hour = sign * i64::from(self.hour);
+        let minute = sign * i64::from(self.minute.unwrap_or(C(0).rinto()));
+        let second = sign * i64::from(self.second.unwrap_or(C(0).rinto()));
+        SignedDuration::from_secs(second + (60 * minute) + (60 * 60 * hour))
     }
 
     /// Returns the sign for this time sepc, defaulting to positive if one
@@ -2025,33 +2027,33 @@ mod tests {
     fn posix_time_spec_to_span() {
         let tz = reasonable_posix_time_zone("EST5EDT,J1,J365/5:12:34");
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.start.time().to_span(),
-            Span::new().hours(2),
+            tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
+            SignedDuration::from_hours(2),
         );
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.end.time().to_span(),
-            Span::new().hours(5).minutes(12).seconds(34),
+            tz.dst.as_ref().unwrap().rule.end.time().to_duration(),
+            SignedDuration::from_secs((5 * 60 * 60) + (12 * 60) + 34),
         );
 
         let tz =
             reasonable_posix_time_zone("EST5EDT,J1/23:59:59,J365/24:00:00");
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.start.time().to_span(),
-            Span::new().hours(23).minutes(59).seconds(59),
+            tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
+            SignedDuration::from_secs((23 * 60 * 60) + (59 * 60) + 59),
         );
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.end.time().to_span(),
-            Span::new().hours(24),
+            tz.dst.as_ref().unwrap().rule.end.time().to_duration(),
+            SignedDuration::from_hours(24),
         );
 
         let tz = reasonable_iana_time_zone("EST5EDT,J1/-1,J365/167:00:00");
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.start.time().to_span(),
-            Span::new().hours(-1),
+            tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
+            SignedDuration::from_hours(-1),
         );
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.end.time().to_span(),
-            Span::new().hours(167),
+            tz.dst.as_ref().unwrap().rule.end.time().to_duration(),
+            SignedDuration::from_hours(167),
         );
     }
 
