@@ -1478,7 +1478,7 @@ impl Time {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn round(self, options: impl Into<TimeRound>) -> Result<Time, Error> {
+    pub fn round<R: Into<TimeRound>>(self, options: R) -> Result<Time, Error> {
         let options: TimeRound = options.into();
         options.round(self)
     }
