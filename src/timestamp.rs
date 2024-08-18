@@ -1820,9 +1820,9 @@ impl Timestamp {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn round(
+    pub fn round<R: Into<TimestampRound>>(
         self,
-        options: impl Into<TimestampRound>,
+        options: R,
     ) -> Result<Timestamp, Error> {
         let options: TimestampRound = options.into();
         options.round(self)

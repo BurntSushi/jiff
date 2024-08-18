@@ -2140,9 +2140,9 @@ impl DateTime {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn round(
+    pub fn round<R: Into<DateTimeRound>>(
         self,
-        options: impl Into<DateTimeRound>,
+        options: R,
     ) -> Result<DateTime, Error> {
         let options: DateTimeRound = options.into();
         options.round(t::NANOS_PER_CIVIL_DAY, self)

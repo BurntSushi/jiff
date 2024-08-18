@@ -408,7 +408,7 @@ impl Weekday {
     /// assert_eq!(1 + Weekday::Sunday, Weekday::Monday);
     /// ```
     #[inline]
-    pub fn wrapping_add(self, days: impl Into<i64>) -> Weekday {
+    pub fn wrapping_add<D: Into<i64>>(self, days: D) -> Weekday {
         let start = t::NoUnits::rfrom(self.to_monday_zero_offset_ranged());
         // OK because all i64 values fit in a NoUnits.
         let rhs = t::NoUnits::new(days.into()).unwrap();
@@ -452,7 +452,7 @@ impl Weekday {
     /// weekday has no semantic meaning, the weekday cannot be on the right
     /// hand side of the `-` operator.
     #[inline]
-    pub fn wrapping_sub(self, days: impl Into<i64>) -> Weekday {
+    pub fn wrapping_sub<D: Into<i64>>(self, days: D) -> Weekday {
         self.wrapping_add(-days.into())
     }
 

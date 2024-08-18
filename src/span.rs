@@ -1559,9 +1559,9 @@ impl Span {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn checked_add<'a>(
+    pub fn checked_add<'a, A: Into<SpanArithmetic<'a>>>(
         &self,
-        options: impl Into<SpanArithmetic<'a>>,
+        options: A,
     ) -> Result<Span, Error> {
         let options: SpanArithmetic<'_> = options.into();
         options.checked_add(*self)
@@ -1687,9 +1687,9 @@ impl Span {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn checked_sub<'a>(
+    pub fn checked_sub<'a, A: Into<SpanArithmetic<'a>>>(
         &self,
-        options: impl Into<SpanArithmetic<'a>>,
+        options: A,
     ) -> Result<Span, Error> {
         let mut options: SpanArithmetic<'_> = options.into();
         options.duration = options.duration.checked_neg()?;
@@ -1780,9 +1780,9 @@ impl Span {
     /// See the examples for [`Span::total`] if you want to sort spans without
     /// an `unwrap()` call.
     #[inline]
-    pub fn compare<'a>(
+    pub fn compare<'a, C: Into<SpanCompare<'a>>>(
         &self,
-        options: impl Into<SpanCompare<'a>>,
+        options: C,
     ) -> Result<Ordering, Error> {
         let options: SpanCompare<'_> = options.into();
         options.compare(*self)
@@ -1910,9 +1910,9 @@ impl Span {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn total<'a>(
+    pub fn total<'a, T: Into<SpanTotal<'a>>>(
         &self,
-        options: impl Into<SpanTotal<'a>>,
+        options: T,
     ) -> Result<f64, Error> {
         let options: SpanTotal<'_> = options.into();
         options.total(*self)
@@ -2077,9 +2077,9 @@ impl Span {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn round<'a>(
+    pub fn round<'a, R: Into<SpanRound<'a>>>(
         self,
-        options: impl Into<SpanRound<'a>>,
+        options: R,
     ) -> Result<Span, Error> {
         let options: SpanRound<'a> = options.into();
         options.round(self)
@@ -2141,9 +2141,9 @@ impl Span {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_jiff_duration<'a>(
+    pub fn to_jiff_duration<'a, R: Into<SpanRelativeTo<'a>>>(
         &self,
-        relative: impl Into<SpanRelativeTo<'a>>,
+        relative: R,
     ) -> Result<SignedDuration, Error> {
         let max_unit = self.largest_unit();
         let relative: SpanRelativeTo<'a> = relative.into();
@@ -2289,9 +2289,9 @@ impl Span {
     /// ```
     #[deprecated(since = "0.1.5", note = "use Span::to_jiff_duration instead")]
     #[inline]
-    pub fn to_duration<'a>(
+    pub fn to_duration<'a, R: Into<SpanRelativeTo<'a>>>(
         &self,
-        relative: impl Into<SpanRelativeTo<'a>>,
+        relative: R,
     ) -> Result<UnsignedDuration, Error> {
         if self.is_negative() {
             return Err(err!(

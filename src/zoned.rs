@@ -2788,9 +2788,9 @@ impl Zoned {
     /// timestamp would result in rounding up to the next day. But the next day
     /// is greater than the maximum, and so this returns an error.
     #[inline]
-    pub fn round(
+    pub fn round<R: Into<ZonedRound>>(
         &self,
-        options: impl Into<ZonedRound>,
+        options: R,
     ) -> Result<Zoned, Error> {
         let options: ZonedRound = options.into();
         options.round(self)
