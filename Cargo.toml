@@ -1,6 +1,6 @@
 [package]
 name = "jiff"
-version = "0.1.6"  #:version
+version = "0.1.7"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 license = "Unlicense OR MIT"
 repository = "https://github.com/BurntSushi/jiff"
