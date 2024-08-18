@@ -117,17 +117,24 @@ impl Tzif {
         // The result of the dummy transition is that the code below is simpler
         // with fewer special cases.
         assert!(!self.transitions.is_empty(), "transitions is non-empty");
-        let search =
-            self.transitions.binary_search_by_key(&timestamp, |t| t.timestamp);
-        let index = match search {
-            // Since the first transition is always Timestamp::MIN, it's
-            // impossible for any timestamp to sort before it.
-            Err(0) => unreachable!("impossible to come before Timestamp::MIN"),
-            Ok(i) => i,
-            // i points to the position immediately after the matching
-            // timestamp. And since we know that i>0 because of the i==0 check
-            // above, we can safely subtract 1.
-            Err(i) => i.checked_sub(1).expect("i is non-zero"),
+        let index = if timestamp > self.transitions.last().unwrap().timestamp {
+            self.transitions.len() - 1
+        } else {
+            let search = self
+                .transitions
+                .binary_search_by_key(&timestamp, |t| t.timestamp);
+            match search {
+                // Since the first transition is always Timestamp::MIN, it's
+                // impossible for any timestamp to sort before it.
+                Err(0) => {
+                    unreachable!("impossible to come before Timestamp::MIN")
+                }
+                Ok(i) => i,
+                // i points to the position immediately after the matching
+                // timestamp. And since we know that i>0 because of the i==0 check
+                // above, we can safely subtract 1.
+                Err(i) => i.checked_sub(1).expect("i is non-zero"),
+            }
         };
         // Our index is always in bounds. The only way it couldn't be is if
         // binary search returns an Err(len) for a time greater than the
