@@ -577,16 +577,16 @@ fn parse_strptime(c: &mut Criterion) {
 
 criterion::criterion_group!(
     benches,
-    // civil_datetime_to_instant_with_tzdb_lookup,
-    // civil_datetime_to_instant_static,
+    civil_datetime_to_instant_with_tzdb_lookup,
+    civil_datetime_to_instant_static,
     instant_to_civil_datetime_static,
-    // instant_to_civil_datetime_offset,
-    // offset_to_civil_datetime,
-    // offset_to_timestamp,
-    // zoned_add_time_duration,
-    // parse_civil_datetime,
-    // parse_rfc2822,
-    // parse_strptime,
-    // print_civil_datetime,
+    instant_to_civil_datetime_offset,
+    offset_to_civil_datetime,
+    offset_to_timestamp,
+    zoned_add_time_duration,
+    parse_civil_datetime,
+    parse_rfc2822,
+    parse_strptime,
+    print_civil_datetime,
 );
 criterion::criterion_main!(benches);
