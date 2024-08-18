@@ -1,24 +1,38 @@
-0.1.6 (TBD)
-===========
+0.1.6 (2024-08-18)
+==================
 This release includes a new top-level type, `SignedDuration`, that provides a
 near exact replica of `std::time::Duration`, but signed. It is meant to provide
 alternative APIs for working with durations at a lower level than what `Span`
 provides, and to facilitate better integration with the standard library.
 
+A `SignedDuration` has also been integrated with all of Jiff's datetime types.
+For example, previously, `Zoned::checked_add` only accepted a concrete
+`jiff::Span`. But now it accepts a `jiff::Span`, `jiff::SignedDuration` or even
+a `std::time::Duration`. Moreover, all of the `until` and `since` APIs on
+datetime types have been ported and copied to return `SignedDuration` under the
+`duration_until` and `duration_since` names.
+
 This marks an initial integration phase with `SignedDuration`. It is planned
 to integrate it more with the datetime types. Currently, there are integrations
 on `Timestamp` and `Span`, but more will be added in the future.
 
-This release also includes a few deprecations.
+Overall, folks should still use `Span`. That is the intended default duration
+type in Jiff and will continue to be. Users of Jiff may find `SignedDuration`
+useful in contexts where speed is important or when one needs to integrate
+with the standard library.
+
+This release also includes a few related deprecations as the APIs involving
+`std::time::Duration` are phased out in favor of `SignedDuration`.
 
 Deprecations:
 
-* `Timestamp::as_duration`: to be replaced with `SignedDuration` in `jiff 0.2`.
-* `Timestamp::from_duration`: to be replaced with `SignedDuration` in
-`jiff 0.2`.
-* `Timestamp::from_signed_duration`: to be replaced with `SignedDuration` in
-`jiff 0.2`.
-* `Span::to_duration`: to be replaced with `SignedDuration` in `jiff 0.2`.
+* `Timestamp::as_duration`: replaced with `as_jiff_duration`, which will be
+renamed to `as_duration` in `jiff 0.2`.
+* `Timestamp::from_duration`: replaced with `from_jiff_duration`, which will be
+renamed to `from_duration` in `jiff 0.2`.
+* `Timestamp::from_signed_duration`: replaced with `from_jiff_duration`.
+* `Span::to_duration`: replaced with `to_jiff_duration`, which will be renamed
+to `to_duration` in `jiff 0.2`.
 
 Basically, all of the above APIs either accept or return a
 `std::time::Duration`. To avoid breaking chnages at this point, new methods
@@ -30,8 +44,17 @@ appropriate `TryFrom` trait implementations.
 
 Enhancements:
 
-* [#XXX](https://github.com/BurntSushi/jiff/issues/XXX):
+* [#21](https://github.com/BurntSushi/jiff/issues/21):
 Add new top-level `SignedDuration` type.
+* [#90](https://github.com/BurntSushi/jiff/issues/90):
+Improve error message when using `Span` with >=day units with a `Timestamp`.
+
+Performance:
+
+* [#104](https://github.com/BurntSushi/jiff/pull/104)
+Optimize offset calculations in time zones without DST.
+* [#104](https://github.com/BurntSushi/jiff/pull/105)
+Optimize offset calculations for timestamps after last DST rule change.
 
 
 0.1.5 (2024-08-09)
