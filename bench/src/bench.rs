@@ -116,56 +116,66 @@ fn civil_datetime_to_instant_static(c: &mut Criterion) {
 /// specific time zone.
 fn instant_to_civil_datetime_static(c: &mut Criterion) {
     const NAME: &str = "instant_to_civil_datetime_static";
-    const TZNAME: &str = "America/New_York";
-    const STAMP: i64 = 1719755160;
 
-    if let Ok(tz) = jiff::tz::TimeZone::get(TZNAME) {
-        let expected = jiff::civil::date(2024, 6, 30).at(9, 46, 0, 0);
+    fn define(c: &mut Criterion, tz_name: &str, timestamp: i64) {
+        if let Ok(tz) = jiff::tz::TimeZone::get(tz_name) {
+            let expected = jiff::civil::date(2024, 6, 30).at(9, 46, 0, 0);
 
-        let ts = jiff::Timestamp::from_second(STAMP).unwrap();
-        c.bench_function(&format!("jiff/{NAME}"), |b| {
-            b.iter(|| {
-                let zdt = bb(ts).to_zoned(bb(&tz).clone());
-                assert_eq!(zdt.datetime(), expected);
-            })
-        });
-    }
+            let ts = jiff::Timestamp::from_second(timestamp).unwrap();
 
-    #[cfg(unix)]
-    {
-        if let Ok(tz) = tzfile::Tz::named(TZNAME) {
+            c.bench_function(&format!("jiff/{NAME}-{tz_name}"), |b| {
+                b.iter(|| {
+                    let zdt = bb(ts).to_zoned(bb(&tz).clone());
+                    assert_eq!(zdt.datetime(), expected);
+                })
+            });
+        }
+
+        #[cfg(unix)]
+        {
+            if let Ok(tz) = tzfile::Tz::named(tz_name) {
+                let expected = chrono::NaiveDateTime::new(
+                    chrono::NaiveDate::from_ymd_opt(2024, 6, 30).unwrap(),
+                    chrono::NaiveTime::from_hms_opt(9, 46, 0).unwrap(),
+                );
+                c.bench_function(
+                    &format!("chrono-tzfile/{NAME}-{tz_name}"),
+                    |b| {
+                        use chrono::TimeZone;
+
+                        b.iter(|| {
+                            let mapped = (&tz).timestamp_opt(bb(timestamp), 0);
+                            let zdt = mapped.single().unwrap();
+                            assert_eq!(zdt.naive_local(), expected);
+                        })
+                    },
+                );
+            }
+        }
+
+        {
+            let tz = tz_name.parse::<chrono_tz::Tz>().unwrap();
             let expected = chrono::NaiveDateTime::new(
                 chrono::NaiveDate::from_ymd_opt(2024, 6, 30).unwrap(),
                 chrono::NaiveTime::from_hms_opt(9, 46, 0).unwrap(),
             );
-            c.bench_function(&format!("chrono-tzfile/{NAME}"), |b| {
+
+            c.bench_function(&format!("chrono/{NAME}-{tz_name}"), |b| {
                 use chrono::TimeZone;
 
                 b.iter(|| {
-                    let mapped = (&tz).timestamp_opt(bb(STAMP), 0);
+                    let mapped = tz.timestamp_opt(bb(timestamp), 0);
                     let zdt = mapped.single().unwrap();
                     assert_eq!(zdt.naive_local(), expected);
                 })
             });
         }
+
+        // The `time` crate doesn't support this.
     }
 
-    let expected = chrono::NaiveDateTime::new(
-        chrono::NaiveDate::from_ymd_opt(2024, 6, 30).unwrap(),
-        chrono::NaiveTime::from_hms_opt(9, 46, 0).unwrap(),
-    );
-    c.bench_function(&format!("chrono/{NAME}"), |b| {
-        use chrono::TimeZone;
-        use chrono_tz::America::New_York;
-
-        b.iter(|| {
-            let mapped = New_York.timestamp_opt(bb(STAMP), 0);
-            let zdt = mapped.single().unwrap();
-            assert_eq!(zdt.naive_local(), expected);
-        })
-    });
-
-    // The `time` crate doesn't support this.
+    define(c, "America/New_York", 1719755160);
+    define(c, "Asia/Shanghai", 1719711960);
 }
 
 /// Benchmarks the conversion of an instant in time to a civil datetime
