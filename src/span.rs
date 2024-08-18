@@ -1,9 +1,10 @@
-use core::{cmp::Ordering, time::Duration};
+use core::{cmp::Ordering, time::Duration as UnsignedDuration};
 
 use alloc::borrow::Cow;
 
 use crate::{
     civil::{Date, DateTime, Time},
+    duration::{Duration, SDuration},
     error::{err, Error, ErrorContext},
     fmt::temporal::{DEFAULT_SPAN_PARSER, DEFAULT_SPAN_PRINTER},
     tz::TimeZone,
@@ -1412,10 +1413,23 @@ impl Span {
     /// span to this one relative to the given date. There are also `From`
     /// implementations for `civil::DateTime` and `Zoned`.
     ///
+    /// This also works with different duration types, such as
+    /// [`SignedDuration`] and [`std::time::Duration`], via additional trait
+    /// implementations:
+    ///
+    /// * `From<SignedDuration> for SpanArithmetic` adds the given duration to
+    /// this one.
+    /// * `From<(SignedDuration, civil::Date)> for SpanArithmetic` adds the
+    /// given duration to this one relative to the given date. There are also
+    /// `From` implementations for `civil::DateTime` and `Zoned`.
+    ///
+    /// And similarly for `std::time::Duration`.
+    ///
     /// Adding a negative span is equivalent to subtracting its absolute value.
     ///
     /// The largest non-zero unit in the span returned is at most the largest
-    /// non-zero unit among the two spans being added.
+    /// non-zero unit among the two spans being added. For an absolute
+    /// duration, its "largest" unit is considered to be nanoseconds.
     ///
     /// The sum returned is automatically re-balanced so that the span is not
     /// "bottom heavy."
@@ -1497,6 +1511,53 @@ impl Span {
     ///
     /// assert!(19_998.years().checked_add(1.year()).is_err());
     /// ```
+    ///
+    /// # Example: adding an absolute duration to a span
+    ///
+    /// This shows how one isn't limited to just adding two spans together.
+    /// One can also add absolute durations to a span.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use jiff::{SignedDuration, ToSpan};
+    ///
+    /// assert_eq!(
+    ///     1.hour().checked_add(SignedDuration::from_mins(30))?,
+    ///     1.hour().minutes(30),
+    /// );
+    /// assert_eq!(
+    ///     1.hour().checked_add(Duration::from_secs(30 * 60))?,
+    ///     1.hour().minutes(30),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Note that even when adding an absolute duration, if the span contains
+    /// non-uniform units, you still need to provide a relative datetime:
+    ///
+    /// ```
+    /// use jiff::{civil::date, SignedDuration, ToSpan};
+    ///
+    /// // Might be 1 month or less than 1 month!
+    /// let dur = SignedDuration::from_hours(30 * 24);
+    /// // No relative datetime provided even when the span
+    /// // contains non-uniform units results in an error.
+    /// assert!(1.month().checked_add(dur).is_err());
+    /// // In this case, 30 days is one month (April).
+    /// assert_eq!(
+    ///     1.month().checked_add((dur, date(2024, 3, 1)))?,
+    ///     2.months(),
+    /// );
+    /// // In this case, 30 days is less than one month (May).
+    /// assert_eq!(
+    ///     1.month().checked_add((dur, date(2024, 4, 1)))?,
+    ///     1.month().days(30),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn checked_add<'a>(
         &self,
@@ -1504,6 +1565,70 @@ impl Span {
     ) -> Result<Span, Error> {
         let options: SpanArithmetic<'_> = options.into();
         options.checked_add(*self)
+    }
+
+    #[inline]
+    fn checked_add_span<'a>(
+        &self,
+        relative: Option<SpanRelativeTo<'a>>,
+        span: &Span,
+    ) -> Result<Span, Error> {
+        let (span1, span2) = (*self, *span);
+        let unit = span1.largest_unit().max(span2.largest_unit());
+        let start = match relative {
+            Some(r) => {
+                if !r.is_variable(unit) {
+                    return span1.checked_add_invariant(unit, &span2);
+                }
+                r.to_relative()?
+            }
+            None => {
+                if unit.is_definitively_variable() {
+                    return Err(err!(
+                        "using largest unit (which is '{unit}') in given span \
+                         requires that a relative reference time be given, \
+                         but none was provided",
+                        unit = unit.singular(),
+                    ));
+                }
+                return span1.checked_add_invariant(unit, &span2);
+            }
+        };
+        let mid = start.checked_add(span1)?;
+        let end = mid.checked_add(span2)?;
+        start.until(unit, &end)
+    }
+
+    #[inline]
+    fn checked_add_duration<'a>(
+        &self,
+        relative: Option<SpanRelativeTo<'a>>,
+        duration: SignedDuration,
+    ) -> Result<Span, Error> {
+        let (span1, dur2) = (*self, duration);
+        let unit = span1.largest_unit();
+        let start = match relative {
+            Some(r) => {
+                if !r.is_variable(unit) {
+                    return span1.checked_add_invariant_duration(unit, dur2);
+                }
+                r.to_relative()?
+            }
+            None => {
+                if unit.is_definitively_variable() {
+                    return Err(err!(
+                        "using largest unit (which is '{unit}') in given span \
+                         requires that a relative reference time be given, \
+                         but none was provided",
+                        unit = unit.singular(),
+                    ));
+                }
+                return span1.checked_add_invariant_duration(unit, dur2);
+            }
+        };
+        let mid = start.checked_add(span1)?;
+        let end = mid.checked_add_duration(dur2)?;
+        start.until(unit, &end)
     }
 
     /// Like `checked_add`, but only applies for invariant units. That is,
@@ -1521,106 +1646,45 @@ impl Span {
         Span::from_invariant_nanoseconds(unit, sum)
     }
 
-    /// Subtracts a span from this one and returns the difference as a new
-    /// span.
-    ///
-    /// When subtracting a span with units greater than days, callers must
-    /// provide a relative datetime to anchor the spans.
-    ///
-    /// Arithmetic proceeds as specified in [RFC 5545]. Bigger units are
-    /// added together before smaller units.
-    ///
-    /// This routine accepts anything that implements `Into<SpanArithmetic>`.
-    /// There are some trait implementations that make using this routine
-    /// ergonomic:
-    ///
-    /// * `From<Span> for SpanArithmetic` adds the given span to this one.
-    /// * `From<(Span, civil::Date)> for SpanArithmetic` adds the given
-    /// span to this one relative to the given date. There are also `From`
-    /// implementations for `civil::DateTime` and `Zoned`.
-    ///
-    /// Subtracting a negative span is equivalent to adding its absolute value.
-    ///
-    /// The largest non-zero unit in the span returned is at most the largest
-    /// non-zero unit among the two spans being subtracted.
-    ///
-    /// The difference returned is automatically re-balanced so that the span
-    /// is not "bottom heavy."
-    ///
-    /// [RFC 5545]: https://datatracker.ietf.org/doc/html/rfc5545
+    /// Like `checked_add_invariant`, but adds an absolute duration.
+    #[inline]
+    fn checked_add_invariant_duration(
+        &self,
+        unit: Unit,
+        duration: SignedDuration,
+    ) -> Result<Span, Error> {
+        assert!(unit <= Unit::Day);
+        let nanos1 = self.to_invariant_nanoseconds();
+        let nanos2 = t::NoUnits96::new_unchecked(duration.as_nanos());
+        let sum = nanos1 + nanos2;
+        Span::from_invariant_nanoseconds(unit, sum)
+    }
+
+    /// This routine is identical to [`Span::checked_add`] with the given
+    /// duration negated.
     ///
     /// # Errors
     ///
-    /// This returns an error when subtracting the two spans would overflow any
-    /// individual field of a span.
+    /// This has the same error conditions as [`Span::checked_add`].
     ///
     /// # Example
     ///
     /// ```
-    /// use jiff::ToSpan;
+    /// use std::time::Duration;
+    ///
+    /// use jiff::{SignedDuration, ToSpan};
     ///
     /// assert_eq!(1.hour().checked_sub(30.minutes())?, 30.minutes());
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: re-balancing
-    ///
-    /// This example shows how units are automatically rebalanced into bigger
-    /// units when appropriate.
-    ///
-    /// ```
-    /// use jiff::ToSpan;
-    ///
-    /// let span1 = 2.days().hours(23);
-    /// let span2 = 25.hours();
-    /// // When no relative datetime is given, days are always 24 hours long.
-    /// assert_eq!(span1.checked_sub(span2)?, 1.day().hours(22));
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: subtracting spans with calendar units
-    ///
-    /// If you try to subtract two spans with calendar units without specifying
-    /// a relative datetime, you'll get an error:
-    ///
-    /// ```
-    /// use jiff::ToSpan;
-    ///
-    /// let span1 = 1.month().days(15);
-    /// let span2 = 15.days();
-    /// assert!(span1.checked_add(span2).is_err());
-    /// ```
-    ///
-    /// A relative datetime is needed because calendar spans may correspond to
-    /// different actual durations depending on where the span begins:
-    ///
-    /// ```
-    /// use jiff::{civil::date, ToSpan};
-    ///
-    /// let span1 = 3.months();
-    /// let span2 = 1.month().days(15);
     /// assert_eq!(
-    ///     span1.checked_sub((span2, date(2008, 4, 1)))?,
-    ///     1.month().days(16),
+    ///     1.hour().checked_sub(SignedDuration::from_mins(30))?,
+    ///     30.minutes(),
     /// );
     /// assert_eq!(
-    ///     span1.checked_sub((span2, date(2008, 5, 1)))?,
-    ///     1.month().days(15),
+    ///     1.hour().checked_sub(Duration::from_secs(30 * 60))?,
+    ///     30.minutes(),
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: error on overflow
-    ///
-    /// Subtracting two spans can overflow, and this will result in an error:
-    ///
-    /// ```
-    /// use jiff::ToSpan;
-    ///
-    /// assert!((-19_998).years().checked_sub(1.year()).is_err());
     /// ```
     #[inline]
     pub fn checked_sub<'a>(
@@ -1628,7 +1692,7 @@ impl Span {
         options: impl Into<SpanArithmetic<'a>>,
     ) -> Result<Span, Error> {
         let mut options: SpanArithmetic<'_> = options.into();
-        options.span = -options.span;
+        options.duration = options.duration.checked_neg()?;
         options.checked_add(*self)
     }
 
@@ -2228,7 +2292,7 @@ impl Span {
     pub fn to_duration<'a>(
         &self,
         relative: impl Into<SpanRelativeTo<'a>>,
-    ) -> Result<Duration, Error> {
+    ) -> Result<UnsignedDuration, Error> {
         if self.is_negative() {
             return Err(err!(
                 "cannot convert negative span {self:?} \
@@ -2260,7 +2324,7 @@ impl Span {
     /// greater than days. If it does have non-zero units of days, then every
     /// day is considered 24 hours.
     #[inline]
-    fn to_duration_invariant(&self) -> Duration {
+    fn to_duration_invariant(&self) -> UnsignedDuration {
         // This guarantees, at compile time, that a maximal invariant Span
         // (that is, all units are days or lower and all units are set to their
         // maximum values) will still balance out to a number of seconds that
@@ -2309,7 +2373,7 @@ impl Span {
         // Duration::new can panic if subsec_nanos >= 1_000_000_000 and seconds
         // == u64::MAX. But this can never happen because we guaranteed by
         // construction above that subsec_nanos < 1_000_000_000.
-        Duration::new(seconds, subsec_nanos)
+        UnsignedDuration::new(seconds, subsec_nanos)
     }
 }
 
@@ -3123,11 +3187,11 @@ impl core::ops::Mul<Span> for i64 {
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-impl TryFrom<Span> for Duration {
+impl TryFrom<Span> for UnsignedDuration {
     type Error = Error;
 
     #[inline]
-    fn try_from(sp: Span) -> Result<Duration, Error> {
+    fn try_from(sp: Span) -> Result<UnsignedDuration, Error> {
         if sp.is_negative() {
             return Err(err!(
                 "cannot convert negative span {sp:?} \
@@ -3202,11 +3266,11 @@ impl TryFrom<Span> for Duration {
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-impl TryFrom<Duration> for Span {
+impl TryFrom<UnsignedDuration> for Span {
     type Error = Error;
 
     #[inline]
-    fn try_from(d: Duration) -> Result<Span, Error> {
+    fn try_from(d: UnsignedDuration) -> Result<Span, Error> {
         let seconds = i64::try_from(d.as_secs()).map_err(|_| {
             err!("seconds from {d:?} overflows a 64-bit signed integer")
         })?;
@@ -3924,16 +3988,11 @@ impl quickcheck::Arbitrary for Unit {
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct SpanArithmetic<'a> {
-    span: Span,
+    duration: Duration,
     relative: Option<SpanRelativeTo<'a>>,
 }
 
 impl<'a> SpanArithmetic<'a> {
-    #[inline]
-    fn new(span: Span) -> SpanArithmetic<'static> {
-        SpanArithmetic { span, relative: None }
-    }
-
     #[inline]
     fn relative<R: Into<SpanRelativeTo<'a>>>(
         self,
@@ -3943,43 +4002,29 @@ impl<'a> SpanArithmetic<'a> {
     }
 
     #[inline]
-    fn checked_add(self, span: Span) -> Result<Span, Error> {
-        let (span1, span2) = (span, self.span);
-        let unit = span1.largest_unit().max(span2.largest_unit());
-        let start = match self.relative {
-            Some(r) => {
-                if !r.is_variable(unit) {
-                    return span1.checked_add_invariant(unit, &span2);
-                }
-                r.to_relative()?
+    fn checked_add(self, span1: Span) -> Result<Span, Error> {
+        match self.duration.to_signed()? {
+            SDuration::Span(span2) => {
+                span1.checked_add_span(self.relative, &span2)
             }
-            None => {
-                if unit.is_definitively_variable() {
-                    return Err(err!(
-                        "using largest unit (which is '{unit}') in given span \
-                         requires that a relative reference time be given, \
-                         but none was provided",
-                        unit = unit.singular(),
-                    ));
-                }
-                return span1.checked_add_invariant(unit, &span2);
+            SDuration::Absolute(dur2) => {
+                span1.checked_add_duration(self.relative, dur2)
             }
-        };
-        let mid = start.checked_add(span1)?;
-        let end = mid.checked_add(span2)?;
-        start.until(unit, &end)
+        }
     }
 }
 
 impl From<Span> for SpanArithmetic<'static> {
     fn from(span: Span) -> SpanArithmetic<'static> {
-        SpanArithmetic::new(span)
+        let duration = Duration::from(span);
+        SpanArithmetic { duration, relative: None }
     }
 }
 
 impl<'a> From<&'a Span> for SpanArithmetic<'static> {
     fn from(span: &'a Span) -> SpanArithmetic<'static> {
-        SpanArithmetic::new(*span)
+        let duration = Duration::from(*span);
+        SpanArithmetic { duration, relative: None }
     }
 }
 
@@ -4024,6 +4069,74 @@ impl<'a, 'b> From<(&'a Span, &'b Zoned)> for SpanArithmetic<'b> {
     #[inline]
     fn from((span, zoned): (&'a Span, &'b Zoned)) -> SpanArithmetic<'b> {
         SpanArithmetic::from(span).relative(zoned)
+    }
+}
+
+impl From<SignedDuration> for SpanArithmetic<'static> {
+    fn from(duration: SignedDuration) -> SpanArithmetic<'static> {
+        let duration = Duration::from(duration);
+        SpanArithmetic { duration, relative: None }
+    }
+}
+
+impl From<(SignedDuration, Date)> for SpanArithmetic<'static> {
+    #[inline]
+    fn from(
+        (duration, date): (SignedDuration, Date),
+    ) -> SpanArithmetic<'static> {
+        SpanArithmetic::from(duration).relative(date)
+    }
+}
+
+impl From<(SignedDuration, DateTime)> for SpanArithmetic<'static> {
+    #[inline]
+    fn from(
+        (duration, datetime): (SignedDuration, DateTime),
+    ) -> SpanArithmetic<'static> {
+        SpanArithmetic::from(duration).relative(datetime)
+    }
+}
+
+impl<'a> From<(SignedDuration, &'a Zoned)> for SpanArithmetic<'a> {
+    #[inline]
+    fn from(
+        (duration, zoned): (SignedDuration, &'a Zoned),
+    ) -> SpanArithmetic<'a> {
+        SpanArithmetic::from(duration).relative(zoned)
+    }
+}
+
+impl From<UnsignedDuration> for SpanArithmetic<'static> {
+    fn from(duration: UnsignedDuration) -> SpanArithmetic<'static> {
+        let duration = Duration::from(duration);
+        SpanArithmetic { duration, relative: None }
+    }
+}
+
+impl From<(UnsignedDuration, Date)> for SpanArithmetic<'static> {
+    #[inline]
+    fn from(
+        (duration, date): (UnsignedDuration, Date),
+    ) -> SpanArithmetic<'static> {
+        SpanArithmetic::from(duration).relative(date)
+    }
+}
+
+impl From<(UnsignedDuration, DateTime)> for SpanArithmetic<'static> {
+    #[inline]
+    fn from(
+        (duration, datetime): (UnsignedDuration, DateTime),
+    ) -> SpanArithmetic<'static> {
+        SpanArithmetic::from(duration).relative(datetime)
+    }
+}
+
+impl<'a> From<(UnsignedDuration, &'a Zoned)> for SpanArithmetic<'a> {
+    #[inline]
+    fn from(
+        (duration, zoned): (UnsignedDuration, &'a Zoned),
+    ) -> SpanArithmetic<'a> {
+        SpanArithmetic::from(duration).relative(zoned)
     }
 }
 
@@ -5004,6 +5117,20 @@ impl<'a> Relative<'a> {
         }
     }
 
+    fn checked_add_duration(
+        &self,
+        duration: SignedDuration,
+    ) -> Result<Relative, Error> {
+        match *self {
+            Relative::Civil(dt) => {
+                Ok(Relative::Civil(dt.checked_add_duration(duration)?))
+            }
+            Relative::Zoned(ref zdt) => {
+                Ok(Relative::Zoned(zdt.checked_add_duration(duration)?))
+            }
+        }
+    }
+
     /// Returns the span of time from this relative datetime to the one given,
     /// with units as large as `largest`.
     ///
@@ -5313,6 +5440,34 @@ impl RelativeCivil {
         Ok(RelativeCivil { datetime, timestamp })
     }
 
+    /// Returns the result of [`DateTime::checked_add`] with an absolute
+    /// duration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error in the same cases as `DateTime::checked_add`. That is,
+    /// when adding the span to this zoned datetime would overflow.
+    ///
+    /// This also returns an error if the resulting datetime could not be
+    /// converted to a timestamp in UTC. This only occurs near the minimum and
+    /// maximum datetime values.
+    fn checked_add_duration(
+        &self,
+        duration: SignedDuration,
+    ) -> Result<RelativeCivil, Error> {
+        let datetime =
+            self.datetime.checked_add(duration).with_context(|| {
+                err!("failed to add {duration:?} to {dt}", dt = self.datetime)
+            })?;
+        let timestamp = datetime
+            .to_zoned(TimeZone::UTC)
+            .with_context(|| {
+                err!("failed to convert {datetime} to timestamp")
+            })?
+            .timestamp();
+        Ok(RelativeCivil { datetime, timestamp })
+    }
+
     /// Returns the result of [`DateTime::until`].
     ///
     /// # Errors
@@ -5357,6 +5512,22 @@ impl<'a> RelativeZoned<'a> {
     ) -> Result<RelativeZoned<'static>, Error> {
         let zoned = self.zoned.checked_add(span).with_context(|| {
             err!("failed to add {span} to {zoned}", zoned = self.zoned)
+        })?;
+        Ok(RelativeZoned { zoned: Cow::Owned(zoned) })
+    }
+
+    /// Returns the result of [`Zoned::checked_add`] with an absolute duration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error in the same cases as `Zoned::checked_add`. That is,
+    /// when adding the span to this zoned datetime would overflow.
+    fn checked_add_duration(
+        &self,
+        duration: SignedDuration,
+    ) -> Result<RelativeZoned<'static>, Error> {
+        let zoned = self.zoned.checked_add(duration).with_context(|| {
+            err!("failed to add {duration:?} to {zoned}", zoned = self.zoned)
         })?;
         Ok(RelativeZoned { zoned: Cow::Owned(zoned) })
     }
