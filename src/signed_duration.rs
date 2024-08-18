@@ -170,6 +170,113 @@ use crate::util::libm::Float;
 /// (as long as they're within Jiff's limits), including durations with units
 /// of years, months, weeks and days. A `SignedDuration`, by contrast, only
 /// supports units up to and including hours.
+///
+/// # Integration with datetime types
+///
+/// All datetime types that support arithmetic using [`Span`](crate::Span) also
+/// support arithmetic using `SignedDuration` (and [`std::time::Duration`]).
+/// For example, here's how to add an absolute duration to a [`Timestamp`]:
+///
+/// ```
+/// use jiff::{SignedDuration, Timestamp};
+///
+/// let ts1 = Timestamp::from_second(1_123_456_789)?;
+/// assert_eq!(ts1.to_string(), "2005-08-07T23:19:49Z");
+///
+/// let duration = SignedDuration::new(59, 999_999_999);
+/// // Timestamp::checked_add is polymorphic! It can accept a
+/// // span or a duration.
+/// let ts2 = ts1.checked_add(duration)?;
+/// assert_eq!(ts2.to_string(), "2005-08-07T23:20:48.999999999Z");
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// The same API pattern works with [`Zoned`], [`DateTime`], [`Date`] and
+/// [`Time`].
+///
+/// # Interaction with daylight saving time and time zone transitions
+///
+/// A `SignedDuration` always corresponds to a specific number of nanoseconds.
+/// Since a [`Zoned`] is always a precise instant in time, adding a `SignedDuration`
+/// to a `Zoned` always behaves by adding the nanoseconds from the duration to
+/// the timestamp inside of `Zoned`. Consider `2024-03-10` in `US/Eastern`.
+/// At `02:00:00`, daylight saving time came into effect, switching the UTC
+/// offset for the region from `-05` to `-04`. This has the effect of skipping
+/// an hour on the clocks:
+///
+/// ```
+/// use jiff::{civil::date, SignedDuration};
+///
+/// let zdt = date(2024, 3, 10).at(1, 59, 0, 0).intz("US/Eastern")?;
+/// assert_eq!(
+///     zdt.checked_add(SignedDuration::from_hours(1))?,
+///     // Time on the clock skipped an hour, but in this time
+///     // zone, 03:59 is actually precisely 1 hour later than
+///     // 01:59.
+///     date(2024, 3, 10).at(3, 59, 0, 0).intz("US/Eastern")?,
+/// );
+/// // The same would apply if you used a `Span`:
+/// assert_eq!(
+///     zdt.checked_add(jiff::Span::new().hours(1))?,
+///     // Time on the clock skipped an hour, but in this time
+///     // zone, 03:59 is actually precisely 1 hour later than
+///     // 01:59.
+///     date(2024, 3, 10).at(3, 59, 0, 0).intz("US/Eastern")?,
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// Where time zones might have a more interesting effect is in the definition
+/// of the "day" itself. If, for example, you encode the notion that a day is
+/// always 24 hours into your arithmetic, you might get unexpected results.
+/// For example, let's say you want to find the datetime precisely one week
+/// after `2024-03-08T17:00` in the `US/Eastern` time zone. You might be
+/// tempted to just ask for the time that is `7 * 24` hours later:
+///
+/// ```
+/// use jiff::{civil::date, SignedDuration};
+///
+/// let zdt = date(2024, 3, 8).at(17, 0, 0, 0).intz("US/Eastern")?;
+/// assert_eq!(
+///     zdt.checked_add(SignedDuration::from_hours(7 * 24))?,
+///     date(2024, 3, 15).at(18, 0, 0, 0).intz("US/Eastern")?,
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// Notice that you get `18:00` and not `17:00`! That's because, as shown
+/// in the previous example, `2024-03-10` was only 23 hours long. That in turn
+/// implies that the week starting from `2024-03-08` is only `7 * 24 - 1` hours
+/// long. This can be tricky to get correct with absolute durations like
+/// `SignedDuration`, but a `Span` will handle this for you automatically:
+///
+/// ```
+/// use jiff::{civil::date, ToSpan};
+///
+/// let zdt = date(2024, 3, 8).at(17, 0, 0, 0).intz("US/Eastern")?;
+/// assert_eq!(
+///     zdt.checked_add(1.week())?,
+///     // The expected time!
+///     date(2024, 3, 15).at(17, 0, 0, 0).intz("US/Eastern")?,
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// A `Span` achieves this by keeping track of individual units. Unlike a
+/// `SignedDuration`, it is not just a simple count of nanoseconds. It is a
+/// "bag" of individual units, and the arithmetic operations defined on a
+/// `Span` for `Zoned` know how to interpret "day" in a particular time zone
+/// at a particular instant in time.
+///
+/// With that said, the above does not mean that using a `SignedDuration` is
+/// always wrong. For example, if you're dealing with units of hours or lower,
+/// then all such units are uniform and so you'll always get the same results
+/// as with a `Span`. And using a `SignedDuration` can sometimes be simpler
+/// or faster.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct SignedDuration {
     secs: i64,
