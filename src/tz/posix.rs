@@ -286,6 +286,10 @@ impl ReasonablePosixTimeZone {
         &self,
         timestamp: Timestamp,
     ) -> (Offset, Dst, &str) {
+        if self.dst.is_none() {
+            return (self.std_offset(), Dst::No, &self.std_abbrev);
+        }
+
         let dt = Offset::UTC.to_datetime(timestamp);
         self.dst_info_utc(dt.date().year_ranged())
             .filter(|dst_info| dst_info.in_dst(dt))
