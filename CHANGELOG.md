@@ -1,3 +1,14 @@
+0.1.8 (2024-08-19)
+==================
+This releases fixes a build error in Jiff's `alloc`-only configuration. This
+regression was introduced in `jiff 0.1.6`.
+
+Bug fixes:
+
+* [#108](https://github.com/BurntSushi/jiff/issues/108):
+Use `core::time::Duration` everywhere instead of `std::time::Duration`.
+
+
 0.1.7 (2024-08-18)
 ==================
 This release relaxes Jiff's dependency on `windows-sys` to include multiple
