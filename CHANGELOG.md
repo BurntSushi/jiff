@@ -67,7 +67,7 @@ Performance:
 
 * [#104](https://github.com/BurntSushi/jiff/pull/104)
 Optimize offset calculations in time zones without DST.
-* [#104](https://github.com/BurntSushi/jiff/pull/105)
+* [#105](https://github.com/BurntSushi/jiff/pull/105)
 Optimize offset calculations for timestamps after last DST rule change.
 
 
