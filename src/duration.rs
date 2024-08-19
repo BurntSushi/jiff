@@ -1,4 +1,4 @@
-use std::time::Duration as UnsignedDuration;
+use core::time::Duration as UnsignedDuration;
 
 use crate::{
     error::{err, ErrorContext},

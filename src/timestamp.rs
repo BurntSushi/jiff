@@ -2106,7 +2106,7 @@ impl Timestamp {
             .expect("absolute value of seconds fits in u64");
         let nanosecond = u32::try_from(self.subsec_nanosecond().abs())
             .expect("nanosecond always fit in a u32");
-        (self.signum(), std::time::Duration::new(second, nanosecond))
+        (self.signum(), core::time::Duration::new(second, nanosecond))
     }
 }
 
