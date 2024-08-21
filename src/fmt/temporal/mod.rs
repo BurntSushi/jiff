@@ -885,6 +885,70 @@ impl DateTimePrinter {
         self
     }
 
+    /// Set the precision to use for formatting the fractional second component
+    /// of a time.
+    ///
+    /// The default is `None`, which will automatically set the precision based
+    /// on the value.
+    ///
+    /// When the precision is set to `N`, you'll always get precisely `N`
+    /// digits after a decimal point (unless `N==0`, then no fractional
+    /// component is printed), even if they are `0`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::date, fmt::temporal::DateTimePrinter};
+    ///
+    /// const PRINTER: DateTimePrinter =
+    ///     DateTimePrinter::new().precision(Some(3));
+    ///
+    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 123_456_789).intz("US/Eastern")?;
+    ///
+    /// let mut buf = String::new();
+    /// // Printing to a `String` can never fail.
+    /// PRINTER.print_zoned(&zdt, &mut buf).unwrap();
+    /// assert_eq!(buf, "2024-06-15T07:00:00.123-04:00[US/Eastern]");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: available via formatting machinery
+    ///
+    /// When formatting datetime types that may contain a fractional second
+    /// component, this can be set via Rust's formatting DSL. Specifically,
+    /// it corresponds to the [`std::fmt::Formatter::precision`] setting.
+    ///
+    /// ```
+    /// use jiff::civil::date;
+    ///
+    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 123_000_000).intz("US/Eastern")?;
+    /// assert_eq!(
+    ///     format!("{zdt:.6}"),
+    ///     "2024-06-15T07:00:00.123000-04:00[US/Eastern]",
+    /// );
+    /// // Precision values greater than 9 are clamped to 9.
+    /// assert_eq!(
+    ///     format!("{zdt:.300}"),
+    ///     "2024-06-15T07:00:00.123000000-04:00[US/Eastern]",
+    /// );
+    /// // A precision of 0 implies the entire fractional
+    /// // component is always truncated.
+    /// assert_eq!(
+    ///     format!("{zdt:.0}"),
+    ///     "2024-06-15T07:00:00-04:00[US/Eastern]",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub const fn precision(
+        mut self,
+        precision: Option<u8>,
+    ) -> DateTimePrinter {
+        self.p = self.p.precision(precision);
+        self
+    }
+
     /// Print a `Zoned` datetime to the given writer.
     ///
     /// # Errors

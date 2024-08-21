@@ -6,7 +6,7 @@ use crate::{
     error::{err, Error, ErrorContext},
     fmt::{
         self,
-        temporal::{DEFAULT_DATETIME_PARSER, DEFAULT_DATETIME_PRINTER},
+        temporal::{self, DEFAULT_DATETIME_PARSER},
     },
     tz::{AmbiguousOffset, Disambiguation, Offset, OffsetConflict, TimeZone},
     util::{
@@ -2979,17 +2979,85 @@ impl Default for Zoned {
     }
 }
 
+/// Converts a `Zoned` datetime into a human readable datetime string.
+///
+/// (This `Debug` representation currently emits the same string as the
+/// `Display` representation, but this is not a guarantee.)
+///
+/// Options currently supported:
+///
+/// * [`std::fmt::Formatter::precision`] can be set to control the precision
+/// of the fractional second component.
+///
+/// # Example
+///
+/// ```
+/// use jiff::civil::date;
+///
+/// let zdt = date(2024, 6, 15).at(7, 0, 0, 123_000_000).intz("US/Eastern")?;
+/// assert_eq!(
+///     format!("{zdt:.6?}"),
+///     "2024-06-15T07:00:00.123000-04:00[US/Eastern]",
+/// );
+/// // Precision values greater than 9 are clamped to 9.
+/// assert_eq!(
+///     format!("{zdt:.300?}"),
+///     "2024-06-15T07:00:00.123000000-04:00[US/Eastern]",
+/// );
+/// // A precision of 0 implies the entire fractional
+/// // component is always truncated.
+/// assert_eq!(
+///     format!("{zdt:.0?}"),
+///     "2024-06-15T07:00:00-04:00[US/Eastern]",
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 impl core::fmt::Debug for Zoned {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         core::fmt::Display::fmt(self, f)
     }
 }
 
+/// Converts a `Zoned` datetime into a RFC 9557 compliant string.
+///
+/// Options currently supported:
+///
+/// * [`std::fmt::Formatter::precision`] can be set to control the precision
+/// of the fractional second component.
+///
+/// # Example
+///
+/// ```
+/// use jiff::civil::date;
+///
+/// let zdt = date(2024, 6, 15).at(7, 0, 0, 123_000_000).intz("US/Eastern")?;
+/// assert_eq!(
+///     format!("{zdt:.6}"),
+///     "2024-06-15T07:00:00.123000-04:00[US/Eastern]",
+/// );
+/// // Precision values greater than 9 are clamped to 9.
+/// assert_eq!(
+///     format!("{zdt:.300}"),
+///     "2024-06-15T07:00:00.123000000-04:00[US/Eastern]",
+/// );
+/// // A precision of 0 implies the entire fractional
+/// // component is always truncated.
+/// assert_eq!(
+///     format!("{zdt:.0}"),
+///     "2024-06-15T07:00:00-04:00[US/Eastern]",
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 impl core::fmt::Display for Zoned {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         use crate::fmt::StdFmtWrite;
 
-        DEFAULT_DATETIME_PRINTER
+        let precision =
+            f.precision().map(|p| u8::try_from(p).unwrap_or(u8::MAX));
+        temporal::DateTimePrinter::new()
+            .precision(precision)
             .print_zoned(self, StdFmtWrite(f))
             .map_err(|_| core::fmt::Error)
     }

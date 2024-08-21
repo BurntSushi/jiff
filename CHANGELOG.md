@@ -1,3 +1,20 @@
+0.1.9 (2024-08-23)
+==================
+This release introduces new options for controlling the precision
+of fractional seconds when printing `Zoned`, `Timestamp`,
+`civil::DateTime` or `civil::Time` values. This is principally exposed
+via `jiff::fmt::temporal::DateTimePrinter::precision`, but it's also
+available via the standard library's formatting machinery. For example,
+if `zdt` is a `jiff::Zoned`, then `format!("{zdt:.6}")` will format
+it into a string with microsecond precision, even if its fractional
+component is zero.
+
+Enhancements:
+
+* [#92](https://github.com/BurntSushi/jiff/issues/92):
+Support setting the precision of fractional seconds when printing datetimes.
+
+
 0.1.8 (2024-08-19)
 ==================
 This releases fixes a build error in Jiff's `alloc`-only configuration. This

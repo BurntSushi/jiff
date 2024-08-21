@@ -5,7 +5,7 @@ use crate::{
     error::{err, Error, ErrorContext},
     fmt::{
         self,
-        temporal::{DEFAULT_DATETIME_PARSER, DEFAULT_DATETIME_PRINTER},
+        temporal::{self, DEFAULT_DATETIME_PARSER},
     },
     tz::TimeZone,
     util::{
@@ -2292,6 +2292,40 @@ impl Default for Timestamp {
     }
 }
 
+/// Converts a `Timestamp` datetime into a human readable datetime string.
+///
+/// (This `Debug` representation currently emits the same string as the
+/// `Display` representation, but this is not a guarantee.)
+///
+/// Options currently supported:
+///
+/// * [`std::fmt::Formatter::precision`] can be set to control the precision
+/// of the fractional second component.
+///
+/// # Example
+///
+/// ```
+/// use jiff::Timestamp;
+///
+/// let ts = Timestamp::new(1_123_456_789, 123_000_000)?;
+/// assert_eq!(
+///     format!("{ts:.6?}"),
+///     "2005-08-07T23:19:49.123000Z",
+/// );
+/// // Precision values greater than 9 are clamped to 9.
+/// assert_eq!(
+///     format!("{ts:.300?}"),
+///     "2005-08-07T23:19:49.123000000Z",
+/// );
+/// // A precision of 0 implies the entire fractional
+/// // component is always truncated.
+/// assert_eq!(
+///     format!("{ts:.0?}"),
+///     "2005-08-07T23:19:49Z",
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 impl core::fmt::Debug for Timestamp {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -2299,12 +2333,46 @@ impl core::fmt::Debug for Timestamp {
     }
 }
 
+/// Converts a `Timestamp` datetime into a RFC 3339 compliant string.
+///
+/// Options currently supported:
+///
+/// * [`std::fmt::Formatter::precision`] can be set to control the precision
+/// of the fractional second component.
+///
+/// # Example
+///
+/// ```
+/// use jiff::Timestamp;
+///
+/// let ts = Timestamp::new(1_123_456_789, 123_000_000)?;
+/// assert_eq!(
+///     format!("{ts:.6}"),
+///     "2005-08-07T23:19:49.123000Z",
+/// );
+/// // Precision values greater than 9 are clamped to 9.
+/// assert_eq!(
+///     format!("{ts:.300}"),
+///     "2005-08-07T23:19:49.123000000Z",
+/// );
+/// // A precision of 0 implies the entire fractional
+/// // component is always truncated.
+/// assert_eq!(
+///     format!("{ts:.0}"),
+///     "2005-08-07T23:19:49Z",
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 impl core::fmt::Display for Timestamp {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         use crate::fmt::StdFmtWrite;
 
-        DEFAULT_DATETIME_PRINTER
+        let precision =
+            f.precision().map(|p| u8::try_from(p).unwrap_or(u8::MAX));
+        temporal::DateTimePrinter::new()
+            .precision(precision)
             .print_timestamp(self, StdFmtWrite(f))
             .map_err(|_| core::fmt::Error)
     }
