@@ -16,11 +16,17 @@ pub(super) struct DateTimePrinter {
     lowercase: bool,
     separator: u8,
     rfc9557: bool,
+    precision: Option<u8>,
 }
 
 impl DateTimePrinter {
     pub(super) const fn new() -> DateTimePrinter {
-        DateTimePrinter { lowercase: false, separator: b'T', rfc9557: true }
+        DateTimePrinter {
+            lowercase: false,
+            separator: b'T',
+            rfc9557: true,
+            precision: None,
+        }
     }
 
     pub(super) const fn lowercase(self, yes: bool) -> DateTimePrinter {
@@ -30,6 +36,13 @@ impl DateTimePrinter {
     pub(super) const fn separator(self, ascii_char: u8) -> DateTimePrinter {
         assert!(ascii_char.is_ascii(), "RFC3339 separator must be ASCII");
         DateTimePrinter { separator: ascii_char, ..self }
+    }
+
+    pub(super) const fn precision(
+        self,
+        precision: Option<u8>,
+    ) -> DateTimePrinter {
+        DateTimePrinter { precision, ..self }
     }
 
     pub(super) fn print_zoned<W: Write>(
@@ -113,7 +126,15 @@ impl DateTimePrinter {
         wtr.write_str(":")?;
         wtr.write_int(&FMT_TWO, time.second())?;
         let fractional_nanosecond = time.subsec_nanosecond();
-        if fractional_nanosecond != 0 {
+        if let Some(precision) = self.precision {
+            if precision > 0 {
+                wtr.write_str(".")?;
+                wtr.write_fraction(
+                    &FMT_FRACTION.precision(precision),
+                    fractional_nanosecond,
+                )?;
+            }
+        } else if fractional_nanosecond != 0 {
             wtr.write_str(".")?;
             wtr.write_fraction(&FMT_FRACTION, fractional_nanosecond)?;
         }

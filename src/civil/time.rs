@@ -6,7 +6,7 @@ use crate::{
     error::{err, Error, ErrorContext},
     fmt::{
         self,
-        temporal::{DEFAULT_DATETIME_PARSER, DEFAULT_DATETIME_PRINTER},
+        temporal::{self, DEFAULT_DATETIME_PARSER},
     },
     util::{
         rangeint::{RFrom, RInto, TryRFrom},
@@ -1757,6 +1757,31 @@ impl Default for Time {
     }
 }
 
+/// Converts a `Time` into a human readable time string.
+///
+/// (This `Debug` representation currently emits the same string as the
+/// `Display` representation, but this is not a guarantee.)
+///
+/// Options currently supported:
+///
+/// * [`std::fmt::Formatter::precision`] can be set to control the precision
+/// of the fractional second component.
+///
+/// # Example
+///
+/// ```
+/// use jiff::civil::time;
+///
+/// let t = time(7, 0, 0, 123_000_000);
+/// assert_eq!(format!("{t:.6?}"), "07:00:00.123000");
+/// // Precision values greater than 9 are clamped to 9.
+/// assert_eq!(format!("{t:.300?}"), "07:00:00.123000000");
+/// // A precision of 0 implies the entire fractional
+/// // component is always truncated.
+/// assert_eq!(format!("{t:.0?}"), "07:00:00");
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 impl core::fmt::Debug for Time {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -1764,12 +1789,37 @@ impl core::fmt::Debug for Time {
     }
 }
 
+/// Converts a `Time` into an ISO 8601 compliant string.
+///
+/// Options currently supported:
+///
+/// * [`std::fmt::Formatter::precision`] can be set to control the precision
+/// of the fractional second component.
+///
+/// # Example
+///
+/// ```
+/// use jiff::civil::time;
+///
+/// let t = time(7, 0, 0, 123_000_000);
+/// assert_eq!(format!("{t:.6}"), "07:00:00.123000");
+/// // Precision values greater than 9 are clamped to 9.
+/// assert_eq!(format!("{t:.300}"), "07:00:00.123000000");
+/// // A precision of 0 implies the entire fractional
+/// // component is always truncated.
+/// assert_eq!(format!("{t:.0}"), "07:00:00");
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 impl core::fmt::Display for Time {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         use crate::fmt::StdFmtWrite;
 
-        DEFAULT_DATETIME_PRINTER
+        let precision =
+            f.precision().map(|p| u8::try_from(p).unwrap_or(u8::MAX));
+        temporal::DateTimePrinter::new()
+            .precision(precision)
             .print_time(self, StdFmtWrite(f))
             .map_err(|_| core::fmt::Error)
     }
