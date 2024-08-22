@@ -18,7 +18,7 @@ use crate::{
 pub(super) struct ParsedDateTime<'i> {
     /// The original input that the datetime was parsed from.
     input: escape::Bytes<'i>,
-    /// An optional civil date.
+    /// A required civil date.
     date: ParsedDate<'i>,
     /// An optional civil time.
     time: Option<ParsedTime<'i>>,

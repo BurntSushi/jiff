@@ -188,8 +188,8 @@ impl FractionalFormatter {
     ///
     /// If the `precision` is greater than `9`, then it is clamped to `9`.
     ///
-    /// When the precision is not set, then it is automatically determined base
-    /// on the value.
+    /// When the precision is not set, then it is automatically determined
+    /// based on the value.
     pub(crate) const fn precision(
         self,
         mut precision: u8,
