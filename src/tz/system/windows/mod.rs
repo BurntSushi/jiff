@@ -62,6 +62,16 @@ pub(super) fn get(db: &TimeZoneDatabase) -> Option<TimeZone> {
     Some(tz)
 }
 
+pub(super) fn read(_db: &TimeZoneDatabase, path: &str) -> Option<TimeZone> {
+    match super::read_unnamed_tzif_file(path) {
+        Ok(tz) => Some(tz),
+        Err(_err) => {
+            trace!("failed to read {path} as unnamed time zone: {_err}");
+            None
+        }
+    }
+}
+
 fn windows_to_iana(tz_key_name: &str) -> Result<&'static str, Error> {
     let result = WINDOWS_TO_IANA.binary_search_by(|(win_name, _)| {
         cmp_ignore_ascii_case(win_name, &tz_key_name)

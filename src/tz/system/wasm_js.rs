@@ -45,3 +45,13 @@ pub(super) fn get(db: &TimeZoneDatabase) -> Option<TimeZone> {
     };
     Some(tz)
 }
+
+pub(super) fn read(_db: &TimeZoneDatabase, path: &str) -> Option<TimeZone> {
+    match super::read_unnamed_tzif_file(path) {
+        Ok(tz) => Some(tz),
+        Err(_err) => {
+            trace!("failed to read {path} as unnamed time zone: {_err}");
+            None
+        }
+    }
+}
