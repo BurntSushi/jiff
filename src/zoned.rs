@@ -384,6 +384,12 @@ impl Zoned {
     /// compatible with the `log` crate and enable Jiff's `logging` Cargo
     /// feature.)
     ///
+    /// To create a `Zoned` value for the current time in a particular
+    /// time zone other than the system default time zone, use
+    /// `Timestamp::now().to_zoned(time_zone)`. In particular, using
+    /// [`Timestamp::now`] avoids the work required to fetch the system time
+    /// zone if you did `Zoned::now().with_time_zone(time_zone)`.
+    ///
     /// # Panics
     ///
     /// This panics if the system clock is set to a time value outside of the
