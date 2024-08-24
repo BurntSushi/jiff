@@ -1,3 +1,14 @@
+0.1.11 (TBD)
+============
+TODO
+
+Enhancements:
+
+* [#93](https://github.com/BurntSushi/jiff/issues/93):
+Add note about using `Timestamp::now().to_zoned()` instead of
+`Zoned::now().with_time_zone()`.
+
+
 0.1.10 (2024-08-23)
 ===================
 This release features a small bug fix where Jiff will detect an IANA time
