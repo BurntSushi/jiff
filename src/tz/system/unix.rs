@@ -16,20 +16,27 @@ static UNIX_LOCALTIME_PATH: &str = "/etc/localtime";
 /// zone name. And we *really* want the time zone name as it is the only
 /// standardized way to roundtrip a datetime in a particular time zone.
 pub(super) fn get(db: &TimeZoneDatabase) -> Option<TimeZone> {
-    if let Some(tz) = read_link_to_zoneinfo(db, UNIX_LOCALTIME_PATH) {
+    read(db, UNIX_LOCALTIME_PATH)
+}
+
+/// Given a path to a system default TZif file, return its corresponding
+/// time zone.
+///
+/// In Unix, we attempt to read it as a symlink and extract an IANA time zone
+/// identifier. If that ID exists in the tzdb, we return that. Otherwise, we
+/// read the TZif file as an unnamed time zone.
+pub(super) fn read(db: &TimeZoneDatabase, path: &str) -> Option<TimeZone> {
+    if let Some(tz) = read_link_to_zoneinfo(db, path) {
         return Some(tz);
     }
     trace!(
         "failed to find time zone name using Unix-specific heuristics, \
          attempting to read {UNIX_LOCALTIME_PATH} as unnamed time zone",
     );
-    match super::read_unnamed_tzif_file(UNIX_LOCALTIME_PATH) {
+    match super::read_unnamed_tzif_file(path) {
         Ok(tz) => Some(tz),
         Err(_err) => {
-            trace!(
-                "failed to read {UNIX_LOCALTIME_PATH} \
-                 as unnamed time zone: {_err}"
-            );
+            trace!("failed to read {path} as unnamed time zone: {_err}");
             None
         }
     }

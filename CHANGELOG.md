@@ -1,3 +1,19 @@
+0.1.10 (2024-08-23)
+===================
+This release features a small bug fix where Jiff will detect an IANA time
+zone identifier in some cases where it wouldn't before. While Jiff would
+previously read the symlink metadata on `/etc/localtime` by default to discover
+the system configured time zone on Unix systems, it *wouldn't* do so when
+`TZ=/etc/localtime`. There's really no reason not to, so this release of Jiff
+is fixed to use symlink sniffing on file paths provided by thw `TZ` environment
+variable.
+
+Bug fixes:
+
+* [#113](https://github.com/BurntSushi/jiff/issues/113):
+When `TZ=/etc/localtime`, use symlink metadata to detect IANA identifier.
+
+
 0.1.9 (2024-08-23)
 ==================
 This release introduces new options for controlling the precision

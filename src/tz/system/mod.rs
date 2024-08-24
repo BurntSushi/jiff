@@ -42,6 +42,19 @@ mod sys {
         warn!("getting system time zone on this platform is unsupported");
         None
     }
+
+    pub(super) fn read(
+        _db: &TimeZoneDatabase,
+        path: &str,
+    ) -> Option<TimeZone> {
+        match super::read_unnamed_tzif_file(path) {
+            Ok(tz) => Some(tz),
+            Err(_err) => {
+                trace!("failed to read {path} as unnamed time zone: {_err}");
+                None
+            }
+        }
+    }
 }
 
 /// The duration of time that a cached time zone should be considered valid.
@@ -230,10 +243,10 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
             Err(_err) => {
                 trace!(
                     "using TZ={tz_name_or_path:?} as time zone name failed, \
-                     could not find time zone in zoneinfo database {db:?}, \
-                     now attempting to read as unnamed TZif data directly",
+                     could not find time zone in zoneinfo database {db:?} \
+                     (continuing to try and use {tz_name_or_path:?}",
                 );
-                read_unnamed_tzif_file(&tz_name_or_path).map(Some)
+                Ok(sys::read(db, &tz_name_or_path))
             }
         };
     };
@@ -251,8 +264,7 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
             trace!(
                 "using {name:?} from TZ={tz_name_or_path:?}, \
                  could not find time zone in zoneinfo database {db:?} \
-                 (continuing to try and use {tz_name_or_path:?} as \
-                 unnamed TZif data directly)",
+                 (continuing to try and use {tz_name_or_path:?})",
             );
         }
     }
@@ -261,7 +273,7 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
     // The only thing left for us to do is treat the value as a file path
     // and read the data as TZif. This will give us time zone data if it works,
     // but without a name.
-    read_unnamed_tzif_file(&tz_name_or_path).map(Some)
+    Ok(sys::read(db, &tz_name_or_path))
 }
 
 /// Returns the given file path as TZif data without a time zone name.
