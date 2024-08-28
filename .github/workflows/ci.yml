@@ -57,7 +57,7 @@ jobs:
       with:
         toolchain: ${{ matrix.rust }}
     - run: cargo build --verbose
-    - run: cargo doc --verbose
+    - run: cargo doc --features serde --verbose
     - run: cargo test --verbose --all
     - run: cargo test --verbose -p jiff-cli
     # Skip on Windows because it takes freaking forever.
@@ -82,7 +82,7 @@ jobs:
       with:
         toolchain: stable-x86_64-gnu
     - run: cargo build --verbose
-    - run: cargo doc --verbose
+    - run: cargo doc --features serde --verbose
     - run: cargo test --verbose --lib
     - run: cargo test --verbose --test integration
 
@@ -109,7 +109,7 @@ jobs:
     - name: Build jiff-tzdb-platform
       run: cargo build -p jiff-tzdb-platform --verbose
     - name: Build docs
-      run: cargo doc --verbose
+      run: cargo doc --features serde --verbose
     - name: Run library tests
       run: cargo test --lib
     - name: Run integration tests
