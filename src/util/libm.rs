@@ -24,12 +24,6 @@ pub(crate) trait Float {
     fn fract(self) -> Self;
 }
 
-macro_rules! force_eval {
-    ($e:expr) => {
-        core::ptr::read_volatile(&$e)
-    };
-}
-
 const TOINT64: f64 = 1. / f64::EPSILON;
 
 impl Float for f64 {
@@ -58,9 +52,7 @@ impl Float for f64 {
         };
         // special case because of non-nearest rounding modes
         if e < 0x3ff {
-            unsafe {
-                force_eval!(y);
-            }
+            core::hint::black_box(y);
             return if (u >> 63) != 0 { -0. } else { 1. };
         }
         if y < 0. {
@@ -86,9 +78,7 @@ impl Float for f64 {
         };
         /* special case because of non-nearest rounding modes */
         if e < 0x3ff {
-            unsafe {
-                force_eval!(y);
-            }
+            core::hint::black_box(y);
             return if (ui >> 63) != 0 { -1. } else { 0. };
         }
         if y > 0. {
@@ -128,9 +118,7 @@ impl Float for f64 {
         if (i & m) == 0 {
             return x;
         }
-        unsafe {
-            force_eval!(x + x1p120);
-        }
+        core::hint::black_box(x + x1p120);
         i &= !m;
         f64::from_bits(i)
     }
@@ -162,17 +150,13 @@ impl Float for f32 {
             if (ui & m) == 0 {
                 return x;
             }
-            unsafe {
-                force_eval!(x + f32::from_bits(0x7b800000));
-            }
+            core::hint::black_box(x + f32::from_bits(0x7b800000));
             if ui >> 31 == 0 {
                 ui += m;
             }
             ui &= !m;
         } else {
-            unsafe {
-                force_eval!(x + f32::from_bits(0x7b800000));
-            }
+            core::hint::black_box(x + f32::from_bits(0x7b800000));
             if ui >> 31 != 0 {
                 return -0.0;
             } else if ui << 1 != 0 {
@@ -195,17 +179,13 @@ impl Float for f32 {
             if (ui & m) == 0 {
                 return x;
             }
-            unsafe {
-                force_eval!(x + f32::from_bits(0x7b800000));
-            }
+            core::hint::black_box(x + f32::from_bits(0x7b800000));
             if ui >> 31 != 0 {
                 ui += m;
             }
             ui &= !m;
         } else {
-            unsafe {
-                force_eval!(x + f32::from_bits(0x7b800000));
-            }
+            core::hint::black_box(x + f32::from_bits(0x7b800000));
             if ui >> 31 == 0 {
                 ui = 0;
             } else if ui << 1 != 0 {
@@ -245,9 +225,7 @@ impl Float for f32 {
         if (i & m) == 0 {
             return x;
         }
-        unsafe {
-            force_eval!(x + x1p120);
-        }
+        core::hint::black_box(x + x1p120);
         i &= !m;
         f32::from_bits(i)
     }
