@@ -4,6 +4,8 @@ TODO
 
 Enhancements:
 
+* [#78](https://github.com/BurntSushi/jiff/issues/78):
+Add `BrokenDownTime::set_{offset,iana_time_zone}` APIs.
 * [#93](https://github.com/BurntSushi/jiff/issues/93):
 Add note about using `Timestamp::now().to_zoned()` instead of
 `Zoned::now().with_time_zone()`.

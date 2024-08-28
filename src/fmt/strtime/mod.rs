@@ -1310,6 +1310,33 @@ impl BrokenDownTime {
         self.offset
     }
 
+    /// Returns the time zone IANA identifier, if available.
+    ///
+    /// # Example
+    ///
+    /// This shows how to parse an IANA time zone identifier:
+    ///
+    /// ```
+    /// use jiff::{fmt::strtime::BrokenDownTime, tz};
+    ///
+    /// let tm = BrokenDownTime::parse("%V", "US/Eastern")?;
+    /// assert_eq!(tm.iana_time_zone(), Some("US/Eastern"));
+    /// assert_eq!(tm.offset(), None);
+    ///
+    /// // Note that %V (and %:V) also support parsing an offset
+    /// // as a fallback. If that occurs, an IANA time zone
+    /// // identifier is not available.
+    /// let tm = BrokenDownTime::parse("%V", "-0400")?;
+    /// assert_eq!(tm.iana_time_zone(), None);
+    /// assert_eq!(tm.offset(), Some(tz::offset(-4)));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn iana_time_zone(&self) -> Option<&str> {
+        self.iana.as_deref()
+    }
+
     /// Returns the parsed weekday, if available.
     ///
     /// # Example
@@ -1602,6 +1629,133 @@ impl BrokenDownTime {
             )?),
         };
         Ok(())
+    }
+
+    /// Set the time zone offset on this broken down time.
+    ///
+    /// This can be useful for setting the offset after parsing if the offset
+    /// is known from the context or from some out-of-band information.
+    ///
+    /// Note that one can set any legal offset value, regardless of whether
+    /// it's consistent with the IANA time zone identifier on this broken down
+    /// time (if it's set). Similarly, setting the offset does not actually
+    /// change any other value in this broken down time.
+    ///
+    /// # Example: setting the offset after parsing
+    ///
+    /// One use case for this routine is when parsing a datetime _without_
+    /// an offset, but where one wants to set an offset based on the context.
+    /// For example, while it's usually not correct to assume a datetime is
+    /// in UTC, if you know it is, then you can parse it into a [`Timestamp`]
+    /// like so:
+    ///
+    /// ```
+    /// use jiff::{fmt::strtime::BrokenDownTime, tz::Offset};
+    ///
+    /// let mut tm = BrokenDownTime::parse(
+    ///     "%Y-%m-%d at %H:%M:%S",
+    ///     "1970-01-01 at 01:00:00",
+    /// )?;
+    /// tm.set_offset(Some(Offset::UTC));
+    /// // Normally this would fail since the parse
+    /// // itself doesn't include an offset. It only
+    /// // works here because we explicitly set the
+    /// // offset after parsing.
+    /// assert_eq!(tm.to_timestamp()?.to_string(), "1970-01-01T01:00:00Z");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: setting the offset is not "smart"
+    ///
+    /// This example shows how setting the offset on an existing broken down
+    /// time does not impact any other field, even if the result printed is
+    /// non-sensical:
+    ///
+    /// ```
+    /// use jiff::{civil::date, fmt::strtime::BrokenDownTime, tz};
+    ///
+    /// let zdt = date(2024, 8, 28).at(14, 56, 0, 0).intz("US/Eastern")?;
+    /// let mut tm = BrokenDownTime::from(&zdt);
+    /// tm.set_offset(Some(tz::offset(12)));
+    /// assert_eq!(
+    ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %V %:z")?,
+    ///     "2024-08-28 at 14:56:00 in US/Eastern +12:00",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_offset(&mut self, offset: Option<Offset>) {
+        self.offset = offset;
+    }
+
+    /// Set the IANA time zone identifier on this broken down time.
+    ///
+    /// This can be useful for setting the time zone after parsing if the time
+    /// zone is known from the context or from some out-of-band information.
+    ///
+    /// Note that one can set any string value, regardless of whether it's
+    /// consistent with the offset on this broken down time (if it's set).
+    /// Similarly, setting the IANA time zone identifier does not actually
+    /// change any other value in this broken down time.
+    ///
+    /// # Example: setting the IANA time zone identifier after parsing
+    ///
+    /// One use case for this routine is when parsing a datetime _without_ a
+    /// time zone, but where one wants to set a time zone based on the context.
+    ///
+    /// ```
+    /// use jiff::{fmt::strtime::BrokenDownTime, tz::Offset};
+    ///
+    /// let mut tm = BrokenDownTime::parse(
+    ///     "%Y-%m-%d at %H:%M:%S",
+    ///     "1970-01-01 at 01:00:00",
+    /// )?;
+    /// tm.set_iana_time_zone(Some(String::from("US/Eastern")));
+    /// // Normally this would fail since the parse
+    /// // itself doesn't include an offset or a time
+    /// // zone. It only works here because we
+    /// // explicitly set the time zone after parsing.
+    /// assert_eq!(
+    ///     tm.to_zoned()?.to_string(),
+    ///     "1970-01-01T01:00:00-05:00[US/Eastern]",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: setting the IANA time zone identifier is not "smart"
+    ///
+    /// This example shows how setting the IANA time zone identifier on an
+    /// existing broken down time does not impact any other field, even if the
+    /// result printed is non-sensical:
+    ///
+    /// ```
+    /// use jiff::{civil::date, fmt::strtime::BrokenDownTime, tz};
+    ///
+    /// let zdt = date(2024, 8, 28).at(14, 56, 0, 0).intz("US/Eastern")?;
+    /// let mut tm = BrokenDownTime::from(&zdt);
+    /// tm.set_iana_time_zone(Some(String::from("Australia/Tasmania")));
+    /// assert_eq!(
+    ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %V %:z")?,
+    ///     "2024-08-28 at 14:56:00 in Australia/Tasmania -04:00",
+    /// );
+    ///
+    /// // In fact, it's not even required that the string
+    /// // given be a valid IANA time zone identifier!
+    /// let mut tm = BrokenDownTime::from(&zdt);
+    /// tm.set_iana_time_zone(Some(String::from("Clearly/Invalid")));
+    /// assert_eq!(
+    ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %V %:z")?,
+    ///     "2024-08-28 at 14:56:00 in Clearly/Invalid -04:00",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_iana_time_zone(&mut self, id: Option<String>) {
+        self.iana = id;
     }
 
     /// Set the weekday on this broken down time.
