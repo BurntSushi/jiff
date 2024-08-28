@@ -9,6 +9,8 @@ Add `BrokenDownTime::set_{offset,iana_time_zone}` APIs.
 * [#93](https://github.com/BurntSushi/jiff/issues/93):
 Add note about using `Timestamp::now().to_zoned()` instead of
 `Zoned::now().with_time_zone()`.
+* [#101](https://github.com/BurntSushi/jiff/issues/101):
+Add new `jiff::fmt::serde` module for integration with integer timestamps.
 * [#117](https://github.com/BurntSushi/jiff/pull/117):
 Remove `unsafe` usage in `libm` functions (applicable only to no-std users).
 

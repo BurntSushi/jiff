@@ -19,6 +19,8 @@ use self::util::{Decimal, DecimalFormatter, Fractional, FractionalFormatter};
 mod offset;
 pub mod rfc2822;
 mod rfc9557;
+#[cfg(feature = "serde")]
+pub mod serde;
 pub mod strtime;
 pub mod temporal;
 mod util;

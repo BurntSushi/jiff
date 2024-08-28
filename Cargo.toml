@@ -101,7 +101,7 @@ anyhow = "1.0.81"
 chrono = { version = "0.4.38", features = ["serde"] }
 chrono-tz = "0.9.0"
 insta = "1.39.0"
-# We force `serde` to be enable in dev mode so that the docs render and test
+# We force `serde` to be enabled in dev mode so that the docs render and test
 # correctly. This is highly suspicious.
 jiff = { path = "./", features = ["serde"] }
 quickcheck = { version = "1.0.3", default-features = false }

@@ -196,6 +196,7 @@ subsequent runs shouldn't have to re-compile the dependencies.
 * [Parsing a span](#parsing-a-span)
 * [Parsing an RFC 2822 datetime string](#parsing-an-rfc-2822-datetime-string)
 * [Using `strftime` and `strptime` for formatting and parsing](#using-strftime-and-strptime-for-formatting-and-parsing)
+* [Serializing and deserializing integer timestamps with Serde](#serializing-and-deserializing-integer-timestamps-with-serde)
 
 ### Get the current time in your system's time zone
 
@@ -529,6 +530,39 @@ specifiers and other APIs.
 [`strftime`]: https://pubs.opengroup.org/onlinepubs/009695399/functions/strftime.html
 [`strptime`]: https://pubs.opengroup.org/onlinepubs/009695399/functions/strptime.html
 
+### Serializing and deserializing integer timestamps with Serde
+
+Sometimes you need to interact with external services that use integer timestamps
+instead of something more civilized like RFC 3339. Since [`Timestamp`]'s
+Serde integration uses RFC 3339, you'll need to override the default. While
+you could hand-write this, Jiff provides convenience routines that do this
+for you. But you do need to wire it up via [Serde's `with` attribute]:
+
+```
+use jiff::Timestamp;
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+struct Record {
+    #[serde(with = "jiff::fmt::serde::timestamp::second::required")]
+    timestamp: Timestamp,
+}
+
+let json = r#"{"timestamp":1517644800}"#;
+let got: Record = serde_json::from_str(&json)?;
+assert_eq!(got.timestamp, Timestamp::from_second(1517644800)?);
+assert_eq!(serde_json::to_string(&got)?, json);
+
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+If you need to support optional timestamps via `Option<Timestamp>`, then use
+`jiff::fmt::serde::timestamp::second::optional` instead.
+
+For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
+`serde` crate feature.)
+
+[Serde's `with` attribute]: https://serde.rs/field-attrs.html#with
+
 # Crate features
 
 ### Ecosystem features
@@ -594,7 +628,7 @@ specifiers and other APIs.
 // Lots of rustdoc links break when disabling default features because docs
 // aren't written conditionally.
 #![cfg_attr(
-    all(feature = "std", feature = "tzdb-zoneinfo"),
+    all(feature = "std", feature = "serde", feature = "tzdb-zoneinfo"),
     deny(rustdoc::broken_intra_doc_links)
 )]
 // These are just too annoying to squash otherwise.
