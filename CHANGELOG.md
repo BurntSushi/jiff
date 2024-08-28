@@ -1,6 +1,30 @@
-0.1.11 (TBD)
-============
-TODO
+0.1.11 (2024-08-28)
+===================
+This release includes a few small enhancements that have been requested over
+the last several weeks. The biggest enhancement is a new `jiff::fmt::serde`
+sub-module. It provides convenience routines similar to Chrono's
+`chrono::serde` sub-module for serializing and deserializing between a
+`jiff::Timestamp` and an integer number of seconds, milliseconds, microseconds
+or nanoseconds. For example:
+
+```rust
+use jiff::Timestamp;
+
+struct Record {
+    #[serde(with = "jiff::fmt::serde::timestamp::second::required")]
+    timestamp: Timestamp,
+}
+
+let json = r#"{"timestamp":1517644800}"#;
+let got: Record = serde_json::from_str(&json)?;
+assert_eq!(got.timestamp, Timestamp::from_second(1517644800)?);
+assert_eq!(serde_json::to_string(&got)?, json);
+```
+
+If you need to support optional timestamps via `Option<Timestamp>`, then use
+`jiff::fmt::serde::timestamp::second::optional` instead. Similarly, if you
+need to support milliseconds instead of seconds, then replace `second` with
+`millisecond` in the module path.
 
 Enhancements:
 
