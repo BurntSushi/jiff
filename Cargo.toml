@@ -10,8 +10,8 @@ A date-time library that encourages you to jump into the pit of success.
 
 This library is heavily inspired by the Temporal project.
 '''
-categories = ["date-and-time"]
-keywords = ["date", "time", "temporal", "zone", "iana"]
+categories = ["date-and-time", "no-std"]
+keywords = ["date", "time", "calendar", "zone", "duration"]
 edition = "2021"
 exclude = ["/.github", "/tmp"]
 autotests = false
