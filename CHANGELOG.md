@@ -1,3 +1,68 @@
+0.1.12 (2024-08-31)
+===================
+This release introduces some new minor APIs that support formatting
+`Timestamp` values as RFC 3339 strings with a specific offset.
+
+Previously, using the standard formatting routines that Jiff provides, it was
+only possible to format a `Timestamp` using Zulu time. For example:
+
+```rust
+use jiff::Timestamp;
+
+assert_eq!(
+    Timestamp::UNIX_EPOCH.to_string(),
+    "1970-01-01T00:00:00Z",
+);
+```
+
+This is fine most use cases, but it can be useful on occasion to format
+a `Timestamp` with a specific offset. While this isn't as expressive
+as formatting a datetime with a time zone (e.g., with an IANA time
+zone identifier), it may be useful in contexts where you just want to
+"hint" at what a user's local time is. To that end, there is a new
+[`Timestamp::display_with_offset`] method that makes this possible:
+
+```rust
+use jiff::{tz, Timestamp};
+
+assert_eq!(
+    Timestamp::UNIX_EPOCH.display_with_offset(tz::offset(-5)).to_string(),
+    "1969-12-31T19:00:00-05:00",
+);
+```
+
+A corresponding API was added to `jiff::fmt::temporal::DateTimePrinter` for
+lower level use.
+
+Moreover, this release also includes new convenience APIs on the Temporal and
+RFC 2822 printer types for returning strings. For example, previously, if you
+were using the RFC 2822 printer to format a `Timestamp`, you had to do this:
+
+```rust
+use jiff::{fmt::rfc2822::DateTimePrinter, Timestamp};
+
+let mut buf = String::new();
+DateTimePrinter::new().print_timestamp(&Timestamp::UNIX_EPOCH, &mut buf)?;
+assert_eq!(buf, "Thu, 1 Jan 1970 00:00:00 -0000");
+```
+
+But now you can just do this:
+
+```rust
+use jiff::{fmt::rfc2822::DateTimePrinter, Timestamp};
+
+assert_eq!(
+    DateTimePrinter::new().timestamp_to_string(&Timestamp::UNIX_EPOCH)?;
+    "Thu, 1 Jan 1970 00:00:00 -0000",
+);
+```
+
+Enhancements:
+
+* [#122](https://github.com/BurntSushi/jiff/issues/122):
+Support formatting `Timestamp` to an RFC 3339 string with a specific offset.
+
+
 0.1.11 (2024-08-28)
 ===================
 This release includes a few small enhancements that have been requested over
