@@ -163,6 +163,8 @@ There is some more [background on Temporal's format] available.
 [background on Temporal's format]: https://github.com/tc39/proposal-temporal/issues/2843
 */
 
+use alloc::string::String;
+
 use crate::{
     civil,
     error::Error,
@@ -955,6 +957,198 @@ impl DateTimePrinter {
         self
     }
 
+    /// Format a `Zoned` datetime into a string.
+    ///
+    /// This is a convenience routine for [`DateTimePrinter::print_zoned`] with
+    /// a `String`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::date, fmt::temporal::DateTimePrinter};
+    ///
+    /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
+    ///
+    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).intz("America/New_York")?;
+    /// assert_eq!(
+    ///     PRINTER.zoned_to_string(&zdt),
+    ///     "2024-06-15T07:00:00-04:00[America/New_York]",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn zoned_to_string(&self, zdt: &Zoned) -> String {
+        let mut buf = String::with_capacity(4);
+        // OK because writing to `String` never fails.
+        self.print_zoned(zdt, &mut buf).unwrap();
+        buf
+    }
+
+    /// Format a `Timestamp` datetime into a string.
+    ///
+    /// This will always return an RFC 3339 compatible string with a `Z` or
+    /// Zulu offset. Zulu is chosen in accordance with RFC 9557's update to
+    /// RFC 3339 that establishes the `-00:00` offset as equivalent to Zulu:
+    ///
+    /// > If the time in UTC is known, but the offset to local time is
+    /// > unknown, this can be represented with an offset of "Z".  (The
+    /// > original version of this specification provided -00:00 for this
+    /// > purpose, which is not allowed by ISO8601:2000 and therefore is
+    /// > less interoperable; Section 3.3 of RFC5322 describes a related
+    /// > convention for email, which does not have this problem).  This
+    /// > differs semantically from an offset of +00:00, which implies that
+    /// > UTC is the preferred reference point for the specified time.
+    ///
+    /// In other words, both Zulu time and `-00:00` mean "the time in UTC is
+    /// known, but the offset to local time is unknown."
+    ///
+    /// If you need to format an RFC 3339 timestamp with a specific offset,
+    /// use [`DateTimePrinter::timestamp_with_offset_to_string`].
+    ///
+    /// This is a convenience routine for [`DateTimePrinter::print_timestamp`]
+    /// with a `String`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::DateTimePrinter, Timestamp};
+    ///
+    /// let timestamp = Timestamp::new(0, 1)
+    ///     .expect("one nanosecond after Unix epoch is always valid");
+    /// assert_eq!(
+    ///     DateTimePrinter::new().timestamp_to_string(&timestamp),
+    ///     "1970-01-01T00:00:00.000000001Z",
+    /// );
+    /// ```
+    pub fn timestamp_to_string(&self, timestamp: &Timestamp) -> String {
+        let mut buf = String::with_capacity(4);
+        // OK because writing to `String` never fails.
+        self.print_timestamp(timestamp, &mut buf).unwrap();
+        buf
+    }
+
+    /// Format a `Timestamp` datetime into a string with the given offset.
+    ///
+    /// This will always return an RFC 3339 compatible string with an offset.
+    ///
+    /// This will never use either `Z` (for Zulu time) or `-00:00` as an
+    /// offset. This is because Zulu time (and `-00:00`) mean "the time in UTC
+    /// is known, but the offset to local time is unknown." Since this routine
+    /// accepts an explicit offset, the offset is known. For example,
+    /// `Offset::UTC` will be formatted as `+00:00`.
+    ///
+    /// To format an RFC 3339 string in Zulu time, use
+    /// [`DateTimePrinter::timestamp_to_string`].
+    ///
+    /// This is a convenience routine for
+    /// [`DateTimePrinter::print_timestamp_with_offset`] with a `String`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::DateTimePrinter, tz, Timestamp};
+    ///
+    /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
+    ///
+    /// let timestamp = Timestamp::new(0, 1)
+    ///     .expect("one nanosecond after Unix epoch is always valid");
+    /// assert_eq!(
+    ///     PRINTER.timestamp_with_offset_to_string(&timestamp, tz::offset(-5)),
+    ///     "1969-12-31T19:00:00.000000001-05:00",
+    /// );
+    /// ```
+    ///
+    /// # Example: `Offset::UTC` formats as `+00:00`
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::DateTimePrinter, tz::Offset, Timestamp};
+    ///
+    /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
+    ///
+    /// let timestamp = Timestamp::new(0, 1)
+    ///     .expect("one nanosecond after Unix epoch is always valid");
+    /// assert_eq!(
+    ///     PRINTER.timestamp_with_offset_to_string(&timestamp, Offset::UTC),
+    ///     "1970-01-01T00:00:00.000000001+00:00",
+    /// );
+    /// ```
+    pub fn timestamp_with_offset_to_string(
+        &self,
+        timestamp: &Timestamp,
+        offset: Offset,
+    ) -> String {
+        let mut buf = String::with_capacity(4);
+        // OK because writing to `String` never fails.
+        self.print_timestamp_with_offset(timestamp, offset, &mut buf).unwrap();
+        buf
+    }
+
+    /// Format a `civil::DateTime` into a string.
+    ///
+    /// This is a convenience routine for [`DateTimePrinter::print_datetime`]
+    /// with a `String`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::date, fmt::temporal::DateTimePrinter};
+    ///
+    /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
+    ///
+    /// let dt = date(2024, 6, 15).at(7, 0, 0, 0);
+    /// assert_eq!(PRINTER.datetime_to_string(&dt), "2024-06-15T07:00:00");
+    /// ```
+    pub fn datetime_to_string(&self, dt: &civil::DateTime) -> String {
+        let mut buf = String::with_capacity(4);
+        // OK because writing to `String` never fails.
+        self.print_datetime(dt, &mut buf).unwrap();
+        buf
+    }
+
+    /// Format a `civil::Date` into a string.
+    ///
+    /// This is a convenience routine for [`DateTimePrinter::print_date`]
+    /// with a `String`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::date, fmt::temporal::DateTimePrinter};
+    ///
+    /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
+    ///
+    /// let d = date(2024, 6, 15);
+    /// assert_eq!(PRINTER.date_to_string(&d), "2024-06-15");
+    /// ```
+    pub fn date_to_string(&self, date: &civil::Date) -> String {
+        let mut buf = String::with_capacity(4);
+        // OK because writing to `String` never fails.
+        self.print_date(date, &mut buf).unwrap();
+        buf
+    }
+
+    /// Format a `civil::Time` into a string.
+    ///
+    /// This is a convenience routine for [`DateTimePrinter::print_time`]
+    /// with a `String`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::time, fmt::temporal::DateTimePrinter};
+    ///
+    /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
+    ///
+    /// let t = time(7, 0, 0, 0);
+    /// assert_eq!(PRINTER.time_to_string(&t), "07:00:00");
+    /// ```
+    pub fn time_to_string(&self, time: &civil::Time) -> String {
+        let mut buf = String::with_capacity(4);
+        // OK because writing to `String` never fails.
+        self.print_time(time, &mut buf).unwrap();
+        buf
+    }
+
     /// Print a `Zoned` datetime to the given writer.
     ///
     /// # Errors
@@ -1123,11 +1317,11 @@ impl DateTimePrinter {
     ///
     /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
     ///
-    /// let dt = date(2024, 6, 15).at(7, 0, 0, 0);
+    /// let d = date(2024, 6, 15).at(7, 0, 0, 0);
     ///
     /// let mut buf = String::new();
     /// // Printing to a `String` can never fail.
-    /// PRINTER.print_datetime(&dt, &mut buf).unwrap();
+    /// PRINTER.print_datetime(&d, &mut buf).unwrap();
     /// assert_eq!(buf, "2024-06-15T07:00:00");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1156,11 +1350,11 @@ impl DateTimePrinter {
     ///
     /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
     ///
-    /// let dt = date(2024, 6, 15);
+    /// let d = date(2024, 6, 15);
     ///
     /// let mut buf = String::new();
     /// // Printing to a `String` can never fail.
-    /// PRINTER.print_date(&dt, &mut buf).unwrap();
+    /// PRINTER.print_date(&d, &mut buf).unwrap();
     /// assert_eq!(buf, "2024-06-15");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1189,11 +1383,11 @@ impl DateTimePrinter {
     ///
     /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
     ///
-    /// let dt = time(7, 0, 0, 0);
+    /// let t = time(7, 0, 0, 0);
     ///
     /// let mut buf = String::new();
     /// // Printing to a `String` can never fail.
-    /// PRINTER.print_time(&dt, &mut buf).unwrap();
+    /// PRINTER.print_time(&t, &mut buf).unwrap();
     /// assert_eq!(buf, "07:00:00");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1399,6 +1593,58 @@ impl SpanPrinter {
     #[inline]
     pub const fn new() -> SpanPrinter {
         SpanPrinter { p: printer::SpanPrinter::new() }
+    }
+
+    /// Format a `Span` into a string.
+    ///
+    /// This is a convenience routine for [`SpanPrinter::print_span`] with
+    /// a `String`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::SpanPrinter, ToSpan};
+    ///
+    /// const PRINTER: SpanPrinter = SpanPrinter::new();
+    ///
+    /// let span = 3.years().months(5);
+    /// assert_eq!(PRINTER.span_to_string(&span), "P3y5m");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn span_to_string(&self, span: &Span) -> String {
+        let mut buf = String::with_capacity(4);
+        // OK because writing to `String` never fails.
+        self.print_span(span, &mut buf).unwrap();
+        buf
+    }
+
+    /// Format a `SignedDuration` into a string.
+    ///
+    /// This balances the units of the duration up to at most hours
+    /// automatically.
+    ///
+    /// This is a convenience routine for [`SpanPrinter::print_duration`] with
+    /// a `String`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::SpanPrinter, SignedDuration};
+    ///
+    /// const PRINTER: SpanPrinter = SpanPrinter::new();
+    ///
+    /// let dur = SignedDuration::new(86_525, 123_000_789);
+    /// assert_eq!(PRINTER.duration_to_string(&dur), "PT24h2m5.123000789s");
+    /// assert_eq!(PRINTER.duration_to_string(&-dur), "-PT24h2m5.123000789s");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn duration_to_string(&self, duration: &SignedDuration) -> String {
+        let mut buf = String::with_capacity(4);
+        // OK because writing to `String` never fails.
+        self.print_duration(duration, &mut buf).unwrap();
+        buf
     }
 
     /// Print a `Span` to the given writer.
