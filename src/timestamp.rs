@@ -7,7 +7,7 @@ use crate::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
     },
-    tz::TimeZone,
+    tz::{Offset, TimeZone},
     util::{
         rangeint::{RFrom, RInto},
         round::increment,
@@ -1874,7 +1874,7 @@ impl Timestamp {
     }
 }
 
-/// Parsing and formatting using a "printf"-style API.
+/// Parsing and formatting APIs.
 impl Timestamp {
     /// Parses a timestamp (expressed as broken down time) in `input` matching
     /// the given `format`.
@@ -1951,6 +1951,40 @@ impl Timestamp {
         format: &'f F,
     ) -> fmt::strtime::Display<'f> {
         fmt::strtime::Display { fmt: format.as_ref(), tm: (*self).into() }
+    }
+
+    /// Format a `Timestamp` datetime into a string with the given offset.
+    ///
+    /// This will format to an RFC 3339 compatible string with an offset.
+    ///
+    /// This will never use either `Z` (for Zulu time) or `-00:00` as an
+    /// offset. This is because Zulu time (and `-00:00`) mean "the time in UTC
+    /// is known, but the offset to local time is unknown." Since this routine
+    /// accepts an explicit offset, the offset is known. For example,
+    /// `Offset::UTC` will be formatted as `+00:00`.
+    ///
+    /// To format an RFC 3339 string in Zulu time, use the default
+    /// [`std::fmt::Display`] trait implementation on `Timestamp`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{tz, Timestamp};
+    ///
+    /// let ts = Timestamp::from_second(1)?;
+    /// assert_eq!(
+    ///     ts.display_with_offset(tz::offset(-5)).to_string(),
+    ///     "1969-12-31T19:00:01-05:00",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn display_with_offset(
+        &self,
+        offset: Offset,
+    ) -> TimestampDisplayWithOffset {
+        TimestampDisplayWithOffset { timestamp: *self, offset }
     }
 }
 
@@ -2335,7 +2369,14 @@ impl core::fmt::Debug for Timestamp {
 
 /// Converts a `Timestamp` datetime into a RFC 3339 compliant string.
 ///
-/// Options currently supported:
+/// Since a `Timestamp` never has an offset associated with it and is always
+/// in UTC, the string emitted by this trait implementation uses `Z` for "Zulu"
+/// time. The significance of Zulu time is prescribed by RFC 9557 and means
+/// that "the time in UTC is known, but the offset to local time is unknown."
+/// If you need to emit an RFC 3339 compliant string with a specific offset,
+/// then use [`Timestamp::display_with_offset`].
+///
+/// # Forrmatting options supported
 ///
 /// * [`std::fmt::Formatter::precision`] can be set to control the precision
 /// of the fractional second component.
@@ -2711,6 +2752,69 @@ impl quickcheck::Arbitrary for Timestamp {
                 }
             },
         ))
+    }
+}
+
+/// A type for formatting a [`Timestamp`] with a specific offset.
+///
+/// This type is created by the [`Timestamp::display_with_offset`] method.
+///
+/// Like the [`std::fmt::Display`] trait implementation for `Timestamp`, this
+/// always emits an RFC 3339 compliant string. Unlike `Timestamp`'s `Display`
+/// trait implementation, which always uses `Z` or "Zulu" time, this always
+/// uses an offfset.
+///
+/// # Forrmatting options supported
+///
+/// * [`std::fmt::Formatter::precision`] can be set to control the precision
+/// of the fractional second component.
+///
+/// # Example
+///
+/// ```
+/// use jiff::{tz, Timestamp};
+///
+/// let offset = tz::offset(-5);
+/// let ts = Timestamp::new(1_123_456_789, 123_000_000)?;
+/// assert_eq!(
+///     format!("{ts:.6}", ts = ts.display_with_offset(offset)),
+///     "2005-08-07T18:19:49.123000-05:00",
+/// );
+/// // Precision values greater than 9 are clamped to 9.
+/// assert_eq!(
+///     format!("{ts:.300}", ts = ts.display_with_offset(offset)),
+///     "2005-08-07T18:19:49.123000000-05:00",
+/// );
+/// // A precision of 0 implies the entire fractional
+/// // component is always truncated.
+/// assert_eq!(
+///     format!("{ts:.0}", ts = ts.display_with_offset(tz::Offset::UTC)),
+///     "2005-08-07T23:19:49+00:00",
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct TimestampDisplayWithOffset {
+    timestamp: Timestamp,
+    offset: Offset,
+}
+
+impl core::fmt::Display for TimestampDisplayWithOffset {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use crate::fmt::StdFmtWrite;
+
+        let precision =
+            f.precision().map(|p| u8::try_from(p).unwrap_or(u8::MAX));
+        temporal::DateTimePrinter::new()
+            .precision(precision)
+            .print_timestamp_with_offset(
+                &self.timestamp,
+                self.offset,
+                StdFmtWrite(f),
+            )
+            .map_err(|_| core::fmt::Error)
     }
 }
 
