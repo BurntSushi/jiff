@@ -244,6 +244,7 @@ pub struct DateTimeParser {
 
 impl DateTimeParser {
     /// Create a new Temporal datetime parser with the default configuration.
+    #[inline]
     pub const fn new() -> DateTimeParser {
         DateTimeParser {
             p: parser::DateTimeParser::new(),
@@ -283,6 +284,7 @@ impl DateTimeParser {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[inline]
     pub const fn offset_conflict(
         self,
         strategy: OffsetConflict,
@@ -363,6 +365,7 @@ impl DateTimeParser {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[inline]
     pub const fn disambiguation(
         self,
         strategy: Disambiguation,
@@ -849,6 +852,7 @@ impl DateTimePrinter {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[inline]
     pub const fn lowercase(mut self, yes: bool) -> DateTimePrinter {
         self.p = self.p.lowercase(yes);
         self
@@ -880,6 +884,7 @@ impl DateTimePrinter {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[inline]
     pub const fn separator(mut self, ascii_char: u8) -> DateTimePrinter {
         self.p = self.p.separator(ascii_char);
         self
@@ -941,6 +946,7 @@ impl DateTimePrinter {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[inline]
     pub const fn precision(
         mut self,
         precision: Option<u8>,
@@ -1231,6 +1237,7 @@ pub struct SpanParser {
 
 impl SpanParser {
     /// Create a new Temporal datetime printer with the default configuration.
+    #[inline]
     pub const fn new() -> SpanParser {
         SpanParser { p: parser::SpanParser::new() }
     }
@@ -1389,6 +1396,7 @@ pub struct SpanPrinter {
 
 impl SpanPrinter {
     /// Create a new Temporal span printer with the default configuration.
+    #[inline]
     pub const fn new() -> SpanPrinter {
         SpanPrinter { p: printer::SpanPrinter::new() }
     }
