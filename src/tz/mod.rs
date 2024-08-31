@@ -316,10 +316,16 @@ impl TimeZone {
     /// If the system's default time zone could not be determined, or if
     /// the `tz-system` crate feature is not enabled, then this returns
     /// [`TimeZone::UTC`]. A `WARN` level log will also be emitted with a
-    /// message explaining why time zone detection failed.
+    /// message explaining why time zone detection failed. The fallback
+    /// to UTC is a practical trade-off, is what most other systems tend
+    /// to do and is also recommended by [relevant standards such as
+    /// freedesktop.org][freedesktop-org-localtime].
     ///
     /// Detection of a system's default time zone is generally heuristic
     /// based and platform specific.
+    ///
+    /// If callers need to know whether discovery of the system time zone
+    /// failed, then use [`TimeZone::try_system`].
     ///
     /// # Platform behavior
     ///
@@ -350,31 +356,84 @@ impl TimeZone {
     /// IANA Time Zone Database identifier via Unicode's
     /// [CLDR XML data].
     ///
+    /// [freedesktop-org-localtime]: https://www.freedesktop.org/software/systemd/man/latest/localtime.html
     /// [POSIX TZ]: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap08.html
     /// [`GetDynamicTimeZoneInformation`]: https://learn.microsoft.com/en-us/windows/win32/api/timezoneapi/nf-timezoneapi-getdynamictimezoneinformation
     /// [CLDR XML data]: https://github.com/unicode-org/cldr/raw/main/common/supplemental/windowsZones.xml
     #[inline]
     pub fn system() -> TimeZone {
+        match TimeZone::try_system() {
+            Ok(tz) => tz,
+            Err(_err) => {
+                warn!(
+                    "failed to get system time zone, \
+                     falling back to UTC: {_err}",
+                );
+                TimeZone::UTC
+            }
+        }
+    }
+
+    /// Returns the system configured time zone, if available.
+    ///
+    /// If the system's default time zone could not be determined, or if the
+    /// `tz-system` crate feature is not enabled, then this returns an error.
+    ///
+    /// Detection of a system's default time zone is generally heuristic
+    /// based and platform specific.
+    ///
+    /// Note that callers should generally prefer using [`TimeZone::system`].
+    /// If a system time zone could not be found, then it falls
+    /// back to [`TimeZone::UTC`] automatically. This is often
+    /// what is recommended by [relevant standards such as
+    /// freedesktop.org][freedesktop-org-localtime]. Conversely, this routine
+    /// is useful if detection of a system's default time zone is critical.
+    ///
+    /// # Platform behavior
+    ///
+    /// This section is a "best effort" explanation of how the time zone is
+    /// detected on supported platforms. The behavior is subject to change.
+    ///
+    /// On all platforms, the `TZ` environment variable overrides any other
+    /// heuristic, and provides a way for end users to set the time zone for
+    /// specific use cases. In general, Jiff respects the [POSIX TZ] rules.
+    /// Here are some examples:
+    ///
+    /// * `TZ=America/New_York` for setting a time zone via an IANA Time Zone
+    /// Database Identifier.
+    /// * `TZ=/usr/share/zoneinfo/America/New_York` for setting a time zone
+    /// by providing a file path to a TZif file directly.
+    /// * `TZ=EST5EDT,M3.2.0,M11.1.0` for setting a time zone via a daylight
+    /// saving time transition rule.
+    ///
+    /// Otherwise, when `TZ` isn't set, then:
+    ///
+    /// On Unix systems, this inspects `/etc/localtime`. If it's a symbolic
+    /// link to an entry in `/usr/share/zoneinfo`, then the suffix is
+    /// considered an IANA Time Zone Database identifier. Otherwise,
+    /// `/etc/localtime` is read as a TZif file directly.
+    ///
+    /// On Windows, the system time zone is determined via
+    /// [`GetDynamicTimeZoneInformation`]. The result is then mapped to an
+    /// IANA Time Zone Database identifier via Unicode's
+    /// [CLDR XML data].
+    ///
+    /// [freedesktop-org-localtime]: https://www.freedesktop.org/software/systemd/man/latest/localtime.html
+    /// [POSIX TZ]: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap08.html
+    /// [`GetDynamicTimeZoneInformation`]: https://learn.microsoft.com/en-us/windows/win32/api/timezoneapi/nf-timezoneapi-getdynamictimezoneinformation
+    /// [CLDR XML data]: https://github.com/unicode-org/cldr/raw/main/common/supplemental/windowsZones.xml
+    #[inline]
+    pub fn try_system() -> Result<TimeZone, Error> {
         #[cfg(not(feature = "tz-system"))]
         {
-            warn!(
-                "failed to get system time zone since 'system', \
-                 crate feature is not enabled, falling back to UTC",
-            );
-            TimeZone::UTC
+            Err(err!(
+                "failed to get system time zone since 'tz-system' \
+                 crate feature is not enabled",
+            ))
         }
         #[cfg(feature = "tz-system")]
         {
-            match self::system::get(db()) {
-                Ok(tz) => tz,
-                Err(_err) => {
-                    warn!(
-                        "failed to get system time zone, \
-                         falling back to UTC: {_err}",
-                    );
-                    TimeZone::UTC
-                }
-            }
+            self::system::get(db())
         }
     }
 
