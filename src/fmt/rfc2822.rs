@@ -1099,6 +1099,101 @@ impl DateTimePrinter {
         DateTimePrinter { _private: () }
     }
 
+    /// Format a `Zoned` datetime into a string.
+    ///
+    /// This never emits `-0000` as the offset in the RFC 2822 format. If you
+    /// desire a `-0000` offset, use [`DateTimePrinter::print_timestamp`] via
+    /// [`Zoned::timestamp`].
+    ///
+    /// Moreover, since RFC 2822 does not support fractional seconds, this
+    /// routine prints the zoned datetime as if truncating any fractional
+    /// seconds.
+    ///
+    /// This is a convenience routine for [`DateTimePrinter::print_zoned`]
+    /// with a `String`.
+    ///
+    /// # Warning
+    ///
+    /// The RFC 2822 format only supports writing a precise instant in time
+    /// expressed via a time zone offset. It does *not* support serializing
+    /// the time zone itself. This means that if you format a zoned datetime
+    /// in a time zone like `America/New_York` and then deserialize it, the
+    /// zoned datetime you get back will be a "fixed offset" zoned datetime.
+    /// This in turn means it will not perform daylight saving time safe
+    /// arithmetic.
+    ///
+    /// Basically, you should use the RFC 2822 format if it's required (for
+    /// example, when dealing with HTTP). But you should not choose it as a
+    /// general interchange format for new applications.
+    ///
+    /// # Errors
+    ///
+    /// This can return an error if the year corresponding to this timestamp
+    /// cannot be represented in the RFC 2822 format. For example, a negative
+    /// year.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::date, fmt::rfc2822::DateTimePrinter};
+    ///
+    /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
+    ///
+    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).intz("America/New_York")?;
+    /// assert_eq!(
+    ///     PRINTER.zoned_to_string(&zdt)?,
+    ///     "Sat, 15 Jun 2024 07:00:00 -0400",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn zoned_to_string(&self, zdt: &Zoned) -> Result<String, Error> {
+        let mut buf = String::with_capacity(4);
+        self.print_zoned(zdt, &mut buf)?;
+        Ok(buf)
+    }
+
+    /// Format a `Timestamp` datetime into a string.
+    ///
+    /// This always emits `-0000` as the offset in the RFC 2822 format. If you
+    /// desire a `+0000` offset, use [`DateTimePrinter::print_zoned`] with a
+    /// zoned datetime with [`TimeZone::UTC`].
+    ///
+    /// Moreover, since RFC 2822 does not support fractional seconds, this
+    /// routine prints the timestamp as if truncating any fractional seconds.
+    ///
+    /// This is a convenience routine for [`DateTimePrinter::print_timestamp`]
+    /// with a `String`.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the year corresponding to this
+    /// timestamp cannot be represented in the RFC 2822 format. For example, a
+    /// negative year.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{fmt::rfc2822::DateTimePrinter, Timestamp};
+    ///
+    /// let timestamp = Timestamp::from_second(1)
+    ///     .expect("one second after Unix epoch is always valid");
+    /// assert_eq!(
+    ///     DateTimePrinter::new().timestamp_to_string(&timestamp)?,
+    ///     "Thu, 1 Jan 1970 00:00:01 -0000",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn timestamp_to_string(
+        &self,
+        timestamp: &Timestamp,
+    ) -> Result<String, Error> {
+        let mut buf = String::with_capacity(4);
+        self.print_timestamp(timestamp, &mut buf)?;
+        Ok(buf)
+    }
+
     /// Print a `Zoned` datetime to the given writer.
     ///
     /// This never emits `-0000` as the offset in the RFC 2822 format. If you
