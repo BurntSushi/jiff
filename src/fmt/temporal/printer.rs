@@ -63,11 +63,18 @@ impl DateTimePrinter {
     pub(super) fn print_timestamp<W: Write>(
         &self,
         timestamp: &Timestamp,
+        offset: Option<Offset>,
         mut wtr: W,
     ) -> Result<(), Error> {
-        let dt = TimeZone::UTC.to_datetime(*timestamp);
+        let Some(offset) = offset else {
+            let dt = TimeZone::UTC.to_datetime(*timestamp);
+            self.print_datetime(&dt, &mut wtr)?;
+            self.print_zulu(&mut wtr)?;
+            return Ok(());
+        };
+        let dt = offset.to_datetime(*timestamp);
         self.print_datetime(&dt, &mut wtr)?;
-        self.print_zulu(&mut wtr)?;
+        self.print_offset(&offset, &mut wtr)?;
         Ok(())
     }
 
@@ -427,7 +434,7 @@ mod tests {
         let zoned: Zoned = dt.intz("America/New_York").unwrap();
         let mut buf = String::new();
         DateTimePrinter::new()
-            .print_timestamp(&zoned.timestamp(), &mut buf)
+            .print_timestamp(&zoned.timestamp(), None, &mut buf)
             .unwrap();
         assert_eq!(buf, "2024-03-10T09:34:45Z");
 
@@ -435,7 +442,7 @@ mod tests {
         let zoned: Zoned = dt.intz("America/New_York").unwrap();
         let mut buf = String::new();
         DateTimePrinter::new()
-            .print_timestamp(&zoned.timestamp(), &mut buf)
+            .print_timestamp(&zoned.timestamp(), None, &mut buf)
             .unwrap();
         assert_eq!(buf, "-002024-03-10T10:30:47Z");
     }
