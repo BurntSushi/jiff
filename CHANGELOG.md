@@ -1,5 +1,17 @@
 # CHANGELOG
 
+0.1.13 (TBD)
+============
+This release introduces a new `jiff::tz::TimeZone::try_system` API. It is like
+`TimeZone::system`, but returns an error instead of an automatic fall back to
+UTC when the system time zone could not be discovered.
+
+Enhancements:
+
+* [#65](https://github.com/BurntSushi/jiff/issues/65):
+Add `TimeZone::try_system` for fallibly determining the system's time zone.
+
+
 0.1.12 (2024-08-31)
 ===================
 This release introduces some new minor APIs that support formatting
@@ -61,7 +73,7 @@ assert_eq!(
 
 Enhancements:
 
-* [#122](https://github.com/BurntSushi/jiff/issues/122):
+* [#122](https://github.com/BurntSushi/jiff/pull/122):
 Support formatting `Timestamp` to an RFC 3339 string with a specific offset.
 
 
