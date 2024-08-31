@@ -688,8 +688,8 @@ pub use crate::{
         SpanTotal, ToSpan, Unit,
     },
     timestamp::{
-        Timestamp, TimestampArithmetic, TimestampDifference, TimestampRound,
-        TimestampSeries,
+        Timestamp, TimestampArithmetic, TimestampDifference,
+        TimestampDisplayWithOffset, TimestampRound, TimestampSeries,
     },
     util::round::mode::RoundMode,
     zoned::{Zoned, ZonedArithmetic, ZonedDifference, ZonedRound, ZonedWith},
