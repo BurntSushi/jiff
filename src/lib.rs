@@ -66,6 +66,7 @@ documentation:
 * [Comparison with other Rust datetime crates](crate::_documentation::comparison)
 * [The API design rationale for Jiff](crate::_documentation::design)
 * [Platform support](crate::_documentation::platform)
+* [CHANGELOG](crate::_documentation::changelog)
 
 # Features
 
@@ -719,6 +720,8 @@ pub mod _documentation {
     pub mod design {}
     #[doc = include_str!("../PLATFORM.md")]
     pub mod platform {}
+    #[doc = include_str!("../CHANGELOG.md")]
+    pub mod changelog {}
 }
 
 #[cfg(test)]

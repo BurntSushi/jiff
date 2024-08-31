@@ -1,3 +1,5 @@
+# CHANGELOG
+
 0.1.12 (2024-08-31)
 ===================
 This release introduces some new minor APIs that support formatting
@@ -20,7 +22,7 @@ a `Timestamp` with a specific offset. While this isn't as expressive
 as formatting a datetime with a time zone (e.g., with an IANA time
 zone identifier), it may be useful in contexts where you just want to
 "hint" at what a user's local time is. To that end, there is a new
-[`Timestamp::display_with_offset`] method that makes this possible:
+`Timestamp::display_with_offset` method that makes this possible:
 
 ```rust
 use jiff::{tz, Timestamp};
@@ -42,7 +44,7 @@ were using the RFC 2822 printer to format a `Timestamp`, you had to do this:
 use jiff::{fmt::rfc2822::DateTimePrinter, Timestamp};
 
 let mut buf = String::new();
-DateTimePrinter::new().print_timestamp(&Timestamp::UNIX_EPOCH, &mut buf)?;
+DateTimePrinter::new().print_timestamp(&Timestamp::UNIX_EPOCH, &mut buf).unwrap();
 assert_eq!(buf, "Thu, 1 Jan 1970 00:00:00 -0000");
 ```
 
@@ -52,7 +54,7 @@ But now you can just do this:
 use jiff::{fmt::rfc2822::DateTimePrinter, Timestamp};
 
 assert_eq!(
-    DateTimePrinter::new().timestamp_to_string(&Timestamp::UNIX_EPOCH)?;
+    DateTimePrinter::new().timestamp_to_string(&Timestamp::UNIX_EPOCH).unwrap(),
     "Thu, 1 Jan 1970 00:00:00 -0000",
 );
 ```
@@ -75,15 +77,16 @@ or nanoseconds. For example:
 ```rust
 use jiff::Timestamp;
 
+#[derive(serde::Serialize, serde::Deserialize)]
 struct Record {
     #[serde(with = "jiff::fmt::serde::timestamp::second::required")]
     timestamp: Timestamp,
 }
 
 let json = r#"{"timestamp":1517644800}"#;
-let got: Record = serde_json::from_str(&json)?;
-assert_eq!(got.timestamp, Timestamp::from_second(1517644800)?);
-assert_eq!(serde_json::to_string(&got)?, json);
+let got: Record = serde_json::from_str(&json).unwrap();
+assert_eq!(got.timestamp, Timestamp::from_second(1517644800).unwrap());
+assert_eq!(serde_json::to_string(&got).unwrap(), json);
 ```
 
 If you need to support optional timestamps via `Option<Timestamp>`, then use
