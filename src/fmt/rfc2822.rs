@@ -105,6 +105,7 @@ pub(crate) static DEFAULT_DATETIME_PRINTER: DateTimePrinter =
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+#[inline]
 pub fn to_string(zdt: &Zoned) -> Result<String, Error> {
     let mut buf = String::new();
     DEFAULT_DATETIME_PRINTER.print_zoned(zdt, &mut buf)?;
@@ -168,6 +169,7 @@ pub fn to_string(zdt: &Zoned) -> Result<String, Error> {
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+#[inline]
 pub fn parse(string: &str) -> Result<Zoned, Error> {
     DEFAULT_DATETIME_PARSER.parse_zoned(string)
 }
@@ -222,6 +224,7 @@ pub struct DateTimeParser {
 
 impl DateTimeParser {
     /// Create a new RFC 2822 datetime parser with the default configuration.
+    #[inline]
     pub const fn new() -> DateTimeParser {
         DateTimeParser { relaxed_weekday: false }
     }
@@ -259,6 +262,7 @@ impl DateTimeParser {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[inline]
     pub const fn relaxed_weekday(self, yes: bool) -> DateTimeParser {
         DateTimeParser { relaxed_weekday: yes, ..self }
     }
@@ -1090,6 +1094,7 @@ pub struct DateTimePrinter {
 
 impl DateTimePrinter {
     /// Create a new RFC 2822 datetime printer with the default configuration.
+    #[inline]
     pub const fn new() -> DateTimePrinter {
         DateTimePrinter { _private: () }
     }
