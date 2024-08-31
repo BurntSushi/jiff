@@ -168,7 +168,7 @@ use crate::{
     error::Error,
     fmt::Write,
     span::Span,
-    tz::{Disambiguation, OffsetConflict, TimeZoneDatabase},
+    tz::{Disambiguation, Offset, OffsetConflict, TimeZoneDatabase},
     SignedDuration, Timestamp, Zoned,
 };
 
@@ -984,6 +984,25 @@ impl DateTimePrinter {
 
     /// Print a `Timestamp` datetime to the given writer.
     ///
+    /// This will always write an RFC 3339 compatible string with a `Z` or
+    /// Zulu offset. Zulu is chosen in accordance with RFC 9557's update to
+    /// RFC 3339 that establishes the `-00:00` offset as equivalent to Zulu:
+    ///
+    /// > If the time in UTC is known, but the offset to local time is
+    /// > unknown, this can be represented with an offset of "Z".  (The
+    /// > original version of this specification provided -00:00 for this
+    /// > purpose, which is not allowed by ISO8601:2000 and therefore is
+    /// > less interoperable; Section 3.3 of RFC5322 describes a related
+    /// > convention for email, which does not have this problem).  This
+    /// > differs semantically from an offset of +00:00, which implies that
+    /// > UTC is the preferred reference point for the specified time.
+    ///
+    /// In other words, both Zulu time and `-00:00` mean "the time in UTC is
+    /// known, but the offset to local time is unknown."
+    ///
+    /// If you need to write an RFC 3339 timestamp with a specific offset,
+    /// use [`DateTimePrinter::print_timestamp_with_offset`].
+    ///
     /// # Errors
     ///
     /// This only returns an error when writing to the given [`Write`]
@@ -1011,7 +1030,75 @@ impl DateTimePrinter {
         timestamp: &Timestamp,
         wtr: W,
     ) -> Result<(), Error> {
-        self.p.print_timestamp(timestamp, wtr)
+        self.p.print_timestamp(timestamp, None, wtr)
+    }
+
+    /// Print a `Timestamp` datetime to the given writer with the given offset.
+    ///
+    /// This will always write an RFC 3339 compatible string with an offset.
+    ///
+    /// This will never write either `Z` (for Zulu time) or `-00:00` as an
+    /// offset. This is because Zulu time (and `-00:00`) mean "the time in UTC
+    /// is known, but the offset to local time is unknown." Since this routine
+    /// accepts an explicit offset, the offset is known. For example,
+    /// `Offset::UTC` will be formatted as `+00:00`.
+    ///
+    /// To write an RFC 3339 string in Zulu time, use
+    /// [`DateTimePrinter::print_timestamp`].
+    ///
+    /// # Errors
+    ///
+    /// This only returns an error when writing to the given [`Write`]
+    /// implementation would fail. Some such implementations, like for `String`
+    /// and `Vec<u8>`, never fail (unless memory allocation fails). In such
+    /// cases, it would be appropriate to call `unwrap()` on the result.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::DateTimePrinter, tz, Timestamp};
+    ///
+    /// let timestamp = Timestamp::new(0, 1)
+    ///     .expect("one nanosecond after Unix epoch is always valid");
+    ///
+    /// let mut buf = String::new();
+    /// // Printing to a `String` can never fail.
+    /// DateTimePrinter::new().print_timestamp_with_offset(
+    ///     &timestamp,
+    ///     tz::offset(-5),
+    ///     &mut buf,
+    /// ).unwrap();
+    /// assert_eq!(buf, "1969-12-31T19:00:00.000000001-05:00");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: `Offset::UTC` formats as `+00:00`
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::DateTimePrinter, tz::Offset, Timestamp};
+    ///
+    /// let timestamp = Timestamp::new(0, 1)
+    ///     .expect("one nanosecond after Unix epoch is always valid");
+    ///
+    /// let mut buf = String::new();
+    /// // Printing to a `String` can never fail.
+    /// DateTimePrinter::new().print_timestamp_with_offset(
+    ///     &timestamp,
+    ///     Offset::UTC, // equivalent to `Offset::from_hours(0)`
+    ///     &mut buf,
+    /// ).unwrap();
+    /// assert_eq!(buf, "1970-01-01T00:00:00.000000001+00:00");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn print_timestamp_with_offset<W: Write>(
+        &self,
+        timestamp: &Timestamp,
+        offset: Offset,
+        wtr: W,
+    ) -> Result<(), Error> {
+        self.p.print_timestamp(timestamp, Some(offset), wtr)
     }
 
     /// Print a `civil::DateTime` to the given writer.
