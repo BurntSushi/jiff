@@ -263,22 +263,50 @@ Here's a list. More may be added in the future:
 [alt1]: https://github.com/BurntSushi/jiff/issues/63
 
 
-## Why is there one duration type instead of two?
+## Why are there two duration types?
 
-In large part, this design decision came from [Temporal], which also [uses
-only one duration type][temporal-one-duration]. In Temporal, the duration
-type is aptly named `Duration`, where as in Jiff, the duration type is
-called `Span`. This is to distinguish it from the standard library type,
-`std::time::Duration`, which is similar but subtly different.
+The two duration types provided by Jiff are `Span` and `SignedDuration`. A
+`SignedDuration` is effectively identical to a `std::time::Duration`, but it's
+signed instead of unsigned. A `Span` is also a duration type, but is likely
+different than most other duration types you've used before.
 
-The main alternative design, found in [`java.time`] and [NodaTime], is to
-have _two_ duration types: one duration type for describing calendar units
-and another duration type for describing "absolute" time. The key distinction
-between these types is that of uniform units. An absolute time duration only
-uses units that are uniform. That is, units that always correspond to the same
-amount of elapsed time, regardless of context. Conversely, a duration type
-with calendar units uses non-uniform units. For example, 1 month starting from
-`April 1` is shorter (30 days) than 1 month starting from `May 1` (31 days).
+While a `SignedDuration` can be thought of as a single integer corresponding
+to the number of nanoseconds between two points in time, a `Span` is a
+collection of individual unit values that combine to represent the difference
+between two point in time. Stated more concretely, while the spans `2
+hours` and `120 minutes` both correspond to the same duration of time, when
+represented as a Jiff `Span`, they correspond to two distinct values in
+memory. This is something that is fundamentally not expressible by a type
+like `SignedDuration`, where `2 hours` and `120 minutes` are completely
+indistinguishable.
+
+One of the key advantages of a `Span` is that it can represent units of
+non-uniform length. For example, not every month has the same number of days,
+but a `Span` can still represent units of months because it tracks the values
+of each unit independently. For example, Jiff is smart enough to know that the
+difference between `2024-03-01` and `2024-04-01` is the same number of months
+as `2024-04-01` and `2024-05-01`, even though the number of days is different:
+
+```rust
+use jiff::{civil::date, ToSpan, Unit};
+
+fn main() -> anyhow::Result<()> {
+    let date1 = date(2024, 3, 1);
+    let date2 = date(2024, 4, 1);
+    let date3 = date(2024, 5, 1);
+
+    // When computing durations between `Date` values,
+    // the spans default to days.
+    assert_eq!(date1.until(date2)?, 31.days());
+    assert_eq!(date2.until(date3)?, 30.days());
+
+    // But we can request bigger units!
+    assert_eq!(date1.until((Unit::Month, date2))?, 1.month());
+    assert_eq!(date2.until((Unit::Month, date3))?, 1.month());
+
+    Ok(())
+}
+```
 
 While most folks are very in tune with the fact that years and months have
 non-uniform length, a less obvious truth is that days themselves also have
@@ -287,47 +315,36 @@ non-uniform length in the presence of time zones. For example, `2024-03-10` in
 time, creating a gap in time), while `2024-11-03` was 25 hours long (the region
 left daylight saving time, creating a fold in time). Being unaware of this
 corner case leads to folks assuming that "1 day" and "24 hours" are _always_
-exactly equivalent. But they aren't.
+exactly equivalent. But they aren't. The design of Jiff leans into this and
+ensures that so long as you're using `Span` to encode a concept of days and are
+doing arithmetic with it on `Zoned` values, then you can never get it wrong.
+Jiff will always take time zones into account when dealing with units of days
+or bigger.
 
-The idea then is not just to separate durations into two distinct types, but to
-provide _distinct operations_ that clearly delineate absolute time (where,
-typically, days, if expressible, are always 24 hours in length) from
-calendar time (where days might be shorter or longer than 24 hours).
-
-While I do acknowledge that delineating calendar from absolute span operations
-can make some cases clearer, my belief (before Jiff's initial release) is
-that a single span type that combines all units will ultimately be simpler
-and less error prone. In particular, one crucial thing to note here is the
-existence of the `Zoned` data type. That is, whenever you use the units "days"
-with a `Zoned` type, it should always do the right thing. And if you need to
-do arithmetic that ignores DST, you can use `Zoned::datetime` to get civil
-time and perform DST-ignorant arithmetic (where days are always 24 hours). In
-a sense, the distinct calendar and absolute durations are still captured by
-Jiff's API, but are done via the datetime types instead of the span types.
-
-As the [Temporal GitHub issue on this topic discusses][temporal-one-duration],
-there are some significant advantages to a single span type. In my own words:
+The design of `Span` comes from [Temporal], which [uses only one duration
+type][temporal-one-duration]. From that issue, there are some significant
+advantages to using a `Span`. In my own words:
 
 * It more closely lines up with ISO 8601 durations, which themselves combine
 calendar and clock units.
-* A single type makes it very easy to move between `5 years 2 months` and
+* With a `Span`, it is very easy to move between `5 years 2 months` and
 the number of hours in that same span.
 * Jiff's `Span` type specifically represents each unit as distinct from the
-others. In contrast, most absolute duration types (like `std::time::Duration`),
-are "just" a 96-bit integer number of nanoseconds. This means that, for
-example, `1 hour 30 minutes` is impossible to differentiate from `90 minutes`.
-But depending on the use case, you might want one or the other. Jiff's
-`Span` design (copied from Temporal) enables users to express durations in
-whatever units they want. And this expression can be manipulated via APIs like
-`Span::round` in intuitive ways.
-* APIs like `Zoned::since` would not be as simple as they are today. If we
-have multiple duration types, then we'd need multiple distinct operations to
-compute those durations between datetimes. Or at least, one operation that
-returns each of the different types of duration.
+others. In contrast, most absolute duration types (like `std::time::Duration`
+and Jiff's own `SignedDuration`), are "just" a 96-bit integer number of
+nanoseconds. This means that, for example, `1 hour 30 minutes` is impossible to
+differentiate from `90 minutes`. But depending on the use case, you might want
+one or the other. Jiff's `Span` design (copied from Temporal) enables users
+to express durations in whatever units they want. And this expression can be
+manipulated via APIs like `Span::round` in intuitive ways.
 
-Ultimately, I think it is likely that Jiff will end up growing support for
-[absolute durations][github-issue-duration], but likely for reasons related
-to performance and better integration with standard library types.
+A `SignedDuration` is still useful in some respects. For example, when you
+need tighter integration with the standard library's `std::time::Duration`
+(since a `SignedDuration` is the same, but just signed), or when you need
+better performance than what `Span` gives you. In particular, since a `Span`
+keeps track of the values for each individual unit, it is a much heavier type
+than a `SignedDuration`. It uses up more stack space and also required more
+computation to do arithmetic with it.
 
 
 ## Why isn't there a `TimeZone` trait?
