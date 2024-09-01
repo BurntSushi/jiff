@@ -24,6 +24,7 @@ Dual-licensed under MIT or the [UNLICENSE](https://unlicense.org/).
 * [Comparison with `chrono`, `time`, `hifitime` and `icu`](COMPARE.md)
 * [The API design rationale for Jiff](DESIGN.md)
 * [Platform support](PLATFORM.md)
+* [CHANGELOG](CHANGELOG.md)
 
 ### Example
 
