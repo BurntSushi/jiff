@@ -6,10 +6,17 @@ This release introduces a new `jiff::tz::TimeZone::try_system` API. It is like
 `TimeZone::system`, but returns an error instead of an automatic fall back to
 UTC when the system time zone could not be discovered.
 
+This also includes an update to the bundled [IANA Time Zone Database] to the
+`2024b` release in the `jiff-tzdb` crate. As a reminder, the bundled database
+is not used or included on Unix platforms by default. See [PLATFORM] for more
+details.
+
 Enhancements:
 
 * [#65](https://github.com/BurntSushi/jiff/issues/65):
 Add `TimeZone::try_system` for fallibly determining the system's time zone.
+* [#125](https://github.com/BurntSushi/jiff/pull/125):
+Update to the `2024b` release of the [IANA Time Zone Database].
 
 
 0.1.12 (2024-08-31)
@@ -343,3 +350,6 @@ Document that the RFC 2822 parser is not technically fully spec compliant.
 0.1.0 (2024-07-21)
 ==================
 The initial release of Jiff.
+
+[IANA Time Zone Database]: https://www.iana.org/time-zones
+[PLATFORM]: PLATFORM.md
