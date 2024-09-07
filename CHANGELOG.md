@@ -1,7 +1,7 @@
 # CHANGELOG
 
-0.1.13 (TBD)
-============
+0.1.13 (2024-09-07)
+===================
 This release introduces a new `jiff::tz::TimeZone::try_system` API. It is like
 `TimeZone::system`, but returns an error instead of an automatic fall back to
 UTC when the system time zone could not be discovered.
