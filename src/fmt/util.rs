@@ -18,7 +18,7 @@ use crate::{
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct DecimalFormatter {
     force_sign: Option<bool>,
-    minimum_digits: Option<u8>,
+    minimum_digits: u8,
     padding_byte: u8,
 }
 
@@ -27,7 +27,7 @@ impl DecimalFormatter {
     pub(crate) const fn new() -> DecimalFormatter {
         DecimalFormatter {
             force_sign: None,
-            minimum_digits: None,
+            minimum_digits: 0,
             padding_byte: b'0',
         }
     }
@@ -62,7 +62,7 @@ impl DecimalFormatter {
         if digits > Decimal::MAX_I64_DIGITS {
             digits = Decimal::MAX_I64_DIGITS;
         }
-        DecimalFormatter { minimum_digits: Some(digits), ..self }
+        DecimalFormatter { minimum_digits: digits, ..self }
     }
 
     /// The padding byte to use when `padding` is set.
@@ -122,11 +122,9 @@ impl Decimal {
                 break;
             }
         }
-        if let Some(minimum_digits) = formatter.minimum_digits {
-            while decimal.len() < minimum_digits {
-                decimal.start -= 1;
-                decimal.buf[decimal.start as usize] = formatter.padding_byte;
-            }
+        while decimal.len() < formatter.minimum_digits {
+            decimal.start -= 1;
+            decimal.buf[decimal.start as usize] = formatter.padding_byte;
         }
         if sign < 0 {
             decimal.start -= 1;
