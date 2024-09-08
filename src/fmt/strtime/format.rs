@@ -569,10 +569,7 @@ impl Extension {
     ) -> Result<(), Error> {
         let number = number.into();
 
-        let mut formatter = FractionalFormatter::new();
-        if let Some(precision) = self.width {
-            formatter = formatter.precision(precision);
-        }
+        let formatter = FractionalFormatter::new().precision(self.width);
         wtr.write_fraction(&formatter, number)
     }
 }
