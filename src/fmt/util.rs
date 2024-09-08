@@ -190,12 +190,14 @@ impl FractionalFormatter {
     /// based on the value.
     pub(crate) const fn precision(
         self,
-        mut precision: u8,
+        precision: Option<u8>,
     ) -> FractionalFormatter {
-        if precision > 9 {
-            precision = 9;
-        }
-        FractionalFormatter { precision: Some(precision), ..self }
+        let precision = match precision {
+            None => None,
+            Some(p) if p > 9 => Some(9),
+            Some(p) => Some(p),
+        };
+        FractionalFormatter { precision, ..self }
     }
 }
 
@@ -410,7 +412,7 @@ mod tests {
     fn fractional_precision() {
         let f = |precision, n| {
             FractionalFormatter::new()
-                .precision(precision)
+                .precision(Some(precision))
                 .format(n)
                 .as_str()
                 .to_string()

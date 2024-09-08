@@ -133,17 +133,12 @@ impl DateTimePrinter {
         wtr.write_str(":")?;
         wtr.write_int(&FMT_TWO, time.second())?;
         let fractional_nanosecond = time.subsec_nanosecond();
-        if let Some(precision) = self.precision {
-            if precision > 0 {
-                wtr.write_str(".")?;
-                wtr.write_fraction(
-                    &FMT_FRACTION.precision(precision),
-                    fractional_nanosecond,
-                )?;
-            }
-        } else if fractional_nanosecond != 0 {
+        if self.precision.map_or(fractional_nanosecond != 0, |p| p > 0) {
             wtr.write_str(".")?;
-            wtr.write_fraction(&FMT_FRACTION, fractional_nanosecond)?;
+            wtr.write_fraction(
+                &FMT_FRACTION.precision(self.precision),
+                fractional_nanosecond,
+            )?;
         }
         Ok(())
     }
