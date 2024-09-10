@@ -1118,10 +1118,65 @@ fn main() -> anyhow::Result<()> {
 
 ## [`icu`](https://docs.rs/icu) (v1.5.0)
 
-I have not had enough time to do a thorough review of the `icu` crate API.
-My sense is that `icu` does not yet have Time Zone Database support, but that
-generally speaking, it is also inspired by Temporal. I do know at least that
-two important things that `icu` supports that Jiff does not are non-Gregorian
-calendars and localization.
+The `icu` crate fulfils a slightly different need than `jiff`. Its main
+features are calendrical calculations (`icu::calendar`), supporting conversions
+between different calendar systems such as Gregorian, Buddhist, Islamic,
+Japanese, etc., as well as localized datetime formatting (`icu::datetime`).
 
-I would welcome contributions that fill out this section.
+It does not perform datetime or time-zone arithmetic, and does not have a
+timestamp or duration type.
+
+`icu` can be used to complement `jiff` when localized date formatting or
+calendar conversions are required:
+
+```rust
+use icu::{
+    calendar::{japanese::Japanese, DateTime},
+    datetime::TypedDateTimeFormatter,
+    locid::locale,
+};
+use jiff::Timestamp;
+
+fn main() -> anyhow::Result<()> {
+    let ts: Timestamp = "2024-09-10T23:37:20Z".parse()?;
+    let zoned = ts.intz("Asia/Tokyo")?;
+
+    // Create ICU datetime.
+    let datetime = DateTime::try_new_iso_datetime(
+        i32::from(zoned.year()),
+        // These unwraps are all guaranteed to be
+        // correct because Jiff's bounds on allowable
+        // values fit within icu's bounds.
+        u8::try_from(zoned.month()).unwrap(),
+        u8::try_from(zoned.day()).unwrap(),
+        u8::try_from(zoned.hour()).unwrap(),
+        u8::try_from(zoned.minute()).unwrap(),
+        u8::try_from(zoned.second()).unwrap(),
+    )?;
+
+    // Convert to Japanese calendar.
+    let japanese_datetime = DateTime::new_from_iso(datetime, Japanese::new());
+
+    // Format for the en-GB locale.
+    let formatter = TypedDateTimeFormatter::try_new(
+        &locale!("en-GB").into(),
+        Default::default(),
+    )?;
+
+    // Assert that we get the expected result.
+    assert_eq!(
+        formatter.format(&japanese_datetime).to_string(),
+        "Sept 11, 6 Reiwa, 08:37:20",
+    );
+
+    Ok(())
+}
+```
+
+The above example requires the following dependency specifications:
+
+```toml
+anyhow = "1.0.81"
+icu = { version = "1.5.0", features = ["std"] }
+jiff = { version = "0.1.0", features = ["serde"] }
+```
