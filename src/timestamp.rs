@@ -23,7 +23,7 @@ use crate::{
 /// An instant in time represented as the number of nanoseconds since the Unix
 /// epoch.
 ///
-/// A timestamp is always in the UNIX timescale.
+/// A timestamp is always in the UNIX timescale with a UTC offset of zero.
 ///
 /// To obtain civil or "local" datetime units like year, month, day or hour, a
 /// timestamp needs to be combined with a [`TimeZone`] to create a [`Zoned`].
