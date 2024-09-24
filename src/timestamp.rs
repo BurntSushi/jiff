@@ -2428,6 +2428,15 @@ impl core::str::FromStr for Timestamp {
     }
 }
 
+impl<'a> core::convert::TryFrom<&'a str> for Timestamp {
+    type Error = Error;
+
+    #[inline]
+    fn try_from(string: &str) -> Result<Timestamp, Error> {
+        DEFAULT_DATETIME_PARSER.parse_timestamp(string)
+    }
+}
+
 impl Eq for Timestamp {}
 
 impl PartialEq for Timestamp {
