@@ -1,6 +1,3 @@
-use serde::{Deserialize, Serialize};
-use std::ops::{Deref, DerefMut};
-
 #[cfg(feature = "postgres")]
 mod postgres;
 

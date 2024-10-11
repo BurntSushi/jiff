@@ -1,4 +1,4 @@
-use crate::Timestamp;
+use crate::{Timestamp, ToTimestamp};
 use jiff::SignedDuration;
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
@@ -28,11 +28,12 @@ impl Encode<'_, Postgres> for Timestamp {
         &self,
         buf: &mut PgArgumentBuffer,
     ) -> Result<IsNull, BoxDynError> {
+        let ts = self.to_jiff();
+
         // TIMESTAMP is encoded as the microseconds since the epoch
-        let micros =
-            self.0.duration_since(postgres_epoch_timestamp()).as_micros();
+        let micros = ts.duration_since(postgres_epoch_timestamp()).as_micros();
         let micros = i64::try_from(micros).map_err(|_| {
-            format!("Timestamp {} out of range for Postgres: {micros}", self.0)
+            format!("Timestamp {ts} out of range for Postgres: {micros}")
         })?;
         Encode::<Postgres>::encode(micros, buf)
     }
@@ -52,12 +53,12 @@ impl<'r> Decode<'r, Postgres> for Timestamp {
                 let us = Decode::<Postgres>::decode(value)?;
                 let ts = postgres_epoch_timestamp()
                     .checked_add(SignedDuration::from_micros(us))?;
-                Timestamp(ts)
+                ts.to_sqlx()
             }
             PgValueFormat::Text => {
                 let s = value.as_str()?;
                 let ts = jiff::Timestamp::from_str(s)?;
-                Timestamp(ts)
+                ts.to_sqlx()
             }
         })
     }
