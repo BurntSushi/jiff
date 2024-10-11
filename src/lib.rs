@@ -712,9 +712,6 @@ pub mod tz;
 mod util;
 mod zoned;
 
-#[cfg(feature = "sqlx")]
-mod sqlx_impls;
-
 /// Longer form documentation for Jiff.
 pub mod _documentation {
     #[doc = include_str!("../COMPARE.md")]

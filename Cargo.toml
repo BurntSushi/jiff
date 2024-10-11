@@ -20,10 +20,11 @@ rust-version = "1.70"
 
 [workspace]
 members = [
-    "jiff-cli",
-    "jiff-tzdb",
-    "jiff-tzdb-platform",
-    "examples/*",
+  "jiff-cli",
+  "jiff-tzdb",
+  "jiff-tzdb-platform",
+  "sqlx-jiff",
+  "examples/*",
 ]
 
 # Features are documented in the "Crate features" section of the crate docs:
@@ -74,16 +75,10 @@ tzdb-zoneinfo = ["std"]
 # (This is the same dependency setup that the `getrandom` crate uses.)
 js = ["dep:wasm-bindgen", "dep:js-sys"]
 
-# This enables the integrations with the `sqlx` crate.
-sqlx = ["dep:sqlx"]
-sqlx-postgres = ["sqlx", "sqlx/postgres"]
-
 [dependencies]
 jiff-tzdb = { version = "0.1.1", path = "jiff-tzdb", optional = true }
 log = { version = "0.4.21", optional = true }
 serde = { version = "1.0.203", optional = true }
-
-sqlx = { version = "0.8.2", optional = true }
 
 # Note that the `cfg` gate for the `tzdb-bundle-platform` must repeat the
 # target gate on this dependency. The intent is that `tzdb-bundle-platform`
