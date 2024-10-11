@@ -18,4 +18,5 @@ postgres = ["sqlx/postgres"]
 
 [dependencies]
 jiff = { path = ".." }
-sqlx = { version = "0.8.2" }
+serde = { version = "1.0" }
+sqlx = { version = "0.8" }
