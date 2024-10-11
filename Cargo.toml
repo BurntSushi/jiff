@@ -23,7 +23,7 @@ members = [
   "jiff-cli",
   "jiff-tzdb",
   "jiff-tzdb-platform",
-  "sqlx-jiff",
+  "jiff-sqlx",
   "examples/*",
 ]
 

@@ -1,10 +1,10 @@
 [package]
-name = "sqlx-jiff"
+name = "jiff-sqlx"
 version = "0.1.0"
 license = "Unlicense OR MIT"
-homepage = "https://github.com/BurntSushi/jiff/tree/master/sqlx-jiff"
+homepage = "https://github.com/BurntSushi/jiff/tree/master/jiff-sqlx"
 repository = "https://github.com/BurntSushi/jiff"
-documentation = "https://docs.rs/sqlx-jiff"
+documentation = "https://docs.rs/jiff-sqlx"
 description = "Integration to use jiff structs for datetime types in sqlx."
 categories = ["date-and-time"]
 keywords = ["date", "time", "temporal", "zone", "iana"]
