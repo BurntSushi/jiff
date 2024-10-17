@@ -2132,7 +2132,7 @@ impl Timestamp {
     /// ```
     #[deprecated(
         since = "0.1.5",
-        note = "use Timestamp::as_signed_duration instead"
+        note = "use Timestamp::as_jiff_duration instead"
     )]
     #[inline]
     pub fn as_duration(self) -> (i8, core::time::Duration) {
