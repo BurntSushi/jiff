@@ -4,6 +4,11 @@
 ============
 TODO
 
+Enhancements:
+
+* [#143](https://github.com/BurntSushi/jiff/pull/143):
+Add `Hash` implementation for `Zoned` and `Timestamp`.
+
 Bug fixes:
 
 * [#138](https://github.com/BurntSushi/jiff/issues/138):

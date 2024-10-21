@@ -3123,6 +3123,13 @@ impl<'a> PartialOrd<Zoned> for &'a Zoned {
     }
 }
 
+impl core::hash::Hash for Zoned {
+    #[inline]
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.timestamp().hash(state);
+    }
+}
+
 #[cfg(feature = "std")]
 impl TryFrom<std::time::SystemTime> for Zoned {
     type Error = Error;
