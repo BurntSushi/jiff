@@ -2457,6 +2457,14 @@ impl PartialOrd for Timestamp {
     }
 }
 
+impl core::hash::Hash for Timestamp {
+    #[inline]
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.as_second_ranged().get().hash(state);
+        self.subsec_nanosecond_ranged().get().hash(state);
+    }
+}
+
 /// Adds a span of time to a timestamp.
 ///
 /// This uses checked arithmetic and panics on overflow. To handle overflow
