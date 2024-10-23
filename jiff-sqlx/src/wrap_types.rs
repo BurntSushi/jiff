@@ -28,3 +28,34 @@ impl From<jiff::Timestamp> for Timestamp {
         Self(ts)
     }
 }
+
+pub trait ToSignedDuration {
+    fn to_sqlx(self) -> SignedDuration;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SignedDuration(jiff::SignedDuration);
+
+impl SignedDuration {
+    pub fn to_jiff(self) -> jiff::SignedDuration {
+        self.0
+    }
+}
+
+impl ToSignedDuration for jiff::SignedDuration {
+    fn to_sqlx(self) -> SignedDuration {
+        SignedDuration(self)
+    }
+}
+
+impl From<SignedDuration> for jiff::SignedDuration {
+    fn from(sd: SignedDuration) -> Self {
+        sd.0
+    }
+}
+
+impl From<jiff::SignedDuration> for SignedDuration {
+    fn from(sd: jiff::SignedDuration) -> Self {
+        Self(sd)
+    }
+}
