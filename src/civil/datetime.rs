@@ -1388,7 +1388,7 @@ impl DateTime {
     ///
     /// # Example
     ///
-    /// This example shows how to created a zoned value with a fixed time zone
+    /// This example shows how to create a zoned value with a fixed time zone
     /// offset:
     ///
     /// ```
