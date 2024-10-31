@@ -3562,7 +3562,7 @@ impl<'de> serde::Deserialize<'de> for Span {
             }
         }
 
-        deserializer.deserialize_bytes(SpanVisitor)
+        deserializer.deserialize_str(SpanVisitor)
     }
 }
 

@@ -2721,7 +2721,7 @@ impl<'de> serde::Deserialize<'de> for Timestamp {
             }
         }
 
-        deserializer.deserialize_bytes(TimestampVisitor)
+        deserializer.deserialize_str(TimestampVisitor)
     }
 }
 
