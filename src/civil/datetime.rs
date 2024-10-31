@@ -2604,7 +2604,7 @@ impl<'de> serde::Deserialize<'de> for DateTime {
             }
         }
 
-        deserializer.deserialize_bytes(DateTimeVisitor)
+        deserializer.deserialize_str(DateTimeVisitor)
     }
 }
 

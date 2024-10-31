@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.1.16 (TBD)
+============
+TODO
+
+Bug fixes:
+
+* [#138](https://github.com/BurntSushi/jiff/issues/138):
+Fix deserialization in `serde_yml` and `serde_yaml` crates.
+
+
 0.1.15 (2024-11-30)
 ===================
 This release fixes a bug where Jiff would sometimes fail to parse TZif files
@@ -10,6 +20,8 @@ clamping the out-of-range transitions to Jiff's supported range.
 
 This bug only seems to occur in some environments where their TZif files
 contain more extreme values than what is typically found.
+
+Bug fixes:
 
 * [#163](https://github.com/BurntSushi/jiff/issues/163):
 Fix a bug where Jiff would fail to parse some TZif files.
