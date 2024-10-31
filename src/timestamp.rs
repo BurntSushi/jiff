@@ -3513,7 +3513,12 @@ impl From<(Unit, i64)> for TimestampRound {
 
 #[cfg(test)]
 mod tests {
-    use crate::{civil, tz::Offset};
+    use std::io::Cursor;
+
+    use crate::{
+        civil::{self, datetime},
+        tz::Offset,
+    };
 
     use super::*;
 
@@ -3686,5 +3691,38 @@ mod tests {
             let got = Timestamp::from_nanosecond(nanos).unwrap();
             t == got
         }
+    }
+
+    /// # `serde` deserializer compatibility test
+    ///
+    /// Serde YAML used to be unable to deserialize `jiff` types,
+    /// as deserializing from bytes is not supported by the deserializer.
+    ///
+    /// - <https://github.com/BurntSushi/jiff/issues/138>
+    /// - <https://github.com/BurntSushi/jiff/discussions/148>
+    #[test]
+    fn timestamp_deserialize_yaml() {
+        let expected = datetime(2024, 10, 31, 16, 33, 53, 123456789)
+            .intz("UTC")
+            .unwrap()
+            .timestamp();
+
+        let deserialized: Timestamp =
+            serde_yml::from_str("2024-10-31T16:33:53.123456789+00:00[UTC]")
+                .unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let deserialized: Timestamp = serde_yml::from_slice(
+            "2024-10-31T16:33:53.123456789+00:00[UTC]".as_bytes(),
+        )
+        .unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let cursor = Cursor::new(b"2024-10-31T16:33:53.123456789+00:00[UTC]");
+        let deserialized: Timestamp = serde_yml::from_reader(cursor).unwrap();
+
+        assert_eq!(deserialized, expected);
     }
 }

@@ -2069,6 +2069,8 @@ impl<'de> serde::Deserialize<'de> for SignedDuration {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use super::*;
 
     #[test]
@@ -2185,5 +2187,33 @@ mod tests {
         assert_eq!(None, add((i64::MIN, 0), (-1, 0)));
         assert_eq!(None, add((i64::MAX, 1), (0, 999_999_999)));
         assert_eq!(None, add((i64::MIN, -1), (0, -999_999_999)));
+    }
+
+    /// # `serde` deserializer compatibility test
+    ///
+    /// Serde YAML used to be unable to deserialize `jiff` types,
+    /// as deserializing from bytes is not supported by the deserializer.
+    ///
+    /// - <https://github.com/BurntSushi/jiff/issues/138>
+    /// - <https://github.com/BurntSushi/jiff/discussions/148>
+    #[test]
+    fn signed_duration_deserialize_yaml() {
+        let expected = SignedDuration::from_secs(123456789);
+
+        let deserialized: SignedDuration =
+            serde_yml::from_str("PT34293h33m9s").unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let deserialized: SignedDuration =
+            serde_yml::from_slice("PT34293h33m9s".as_bytes()).unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let cursor = Cursor::new(b"PT34293h33m9s");
+        let deserialized: SignedDuration =
+            serde_yml::from_reader(cursor).unwrap();
+
+        assert_eq!(deserialized, expected);
     }
 }

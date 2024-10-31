@@ -5998,6 +5998,8 @@ fn clamp_relative_span(
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use crate::{civil::date, RoundMode};
 
     use super::*;
@@ -6358,5 +6360,39 @@ mod tests {
             let got = Span::from_invariant_nanoseconds(largest, nanos).unwrap();
             quickcheck::TestResult::from_bool(nanos == got.to_invariant_nanoseconds())
         }
+    }
+
+    /// # `serde` deserializer compatibility test
+    ///
+    /// Serde YAML used to be unable to deserialize `jiff` types,
+    /// as deserializing from bytes is not supported by the deserializer.
+    ///
+    /// - <https://github.com/BurntSushi/jiff/issues/138>
+    /// - <https://github.com/BurntSushi/jiff/discussions/148>
+    #[test]
+    fn span_deserialize_yaml() {
+        let expected = Span::new()
+            .years(1)
+            .months(2)
+            .weeks(3)
+            .days(4)
+            .hours(5)
+            .minutes(6)
+            .seconds(7);
+
+        let deserialized: Span =
+            serde_yml::from_str("P1y2m3w4dT5h6m7s").unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let deserialized: Span =
+            serde_yml::from_slice("P1y2m3w4dT5h6m7s".as_bytes()).unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let cursor = Cursor::new(b"P1y2m3w4dT5h6m7s");
+        let deserialized: Span = serde_yml::from_reader(cursor).unwrap();
+
+        assert_eq!(deserialized, expected);
     }
 }
