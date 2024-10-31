@@ -3360,7 +3360,7 @@ impl<'de> serde::Deserialize<'de> for Zoned {
             }
         }
 
-        deserializer.deserialize_bytes(ZonedVisitor)
+        deserializer.deserialize_str(ZonedVisitor)
     }
 }
 

@@ -2063,7 +2063,7 @@ impl<'de> serde::Deserialize<'de> for SignedDuration {
             }
         }
 
-        deserializer.deserialize_bytes(SignedDurationVisitor)
+        deserializer.deserialize_str(SignedDurationVisitor)
     }
 }
 

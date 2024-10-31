@@ -2490,7 +2490,7 @@ impl<'de> serde::Deserialize<'de> for Date {
             }
         }
 
-        deserializer.deserialize_bytes(DateVisitor)
+        deserializer.deserialize_str(DateVisitor)
     }
 }
 

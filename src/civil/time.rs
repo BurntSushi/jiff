@@ -2053,7 +2053,7 @@ impl<'de> serde::Deserialize<'de> for Time {
             }
         }
 
-        deserializer.deserialize_bytes(TimeVisitor)
+        deserializer.deserialize_str(TimeVisitor)
     }
 }
 
