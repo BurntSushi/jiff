@@ -1,8 +1,7 @@
 /*!
 Support for printing and parsing instants using the [RFC 2822] datetime format.
 
-RFC 2822 is most commonly found when dealing with HTTP headers and email
-messages.
+RFC 2822 is most commonly found when dealing with email messages.
 
 Since RFC 2822 only supports specifying a complete instant in time, the parser
 and printer in this module only use [`Zoned`] and [`Timestamp`]. If you need
@@ -38,7 +37,7 @@ This in turn means it will not perform daylight saving time safe
 arithmetic.
 
 Basically, you should use the RFC 2822 format if it's required (for
-example, when dealing with HTTP). But you should not choose it as a
+example, when dealing with email). But you should not choose it as a
 general interchange format for new applications.
 */
 
@@ -85,7 +84,7 @@ pub(crate) static DEFAULT_DATETIME_PRINTER: DateTimePrinter =
 /// arithmetic.
 ///
 /// Basically, you should use the RFC 2822 format if it's required (for
-/// example, when dealing with HTTP). But you should not choose it as a
+/// example, when dealing with email). But you should not choose it as a
 /// general interchange format for new applications.
 ///
 /// # Errors
@@ -134,7 +133,7 @@ pub fn to_string(zdt: &Zoned) -> Result<String, Error> {
 /// arithmetic.
 ///
 /// Basically, you should use the RFC 2822 format if it's required (for
-/// example, when dealing with HTTP). But you should not choose it as a
+/// example, when dealing with email). But you should not choose it as a
 /// general interchange format for new applications.
 ///
 /// # Errors
@@ -189,7 +188,7 @@ pub fn parse(string: &str) -> Result<Zoned, Error> {
 /// arithmetic.
 ///
 /// Basically, you should use the RFC 2822 format if it's required (for
-/// example, when dealing with HTTP). But you should not choose it as a
+/// example, when dealing with email). But you should not choose it as a
 /// general interchange format for new applications.
 ///
 /// # Example
@@ -283,7 +282,7 @@ impl DateTimeParser {
     /// arithmetic.
     ///
     /// Basically, you should use the RFC 2822 format if it's required (for
-    /// example, when dealing with HTTP). But you should not choose it as a
+    /// example, when dealing with email). But you should not choose it as a
     /// general interchange format for new applications.
     ///
     /// # Errors
@@ -1038,7 +1037,7 @@ impl DateTimeParser {
 /// arithmetic.
 ///
 /// Basically, you should use the RFC 2822 format if it's required (for
-/// example, when dealing with HTTP). But you should not choose it as a
+/// example, when dealing with email). But you should not choose it as a
 /// general interchange format for new applications.
 ///
 /// # Example
@@ -1123,7 +1122,7 @@ impl DateTimePrinter {
     /// arithmetic.
     ///
     /// Basically, you should use the RFC 2822 format if it's required (for
-    /// example, when dealing with HTTP). But you should not choose it as a
+    /// example, when dealing with email). But you should not choose it as a
     /// general interchange format for new applications.
     ///
     /// # Errors
@@ -1260,7 +1259,7 @@ impl DateTimePrinter {
     /// arithmetic.
     ///
     /// Basically, you should use the RFC 2822 format if it's required (for
-    /// example, when dealing with HTTP). But you should not choose it as a
+    /// example, when dealing with email). But you should not choose it as a
     /// general interchange format for new applications.
     ///
     /// # Errors

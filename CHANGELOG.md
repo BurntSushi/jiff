@@ -2,6 +2,13 @@
 
 0.1.14 (TBD)
 ============
+This release introduces new APIs to the RFC 2822 printer that explicitly
+print timestamps in a format strictly compatible with [RFC 9110].
+
+Enhancements:
+
+* [#151](https://github.com/BurntSushi/jiff/issues/151):
+Add `rfc2822::DateTimePrinter::timestamp_to_rfc9110_string` method.
 
 
 0.1.13 (2024-09-07)
@@ -357,3 +364,4 @@ The initial release of Jiff.
 
 [IANA Time Zone Database]: https://www.iana.org/time-zones
 [PLATFORM]: PLATFORM.md
+[RFC 9110]: https://datatracker.ietf.org/doc/html/rfc9110#section-5.6.7-15
