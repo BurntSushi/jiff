@@ -12,6 +12,7 @@ improve datetime handling in JavaScript.
 
 [![Build status](https://github.com/BurntSushi/jiff/workflows/ci/badge.svg)](https://github.com/BurntSushi/jiff/actions)
 [![Crates.io](https://img.shields.io/crates/v/jiff.svg)](https://crates.io/crates/jiff)
+[![Docs.rs](https://img.shields.io/docsrs/jiff)](https://docs.rs/jiff)
 
 Dual-licensed under MIT or the [UNLICENSE](https://unlicense.org/).
 
