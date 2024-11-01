@@ -579,7 +579,7 @@ impl DateTimeParser {
         }
         let (day, input) = input.split_at(digits);
         let day = parse::i64(day).with_context(|| {
-            err!("failed to parse {day:?} as day", day = escape::Bytes(day),)
+            err!("failed to parse {day:?} as day", day = escape::Bytes(day))
         })?;
         let day = t::Day::try_new("day", day).context("day is not valid")?;
         let Parsed { input, .. } =
@@ -1194,6 +1194,51 @@ impl DateTimePrinter {
         Ok(buf)
     }
 
+    /// Format a `Timestamp` datetime into a string in a way that is explicitly
+    /// compatible with [RFC 9110]. This is typically useful in contexts where
+    /// strict compatibility with HTTP is desired.
+    ///
+    /// This always emits `GMT` as the offset and always uses two digits for
+    /// the day. This results in a fixed length format that always uses 29
+    /// characters.
+    ///
+    /// Since neither RFC 2822 nor RFC 9110 supports fractional seconds, this
+    /// routine prints the timestamp as if truncating any fractional seconds.
+    ///
+    /// This is a convenience routine for
+    /// [`DateTimePrinter::print_timestamp_rfc9110`] with a `String`.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the year corresponding to this timestamp
+    /// cannot be represented in the RFC 2822 or RFC 9110 format. For example,
+    /// a negative year.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{fmt::rfc2822::DateTimePrinter, Timestamp};
+    ///
+    /// let timestamp = Timestamp::from_second(1)
+    ///     .expect("one second after Unix epoch is always valid");
+    /// assert_eq!(
+    ///     DateTimePrinter::new().timestamp_to_rfc9110_string(&timestamp)?,
+    ///     "Thu, 01 Jan 1970 00:00:01 GMT",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// [RFC 9110]: https://datatracker.ietf.org/doc/html/rfc9110#section-5.6.7-15
+    pub fn timestamp_to_rfc9110_string(
+        &self,
+        timestamp: &Timestamp,
+    ) -> Result<String, Error> {
+        let mut buf = String::with_capacity(4);
+        self.print_timestamp_rfc9110(timestamp, &mut buf)?;
+        Ok(buf)
+    }
+
     /// Print a `Zoned` datetime to the given writer.
     ///
     /// This never emits `-0000` as the offset in the RFC 2822 format. If you
@@ -1293,6 +1338,51 @@ impl DateTimePrinter {
         self.print_civil_with_offset(dt, None, wtr)
     }
 
+    /// Print a `Timestamp` datetime to the given writer in a way that is
+    /// explicitly compatible with [RFC 9110]. This is typically useful in
+    /// contexts where strict compatibility with HTTP is desired.
+    ///
+    /// This always emits `GMT` as the offset and always uses two digits for
+    /// the day. This results in a fixed length format that always uses 29
+    /// characters.
+    ///
+    /// Since neither RFC 2822 nor RFC 9110 supports fractional seconds, this
+    /// routine prints the timestamp as if truncating any fractional seconds.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error when writing to the given [`Write`]
+    /// implementation would fail. Some such implementations, like for `String`
+    /// and `Vec<u8>`, never fail (unless memory allocation fails).
+    ///
+    /// This can also return an error if the year corresponding to this
+    /// timestamp cannot be represented in the RFC 2822 or RFC 9110 format. For
+    /// example, a negative year.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{fmt::rfc2822::DateTimePrinter, Timestamp};
+    ///
+    /// let timestamp = Timestamp::from_second(1)
+    ///     .expect("one second after Unix epoch is always valid");
+    ///
+    /// let mut buf = String::new();
+    /// DateTimePrinter::new().print_timestamp_rfc9110(&timestamp, &mut buf)?;
+    /// assert_eq!(buf, "Thu, 01 Jan 1970 00:00:01 GMT");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// [RFC 9110]: https://datatracker.ietf.org/doc/html/rfc9110#section-5.6.7-15
+    pub fn print_timestamp_rfc9110<W: Write>(
+        &self,
+        timestamp: &Timestamp,
+        wtr: W,
+    ) -> Result<(), Error> {
+        self.print_civil_always_utc(timestamp, wtr)
+    }
+
     fn print_civil_with_offset<W: Write>(
         &self,
         dt: DateTime,
@@ -1351,6 +1441,45 @@ impl DateTimePrinter {
         }
         wtr.write_int(&FMT_TIME_UNIT, hours)?;
         wtr.write_int(&FMT_TIME_UNIT, minutes)?;
+        Ok(())
+    }
+
+    fn print_civil_always_utc<W: Write>(
+        &self,
+        timestamp: &Timestamp,
+        mut wtr: W,
+    ) -> Result<(), Error> {
+        static FMT_DAY: DecimalFormatter = DecimalFormatter::new().padding(2);
+        static FMT_YEAR: DecimalFormatter = DecimalFormatter::new().padding(4);
+        static FMT_TIME_UNIT: DecimalFormatter =
+            DecimalFormatter::new().padding(2);
+
+        let dt = TimeZone::UTC.to_datetime(*timestamp);
+        if dt.year() < 0 {
+            // RFC 2822 actually says the year must be at least 1900, but
+            // other implementations (like Chrono) allow any positive 4-digit
+            // year.
+            return Err(err!(
+                "datetime {dt} has negative year, \
+                 which cannot be formatted with RFC 2822",
+            ));
+        }
+
+        wtr.write_str(weekday_abbrev(dt.weekday()))?;
+        wtr.write_str(", ")?;
+        wtr.write_int(&FMT_DAY, dt.day())?;
+        wtr.write_str(" ")?;
+        wtr.write_str(month_name(dt.month()))?;
+        wtr.write_str(" ")?;
+        wtr.write_int(&FMT_YEAR, dt.year())?;
+        wtr.write_str(" ")?;
+        wtr.write_int(&FMT_TIME_UNIT, dt.hour())?;
+        wtr.write_str(":")?;
+        wtr.write_int(&FMT_TIME_UNIT, dt.minute())?;
+        wtr.write_str(":")?;
+        wtr.write_int(&FMT_TIME_UNIT, dt.second())?;
+        wtr.write_str(" ")?;
+        wtr.write_str("GMT")?;
         Ok(())
     }
 }
@@ -1772,6 +1901,50 @@ mod tests {
         // This is because in the case of Timestamp, the "true"
         // offset is not known.
         insta::assert_snapshot!(p(ts), @"Tue, 5 Mar 2024 05:34:45 -0000");
+    }
+
+    #[test]
+    fn ok_print_rfc9110_timestamp() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let p = |ts: Timestamp| -> String {
+            let mut buf = String::new();
+            DateTimePrinter::new()
+                .print_timestamp_rfc9110(&ts, &mut buf)
+                .unwrap();
+            buf
+        };
+
+        let ts = date(2024, 1, 10)
+            .at(5, 34, 45, 0)
+            .intz("America/New_York")
+            .unwrap()
+            .timestamp();
+        insta::assert_snapshot!(p(ts), @"Wed, 10 Jan 2024 10:34:45 GMT");
+
+        let ts = date(2024, 2, 5)
+            .at(5, 34, 45, 0)
+            .intz("America/New_York")
+            .unwrap()
+            .timestamp();
+        insta::assert_snapshot!(p(ts), @"Mon, 05 Feb 2024 10:34:45 GMT");
+
+        let ts = date(2024, 7, 31)
+            .at(5, 34, 45, 0)
+            .intz("America/New_York")
+            .unwrap()
+            .timestamp();
+        insta::assert_snapshot!(p(ts), @"Wed, 31 Jul 2024 09:34:45 GMT");
+
+        let ts =
+            date(2024, 3, 5).at(5, 34, 45, 0).intz("UTC").unwrap().timestamp();
+        // Notice that this prints a +0000 offset.
+        // But when printing a Timestamp, a -0000 offset is used.
+        // This is because in the case of Timestamp, the "true"
+        // offset is not known.
+        insta::assert_snapshot!(p(ts), @"Tue, 05 Mar 2024 05:34:45 GMT");
     }
 
     #[test]
