@@ -8,6 +8,8 @@ Bug fixes:
 
 * [#138](https://github.com/BurntSushi/jiff/issues/138):
 Fix deserialization in `serde_yml` and `serde_yaml` crates.
+* [#161](https://github.com/BurntSushi/jiff/pull/161):
+Fix `serde` dependency configuration so that it builds in no-std mode.
 
 
 0.1.15 (2024-11-30)
