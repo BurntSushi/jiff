@@ -235,7 +235,7 @@ jobs:
       # logs.
       TZ: America/New_York
     steps:
-    - uses: dtolnay/rust-toolchain@stable
+    - uses: dtolnay/rust-toolchain@1.81.0
     - uses: actions/checkout@v4
     - name: Install wasm-pack
       run: |
