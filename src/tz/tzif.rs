@@ -23,6 +23,7 @@ use crate::{
     util::{
         crc32,
         escape::{Byte, Bytes},
+        t::UnixSeconds,
     },
 };
 
@@ -131,8 +132,8 @@ impl Tzif {
                 }
                 Ok(i) => i,
                 // i points to the position immediately after the matching
-                // timestamp. And since we know that i>0 because of the i==0 check
-                // above, we can safely subtract 1.
+                // timestamp. And since we know that i>0 because of the i==0
+                // check above, we can safely subtract 1.
                 Err(i) => i.checked_sub(1).expect("i is non-zero"),
             }
         };
@@ -504,9 +505,29 @@ impl Tzif {
             } else {
                 from_be_bytes_i64(chunk)
             };
-            let timestamp = Timestamp::from_second(seconds).map_err(|e| {
-                err!("transition second value {seconds} is out of range: {e}")
-            })?;
+            let timestamp =
+                Timestamp::from_second(seconds).unwrap_or_else(|_| {
+                    // We really shouldn't error here just because the Unix
+                    // timestamp is outside what Jiff supports. Since what Jiff
+                    // supports is _somewhat_ arbitrary. But Jiff's supported
+                    // range is good enough for all realistic purposes, so we
+                    // just clamp an out-of-range Unix timestamp to the Jiff
+                    // min or max value.
+                    //
+                    // This can't result in the sorting order being wrong, but
+                    // it can result in a transition that is duplicative with
+                    // the dummy transition we inserted above. This should be
+                    // fine.
+                    let clamped = seconds
+                        .clamp(UnixSeconds::MIN_REPR, UnixSeconds::MAX_REPR);
+                    warn!(
+                        "found Unix timestamp {seconds} that is outside \
+                         Jiff's supported range, clamping to {clamped}",
+                    );
+                    // Guaranteed to succeed since we clamped `seconds` such
+                    // that it is in the supported range of `Timestamp`.
+                    Timestamp::from_second(clamped).unwrap()
+                });
             self.transitions.push(Transition {
                 timestamp,
                 // We can't compute the wall clock times until we know the
@@ -1451,6 +1472,8 @@ mod tests {
     #[test]
     fn debug_tzif() -> anyhow::Result<()> {
         use anyhow::Context;
+
+        let _ = crate::logging::Logger::init();
 
         const ENV: &str = "JIFF_DEBUG_TZIF_PATH";
         let Some(val) = std::env::var_os(ENV) else { return Ok(()) };

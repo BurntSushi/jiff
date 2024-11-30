@@ -12,6 +12,7 @@ use crate::tz::Tzif;
 ///
 /// * 2024-03-27: Initial set pulled from my local copy of `tzdata 2024a`.
 /// * 2024-07-05: Added `UTC`.
+/// * 2024-11-30: Added special Sydney time zone from RHEL8.
 pub(crate) const TZIF_TEST_FILES: &[TzifTestFile] = &[
     TzifTestFile {
         name: "America/New_York",
@@ -44,6 +45,19 @@ pub(crate) const TZIF_TEST_FILES: &[TzifTestFile] = &[
     TzifTestFile {
         name: "Pacific/Honolulu",
         data: include_bytes!("testdata/pacific-honolulu.tzif"),
+    },
+    // This TZif file comes from a RHEL8 installation[1]. Apparently RHEL
+    // added a special first transition far back in the past. It is probably
+    // similar in purpose to what Jiff does internally, which is to add a
+    // dummy "minimum" transition. We test this case here because RHEL's dummy
+    // transition falls outside of Jiff's supported `Timestamp` range, which
+    // did result in an error at parse time. But we should be able to parse it,
+    // so we test it here.
+    //
+    // [1]: https://github.com/BurntSushi/jiff/issues/163
+    TzifTestFile {
+        name: "Australia/Sydney/RHEL8",
+        data: include_bytes!("testdata/australia-sydney-rhel8.tzif"),
     },
     TzifTestFile { name: "UTC", data: include_bytes!("testdata/utc.tzif") },
 ];
