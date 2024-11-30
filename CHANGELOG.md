@@ -1,7 +1,22 @@
 # CHANGELOG
 
-0.1.14 (TBD)
-============
+0.1.15 (2024-11-30)
+===================
+This release fixes a bug where Jiff would sometimes fail to parse TZif files
+(found, typically, in `/usr/share/zoneinfo` on Unix systems). This occurred
+when the TZif file contained a time zone transition outside the range of Jiff's
+`Timestamp` type (which is `-9999-01-01` to `9999-12-31`). The bug fix works by
+clamping the out-of-range transitions to Jiff's supported range.
+
+This bug only seems to occur in some environments where their TZif files
+contain more extreme values than what is typically found.
+
+* [#163](https://github.com/BurntSushi/jiff/issues/163):
+Fix a bug where Jiff would fail to parse some TZif files.
+
+
+0.1.14 (2024-11-01)
+===================
 This release introduces new APIs to the RFC 2822 printer that explicitly
 print timestamps in a format strictly compatible with [RFC 9110].
 
