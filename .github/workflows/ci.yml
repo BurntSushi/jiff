@@ -110,10 +110,14 @@ jobs:
       run: cargo build -p jiff-tzdb-platform --verbose
     - name: Build docs
       run: cargo doc --features serde --verbose
-    - name: Run library tests
-      run: cargo test --lib
-    - name: Run integration tests
-      run: cargo test --test integration
+    # We don't really care much about adding dev dependencies, and they can
+    # move quite a bit faster. So unfortunately don't run tests on MSRV. We
+    # could fix this by adding a `Carg.msrv.lock` or some such, but it doesn't
+    # seem worth it.
+    # - name: Run library tests
+      # run: cargo test --lib
+    # - name: Run integration tests
+      # run: cargo test --test integration
 
   # Generic testing for most cross targets. Some get special treatment in
   # other jobs.
