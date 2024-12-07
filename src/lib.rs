@@ -145,9 +145,8 @@ it.
 First, create the project in a new directory:
 
 ```text
-$ mkdir jiff-example
+$ cargo new jiff-example
 $ cd jiff-example
-$ cargo init
 ```
 
 Second, add a dependency on `jiff`:
