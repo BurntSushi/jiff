@@ -4,6 +4,11 @@
 ============
 TBD.
 
+Enhancements:
+
+* [#169](https://github.com/BurntSushi/jiff/issues/169):
+Add `TimeZone::to_fixed_offset` for accessing an invariant offset if possible.
+
 
 0.1.16 (2024-12-26)
 ===================
