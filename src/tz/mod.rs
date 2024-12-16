@@ -738,7 +738,9 @@ impl TimeZone {
     ///
     /// let tz = TimeZone::UTC;
     /// // UTC is a fixed offset and so can be converted without a timestamp.
-    /// assert_eq!(tz.to_fixed_offset().unwrap(), Offset::UTC);
+    /// assert_eq!(tz.to_fixed_offset()?, Offset::UTC);
+    ///
+    /// Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
     pub fn to_fixed_offset(&self) -> Result<Offset, Error> {
@@ -3759,7 +3761,8 @@ mod tests {
         let tz = TimeZone::posix("EST5").unwrap();
         assert!(tz.to_fixed_offset().is_err());
 
-        let tz = TimeZone::get("America/New_York").unwrap();
+        let test_file = TzifTestFile::get("America/New_York");
+        let tz = TimeZone::tzif(test_file.name, test_file.data).unwrap();
         assert!(tz.to_fixed_offset().is_err());
     }
 }
