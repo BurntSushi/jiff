@@ -723,6 +723,34 @@ impl TimeZone {
         }
     }
 
+    /// Returns the fixed offset of this time zone. If this time zone is not a fixed offset, then
+    /// an error is returned. In that case, consider using [`TimeZone::to_offset`] instead.
+    /// Generally, this routine is used when you know that the time zone is fixed, and you want to
+    /// get the offset without having to specify a timestamp.
+    ///
+    /// # Example
+    /// ```
+    /// use jiff::tz::{Offset, TimeZone};
+    ///
+    /// let tz = TimeZone::get("America/New_York")?;
+    /// // A named time zone is not a fixed offset and so cannot be converted without a timestamp.
+    /// assert!(tz.to_fixed_offset().is_err());
+    ///
+    /// let tz = TimeZone::UTC;
+    /// // UTC is a fixed offset and so can be converted without a timestamp.
+    /// assert_eq!(tz.to_fixed_offset()?, Offset::UTC);
+    ///
+    /// Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn to_fixed_offset(&self) -> Result<Offset, Error> {
+        let Some(ref kind) = self.kind else { return Ok(Offset::UTC) };
+        match **kind {
+            TimeZoneKind::Fixed(ref tz) => Ok(tz.offset()),
+            _ => Err(Error::adhoc("Cannot convert non-fixed time zone to offset without specifying a timestamp.")),
+        }
+    }
+
     /// Converts a civil datetime to a [`Zoned`] in this time zone.
     ///
     /// The given civil datetime may be ambiguous in this time zone. A civil
@@ -3719,5 +3747,22 @@ mod tests {
     fn time_zone_size() {
         let word = core::mem::size_of::<usize>();
         assert_eq!(word, core::mem::size_of::<TimeZone>());
+    }
+
+    #[test]
+    fn time_zone_to_fixed_offset() {
+        let tz = TimeZone::UTC;
+        assert_eq!(tz.to_fixed_offset().unwrap(), Offset::UTC);
+
+        let offset = Offset::from_hours(1).unwrap();
+        let tz = TimeZone::fixed(offset);
+        assert_eq!(tz.to_fixed_offset().unwrap(), offset);
+
+        let tz = TimeZone::posix("EST5").unwrap();
+        assert!(tz.to_fixed_offset().is_err());
+
+        let test_file = TzifTestFile::get("America/New_York");
+        let tz = TimeZone::tzif(test_file.name, test_file.data).unwrap();
+        assert!(tz.to_fixed_offset().is_err());
     }
 }
