@@ -72,7 +72,7 @@ adding duration to now: 2026-02-26T19:00:57-05:00[America/New_York]
 With Jiff, you should no longer need to pull in crates like
 [`humantime`](https://docs.rs/humantime) and
 [`humantime-serde`](https://docs.rs/humantime-serde)
-to accomplished a similar task.
+to accomplish a similar task.
 
 While this new format doesn't support any kind of internationalization, the
 prevalence of the `humantime` crate suggests there's a desire for something
