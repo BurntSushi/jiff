@@ -89,9 +89,12 @@ aware.
 account.
 * Formatting and parsing datetimes via a Temporal-specified hybrid format
 that takes the best parts of [RFC 3339], [RFC 9557] and [ISO 8601]. This
-includes lossless round tripping of zone aware datetimes.
+includes lossless round tripping of zone aware datetimes and durations.
 * Formatting and parsing according to [RFC 2822].
 * Formatting and parsing via routines similar to [`strftime`] and [`strptime`].
+* Formatting and parsing durations via a bespoke
+["friendly" format](crate::fmt::friendly), with Serde support, that is meant
+to service the [`humantime`](https://docs.rs/humantime) use cases.
 * Opt-in Serde integration.
 * Full support for dealing with ambiguous civil datetimes.
 * Protection against deserializing datetimes in the future with an offset
@@ -145,9 +148,8 @@ it.
 First, create the project in a new directory:
 
 ```text
-$ mkdir jiff-example
+$ cargo new jiff-example
 $ cd jiff-example
-$ cargo init
 ```
 
 Second, add a dependency on `jiff`:
@@ -452,6 +454,23 @@ assert_eq!(span, expected);
 
 The same format is used for serializing and deserializing `Span` values when
 the `serde` feature is enabled.
+
+Jiff also supports a bespoke ["friendly" format](crate::fmt::friendly) as
+well:
+
+```
+use jiff::Span;
+
+let expected = Span::new().years(5).weeks(1).days(10).hours(5).minutes(59);
+let span: Span = "5 years, 1 week, 10 days, 5 hours, 59 minutes".parse()?;
+assert_eq!(span, expected);
+let span: Span = "5yrs 1wk 10d 5hrs 59mins".parse()?;
+assert_eq!(span, expected);
+let span: Span = "5y 1w 10d 5h 59m".parse()?;
+assert_eq!(span, expected);
+
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
 
 ### Parsing an RFC 2822 datetime string
 

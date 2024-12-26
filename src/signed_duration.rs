@@ -3,7 +3,9 @@ use core::time::Duration;
 use crate::{
     civil::{Date, DateTime, Time},
     error::{err, ErrorContext},
+    fmt::{friendly, temporal},
     tz::Offset,
+    util::escape,
     Error, Timestamp, Zoned,
 };
 
@@ -31,6 +33,15 @@ use crate::util::libm::Float;
 ///
 /// let duration: SignedDuration = "PT2h30m".parse()?;
 /// assert_eq!(duration.to_string(), "PT2h30m");
+///
+/// // Or use the "friendly" format by invoking the alternate:
+/// assert_eq!(format!("{duration:#}"), "2h 30m");
+///
+/// // Parsing automatically supports both the ISO 8601 and "friendly" formats:
+/// let duration: SignedDuration = "2h 30m".parse()?;
+/// assert_eq!(duration, SignedDuration::new(2 * 60 * 60 + 30 * 60, 0));
+/// let duration: SignedDuration = "2 hours, 30 minutes".parse()?;
+/// assert_eq!(duration, SignedDuration::new(2 * 60 * 60 + 30 * 60, 0));
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -70,12 +81,14 @@ use crate::util::libm::Float;
 /// ```
 ///
 /// The format supported is a variation (nearly a subset) of the duration
-/// format specified in [ISO 8601]. Here are more examples:
+/// format specified in [ISO 8601] _and_ a Jiff-specific "friendly" format.
+/// Here are more examples:
 ///
 /// ```
 /// use jiff::SignedDuration;
 ///
 /// let durations = [
+///     // ISO 8601
 ///     ("PT2H30M", SignedDuration::from_secs(2 * 60 * 60 + 30 * 60)),
 ///     ("PT2.5h", SignedDuration::from_secs(2 * 60 * 60 + 30 * 60)),
 ///     ("PT1m", SignedDuration::from_mins(1)),
@@ -83,6 +96,16 @@ use crate::util::libm::Float;
 ///     ("PT0.0021s", SignedDuration::new(0, 2_100_000)),
 ///     ("PT0s", SignedDuration::ZERO),
 ///     ("PT0.000000001s", SignedDuration::from_nanos(1)),
+///     // Jiff's "friendly" format
+///     ("2h30m", SignedDuration::from_secs(2 * 60 * 60 + 30 * 60)),
+///     ("2 hrs 30 mins", SignedDuration::from_secs(2 * 60 * 60 + 30 * 60)),
+///     ("2 hours 30 minutes", SignedDuration::from_secs(2 * 60 * 60 + 30 * 60)),
+///     ("2.5h", SignedDuration::from_secs(2 * 60 * 60 + 30 * 60)),
+///     ("1m", SignedDuration::from_mins(1)),
+///     ("1.5m", SignedDuration::from_secs(90)),
+///     ("0.0021s", SignedDuration::new(0, 2_100_000)),
+///     ("0s", SignedDuration::ZERO),
+///     ("0.000000001s", SignedDuration::from_nanos(1)),
 /// ];
 /// for (string, duration) in durations {
 ///     let parsed: SignedDuration = string.parse()?;
@@ -92,7 +115,8 @@ use crate::util::libm::Float;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
-/// For more details, see the [`fmt::temporal`](crate::fmt::temporal) module.
+/// For more details, see the [`fmt::temporal`](temporal) and
+/// [`fmt::friendly`](friendly) modules.
 ///
 /// [ISO 8601]: https://www.iso.org/iso-8601-date-and-time-format.html
 ///
@@ -1865,25 +1889,28 @@ impl SignedDuration {
 impl core::fmt::Display for SignedDuration {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        use crate::fmt::{temporal::DEFAULT_SPAN_PRINTER, StdFmtWrite};
+        use crate::fmt::StdFmtWrite;
 
-        DEFAULT_SPAN_PRINTER
-            .print_duration(self, StdFmtWrite(f))
-            .map_err(|_| core::fmt::Error)
+        if f.alternate() {
+            friendly::DEFAULT_SPAN_PRINTER
+                .print_duration(self, StdFmtWrite(f))
+                .map_err(|_| core::fmt::Error)
+        } else {
+            temporal::DEFAULT_SPAN_PRINTER
+                .print_duration(self, StdFmtWrite(f))
+                .map_err(|_| core::fmt::Error)
+        }
     }
 }
 
 impl core::fmt::Debug for SignedDuration {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        // TODO: Replace with `jiff::fmt::friendly` printer when it exists.
-        if self.nanos == 0 {
-            write!(f, "{}s", self.secs)
-        } else if self.secs == 0 {
-            write!(f, "{}ns", self.nanos)
-        } else {
-            write!(f, "{}s{}ns", self.secs, self.nanos.abs())
-        }
+        use crate::fmt::StdFmtWrite;
+
+        friendly::DEFAULT_SPAN_PRINTER
+            .print_duration(self, StdFmtWrite(f))
+            .map_err(|_| core::fmt::Error)
     }
 }
 
@@ -1920,9 +1947,7 @@ impl core::str::FromStr for SignedDuration {
 
     #[inline]
     fn from_str(string: &str) -> Result<SignedDuration, Error> {
-        use crate::fmt::temporal::DEFAULT_SPAN_PARSER;
-
-        DEFAULT_SPAN_PARSER.parse_duration(string)
+        parse_iso_or_friendly(string.as_bytes())
     }
 }
 
@@ -2047,11 +2072,7 @@ impl<'de> serde::Deserialize<'de> for SignedDuration {
                 self,
                 value: &[u8],
             ) -> Result<SignedDuration, E> {
-                use crate::fmt::temporal::DEFAULT_SPAN_PARSER;
-
-                DEFAULT_SPAN_PARSER
-                    .parse_duration(value)
-                    .map_err(de::Error::custom)
+                parse_iso_or_friendly(value).map_err(de::Error::custom)
             }
 
             #[inline]
@@ -2063,12 +2084,59 @@ impl<'de> serde::Deserialize<'de> for SignedDuration {
             }
         }
 
-        deserializer.deserialize_bytes(SignedDurationVisitor)
+        deserializer.deserialize_str(SignedDurationVisitor)
+    }
+}
+
+/// A common parsing function that works in bytes.
+///
+/// Specifically, this parses either an ISO 8601 duration into a
+/// `SignedDuration` or a "friendly" duration into a `SignedDuration`. It also
+/// tries to give decent error messages.
+///
+/// This works because the friendly and ISO 8601 formats have non-overlapping
+/// prefixes. Both can start with a `+` or `-`, but aside from that, an ISO
+/// 8601 duration _always_ has to start with a `P` or `p`. We can utilize this
+/// property to very quickly determine how to parse the input. We just need to
+/// handle the possibly ambiguous case with a leading sign a little carefully
+/// in order to ensure good error messages.
+///
+/// (We do the same thing for `Span`.)
+#[inline(always)]
+fn parse_iso_or_friendly(bytes: &[u8]) -> Result<SignedDuration, Error> {
+    if bytes.is_empty() {
+        return Err(err!(
+            "an empty string is not a valid `SignedDuration`, \
+             expected either a ISO 8601 or Jiff's 'friendly' \
+             format",
+        ));
+    }
+    let mut first = bytes[0];
+    if first == b'+' || first == b'-' {
+        if bytes.len() == 1 {
+            return Err(err!(
+                "found nothing after sign `{sign}`, \
+                 which is not a valid `SignedDuration`, \
+                 expected either a ISO 8601 or Jiff's 'friendly' \
+                 format",
+                sign = escape::Byte(first),
+            ));
+        }
+        first = bytes[1];
+    }
+    if first == b'P' || first == b'p' {
+        temporal::DEFAULT_SPAN_PARSER.parse_duration(bytes)
+    } else {
+        friendly::DEFAULT_SPAN_PARSER.parse_duration(bytes)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
+    use alloc::string::ToString;
+
     use super::*;
 
     #[test]
@@ -2185,5 +2253,154 @@ mod tests {
         assert_eq!(None, add((i64::MIN, 0), (-1, 0)));
         assert_eq!(None, add((i64::MAX, 1), (0, 999_999_999)));
         assert_eq!(None, add((i64::MIN, -1), (0, -999_999_999)));
+    }
+
+    /// # `serde` deserializer compatibility test
+    ///
+    /// Serde YAML used to be unable to deserialize `jiff` types,
+    /// as deserializing from bytes is not supported by the deserializer.
+    ///
+    /// - <https://github.com/BurntSushi/jiff/issues/138>
+    /// - <https://github.com/BurntSushi/jiff/discussions/148>
+    #[test]
+    fn signed_duration_deserialize_yaml() {
+        let expected = SignedDuration::from_secs(123456789);
+
+        let deserialized: SignedDuration =
+            serde_yml::from_str("PT34293h33m9s").unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let deserialized: SignedDuration =
+            serde_yml::from_slice("PT34293h33m9s".as_bytes()).unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let cursor = Cursor::new(b"PT34293h33m9s");
+        let deserialized: SignedDuration =
+            serde_yml::from_reader(cursor).unwrap();
+
+        assert_eq!(deserialized, expected);
+    }
+
+    #[test]
+    fn from_str() {
+        let p = |s: &str| -> Result<SignedDuration, Error> { s.parse() };
+
+        insta::assert_snapshot!(
+            p("1 hour").unwrap(),
+            @"PT1h",
+        );
+        insta::assert_snapshot!(
+            p("+1 hour").unwrap(),
+            @"PT1h",
+        );
+        insta::assert_snapshot!(
+            p("-1 hour").unwrap(),
+            @"-PT1h",
+        );
+        insta::assert_snapshot!(
+            p("PT1h").unwrap(),
+            @"PT1h",
+        );
+        insta::assert_snapshot!(
+            p("+PT1h").unwrap(),
+            @"PT1h",
+        );
+        insta::assert_snapshot!(
+            p("-PT1h").unwrap(),
+            @"-PT1h",
+        );
+
+        insta::assert_snapshot!(
+            p("").unwrap_err(),
+            @"an empty string is not a valid `SignedDuration`, expected either a ISO 8601 or Jiff's 'friendly' format",
+        );
+        insta::assert_snapshot!(
+            p("+").unwrap_err(),
+            @"found nothing after sign `+`, which is not a valid `SignedDuration`, expected either a ISO 8601 or Jiff's 'friendly' format",
+        );
+        insta::assert_snapshot!(
+            p("-").unwrap_err(),
+            @"found nothing after sign `-`, which is not a valid `SignedDuration`, expected either a ISO 8601 or Jiff's 'friendly' format",
+        );
+    }
+
+    #[test]
+    fn serde_deserialize() {
+        let p = |s: &str| -> Result<SignedDuration, serde_json::Error> {
+            serde_json::from_str(&alloc::format!("\"{s}\""))
+        };
+
+        insta::assert_snapshot!(
+            p("1 hour").unwrap(),
+            @"PT1h",
+        );
+        insta::assert_snapshot!(
+            p("+1 hour").unwrap(),
+            @"PT1h",
+        );
+        insta::assert_snapshot!(
+            p("-1 hour").unwrap(),
+            @"-PT1h",
+        );
+        insta::assert_snapshot!(
+            p("PT1h").unwrap(),
+            @"PT1h",
+        );
+        insta::assert_snapshot!(
+            p("+PT1h").unwrap(),
+            @"PT1h",
+        );
+        insta::assert_snapshot!(
+            p("-PT1h").unwrap(),
+            @"-PT1h",
+        );
+
+        insta::assert_snapshot!(
+            p("").unwrap_err(),
+            @"an empty string is not a valid `SignedDuration`, expected either a ISO 8601 or Jiff's 'friendly' format at line 1 column 2",
+        );
+        insta::assert_snapshot!(
+            p("+").unwrap_err(),
+            @"found nothing after sign `+`, which is not a valid `SignedDuration`, expected either a ISO 8601 or Jiff's 'friendly' format at line 1 column 3",
+        );
+        insta::assert_snapshot!(
+            p("-").unwrap_err(),
+            @"found nothing after sign `-`, which is not a valid `SignedDuration`, expected either a ISO 8601 or Jiff's 'friendly' format at line 1 column 3",
+        );
+    }
+
+    /// This test ensures that we can parse `humantime` formatted durations.
+    #[test]
+    fn humantime_compatibility_parse() {
+        let dur = std::time::Duration::new(26_784, 123_456_789);
+        let formatted = humantime::format_duration(dur).to_string();
+        assert_eq!(formatted, "7h 26m 24s 123ms 456us 789ns");
+
+        let expected = SignedDuration::try_from(dur).unwrap();
+        assert_eq!(formatted.parse::<SignedDuration>().unwrap(), expected);
+    }
+
+    /// This test ensures that we can print a `SignedDuration` that `humantime`
+    /// can parse.
+    ///
+    /// Note that this isn't the default since `humantime`'s parser is
+    /// pretty limited. e.g., It doesn't support things like `nsecs`
+    /// despite supporting `secs`. And other reasons. See the docs on
+    /// `Designator::HumanTime` for why we sadly provide a custom variant for
+    /// it.
+    #[test]
+    fn humantime_compatibility_print() {
+        static PRINTER: friendly::SpanPrinter = friendly::SpanPrinter::new()
+            .designator(friendly::Designator::HumanTime);
+
+        let sdur = SignedDuration::new(26_784, 123_456_789);
+        let formatted = PRINTER.duration_to_string(&sdur);
+        assert_eq!(formatted, "7h 26m 24s 123ms 456us 789ns");
+
+        let dur = humantime::parse_duration(&formatted).unwrap();
+        let expected = std::time::Duration::try_from(sdur).unwrap();
+        assert_eq!(dur, expected);
     }
 }

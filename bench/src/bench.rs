@@ -604,6 +604,170 @@ fn parse_strptime(c: &mut Criterion) {
     });
 }
 
+/// Benchmarks parsing a "friendly" or "human" duration. We compare Jiff with
+/// `humantime`.
+fn parse_friendly(c: &mut Criterion) {
+    use jiff::{SignedDuration, ToSpan};
+    use std::time::Duration;
+
+    const NAME: &str = "parse_friendly";
+    const TINY: &str = "2s";
+    const SHORT: &str = "2h30m";
+    const MEDIUM: &str = "2d5h30m";
+    const LONG_JIFF: &str = "2y1mo15d5h59m1s";
+    const LONG_HUMANTIME: &str = "2y1M15d5h59m1s";
+    const LONGER: &str = "2 years 1 month 15 days 5 hours 59 minutes 1 second";
+    const LONGEST: &str = "\
+        2 years 1 month 15 days \
+        5 hours 59 minutes 1 second \
+        123 millis 456 usec 789 nanos\
+    ";
+    // The longest duration parsable by Jiff and humantime that doesn't involve
+    // units whose duration can change. This lets us benchmark parsing into a
+    // `SignedDuration`, which is more of an apples-to-apples comparison to
+    // humantime.
+    const LONGEST_TIME: &str = "\
+        5 hours 59 minutes 1 second \
+        123 millis 456 usec 789 nanos\
+    ";
+
+    let benches = [
+        ("tiny", TINY, 2.seconds()),
+        ("short", SHORT, 2.hours().minutes(30)),
+        ("medium", MEDIUM, 2.days().hours(5).minutes(30)),
+        (
+            "long",
+            LONG_JIFF,
+            2.years().months(1).days(15).hours(5).minutes(59).seconds(1),
+        ),
+        (
+            "longer",
+            LONGER,
+            2.years().months(1).days(15).hours(5).minutes(59).seconds(1),
+        ),
+        (
+            "longest",
+            LONGEST,
+            2.years()
+                .months(1)
+                .days(15)
+                .hours(5)
+                .minutes(59)
+                .seconds(1)
+                .milliseconds(123)
+                .microseconds(456)
+                .nanoseconds(789),
+        ),
+        (
+            "longest-time",
+            LONGEST_TIME,
+            5.hours()
+                .minutes(59)
+                .seconds(1)
+                .milliseconds(123)
+                .microseconds(456)
+                .nanoseconds(789),
+        ),
+    ];
+    for (kind, input, expected) in benches {
+        c.bench_function(&format!("jiff-span/{NAME}/{kind}"), |b| {
+            b.iter(|| {
+                let got: jiff::Span = input.parse().unwrap();
+                assert_eq!(got, expected);
+            })
+        });
+    }
+
+    let benches = [
+        ("tiny", TINY, SignedDuration::new(2, 0)),
+        ("short", SHORT, SignedDuration::new(2 * 60 * 60 + 30 * 60, 0)),
+        (
+            "longest-time",
+            LONGEST_TIME,
+            SignedDuration::new(5 * 3600 + 59 * 60 + 1, 123_456_789),
+        ),
+    ];
+    for (kind, input, expected) in benches {
+        c.bench_function(&format!("jiff-duration/{NAME}/{kind}"), |b| {
+            b.iter(|| {
+                let got: jiff::SignedDuration = input.parse().unwrap();
+                assert_eq!(got, expected);
+            })
+        });
+    }
+
+    let benches = [
+        ("tiny", TINY, Duration::new(2, 0)),
+        ("short", SHORT, Duration::new(2 * 60 * 60 + 30 * 60, 0)),
+        (
+            "medium",
+            MEDIUM,
+            Duration::new(2 * 24 * 60 * 60 + 5 * 60 * 60 + 30 * 60, 0),
+        ),
+        (
+            "long",
+            LONG_HUMANTIME,
+            // humantime uses a fixed number of seconds to represent years
+            // and months. That is, 365.25d and 30.44d, respectively, where
+            // a day is 86400 seconds.
+            Duration::new(
+                2 * 31_557_600
+                    + 1 * 2_630_016
+                    + 15 * 86400
+                    + 5 * 3600
+                    + 59 * 60
+                    + 1,
+                0,
+            ),
+        ),
+        (
+            "longer",
+            LONGER,
+            // humantime uses a fixed number of seconds to represent years
+            // and months. That is, 365.25d and 30.44d, respectively, where
+            // a day is 86400 seconds.
+            Duration::new(
+                2 * 31_557_600
+                    + 1 * 2_630_016
+                    + 15 * 86400
+                    + 5 * 3600
+                    + 59 * 60
+                    + 1,
+                0,
+            ),
+        ),
+        (
+            "longest",
+            LONGEST,
+            // humantime uses a fixed number of seconds to represent years
+            // and months. That is, 365.25d and 30.44d, respectively, where
+            // a day is 86400 seconds.
+            Duration::new(
+                2 * 31_557_600
+                    + 1 * 2_630_016
+                    + 15 * 86400
+                    + 5 * 3600
+                    + 59 * 60
+                    + 1,
+                123_456_789,
+            ),
+        ),
+        (
+            "longest-time",
+            LONGEST_TIME,
+            Duration::new(5 * 3600 + 59 * 60 + 1, 123_456_789),
+        ),
+    ];
+    for (kind, input, expected) in benches {
+        c.bench_function(&format!("humantime/{NAME}/{kind}"), |b| {
+            b.iter(|| {
+                let got = humantime::parse_duration(input).unwrap();
+                assert_eq!(got, expected);
+            })
+        });
+    }
+}
+
 criterion::criterion_group!(
     benches,
     civil_datetime_to_instant_with_tzdb_lookup,
@@ -618,5 +782,6 @@ criterion::criterion_group!(
     parse_rfc2822,
     parse_strptime,
     print_civil_datetime,
+    parse_friendly,
 );
 criterion::criterion_main!(benches);

@@ -1712,13 +1712,13 @@ mod tests {
                 weekday: Sunday,
             },
             at: RuleAtP {
-                span: PT2h,
+                span: 2h,
                 suffix: Some(
                     Wall,
                 ),
             },
             save: RuleSaveP {
-                span: PT1h,
+                span: 1h,
                 suffix: Some(
                     Dst,
                 ),
@@ -1754,7 +1754,7 @@ mod tests {
                 name: "America/Menominee",
             },
             stdoff: ZoneStdoffP {
-                span: -PT5h,
+                span: 5h ago,
             },
             rules: None,
             format: Static {
@@ -1781,7 +1781,7 @@ mod tests {
                 name: "America/Menominee",
             },
             stdoff: ZoneStdoffP {
-                span: -PT5h,
+                span: 5h ago,
             },
             rules: None,
             format: Static {
@@ -1797,7 +1797,7 @@ mod tests {
                         day: 29,
                     },
                     duration: RuleAtP {
-                        span: PT2h,
+                        span: 2h,
                         suffix: None,
                     },
                 },
@@ -1825,7 +1825,7 @@ mod tests {
         insta::assert_debug_snapshot!(zone, @r###"
         ZoneContinuationP {
             stdoff: ZoneStdoffP {
-                span: -PT5h,
+                span: 5h ago,
             },
             rules: None,
             format: Static {
@@ -1842,7 +1842,7 @@ mod tests {
         insta::assert_debug_snapshot!(zone, @r###"
         ZoneContinuationP {
             stdoff: ZoneStdoffP {
-                span: -PT5h,
+                span: 5h ago,
             },
             rules: None,
             format: Static {
@@ -1858,7 +1858,7 @@ mod tests {
                         day: 29,
                     },
                     duration: RuleAtP {
-                        span: PT2h,
+                        span: 2h,
                         suffix: None,
                     },
                 },

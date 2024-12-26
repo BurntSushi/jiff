@@ -1,7 +1,135 @@
 # CHANGELOG
 
-0.1.14 (TBD)
+0.1.17 (TBD)
 ============
+TBD.
+
+
+0.1.16 (2024-12-26)
+===================
+This release includes a new `jiff::fmt::friendly` module for formatting and
+parsing durations in a more human readable format than what ISO 8601 specifies.
+ISO 8601 remains the "default" duration format in Jiff due to its widespread
+support. Here are some examples:
+
+```text
+40d
+40 days
+1y1d
+1yr 1d
+3d4h59m
+3 days, 4 hours, 59 minutes
+3d 4h 59m
+2h30m
+2h 30m
+1mo
+1w
+1 week
+1w4d
+1 wk 4 days
+1m
+0.0021s
+0s
+0d
+0 days
+3 mins 34s 123ms
+3 mins 34.123 secs
+3 mins 34,123s
+1y1mo1d1h1m1.1s
+1yr 1mo 1day 1hr 1min 1.1sec
+1 year, 1 month, 1 day, 1 hour, 1 minute 1.1 seconds
+1 year, 1 month, 1 day, 01:01:01.1
+```
+
+To quickly demonstrate this new feature, here's a simple CLI program using
+Clap:
+
+```rust,no_run
+use clap::Parser;
+use jiff::{Span, Zoned};
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    duration: Span,
+}
+
+fn main() {
+    let args = Args::parse();
+    println!("adding duration to now: {}", &Zoned::now() + args.duration);
+}
+```
+
+And running the program:
+
+```text
+$ cargo run -q -- '1 year, 2 months, 5 hours'
+adding duration to now: 2026-02-26T18:58:22-05:00[America/New_York]
+$ cargo run -q -- 'P1Y2MT5H'  # ISO 8601 durations are supported too!
+adding duration to now: 2026-02-26T19:00:57-05:00[America/New_York]
+```
+
+With Jiff, you should no longer need to pull in crates like
+[`humantime`](https://docs.rs/humantime) and
+[`humantime-serde`](https://docs.rs/humantime-serde)
+to accomplish a similar task.
+
+While this new format doesn't support any kind of internationalization, the
+prevalence of the `humantime` crate suggests there's a desire for something
+like this. The "friendly" format is meant to service all the same use cases
+as `humantime` does for durations, but in a way that doesn't let you shoot
+yourself in the foot.
+
+The new "friendly" format is now the default for the `Debug` implementations
+of both `Span` and `SignedDuration`. It's also available via the "alternate"
+`Display` implementations for `Span` and `SignedDuration` as well. Moreover,
+the `FromStr` trait implementations for both `Span` and `SignedDuration` will
+parse _both_ the ISO 8601 duration and this new "friendly" format. Finally,
+when `serde` integration is enabled, the `Deserialize` implementations for
+`SignedDuration` and `Span` also automatically parse either ISO 8601 or the
+friendly format. For serialization, ISO 8601 remains the default, but the
+`jiff::fmt::serde` module provides easy to use helpers to switch to the
+friendly format.
+
+The `jiff::fmt::friendly` module documentation provides many more details,
+including a complete grammar for the format.
+
+Enhancements:
+
+* [#143](https://github.com/BurntSushi/jiff/pull/143):
+Add `Hash` implementation for `Zoned` and `Timestamp`.
+
+Bug fixes:
+
+* [#60](https://github.com/BurntSushi/jiff/issues/60):
+Use a better `Debug` output format for `SignedDuration` and `Span`.
+* [#111](https://github.com/BurntSushi/jiff/issues/111):
+Add a new "friendly" duration format.
+* [#138](https://github.com/BurntSushi/jiff/issues/138):
+Fix deserialization in `serde_yml` and `serde_yaml` crates.
+* [#161](https://github.com/BurntSushi/jiff/pull/161):
+Fix `serde` dependency configuration so that it builds in no-std mode.
+
+
+0.1.15 (2024-11-30)
+===================
+This release fixes a bug where Jiff would sometimes fail to parse TZif files
+(found, typically, in `/usr/share/zoneinfo` on Unix systems). This occurred
+when the TZif file contained a time zone transition outside the range of Jiff's
+`Timestamp` type (which is `-9999-01-01` to `9999-12-31`). The bug fix works by
+clamping the out-of-range transitions to Jiff's supported range.
+
+This bug only seems to occur in some environments where their TZif files
+contain more extreme values than what is typically found.
+
+Bug fixes:
+
+* [#163](https://github.com/BurntSushi/jiff/issues/163):
+Fix a bug where Jiff would fail to parse some TZif files.
+
+
+0.1.14 (2024-11-01)
+===================
 This release introduces new APIs to the RFC 2822 printer that explicitly
 print timestamps in a format strictly compatible with [RFC 9110].
 

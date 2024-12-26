@@ -22,11 +22,11 @@ ZicP {
                     weekday: Sunday,
                 },
                 at: RuleAtP {
-                    span: PT2h,
+                    span: 2h,
                     suffix: None,
                 },
                 save: RuleSaveP {
-                    span: PT0s,
+                    span: 0s,
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -50,11 +50,11 @@ ZicP {
                     weekday: Sunday,
                 },
                 at: RuleAtP {
-                    span: PT2h,
+                    span: 2h,
                     suffix: None,
                 },
                 save: RuleSaveP {
-                    span: PT1h,
+                    span: 1h,
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -70,7 +70,7 @@ ZicP {
                     name: "America/Menominee",
                 },
                 stdoff: ZoneStdoffP {
-                    span: -PT5h,
+                    span: 5h ago,
                 },
                 rules: None,
                 format: Static {
@@ -86,7 +86,7 @@ ZicP {
                             day: 29,
                         },
                         duration: RuleAtP {
-                            span: PT2h,
+                            span: 2h,
                             suffix: None,
                         },
                     },
@@ -95,7 +95,7 @@ ZicP {
             continuations: [
                 ZoneContinuationP {
                     stdoff: ZoneStdoffP {
-                        span: -PT6h,
+                        span: 6h ago,
                     },
                     rules: Named(
                         RuleNameP {

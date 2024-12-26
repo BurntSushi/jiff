@@ -3123,6 +3123,13 @@ impl<'a> PartialOrd<Zoned> for &'a Zoned {
     }
 }
 
+impl core::hash::Hash for Zoned {
+    #[inline]
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.timestamp().hash(state);
+    }
+}
+
 #[cfg(feature = "std")]
 impl TryFrom<std::time::SystemTime> for Zoned {
     type Error = Error;
@@ -3360,7 +3367,7 @@ impl<'de> serde::Deserialize<'de> for Zoned {
             }
         }
 
-        deserializer.deserialize_bytes(ZonedVisitor)
+        deserializer.deserialize_str(ZonedVisitor)
     }
 }
 
@@ -5146,7 +5153,12 @@ fn day_length(
 
 #[cfg(test)]
 mod tests {
-    use crate::{civil::date, ToSpan};
+    use std::io::Cursor;
+
+    use crate::{
+        civil::{date, datetime},
+        ToSpan,
+    };
 
     use super::*;
 
@@ -5237,5 +5249,36 @@ mod tests {
         {
             assert_eq!(40, core::mem::size_of::<Zoned>());
         }
+    }
+
+    /// # `serde` deserializer compatibility test
+    ///
+    /// Serde YAML used to be unable to deserialize `jiff` types,
+    /// as deserializing from bytes is not supported by the deserializer.
+    ///
+    /// - <https://github.com/BurntSushi/jiff/issues/138>
+    /// - <https://github.com/BurntSushi/jiff/discussions/148>
+    #[test]
+    fn zoned_deserialize_yaml() {
+        let expected =
+            datetime(2024, 10, 31, 16, 33, 53, 123456789).intz("UTC").unwrap();
+
+        let deserialized: Zoned =
+            serde_yml::from_str("2024-10-31T16:33:53.123456789+00:00[UTC]")
+                .unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let deserialized: Zoned = serde_yml::from_slice(
+            "2024-10-31T16:33:53.123456789+00:00[UTC]".as_bytes(),
+        )
+        .unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let cursor = Cursor::new(b"2024-10-31T16:33:53.123456789+00:00[UTC]");
+        let deserialized: Zoned = serde_yml::from_reader(cursor).unwrap();
+
+        assert_eq!(deserialized, expected);
     }
 }

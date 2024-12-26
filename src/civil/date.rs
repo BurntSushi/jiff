@@ -1236,7 +1236,7 @@ impl Date {
     ///
     /// # Example
     ///
-    /// This example shows how to created a zoned value with a fixed time zone
+    /// This example shows how to create a zoned value with a fixed time zone
     /// offset:
     ///
     /// ```
@@ -2490,7 +2490,7 @@ impl<'de> serde::Deserialize<'de> for Date {
             }
         }
 
-        deserializer.deserialize_bytes(DateVisitor)
+        deserializer.deserialize_str(DateVisitor)
     }
 }
 
@@ -3651,6 +3651,8 @@ fn day_of_year(year: Year, day: i16) -> Result<Date, Error> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use crate::{civil::date, tz::TimeZone, Timestamp, ToSpan};
 
     use super::*;
@@ -4005,5 +4007,31 @@ mod tests {
             let got = d2.checked_sub(span).unwrap();
             d1 == got
         }
+    }
+
+    /// # `serde` deserializer compatibility test
+    ///
+    /// Serde YAML used to be unable to deserialize `jiff` types,
+    /// as deserializing from bytes is not supported by the deserializer.
+    ///
+    /// - <https://github.com/BurntSushi/jiff/issues/138>
+    /// - <https://github.com/BurntSushi/jiff/discussions/148>
+    #[test]
+    fn civil_date_deserialize_yaml() {
+        let expected = date(2024, 10, 31);
+
+        let deserialized: Date = serde_yml::from_str("2024-10-31").unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let deserialized: Date =
+            serde_yml::from_slice("2024-10-31".as_bytes()).unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let cursor = Cursor::new(b"2024-10-31");
+        let deserialized: Date = serde_yml::from_reader(cursor).unwrap();
+
+        assert_eq!(deserialized, expected);
     }
 }

@@ -1388,7 +1388,7 @@ impl DateTime {
     ///
     /// # Example
     ///
-    /// This example shows how to created a zoned value with a fixed time zone
+    /// This example shows how to create a zoned value with a fixed time zone
     /// offset:
     ///
     /// ```
@@ -2604,7 +2604,7 @@ impl<'de> serde::Deserialize<'de> for DateTime {
             }
         }
 
-        deserializer.deserialize_bytes(DateTimeVisitor)
+        deserializer.deserialize_str(DateTimeVisitor)
     }
 }
 
@@ -4134,6 +4134,8 @@ impl DateTimeWith {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use crate::{
         civil::{date, time},
         RoundMode, ToSpan, Unit,
@@ -4276,5 +4278,33 @@ mod tests {
         {
             assert_eq!(12, core::mem::size_of::<DateTime>());
         }
+    }
+
+    /// # `serde` deserializer compatibility test
+    ///
+    /// Serde YAML used to be unable to deserialize `jiff` types,
+    /// as deserializing from bytes is not supported by the deserializer.
+    ///
+    /// - <https://github.com/BurntSushi/jiff/issues/138>
+    /// - <https://github.com/BurntSushi/jiff/discussions/148>
+    #[test]
+    fn civil_datetime_deserialize_yaml() {
+        let expected = datetime(2024, 10, 31, 16, 33, 53, 123456789);
+
+        let deserialized: DateTime =
+            serde_yml::from_str("2024-10-31 16:33:53.123456789").unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let deserialized: DateTime =
+            serde_yml::from_slice("2024-10-31 16:33:53.123456789".as_bytes())
+                .unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let cursor = Cursor::new(b"2024-10-31 16:33:53.123456789");
+        let deserialized: DateTime = serde_yml::from_reader(cursor).unwrap();
+
+        assert_eq!(deserialized, expected);
     }
 }

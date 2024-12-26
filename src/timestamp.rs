@@ -1082,7 +1082,7 @@ impl Timestamp {
     ///
     /// # Example
     ///
-    /// This example shows how to created a zoned value with a fixed time zone
+    /// This example shows how to create a zoned value with a fixed time zone
     /// offset:
     ///
     /// ```
@@ -2132,7 +2132,7 @@ impl Timestamp {
     /// ```
     #[deprecated(
         since = "0.1.5",
-        note = "use Timestamp::as_signed_duration instead"
+        note = "use Timestamp::as_jiff_duration instead"
     )]
     #[inline]
     pub fn as_duration(self) -> (i8, core::time::Duration) {
@@ -2457,6 +2457,14 @@ impl PartialOrd for Timestamp {
     }
 }
 
+impl core::hash::Hash for Timestamp {
+    #[inline]
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.as_second_ranged().get().hash(state);
+        self.subsec_nanosecond_ranged().get().hash(state);
+    }
+}
+
 /// Adds a span of time to a timestamp.
 ///
 /// This uses checked arithmetic and panics on overflow. To handle overflow
@@ -2721,7 +2729,7 @@ impl<'de> serde::Deserialize<'de> for Timestamp {
             }
         }
 
-        deserializer.deserialize_bytes(TimestampVisitor)
+        deserializer.deserialize_str(TimestampVisitor)
     }
 }
 
@@ -3513,7 +3521,12 @@ impl From<(Unit, i64)> for TimestampRound {
 
 #[cfg(test)]
 mod tests {
-    use crate::{civil, tz::Offset};
+    use std::io::Cursor;
+
+    use crate::{
+        civil::{self, datetime},
+        tz::Offset,
+    };
 
     use super::*;
 
@@ -3686,5 +3699,38 @@ mod tests {
             let got = Timestamp::from_nanosecond(nanos).unwrap();
             t == got
         }
+    }
+
+    /// # `serde` deserializer compatibility test
+    ///
+    /// Serde YAML used to be unable to deserialize `jiff` types,
+    /// as deserializing from bytes is not supported by the deserializer.
+    ///
+    /// - <https://github.com/BurntSushi/jiff/issues/138>
+    /// - <https://github.com/BurntSushi/jiff/discussions/148>
+    #[test]
+    fn timestamp_deserialize_yaml() {
+        let expected = datetime(2024, 10, 31, 16, 33, 53, 123456789)
+            .intz("UTC")
+            .unwrap()
+            .timestamp();
+
+        let deserialized: Timestamp =
+            serde_yml::from_str("2024-10-31T16:33:53.123456789+00:00[UTC]")
+                .unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let deserialized: Timestamp = serde_yml::from_slice(
+            "2024-10-31T16:33:53.123456789+00:00[UTC]".as_bytes(),
+        )
+        .unwrap();
+
+        assert_eq!(deserialized, expected);
+
+        let cursor = Cursor::new(b"2024-10-31T16:33:53.123456789+00:00[UTC]");
+        let deserialized: Timestamp = serde_yml::from_reader(cursor).unwrap();
+
+        assert_eq!(deserialized, expected);
     }
 }
