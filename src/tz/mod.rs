@@ -83,14 +83,12 @@ TO get the system's default time zone, use [`TimeZone::system`].
 [`GetDynamicTimeZoneInformation`]: https://learn.microsoft.com/en-us/windows/win32/api/timezoneapi/nf-timezoneapi-getdynamictimezoneinformation
 */
 
-use alloc::{
-    string::{String, ToString},
-    sync::Arc,
-};
+use alloc::string::{String, ToString};
 
 use crate::{
     civil::DateTime,
     error::{err, Error, ErrorContext},
+    sync::Arc,
     util::array_str::ArrayStr,
     Timestamp, Zoned,
 };

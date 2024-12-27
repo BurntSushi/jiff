@@ -31,7 +31,7 @@ members = [
 [features]
 default = ["std", "tz-system", "tzdb-bundle-platform", "tzdb-zoneinfo"]
 std = ["alloc", "serde?/std"]
-alloc = ["serde?/alloc"]
+alloc = ["serde?/alloc", "portable-atomic-util/alloc"]
 serde = ["dep:serde"]
 logging = ["dep:log"]
 
@@ -95,6 +95,16 @@ optional = true
 [target.'cfg(all(any(target_arch = "wasm32", target_arch = "wasm64"), target_os = "unknown"))'.dependencies]
 js-sys = { version = "0.3.50", optional = true }
 wasm-bindgen = { version = "0.2.70", optional = true }
+
+# For targets that have no atomics in `std`, we add a dependency on
+# `portable-atomic-util` for its Arc implementation.
+#
+# Note that for this to work, you may need to enable a `portable-atomic`
+# feature like `portable-atomic/unsafe-assume-single-core` or
+# `portable-atomic/critical-section`.
+[target.'cfg(not(target_has_atomic = "ptr"))'.dependencies]
+portable-atomic = { version = "1.10.0", default-features = false }
+portable-atomic-util = { version = "0.2.4", default-features = false }
 
 [dev-dependencies]
 anyhow = "1.0.81"

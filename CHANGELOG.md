@@ -6,6 +6,8 @@ TBD.
 
 Enhancements:
 
+* [#162](https://github.com/BurntSushi/jiff/issues/162):
+Support platforms that do not have atomics in `std`.
 * [#169](https://github.com/BurntSushi/jiff/issues/169):
 Add `TimeZone::to_fixed_offset` for accessing an invariant offset if possible.
 

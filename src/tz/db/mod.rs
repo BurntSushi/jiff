@@ -1,6 +1,6 @@
-use alloc::{string::String, sync::Arc, vec::Vec};
+use alloc::{string::String, vec::Vec};
 
-use crate::{error::Error, tz::TimeZone};
+use crate::{error::Error, sync::Arc, tz::TimeZone};
 
 use self::{bundled::BundledZoneInfo, zoneinfo::ZoneInfo};
 
