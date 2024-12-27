@@ -48,8 +48,6 @@ other programs do in practice (for example, GNU date).
 [musl-env]: https://wiki.musl-libc.org/environment-variables
 */
 
-#![allow(warnings)] // REMOVE ME
-
 use core::cell::Cell;
 
 use alloc::{
@@ -60,7 +58,6 @@ use alloc::{
 use crate::{
     civil::{Date, DateTime, Time, Weekday},
     error::{err, Error, ErrorContext},
-    span::Span,
     timestamp::Timestamp,
     tz::{AmbiguousOffset, Dst, Offset},
     util::{
@@ -180,16 +177,6 @@ impl PosixTz {
             _ => unreachable!("expected PosixTz::Rule variant"),
         }
     }
-
-    /// When this is a `Implementation`, returns the underlying `Box<str>`.
-    /// Panics otherwise.
-    #[cfg(test)]
-    fn unwrap_implementation(self) -> Box<str> {
-        match self {
-            PosixTz::Implementation(string) => string,
-            _ => unreachable!("expected PosixTz::Implementation variant"),
-        }
-    }
 }
 
 /// The result of parsing a V2 or V3+ `TZ` string from IANA `tzfile` data.
@@ -204,21 +191,6 @@ impl PosixTz {
 pub(crate) struct IanaTz(ReasonablePosixTimeZone);
 
 impl IanaTz {
-    /// Parse a IANA tzfile v2 `TZ` string from the given bytes.
-    pub(crate) fn parse_v2(bytes: impl AsRef<[u8]>) -> Result<IanaTz, Error> {
-        let bytes = bytes.as_ref();
-        let posix_tz = Parser::new(bytes).parse().map_err(|e| {
-            e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
-        })?;
-        let Ok(reasonable) = posix_tz.reasonable() else {
-            return Err(err!(
-                "TZ string {:?} in v2 tzfile has DST but no transition rules",
-                Bytes(bytes),
-            ));
-        };
-        Ok(IanaTz(reasonable))
-    }
-
     /// Parse a IANA tzfile v3+ `TZ` string from the given bytes.
     pub(crate) fn parse_v3plus(
         bytes: impl AsRef<[u8]>,
@@ -433,16 +405,6 @@ impl ReasonablePosixTimeZone {
     /// Returns the offset for standard time in this POSIX time zone.
     fn std_offset(&self) -> Offset {
         self.std_offset.to_offset()
-    }
-
-    /// Returns the offset for daylight saving time in this POSIX time zone.
-    ///
-    /// If this POSIX time zone doesn't have DST, then this returns `None`.
-    ///
-    /// This returns `Some` in precisely the same cases that `dst_info` returns
-    /// `Some`.
-    fn dst_offset(&self) -> Option<Offset> {
-        Some(self.dst.as_ref()?.posix_offset(&self.std_offset).to_offset())
     }
 
     /// Returns the range in which DST occurs.
@@ -891,27 +853,6 @@ struct PosixTimeSpec {
 }
 
 impl PosixTimeSpec {
-    /// Converts this duration to a civil time if possible.
-    ///
-    /// While a POSIX time specification is technically a duration, most
-    /// instances can just be trivially expressed as a time-of-day. If we can
-    /// just construct the civil time directly, it is simpler and cheaper to
-    /// use it rather than do arithmetic.
-    fn to_civil_time(&self) -> Option<Time> {
-        if self.sign.map_or(false, |sign| sign != 1) {
-            return None;
-        }
-        if self.hour > 23 {
-            return None;
-        }
-        Some(Time::new_ranged(
-            self.hour.min(C(23)),
-            self.minute.unwrap_or(C(0).rinto()),
-            self.second.unwrap_or(C(0).rinto()),
-            C(0),
-        ))
-    }
-
     /// Returns this time specification as a duration of time.
     fn to_duration(&self) -> SignedDuration {
         let sign = i64::from(self.sign());
@@ -1189,8 +1130,7 @@ impl<'s> Parser<'s> {
             )
         })?;
         let hour = self.parse_hour_posix()?;
-        let mut offset =
-            PosixOffset { sign, hour, minute: None, second: None };
+        let offset = PosixOffset { sign, hour, minute: None, second: None };
         if self.maybe_byte() != Some(b':') {
             return Ok(offset);
         }
@@ -1399,8 +1339,7 @@ impl<'s> Parser<'s> {
         } else {
             (None, self.parse_hour_posix()?.rinto())
         };
-        let mut spec =
-            PosixTimeSpec { sign, hour, minute: None, second: None };
+        let spec = PosixTimeSpec { sign, hour, minute: None, second: None };
         if self.maybe_byte() != Some(b':') {
             return Ok(spec);
         }
@@ -1587,7 +1526,7 @@ impl<'s> Parser<'s> {
     fn parse_number_with_upto_n_digits(&self, n: usize) -> Result<i64, Error> {
         assert!(n >= 1, "numbers must have at least 1 digit");
         let start = self.pos();
-        for i in 0..n {
+        for _ in 0..n {
             if self.is_done() || !self.byte().is_ascii_digit() {
                 break;
             }
@@ -1682,9 +1621,7 @@ impl<'s> Parser<'s> {
 // zone transition logic, that's unit tested in tz/mod.rs.
 #[cfg(test)]
 mod tests {
-    use alloc::string::ToString;
-
-    use crate::civil::{date, time};
+    use crate::civil::date;
 
     use super::*;
 
@@ -1993,33 +1930,33 @@ mod tests {
     fn posix_time_spec_to_civil_time() {
         let tz = reasonable_posix_time_zone("EST5EDT,J1,J365/5:12:34");
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.start.time().to_civil_time(),
-            Some(time(2, 0, 0, 0)),
+            tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
+            SignedDuration::from_hours(2),
         );
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.end.time().to_civil_time(),
-            Some(time(5, 12, 34, 0)),
+            tz.dst.as_ref().unwrap().rule.end.time().to_duration(),
+            SignedDuration::new(5 * 60 * 60 + 12 * 60 + 34, 0),
         );
 
         let tz =
             reasonable_posix_time_zone("EST5EDT,J1/23:59:59,J365/24:00:00");
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.start.time().to_civil_time(),
-            Some(time(23, 59, 59, 0)),
+            tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
+            SignedDuration::new(23 * 60 * 60 + 59 * 60 + 59, 0),
         );
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.end.time().to_civil_time(),
-            None,
+            tz.dst.as_ref().unwrap().rule.end.time().to_duration(),
+            SignedDuration::from_hours(24),
         );
 
         let tz = reasonable_iana_time_zone("EST5EDT,J1/-1,J365/167:00:00");
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.start.time().to_civil_time(),
-            None,
+            tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
+            SignedDuration::from_hours(-1),
         );
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.end.time().to_civil_time(),
-            None,
+            tz.dst.as_ref().unwrap().rule.end.time().to_duration(),
+            SignedDuration::from_hours(167),
         );
     }
 
@@ -2540,7 +2477,7 @@ mod tests {
         let p = Parser::new(&tz);
         assert_eq!(
             &*p.parse_quoted_abbreviation().unwrap(),
-            tz.trim_right_matches(">")
+            tz.trim_end_matches(">")
         );
 
         let p = Parser::new("a>");

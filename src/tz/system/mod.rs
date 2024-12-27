@@ -1,5 +1,3 @@
-#![allow(dead_code)] // REMOVE ME
-
 use std::{sync::RwLock, time::Duration};
 
 use alloc::{string::ToString, sync::Arc};
@@ -153,11 +151,6 @@ pub(crate) fn get_force(db: &TimeZoneDatabase) -> Result<TimeZone, Error> {
         return Ok(tz);
     }
     Err(err!("failed to find system time zone"))
-}
-
-/// Clear the system time zone cache.
-pub(crate) fn reset() {
-    *CACHE.write().unwrap() = Cache::empty();
 }
 
 /// Materializes a `TimeZone` from a `TZ` environment variable.

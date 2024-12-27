@@ -2907,7 +2907,7 @@ impl Span {
     /// if this span has maximal values for all units, then rebalancing is
     /// not possible because the number of days after balancing would exceed
     /// the limit.
-    #[allow(dead_code)] // REMOVE ME
+    #[cfg(test)] // currently only used in zic parser?
     #[inline]
     pub(crate) fn rebalance(self, unit: Unit) -> Result<Span, Error> {
         Span::from_invariant_nanoseconds(unit, self.to_invariant_nanoseconds())
