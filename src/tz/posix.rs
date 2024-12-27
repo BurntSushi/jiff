@@ -61,6 +61,7 @@ use crate::{
     timestamp::Timestamp,
     tz::{AmbiguousOffset, Dst, Offset},
     util::{
+        array_str::ArrayStr,
         escape::{Byte, Bytes},
         parse,
         rangeint::{ri16, ri8, RFrom, RInto},
@@ -99,9 +100,19 @@ use crate::{
 /// Sun Mar 17 08:05:36 PM YYYYYYYYYYYYYYYYYYYYY 2024
 /// ```
 ///
-/// I don't know exactly what limit these programs use, but 255 seems like more
-/// than anyone could ever need, right?
-const ABBREVIATION_MAX: usize = 255;
+/// I don't know exactly what limit these programs use, but 30 seems good
+/// enough?
+///
+/// (Previously, I had been using 255 and stuffing the string in a `Box<str>`.
+/// But as part of work on [#168], I was looking to remove allocation from as
+/// many places as possible. And this was one candidate. But making room on the
+/// stack for 255 byte abbreviations seemed gratuitous. So I picked something
+/// smaller. If we come across an abbreviation bigger than this max, then we'll
+/// error.)
+///
+/// [#168]: https://github.com/BurntSushi/jiff/issues/168
+const ABBREVIATION_MAX: usize = 30;
+type Abbreviation = ArrayStr<ABBREVIATION_MAX>;
 
 /// POSIX says the hour must be in the range `0..=24`, but that the default
 /// hour for DST is one hour more than standard time. Therefore, the actual
@@ -238,7 +249,7 @@ impl IanaTz {
 #[derive(Debug)]
 pub(crate) struct ReasonablePosixTimeZone {
     original: Box<str>,
-    std_abbrev: Box<str>,
+    std_abbrev: Abbreviation,
     std_offset: PosixOffset,
     dst: Option<ReasonablePosixDst>,
 }
@@ -260,14 +271,18 @@ impl ReasonablePosixTimeZone {
         timestamp: Timestamp,
     ) -> (Offset, Dst, &str) {
         if self.dst.is_none() {
-            return (self.std_offset(), Dst::No, &self.std_abbrev);
+            return (self.std_offset(), Dst::No, self.std_abbrev.as_str());
         }
 
         let dt = Offset::UTC.to_datetime(timestamp);
         self.dst_info_utc(dt.date().year_ranged())
             .filter(|dst_info| dst_info.in_dst(dt))
-            .map(|dst_info| (dst_info.offset, Dst::Yes, &*dst_info.dst.abbrev))
-            .unwrap_or_else(|| (self.std_offset(), Dst::No, &self.std_abbrev))
+            .map(|dst_info| {
+                (dst_info.offset, Dst::Yes, dst_info.dst.abbrev.as_str())
+            })
+            .unwrap_or_else(|| {
+                (self.std_offset(), Dst::No, self.std_abbrev.as_str())
+            })
     }
 
     /// Returns a possibly ambiguous timestamp for the given civil datetime.
@@ -516,7 +531,7 @@ impl<'a> DstInfo<'a> {
 /// Unlike what POSIX specifies, this requires a rule.
 #[derive(Debug, Eq, PartialEq)]
 struct ReasonablePosixDst {
-    abbrev: Box<str>,
+    abbrev: Abbreviation,
     offset: Option<PosixOffset>,
     /// This is the principal change. A "reasonable" DST must include a rule.
     rule: Rule,
@@ -545,7 +560,7 @@ impl ReasonablePosixDst {
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) struct PosixTimeZone {
     original: Box<str>,
-    std_abbrev: Box<str>,
+    std_abbrev: Abbreviation,
     std_offset: PosixOffset,
     dst: Option<PosixDst>,
 }
@@ -597,7 +612,7 @@ impl PosixTimeZone {
 /// The daylight-saving-time abbreviation, offset and rule for this time zone.
 #[derive(Debug, Eq, PartialEq)]
 struct PosixDst {
-    abbrev: Box<str>,
+    abbrev: Abbreviation,
     offset: Option<PosixOffset>,
     rule: Option<Rule>,
 }
@@ -983,7 +998,7 @@ impl<'s> Parser<'s> {
     ///
     /// Upon success, the parser will be positioned immediately following the
     /// abbreviation name.
-    fn parse_abbreviation(&self) -> Result<Box<str>, Error> {
+    fn parse_abbreviation(&self) -> Result<Abbreviation, Error> {
         if self.byte() == b'<' {
             if !self.bump() {
                 return Err(err!(
@@ -1005,7 +1020,7 @@ impl<'s> Parser<'s> {
     ///
     /// Upon success, the parser will be positioned immediately after the
     /// last byte in the abbreviation.
-    fn parse_unquoted_abbreviation(&self) -> Result<Box<str>, Error> {
+    fn parse_unquoted_abbreviation(&self) -> Result<Abbreviation, Error> {
         let start = self.pos();
         for i in 0.. {
             if !self.byte().is_ascii_alphabetic() {
@@ -1025,7 +1040,7 @@ impl<'s> Parser<'s> {
         }
         let end = self.pos();
         let abbrev =
-            String::from_utf8(self.tz[start..end].to_vec()).map_err(|_| {
+            core::str::from_utf8(&self.tz[start..end]).map_err(|_| {
                 // NOTE: I believe this error is technically impossible since
                 // the loop above restricts letters in an abbreviation to
                 // ASCII. So everything from `start` to `end` is ASCII and
@@ -1044,7 +1059,9 @@ impl<'s> Parser<'s> {
                 abbrev.len(),
             ));
         }
-        Ok(abbrev.into())
+        // OK because we verified above that the abbreviation
+        // does not exceed ABBREVIATION_MAX.
+        Ok(Abbreviation::new(abbrev).unwrap())
     }
 
     /// Parses a quoted time zone abbreviation.
@@ -1054,7 +1071,7 @@ impl<'s> Parser<'s> {
     ///
     /// Upon success, the parser will be positioned immediately after the
     /// closing `>` quote.
-    fn parse_quoted_abbreviation(&self) -> Result<Box<str>, Error> {
+    fn parse_quoted_abbreviation(&self) -> Result<Abbreviation, Error> {
         let start = self.pos();
         for i in 0.. {
             if !self.byte().is_ascii_alphanumeric()
@@ -1077,7 +1094,7 @@ impl<'s> Parser<'s> {
         }
         let end = self.pos();
         let abbrev =
-            String::from_utf8(self.tz[start..end].to_vec()).map_err(|_| {
+            core::str::from_utf8(&self.tz[start..end]).map_err(|_| {
                 // NOTE: I believe this error is technically impossible since
                 // the loop above restricts letters in an abbreviation to
                 // ASCII. So everything from `start` to `end` is ASCII and
@@ -1111,7 +1128,9 @@ impl<'s> Parser<'s> {
                 abbrev.len(),
             ));
         }
-        Ok(abbrev.into())
+        // OK because we verified above that the abbreviation
+        // does not exceed ABBREVIATION_MAX.
+        Ok(Abbreviation::new(abbrev).unwrap())
     }
 
     /// Parse a POSIX time offset.
@@ -2402,13 +2421,13 @@ mod tests {
     #[test]
     fn parse_abbreviation() {
         let p = Parser::new("ABC");
-        assert_eq!(&*p.parse_abbreviation().unwrap(), "ABC");
+        assert_eq!(p.parse_abbreviation().unwrap(), "ABC");
 
         let p = Parser::new("<ABC>");
-        assert_eq!(&*p.parse_abbreviation().unwrap(), "ABC");
+        assert_eq!(p.parse_abbreviation().unwrap(), "ABC");
 
         let p = Parser::new("<+09>");
-        assert_eq!(&*p.parse_abbreviation().unwrap(), "+09");
+        assert_eq!(p.parse_abbreviation().unwrap(), "+09");
 
         let p = Parser::new("+09");
         assert!(p.parse_abbreviation().is_err());
@@ -2417,17 +2436,17 @@ mod tests {
     #[test]
     fn parse_unquoted_abbreviation() {
         let p = Parser::new("ABC");
-        assert_eq!(&*p.parse_unquoted_abbreviation().unwrap(), "ABC");
+        assert_eq!(p.parse_unquoted_abbreviation().unwrap(), "ABC");
 
         let p = Parser::new("ABCXYZ");
-        assert_eq!(&*p.parse_unquoted_abbreviation().unwrap(), "ABCXYZ");
+        assert_eq!(p.parse_unquoted_abbreviation().unwrap(), "ABCXYZ");
 
         let p = Parser::new("ABC123");
-        assert_eq!(&*p.parse_unquoted_abbreviation().unwrap(), "ABC");
+        assert_eq!(p.parse_unquoted_abbreviation().unwrap(), "ABC");
 
-        let tz = "a".repeat(255);
+        let tz = "a".repeat(30);
         let p = Parser::new(&tz);
-        assert_eq!(&*p.parse_unquoted_abbreviation().unwrap(), tz);
+        assert_eq!(p.parse_unquoted_abbreviation().unwrap(), &*tz);
 
         let p = Parser::new("a");
         assert!(p.parse_unquoted_abbreviation().is_err());
@@ -2438,7 +2457,7 @@ mod tests {
         let p = Parser::new("ab1");
         assert!(p.parse_unquoted_abbreviation().is_err());
 
-        let tz = "a".repeat(256);
+        let tz = "a".repeat(31);
         let p = Parser::new(&tz);
         assert!(p.parse_unquoted_abbreviation().is_err());
 
@@ -2453,30 +2472,30 @@ mod tests {
         // has been parsed.
 
         let p = Parser::new("ABC>");
-        assert_eq!(&*p.parse_quoted_abbreviation().unwrap(), "ABC");
+        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "ABC");
 
         let p = Parser::new("ABCXYZ>");
-        assert_eq!(&*p.parse_quoted_abbreviation().unwrap(), "ABCXYZ");
+        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "ABCXYZ");
 
         let p = Parser::new("ABC>123");
-        assert_eq!(&*p.parse_quoted_abbreviation().unwrap(), "ABC");
+        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "ABC");
 
         let p = Parser::new("ABC123>");
-        assert_eq!(&*p.parse_quoted_abbreviation().unwrap(), "ABC123");
+        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "ABC123");
 
         let p = Parser::new("ab1>");
-        assert_eq!(&*p.parse_quoted_abbreviation().unwrap(), "ab1");
+        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "ab1");
 
         let p = Parser::new("+09>");
-        assert_eq!(&*p.parse_quoted_abbreviation().unwrap(), "+09");
+        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "+09");
 
         let p = Parser::new("-09>");
-        assert_eq!(&*p.parse_quoted_abbreviation().unwrap(), "-09");
+        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "-09");
 
-        let tz = alloc::format!("{}>", "a".repeat(255));
+        let tz = alloc::format!("{}>", "a".repeat(30));
         let p = Parser::new(&tz);
         assert_eq!(
-            &*p.parse_quoted_abbreviation().unwrap(),
+            p.parse_quoted_abbreviation().unwrap(),
             tz.trim_end_matches(">")
         );
 
@@ -2486,7 +2505,7 @@ mod tests {
         let p = Parser::new("ab>");
         assert!(p.parse_quoted_abbreviation().is_err());
 
-        let tz = alloc::format!("{}>", "a".repeat(256));
+        let tz = alloc::format!("{}>", "a".repeat(31));
         let p = Parser::new(&tz);
         assert!(p.parse_quoted_abbreviation().is_err());
 
