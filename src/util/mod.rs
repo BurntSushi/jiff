@@ -1,3 +1,4 @@
+pub(crate) mod array_str;
 #[cfg(feature = "std")]
 pub(crate) mod cache;
 pub(crate) mod common;
