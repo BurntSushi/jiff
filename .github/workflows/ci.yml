@@ -155,6 +155,27 @@ jobs:
     - run: cross test --verbose --target ${{ matrix.target }} --all
     - run: cross test --verbose --target ${{ matrix.target }} -p jiff-cli
 
+  # This is meant to test that Jiff's use of `Arc` from `portable-atomic-util`
+  # on targets that don't have `alloc::sync::Arc` in `std` works.
+  #
+  # Normally I'd do this with Cross, but I guess `riscv32imc-unknown-none-elf`
+  # isn't in Cross, and that's the target that the end user wanting this
+  # cares about[1,2].
+  #
+  # [1]: https://github.com/BurntSushi/jiff/issues/162
+  # [2]: https://github.com/BurntSushi/jiff/pull/177
+  riscv32imc-unknown-none-elf:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+        targets: riscv32imc-unknown-none-elf
+    - uses: actions/checkout@v4
+    - name: Test the build only
+      run: |
+        cargo build --target riscv32imc-unknown-none-elf --features alloc --no-default-features --features portable-atomic/critical-section
+
   # Test the wasm32-wasip1 target via wasmtime.
   wasm32-wasip1:
     runs-on: ubuntu-latest

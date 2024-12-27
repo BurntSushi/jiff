@@ -1,4 +1,6 @@
-use alloc::{boxed::Box, string::String, sync::Arc};
+use alloc::{boxed::Box, string::String};
+
+use crate::sync::Arc;
 
 /// Creates a new ad hoc error with no causal chain.
 ///

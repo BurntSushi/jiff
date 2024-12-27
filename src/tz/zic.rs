@@ -105,7 +105,6 @@ use core::{ops::RangeInclusive, str::FromStr};
 use alloc::{
     collections::BTreeMap,
     string::{String, ToString},
-    sync::Arc,
     vec,
     vec::Vec,
 };
@@ -114,6 +113,7 @@ use crate::{
     civil::{Date, DateTime, Time, Weekday},
     error::{err, Error, ErrorContext},
     span::{Span, ToSpan},
+    sync::Arc,
     timestamp::Timestamp,
     tz::{Dst, Offset},
     util::{

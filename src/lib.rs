@@ -743,6 +743,18 @@ pub mod _documentation {
     pub mod changelog {}
 }
 
+/// This module re-exports `Arc`.
+///
+/// That is, it provides some indirection for the case when `alloc::sync::Arc`
+/// is unavailable.
+mod sync {
+    #[cfg(not(target_has_atomic = "ptr"))]
+    pub use portable_atomic_util::Arc;
+
+    #[cfg(target_has_atomic = "ptr")]
+    pub use alloc::sync::Arc;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

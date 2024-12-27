@@ -1,9 +1,10 @@
 use std::{sync::RwLock, time::Duration};
 
-use alloc::{string::ToString, sync::Arc};
+use alloc::string::ToString;
 
 use crate::{
     error::{err, Error, ErrorContext},
+    sync::Arc,
     tz::{posix::PosixTz, TimeZone, TimeZoneDatabase},
     util::cache::Expiration,
 };
