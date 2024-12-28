@@ -388,10 +388,10 @@ pub fn parse(
 pub fn format(
     format: impl AsRef<[u8]>,
     broken_down_time: impl Into<BrokenDownTime>,
-) -> Result<String, Error> {
+) -> Result<alloc::string::String, Error> {
     let broken_down_time: BrokenDownTime = broken_down_time.into();
 
-    let mut buf = String::new();
+    let mut buf = alloc::string::String::new();
     broken_down_time.format(format, &mut buf)?;
     Ok(buf)
 }
@@ -608,8 +608,8 @@ impl BrokenDownTime {
     pub fn to_string(
         &self,
         format: impl AsRef<[u8]>,
-    ) -> Result<String, Error> {
-        let mut buf = String::new();
+    ) -> Result<alloc::string::String, Error> {
+        let mut buf = alloc::string::String::new();
         self.format(format, &mut buf)?;
         Ok(buf)
     }
@@ -1753,7 +1753,7 @@ impl BrokenDownTime {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn set_iana_time_zone(&mut self, id: Option<String>) {
+    pub fn set_iana_time_zone(&mut self, id: Option<alloc::string::String>) {
         self.iana = id;
     }
 
