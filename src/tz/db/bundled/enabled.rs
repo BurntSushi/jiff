@@ -33,7 +33,7 @@ impl BundledZoneInfo {
             }
         };
         #[cfg(feature = "std")]
-        self::global::add(&tz);
+        self::global::add(canonical_name, &tz);
         Some(tz)
     }
 
@@ -80,7 +80,7 @@ fn lookup(name: &str) -> Option<(&'static str, &'static [u8])> {
 /// `std` is supported.
 #[cfg(feature = "std")]
 mod global {
-    use std::{sync::RwLock, vec::Vec};
+    use std::{string::String, string::ToString, sync::RwLock, vec::Vec};
 
     use crate::tz::TimeZone;
 
@@ -101,10 +101,13 @@ mod global {
     ///
     /// The only way a time zone can be remove from the cache is if it's
     /// overwritten or if the cache is cleared entirely.
-    pub(super) fn add(tz: &TimeZone) {
+    pub(super) fn add(name: &str, tz: &TimeZone) {
         let mut cache = CACHED_ZONES.write().unwrap();
-        if let Err(i) = cache.get_zone_index(tz.diagnostic_name()) {
-            cache.zones.insert(i, tz.clone());
+        if let Err(i) = cache.get_zone_index(name) {
+            cache.zones.insert(
+                i,
+                CachedZone { name: name.to_string(), tz: tz.clone() },
+            );
         }
     }
 
@@ -115,23 +118,29 @@ mod global {
 
     #[derive(Debug)]
     struct CachedZones {
-        zones: Vec<TimeZone>,
+        zones: Vec<CachedZone>,
     }
 
     impl CachedZones {
         fn get(&self, query: &str) -> Option<&TimeZone> {
-            self.get_zone_index(query).ok().map(|i| &self.zones[i])
+            self.get_zone_index(query).ok().map(|i| &self.zones[i].tz)
         }
 
         fn get_zone_index(&self, query: &str) -> Result<usize, usize> {
-            self.zones.binary_search_by(|tz| {
-                cmp_ignore_ascii_case(tz.diagnostic_name(), query)
+            self.zones.binary_search_by(|entry| {
+                cmp_ignore_ascii_case(&entry.name, query)
             })
         }
 
         fn clear(&mut self) {
             self.zones.clear();
         }
+    }
+
+    #[derive(Debug)]
+    struct CachedZone {
+        name: String,
+        tz: TimeZone,
     }
 
     /// Like std's `eq_ignore_ascii_case`, but returns a full `Ordering`.

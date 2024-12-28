@@ -601,13 +601,8 @@ impl TimeZone {
     }
 
     #[inline]
-    pub(crate) fn diagnostic_name(&self) -> &str {
-        let Some(ref kind) = self.kind else { return "UTC" };
-        match **kind {
-            TimeZoneKind::Fixed(ref tz) => tz.name(),
-            TimeZoneKind::Posix(ref tz) => tz.name(),
-            TimeZoneKind::Tzif(ref tz) => tz.name().unwrap_or("Local"),
-        }
+    pub(crate) fn diagnostic_name(&self) -> DiagnosticName<'_> {
+        DiagnosticName(self)
     }
 
     /// When this time zone was loaded from an IANA time zone database entry,
@@ -1130,7 +1125,6 @@ impl PartialEq for TimeZoneFixed {
 
 #[derive(Eq, PartialEq)]
 struct TimeZonePosix {
-    name: Box<str>,
     posix: ReasonablePosixTimeZone,
 }
 
@@ -1139,11 +1133,6 @@ impl TimeZonePosix {
     fn new(s: &str) -> Result<TimeZonePosix, Error> {
         let iana_tz = posix::IanaTz::parse_v3plus(s)?;
         Ok(TimeZonePosix::from(iana_tz.into_tz()))
-    }
-
-    #[inline]
-    fn name(&self) -> &str {
-        &self.name
     }
 
     #[inline]
@@ -1170,8 +1159,7 @@ impl TimeZonePosix {
 impl From<ReasonablePosixTimeZone> for TimeZonePosix {
     #[inline]
     fn from(posix: ReasonablePosixTimeZone) -> TimeZonePosix {
-        let name = posix.as_str().to_string().into();
-        TimeZonePosix { name, posix }
+        TimeZonePosix { posix }
     }
 }
 
@@ -1180,7 +1168,14 @@ impl From<ReasonablePosixTimeZone> for TimeZonePosix {
 impl core::fmt::Debug for TimeZonePosix {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.debug_tuple("Posix").field(&self.posix.as_str()).finish()
+        write!(f, "Posix({})", self.posix)
+    }
+}
+
+impl core::fmt::Display for TimeZonePosix {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        core::fmt::Display::fmt(&self.posix, f)
     }
 }
 
@@ -1228,6 +1223,29 @@ impl core::fmt::Debug for TimeZoneTzif {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         f.debug_tuple("TZif").field(&self.name().unwrap_or("Local")).finish()
+    }
+}
+
+/// A helper type for converting a `TimeZone` to a succinct human readable
+/// description.
+///
+/// This is principally used in error messages in various places.
+///
+/// A previous iteration of this was just an `as_str() -> &str` method on
+/// `TimeZone`, but that's difficult to do without relying on dynamic memory
+/// allocation (or chunky arrays).
+pub(crate) struct DiagnosticName<'a>(&'a TimeZone);
+
+impl<'a> core::fmt::Display for DiagnosticName<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        let Some(ref kind) = self.0.kind else { return write!(f, "UTC") };
+        match **kind {
+            TimeZoneKind::Fixed(ref tz) => write!(f, "{}", tz.name()),
+            TimeZoneKind::Posix(ref tz) => write!(f, "{}", tz),
+            TimeZoneKind::Tzif(ref tz) => {
+                write!(f, "{}", tz.name().unwrap_or("Local"))
+            }
+        }
     }
 }
 
