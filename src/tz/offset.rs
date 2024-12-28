@@ -11,6 +11,7 @@ use crate::{
     timestamp::Timestamp,
     tz::{AmbiguousOffset, AmbiguousTimestamp, AmbiguousZoned, TimeZone},
     util::{
+        array_str::ArrayStr,
         rangeint::{RFrom, RInto, TryRFrom},
         t::{self, C},
     },
@@ -908,6 +909,18 @@ impl Offset {
     #[inline]
     pub(crate) fn part_seconds_ranged(self) -> t::SpanZoneOffsetSeconds {
         self.span.rem_ceil(t::SECONDS_PER_MINUTE).rinto()
+    }
+
+    #[inline]
+    pub(crate) fn to_array_str(&self) -> ArrayStr<9> {
+        use core::fmt::Write;
+
+        let mut dst = ArrayStr::new("").unwrap();
+        // OK because the string representation of an offset
+        // can never exceed 9 bytes. The longest possible, e.g.,
+        // is `-25:59:59`.
+        write!(&mut dst, "{}", self).unwrap();
+        dst
     }
 }
 
