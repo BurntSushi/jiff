@@ -35,13 +35,37 @@ impl<const N: usize> ArrayStr<N> {
         }
         let mut bytes = [0; N];
         bytes[..len].copy_from_slice(s.as_bytes());
-        // OK because ABBREVIATION_MAX will never exceed u8::MAX.
+        // OK because we don't ever use anything bigger than u8::MAX for `N`.
+        // And we probably shouldn't, because that would be a pretty chunky
+        // array. If such a thing is needed, please file an issue to discuss.
         debug_assert!(
             N <= usize::from(u8::MAX),
             "size of ArrayStr is too big"
         );
         let len = u8::try_from(len).unwrap();
         Some(ArrayStr { bytes, len })
+    }
+
+    /// Append the bytes given to the end of this string.
+    ///
+    /// If the capacity would be exceeded, then this is a no-op and `false`
+    /// is returned.
+    pub(crate) fn push_str(&mut self, s: &str) -> bool {
+        let len = usize::from(self.len);
+        let Some(new_len) = len.checked_add(s.len()) else { return false };
+        if new_len > N {
+            return false;
+        }
+        self.bytes[len..new_len].copy_from_slice(s.as_bytes());
+        // OK because we don't ever use anything bigger than u8::MAX for `N`.
+        // And we probably shouldn't, because that would be a pretty chunky
+        // array. If such a thing is needed, please file an issue to discuss.
+        debug_assert!(
+            N <= usize::from(u8::MAX),
+            "size of ArrayStr is too big"
+        );
+        self.len = u8::try_from(new_len).unwrap();
+        true
     }
 
     /// Returns this array string as a string slice.
@@ -94,5 +118,30 @@ impl<const N: usize> core::fmt::Debug for ArrayStr<N> {
 impl<const N: usize> core::fmt::Display for ArrayStr<N> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         core::fmt::Display::fmt(self.as_str(), f)
+    }
+}
+
+impl<const N: usize> core::fmt::Write for ArrayStr<N> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        if self.push_str(s) {
+            Ok(())
+        } else {
+            Err(core::fmt::Error)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::fmt::Write;
+
+    use super::*;
+
+    #[test]
+    fn fmt_write() {
+        let mut dst = ArrayStr::<5>::new("").unwrap();
+        assert!(write!(&mut dst, "abcd").is_ok());
+        assert!(write!(&mut dst, "e").is_ok());
+        assert!(write!(&mut dst, "f").is_err());
     }
 }

@@ -84,7 +84,6 @@ TO get the system's default time zone, use [`TimeZone::system`].
 */
 
 use alloc::{
-    boxed::Box,
     string::{String, ToString},
     sync::Arc,
 };
@@ -92,6 +91,7 @@ use alloc::{
 use crate::{
     civil::DateTime,
     error::{err, Error, ErrorContext},
+    util::array_str::ArrayStr,
     Timestamp, Zoned,
 };
 
@@ -1086,19 +1086,19 @@ enum TimeZoneKind {
 #[derive(Clone)]
 struct TimeZoneFixed {
     offset: Offset,
-    name: Box<str>,
+    name: ArrayStr<9>,
 }
 
 impl TimeZoneFixed {
     #[inline]
     fn new(offset: Offset) -> TimeZoneFixed {
-        let name = offset.to_string().into();
+        let name = offset.to_array_str();
         TimeZoneFixed { offset, name }
     }
 
     #[inline]
     fn name(&self) -> &str {
-        &self.name
+        self.name.as_str()
     }
 
     #[inline]
@@ -1111,6 +1111,13 @@ impl core::fmt::Debug for TimeZoneFixed {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         f.debug_tuple("Fixed").field(&self.offset()).finish()
+    }
+}
+
+impl core::fmt::Display for TimeZoneFixed {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        core::fmt::Display::fmt(&self.name, f)
     }
 }
 
@@ -1240,8 +1247,8 @@ impl<'a> core::fmt::Display for DiagnosticName<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         let Some(ref kind) = self.0.kind else { return write!(f, "UTC") };
         match **kind {
-            TimeZoneKind::Fixed(ref tz) => write!(f, "{}", tz.name()),
-            TimeZoneKind::Posix(ref tz) => write!(f, "{}", tz),
+            TimeZoneKind::Fixed(ref tz) => write!(f, "{tz}"),
+            TimeZoneKind::Posix(ref tz) => write!(f, "{tz}"),
             TimeZoneKind::Tzif(ref tz) => {
                 write!(f, "{}", tz.name().unwrap_or("Local"))
             }
@@ -3808,6 +3815,43 @@ mod tests {
     fn time_zone_size() {
         let word = core::mem::size_of::<usize>();
         assert_eq!(word, core::mem::size_of::<TimeZone>());
+    }
+
+    /// This tests a few other cases for `TimeZone::to_offset` that
+    /// probably aren't worth showing in doctest examples.
+    #[test]
+    fn time_zone_to_offset() {
+        let ts = Timestamp::from_second(123456789).unwrap();
+
+        let tz = TimeZone::fixed(offset(-5));
+        let (off, dst, label) = tz.to_offset(ts);
+        assert_eq!(off, offset(-5));
+        assert_eq!(dst, Dst::No);
+        assert_eq!(label, "-05");
+
+        let tz = TimeZone::fixed(offset(5));
+        let (off, dst, label) = tz.to_offset(ts);
+        assert_eq!(off, offset(5));
+        assert_eq!(dst, Dst::No);
+        assert_eq!(label, "+05");
+
+        let tz = TimeZone::fixed(offset(-12));
+        let (off, dst, label) = tz.to_offset(ts);
+        assert_eq!(off, offset(-12));
+        assert_eq!(dst, Dst::No);
+        assert_eq!(label, "-12");
+
+        let tz = TimeZone::fixed(offset(12));
+        let (off, dst, label) = tz.to_offset(ts);
+        assert_eq!(off, offset(12));
+        assert_eq!(dst, Dst::No);
+        assert_eq!(label, "+12");
+
+        let tz = TimeZone::fixed(offset(0));
+        let (off, dst, label) = tz.to_offset(ts);
+        assert_eq!(off, offset(0));
+        assert_eq!(dst, Dst::No);
+        assert_eq!(label, "UTC");
     }
 
     /// This tests a few other cases for `TimeZone::to_fixed_offset` that
