@@ -1,5 +1,5 @@
 pub(crate) mod array_str;
-#[cfg(feature = "std")]
+#[cfg(any(feature = "tz-system", feature = "tzdb-zoneinfo"))]
 pub(crate) mod cache;
 pub(crate) mod common;
 pub(crate) mod crc32;

@@ -91,6 +91,7 @@ enum ErrorKind {
     /// The cause is typically `Adhoc` or `IO`.
     ///
     /// When `std` is not enabled, this variant can never be constructed.
+    #[allow(dead_code)] // not used in some feature configs
     FilePath(FilePathError),
     /// An error that occurs when interacting with the file system.
     ///
@@ -98,6 +99,7 @@ enum ErrorKind {
     /// `std::path::PathBuf`.
     ///
     /// When `std` is not enabled, this variant can never be constructed.
+    #[allow(dead_code)] // not used in some feature configs
     IO(IOError),
 }
 
@@ -158,7 +160,7 @@ impl Error {
     /// sort of context. In Jiff, it's always a file path (at time of writing).
     ///
     /// This is only available when the `std` feature is enabled.
-    #[cfg(feature = "std")]
+    #[cfg(feature = "tzdb-zoneinfo")]
     pub(crate) fn fs(
         path: impl Into<std::path::PathBuf>,
         err: std::io::Error,
@@ -173,7 +175,7 @@ impl Error {
     /// kind of context to this error (like a file path).
     ///
     /// This is only available when the `std` feature is enabled.
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "tz-system", feature = "tzdb-zoneinfo"))]
     pub(crate) fn io(err: std::io::Error) -> Error {
         Error::from(ErrorKind::IO(IOError { err }))
     }
@@ -184,7 +186,7 @@ impl Error {
     /// `FilePathError`.
     ///
     /// This is only available when the `std` feature is enabled.
-    #[cfg(feature = "std")]
+    #[cfg(feature = "tzdb-zoneinfo")]
     pub(crate) fn path(self, path: impl Into<std::path::PathBuf>) -> Error {
         let err = Error::from(ErrorKind::FilePath(FilePathError {
             path: path.into(),

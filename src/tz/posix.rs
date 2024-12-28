@@ -50,10 +50,7 @@ other programs do in practice (for example, GNU date).
 
 use core::cell::Cell;
 
-use alloc::{
-    boxed::Box,
-    string::{String, ToString},
-};
+use alloc::{boxed::Box, string::String};
 
 use crate::{
     civil::{Date, DateTime, Time, Weekday},
@@ -138,15 +135,17 @@ type PosixWeek = ri8<1, 5>;
 /// for example, `TZ="America/New_York"`, then that case isn't encapsulated by
 /// this type. Callers needing that functionality will need to handle the error
 /// returned by parsing this type and layer their own semantics on top.
+#[cfg(feature = "tz-system")]
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum PosixTz {
     /// A valid POSIX time zone with an optional DST transition rule.
     Rule(PosixTimeZone),
     /// An implementation defined string. This occurs when the `TZ` value
     /// starts with a `:`. The string returned here does not include the `:`.
-    Implementation(Box<str>),
+    Implementation(alloc::boxed::Box<str>),
 }
 
+#[cfg(feature = "tz-system")]
 impl PosixTz {
     /// Parse a POSIX `TZ` environment variable string from the given bytes.
     pub(crate) fn parse(bytes: impl AsRef<[u8]>) -> Result<PosixTz, Error> {
@@ -159,34 +158,17 @@ impl PosixTz {
                     Bytes(&bytes[1..]),
                 ));
             };
-            Ok(PosixTz::Implementation(string.to_string().into_boxed_str()))
+            Ok(PosixTz::Implementation(string.into()))
         } else {
-            // We enable the IANA v3+ extensions here. (Namely, that the time
-            // specification hour value has the range `-167..=167` instead of
-            // `0..=24`.) Requiring strict POSIX rules doesn't seem necessary
-            // since the extension is a strict superset. Plus, GNU tooling
-            // seems to accept the extension.
-            let parser = Parser { ianav3plus: true, ..Parser::new(bytes) };
-            parser.parse().map(PosixTz::Rule)
+            PosixTimeZone::parse(bytes).map(PosixTz::Rule)
         }
     }
 
     /// Parse a POSIX `TZ` environment variable string from the given `OsStr`.
-    #[cfg(feature = "std")]
     pub(crate) fn parse_os_str(
         osstr: impl AsRef<std::ffi::OsStr>,
     ) -> Result<PosixTz, Error> {
         PosixTz::parse(parse::os_str_bytes(osstr.as_ref())?)
-    }
-
-    /// When this is a `Rule`, returns the underlying `PosixTimeZone`. Panics
-    /// otherwise.
-    #[cfg(test)]
-    fn unwrap_rule(self) -> PosixTimeZone {
-        match self {
-            PosixTz::Rule(rule) => rule,
-            _ => unreachable!("expected PosixTz::Rule variant"),
-        }
     }
 }
 
@@ -207,11 +189,9 @@ impl IanaTz {
         bytes: impl AsRef<[u8]>,
     ) -> Result<IanaTz, Error> {
         let bytes = bytes.as_ref();
-        let posix_tz = Parser { ianav3plus: true, ..Parser::new(bytes) }
-            .parse()
-            .map_err(|e| {
-                e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
-            })?;
+        let posix_tz = PosixTimeZone::parse(bytes).map_err(|e| {
+            e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
+        })?;
         let Ok(reasonable) = posix_tz.reasonable() else {
             return Err(err!(
                 "TZ string {:?} in v3+ tzfile has DST but no transition rules",
@@ -566,6 +546,19 @@ pub(crate) struct PosixTimeZone {
 }
 
 impl PosixTimeZone {
+    /// Parse a POSIX `TZ` environment variable, assuming it's a rule and not
+    /// an implementation defined value, from the given bytes.
+    fn parse(bytes: impl AsRef<[u8]>) -> Result<PosixTimeZone, Error> {
+        // We enable the IANA v3+ extensions here. (Namely, that the time
+        // specification hour value has the range `-167..=167` instead of
+        // `0..=24`.) Requiring strict POSIX rules doesn't seem necessary
+        // since the extension is a strict superset. Plus, GNU tooling
+        // seems to accept the extension.
+        let parser =
+            Parser { ianav3plus: true, ..Parser::new(bytes.as_ref()) };
+        parser.parse()
+    }
+
     /// Transforms this POSIX time zone into a "reasonable" time zone.
     ///
     /// If this isn't a reasonable time zone, then the original time zone is
@@ -1647,12 +1640,7 @@ mod tests {
     fn reasonable_posix_time_zone(
         input: impl AsRef<[u8]>,
     ) -> ReasonablePosixTimeZone {
-        PosixTz::parse(input).unwrap().unwrap_rule().reasonable().unwrap()
-    }
-
-    fn reasonable_iana_time_zone(
-        input: impl AsRef<[u8]>,
-    ) -> ReasonablePosixTimeZone {
+        // PosixTz::parse(input).unwrap().unwrap_rule().reasonable().unwrap()
         IanaTz::parse_v3plus(input).unwrap().into_tz()
     }
 
@@ -1694,7 +1682,7 @@ mod tests {
 
     #[test]
     fn reasonable_to_dst_civil_datetime_utc_range() {
-        let tz = reasonable_iana_time_zone("WART4WARST,J1/-3,J365/20");
+        let tz = reasonable_posix_time_zone("WART4WARST,J1/-3,J365/20");
         let dst_info = DstInfo {
             // We test this in other places. It's too annoying to write this
             // out here, and I didn't adopt snapshot testing until I had
@@ -1706,7 +1694,7 @@ mod tests {
         };
         assert_eq!(tz.dst_info_utc(C(2024)), Some(dst_info));
 
-        let tz = reasonable_iana_time_zone("WART4WARST,J1/-4,J365/21");
+        let tz = reasonable_posix_time_zone("WART4WARST,J1/-4,J365/21");
         let dst_info = DstInfo {
             dst: tz.dst.as_ref().unwrap(),
             offset: crate::tz::offset(-3),
@@ -1715,7 +1703,7 @@ mod tests {
         };
         assert_eq!(tz.dst_info_utc(C(2024)), Some(dst_info));
 
-        let tz = reasonable_iana_time_zone("EST5EDT,M3.2.0,M11.1.0");
+        let tz = reasonable_posix_time_zone("EST5EDT,M3.2.0,M11.1.0");
         let dst_info = DstInfo {
             dst: tz.dst.as_ref().unwrap(),
             offset: crate::tz::offset(-4),
@@ -1727,19 +1715,13 @@ mod tests {
 
     #[test]
     fn reasonable() {
-        assert!(PosixTz::parse("EST5")
+        assert!(PosixTimeZone::parse("EST5").unwrap().reasonable().is_ok());
+        assert!(PosixTimeZone::parse("EST5EDT")
             .unwrap()
-            .unwrap_rule()
-            .reasonable()
-            .is_ok());
-        assert!(PosixTz::parse("EST5EDT")
-            .unwrap()
-            .unwrap_rule()
             .reasonable()
             .is_err());
-        assert!(PosixTz::parse("EST5EDT,J1,J365")
+        assert!(PosixTimeZone::parse("EST5EDT,J1,J365")
             .unwrap()
-            .unwrap_rule()
             .reasonable()
             .is_ok());
 
@@ -1841,7 +1823,7 @@ mod tests {
             date(2024, 12, 31).at(2, 0, 0, 0),
         );
 
-        let tz = reasonable_iana_time_zone("EST5EDT,0/0,J365/25");
+        let tz = reasonable_posix_time_zone("EST5EDT,0/0,J365/25");
         assert_eq!(
             to_datetime(&tz.rule().start, 2024),
             date(2024, 1, 1).at(0, 0, 0, 0),
@@ -1871,8 +1853,9 @@ mod tests {
             date(2024, 12, 31).at(2, 0, 0, 0),
         );
 
-        let tz =
-            reasonable_iana_time_zone("XXX3EDT4,J1/-167:59:59,J365/167:59:59");
+        let tz = reasonable_posix_time_zone(
+            "XXX3EDT4,J1/-167:59:59,J365/167:59:59",
+        );
         assert_eq!(
             to_datetime(&tz.rule().start, 2024),
             date(2024, 1, 1).at(0, 0, 0, 0),
@@ -1968,7 +1951,7 @@ mod tests {
             SignedDuration::from_hours(24),
         );
 
-        let tz = reasonable_iana_time_zone("EST5EDT,J1/-1,J365/167:00:00");
+        let tz = reasonable_posix_time_zone("EST5EDT,J1/-1,J365/167:00:00");
         assert_eq!(
             tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
             SignedDuration::from_hours(-1),
@@ -2002,7 +1985,7 @@ mod tests {
             SignedDuration::from_hours(24),
         );
 
-        let tz = reasonable_iana_time_zone("EST5EDT,J1/-1,J365/167:00:00");
+        let tz = reasonable_posix_time_zone("EST5EDT,J1/-1,J365/167:00:00");
         assert_eq!(
             tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
             SignedDuration::from_hours(-1),
@@ -2013,6 +1996,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "tz-system")]
     #[test]
     fn parse_posix_tz() {
         let tz = PosixTz::parse("EST5EDT").unwrap();

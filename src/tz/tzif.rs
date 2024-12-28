@@ -1296,6 +1296,7 @@ impl Header {
 /// format. However, it is impossible for this to return false when the given
 /// data is TZif. That is, a false positive is allowed but a false negative is
 /// not.
+#[cfg(feature = "tzdb-zoneinfo")]
 pub(crate) fn is_possibly_tzif(data: &[u8]) -> bool {
     data.starts_with(b"TZif")
 }
@@ -1512,6 +1513,7 @@ mod tests {
     /// do much with it other than to ensure we don't panic or return an error.
     /// That is, we check that we can parse each file, but not that we do so
     /// correctly.
+    #[cfg(feature = "tzdb-zoneinfo")]
     #[cfg(target_os = "linux")]
     #[test]
     fn zoneinfo() {

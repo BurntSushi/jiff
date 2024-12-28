@@ -593,6 +593,7 @@ impl TimeZone {
     /// # Errors
     ///
     /// This returns an error if the given TZif data is invalid.
+    #[cfg(feature = "tz-system")]
     fn tzif_system(data: &[u8]) -> Result<TimeZone, Error> {
         let tzif = TimeZoneTzif::new(None, data)?;
         let kind = TimeZoneKind::Tzif(tzif);
