@@ -3701,7 +3701,7 @@ mod tests {
         }
     }
 
-    /// # `serde` deserializer compatibility test
+    /// A `serde` deserializer compatibility test.
     ///
     /// Serde YAML used to be unable to deserialize `jiff` types,
     /// as deserializing from bytes is not supported by the deserializer.
@@ -3711,24 +3711,24 @@ mod tests {
     #[test]
     fn timestamp_deserialize_yaml() {
         let expected = datetime(2024, 10, 31, 16, 33, 53, 123456789)
-            .intz("UTC")
+            .to_zoned(TimeZone::UTC)
             .unwrap()
             .timestamp();
 
         let deserialized: Timestamp =
-            serde_yml::from_str("2024-10-31T16:33:53.123456789+00:00[UTC]")
+            serde_yml::from_str("2024-10-31T16:33:53.123456789+00:00")
                 .unwrap();
 
         assert_eq!(deserialized, expected);
 
         let deserialized: Timestamp = serde_yml::from_slice(
-            "2024-10-31T16:33:53.123456789+00:00[UTC]".as_bytes(),
+            "2024-10-31T16:33:53.123456789+00:00".as_bytes(),
         )
         .unwrap();
 
         assert_eq!(deserialized, expected);
 
-        let cursor = Cursor::new(b"2024-10-31T16:33:53.123456789+00:00[UTC]");
+        let cursor = Cursor::new(b"2024-10-31T16:33:53.123456789+00:00");
         let deserialized: Timestamp = serde_yml::from_reader(cursor).unwrap();
 
         assert_eq!(deserialized, expected);

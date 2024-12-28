@@ -756,6 +756,7 @@ mod tests {
         std::println!("{zdt}");
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn topscratch() {
         use crate::util::t;

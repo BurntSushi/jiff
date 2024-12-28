@@ -1,6 +1,6 @@
 use jiff::{
     civil::date, tz::TimeZone, RoundMode, Span, SpanRelativeTo, SpanRound,
-    Timestamp, ToSpan, Unit, Zoned,
+    Timestamp, ToSpan, Unit,
 };
 
 use crate::tc39_262::Result;
@@ -105,6 +105,7 @@ fn calendar_possibly_required() -> Result {
 }
 
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/Duration/prototype/round/dst-balancing-result.js
+#[cfg(feature = "std")]
 #[test]
 fn dst_balancing_result() -> Result {
     if jiff::tz::db().is_definitively_empty() {
@@ -112,7 +113,8 @@ fn dst_balancing_result() -> Result {
     }
 
     let sp = 1.year().hours(24);
-    let zdt = "1999-10-29T01-07[America/Los_Angeles]".parse::<Zoned>()?;
+    let zdt =
+        "1999-10-29T01-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result =
         sp.round(SpanRound::new().largest(Unit::Year).relative(&zdt))?;
     assert_eq!(result, 1.year().hours(24));
@@ -123,20 +125,23 @@ fn dst_balancing_result() -> Result {
     // But with real TZ data, a span of 1 year will pretty much always cover
     // a DST backward transition.
     let sp = 1.month().hours(24);
-    let zdt = "2000-09-29T01-07[America/Los_Angeles]".parse::<Zoned>()?;
+    let zdt =
+        "2000-09-29T01-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result =
         sp.round(SpanRound::new().largest(Unit::Year).relative(&zdt))?;
     assert_eq!(result, 1.month().hours(24));
 
     // Try one month earlier, and we balance up to 1 day.
     let sp = 1.month().hours(24);
-    let zdt = "2000-08-29T01-07[America/Los_Angeles]".parse::<Zoned>()?;
+    let zdt =
+        "2000-08-29T01-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result =
         sp.round(SpanRound::new().largest(Unit::Year).relative(&zdt))?;
     assert_eq!(result, 1.month().days(1));
 
     let sp = 24.hours().nanoseconds(5);
-    let zdt = "2000-10-29T00-07[America/Los_Angeles]".parse::<Zoned>()?;
+    let zdt =
+        "2000-10-29T00-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result = sp.round(
         SpanRound::new()
             .largest(Unit::Day)
@@ -151,6 +156,7 @@ fn dst_balancing_result() -> Result {
 }
 
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/Duration/prototype/round/dst-rounding-result.js
+#[cfg(feature = "std")]
 #[test]
 fn dst_rounding_result() -> Result {
     if jiff::tz::db().is_definitively_empty() {
@@ -158,13 +164,15 @@ fn dst_rounding_result() -> Result {
     }
 
     let sp = 1.month().days(15).hours(11).minutes(30);
-    let zdt = "2000-02-18T02-08[America/Los_Angeles]".parse::<Zoned>()?;
+    let zdt =
+        "2000-02-18T02-08[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result =
         sp.round(SpanRound::new().smallest(Unit::Month).relative(&zdt))?;
     assert_eq!(result, 2.months());
 
     let sp = 1.month().days(15).minutes(30);
-    let zdt = "2000-03-02T02-08[America/Los_Angeles]".parse::<Zoned>()?;
+    let zdt =
+        "2000-03-02T02-08[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result =
         sp.round(SpanRound::new().smallest(Unit::Month).relative(&zdt))?;
     assert_eq!(result, 2.months());
@@ -177,7 +185,8 @@ fn dst_rounding_result() -> Result {
     assert_eq!(result, 1.month());
 
     let sp = 11.hours().minutes(30);
-    let zdt = "2000-04-02T00:00:00[America/Los_Angeles]".parse::<Zoned>()?;
+    let zdt =
+        "2000-04-02T00:00:00[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result =
         sp.round(SpanRound::new().smallest(Unit::Day).relative(&zdt))?;
     assert_eq!(result, 1.day());
@@ -271,7 +280,7 @@ fn largestunit_correct_rebalancing() -> Result {
 fn largestunit_smallestunit_combinations_relative() -> Result {
     let sp = mk([5, 5, 5, 5, 5, 5, 5, 5, 5, 5]);
     let d = date(2000, 1, 1);
-    let zdt = date(1972, 1, 1).intz("UTC")?;
+    let zdt = date(1972, 1, 1).to_zoned(TimeZone::UTC)?;
     let exact: &[(Unit, &[(Unit, Span)])] = &[
         (
             Unit::Year,

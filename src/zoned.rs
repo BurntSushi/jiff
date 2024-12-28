@@ -5251,7 +5251,7 @@ mod tests {
         }
     }
 
-    /// # `serde` deserializer compatibility test
+    /// A `serde` deserializer compatibility test.
     ///
     /// Serde YAML used to be unable to deserialize `jiff` types,
     /// as deserializing from bytes is not supported by the deserializer.
@@ -5260,6 +5260,10 @@ mod tests {
     /// - <https://github.com/BurntSushi/jiff/discussions/148>
     #[test]
     fn zoned_deserialize_yaml() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
         let expected =
             datetime(2024, 10, 31, 16, 33, 53, 123456789).intz("UTC").unwrap();
 
