@@ -437,7 +437,7 @@ impl Tzif {
                          of {}, but got {offset} according to POSIX TZ \
                          string {}",
                         typ.offset,
-                        tz.as_str(),
+                        tz,
                     ));
                 }
                 if dst != typ.is_dst {
@@ -447,7 +447,7 @@ impl Tzif {
                          string {}",
                         typ.is_dst.is_dst(),
                         dst.is_dst(),
-                        tz.as_str(),
+                        tz,
                     ));
                 }
                 if abbrev != tzif.designation(&typ) {
@@ -457,7 +457,7 @@ impl Tzif {
                          but got designation={} according to POSIX TZ \
                          string {}",
                         tzif.designation(&typ),
-                        tz.as_str(),
+                        tz,
                     ));
                 }
             }
@@ -1458,7 +1458,7 @@ mod tests {
         }
         if let Some(ref posix_tz) = tzif.posix_tz {
             writeln!(out, "POSIX TIME ZONE STRING").unwrap();
-            writeln!(out, "  {}", posix_tz.as_str()).unwrap();
+            writeln!(out, "  {}", posix_tz).unwrap();
         }
         String::from_utf8(out.into_inner().unwrap()).unwrap()
     }

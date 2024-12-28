@@ -50,8 +50,6 @@ other programs do in practice (for example, GNU date).
 
 use core::cell::Cell;
 
-use alloc::{boxed::Box, string::String};
-
 use crate::{
     civil::{Date, DateTime, Time, Weekday},
     error::{err, Error, ErrorContext},
@@ -172,6 +170,16 @@ impl PosixTz {
     }
 }
 
+#[cfg(feature = "tz-system")]
+impl core::fmt::Display for PosixTz {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        match *self {
+            PosixTz::Rule(ref tz) => write!(f, "{tz}"),
+            PosixTz::Implementation(ref imp) => write!(f, ":{imp}"),
+        }
+    }
+}
+
 /// The result of parsing a V2 or V3+ `TZ` string from IANA `tzfile` data.
 ///
 /// A V2 `TZ` string is precisely identical to a POSIX `TZ` environment
@@ -211,6 +219,12 @@ impl IanaTz {
     }
 }
 
+impl core::fmt::Display for IanaTz {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// A "reasonable" POSIX time zone.
 ///
 /// This is the same as a regular POSIX time zone, but requires that if a DST
@@ -226,20 +240,14 @@ impl IanaTz {
 /// for reasonable POSIX time zone strings.
 ///
 /// [GNU C Library]: https://www.gnu.org/software/libc/manual/2.25/html_node/TZ-Variable.html
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ReasonablePosixTimeZone {
-    original: Box<str>,
     std_abbrev: Abbreviation,
     std_offset: PosixOffset,
     dst: Option<ReasonablePosixDst>,
 }
 
 impl ReasonablePosixTimeZone {
-    /// The original POSIX time zone string.
-    pub(crate) fn as_str(&self) -> &str {
-        &self.original
-    }
-
     /// Returns the appropriate time zone offset to use for the given
     /// timestamp.
     ///
@@ -445,11 +453,18 @@ impl ReasonablePosixTimeZone {
     }
 }
 
-impl Eq for ReasonablePosixTimeZone {}
-
-impl PartialEq for ReasonablePosixTimeZone {
-    fn eq(&self, rhs: &ReasonablePosixTimeZone) -> bool {
-        self.original == rhs.original
+impl core::fmt::Display for ReasonablePosixTimeZone {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(
+            f,
+            "{}{}",
+            AbbreviationDisplay(self.std_abbrev),
+            self.std_offset
+        )?;
+        if let Some(ref dst) = self.dst {
+            write!(f, "{dst}")?;
+        }
+        Ok(())
     }
 }
 
@@ -509,7 +524,7 @@ impl<'a> DstInfo<'a> {
 /// A "reasonable" DST transition rule.
 ///
 /// Unlike what POSIX specifies, this requires a rule.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct ReasonablePosixDst {
     abbrev: Abbreviation,
     offset: Option<PosixOffset>,
@@ -536,10 +551,20 @@ impl ReasonablePosixDst {
     }
 }
 
+impl core::fmt::Display for ReasonablePosixDst {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{}", AbbreviationDisplay(self.abbrev))?;
+        if let Some(offset) = self.offset {
+            write!(f, "{offset}")?;
+        }
+        write!(f, ",{}", self.rule)?;
+        Ok(())
+    }
+}
+
 /// A POSIX time zone.
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) struct PosixTimeZone {
-    original: Box<str>,
     std_abbrev: Abbreviation,
     std_offset: PosixOffset,
     dst: Option<PosixDst>,
@@ -573,7 +598,6 @@ impl PosixTimeZone {
         if let Some(mut dst) = self.dst.take() {
             if let Some(rule) = dst.rule.take() {
                 Ok(ReasonablePosixTimeZone {
-                    original: self.original,
                     std_abbrev: self.std_abbrev,
                     std_offset: self.std_offset,
                     dst: Some(ReasonablePosixDst {
@@ -593,12 +617,26 @@ impl PosixTimeZone {
             // there's no DST at all. So no rule is required for this time
             // zone to be reasonable.
             Ok(ReasonablePosixTimeZone {
-                original: self.original,
                 std_abbrev: self.std_abbrev,
                 std_offset: self.std_offset,
                 dst: None,
             })
         }
+    }
+}
+
+impl core::fmt::Display for PosixTimeZone {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(
+            f,
+            "{}{}",
+            AbbreviationDisplay(self.std_abbrev),
+            self.std_offset
+        )?;
+        if let Some(ref dst) = self.dst {
+            write!(f, "{dst}")?;
+        }
+        Ok(())
     }
 }
 
@@ -608,6 +646,19 @@ struct PosixDst {
     abbrev: Abbreviation,
     offset: Option<PosixOffset>,
     rule: Option<Rule>,
+}
+
+impl core::fmt::Display for PosixDst {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{}", AbbreviationDisplay(self.abbrev))?;
+        if let Some(offset) = self.offset {
+            write!(f, "{offset}")?;
+        }
+        if let Some(rule) = self.rule {
+            write!(f, ",{rule}")?;
+        }
+        Ok(())
+    }
 }
 
 /// The offset from UTC for standard-time or daylight-saving-time for this
@@ -654,11 +705,37 @@ impl PosixOffset {
     }
 }
 
+impl core::fmt::Display for PosixOffset {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if let Some(sign) = self.sign {
+            if sign < 0 {
+                write!(f, "-")?;
+            } else {
+                write!(f, "+")?;
+            }
+        }
+        write!(f, "{}", self.hour)?;
+        if let Some(minute) = self.minute {
+            write!(f, ":{minute:02}")?;
+            if let Some(second) = self.second {
+                write!(f, ":{second:02}")?;
+            }
+        }
+        Ok(())
+    }
+}
+
 /// The rule for when a DST transition starts and ends.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Rule {
     start: PosixDateTimeSpec,
     end: PosixDateTimeSpec,
+}
+
+impl core::fmt::Display for Rule {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{},{}", self.start, self.end)
+    }
 }
 
 /// A specification for the day and an optional time at which a DST
@@ -729,6 +806,16 @@ impl PosixDateTimeSpec {
             second: None,
         };
         self.time.unwrap_or(DEFAULT)
+    }
+}
+
+impl core::fmt::Display for PosixDateTimeSpec {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{}", self.date)?;
+        if let Some(time) = self.time {
+            write!(f, "/{time}")?;
+        }
+        Ok(())
     }
 }
 
@@ -811,6 +898,16 @@ impl PosixDateSpec {
     }
 }
 
+impl core::fmt::Display for PosixDateSpec {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        match *self {
+            PosixDateSpec::JulianOne(n) => write!(f, "J{n}"),
+            PosixDateSpec::JulianZero(n) => write!(f, "{n}"),
+            PosixDateSpec::WeekdayOfMonth(wk) => write!(f, "{wk}"),
+        }
+    }
+}
+
 /// A specification for the day of the month at which a DST transition occurs.
 /// POSIX says:
 ///
@@ -840,6 +937,18 @@ impl WeekdayOfMonth {
         } else {
             self.week.get()
         }
+    }
+}
+
+impl core::fmt::Display for WeekdayOfMonth {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(
+            f,
+            "M{month}.{week}.{weekday}",
+            month = self.month,
+            week = self.week,
+            weekday = self.weekday.to_sunday_zero_offset(),
+        )
     }
 }
 
@@ -874,6 +983,26 @@ impl PosixTimeSpec {
     /// wasn't explicitly given.
     fn sign(&self) -> Sign {
         self.sign.unwrap_or(Sign::N::<1>())
+    }
+}
+
+impl core::fmt::Display for PosixTimeSpec {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if let Some(sign) = self.sign {
+            if sign < 0 {
+                write!(f, "-")?;
+            } else {
+                write!(f, "+")?;
+            }
+        }
+        write!(f, "{}", self.hour)?;
+        if let Some(minute) = self.minute {
+            write!(f, ":{minute:02}")?;
+            if let Some(second) = self.second {
+                write!(f, ":{second:02}")?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -925,7 +1054,6 @@ impl<'s> Parser<'s> {
     /// Upon success, the parser will be positioned immediately following the
     /// TZ string.
     fn parse_posix_time_zone(&self) -> Result<PosixTimeZone, Error> {
-        let original = String::from_utf8_lossy(self.remaining()).into();
         let std_abbrev = self
             .parse_abbreviation()
             .map_err(|e| e.context("failed to parse standard abbreviation"))?;
@@ -938,7 +1066,7 @@ impl<'s> Parser<'s> {
         {
             dst = Some(self.parse_posix_dst()?);
         }
-        Ok(PosixTimeZone { original, std_abbrev, std_offset, dst })
+        Ok(PosixTimeZone { std_abbrev, std_offset, dst })
     }
 
     /// Parse a DST zone with an optional explicit transition rule.
@@ -1333,11 +1461,12 @@ impl<'s> Parser<'s> {
         Ok(WeekdayOfMonth { month, week, weekday })
     }
 
-    /// This parses a POSIX time specification in the format `hh?[:mm[:ss]]`.
+    /// This parses a POSIX time specification in the format
+    /// `[+/-]hh?[:mm[:ss]]`.
     ///
-    /// This assumes the parser is positioned at the first `h`. Upon success,
-    /// the parser will be positioned immediately following the end of the time
-    /// specification.
+    /// This assumes the parser is positioned at the first `h` (or the sign,
+    /// if present). Upon success, the parser will be positioned immediately
+    /// following the end of the time specification.
     fn parse_posix_time_spec(&self) -> Result<PosixTimeSpec, Error> {
         let (sign, hour) = if self.ianav3plus {
             let sign = self.parse_optional_sign().map_err(|e| {
@@ -1629,10 +1758,30 @@ impl<'s> Parser<'s> {
     }
 }
 
+/// A helper type for formatting a time zone abbreviation.
+///
+/// Basically, this will write the `<` and `>` quotes if necessary, and
+/// otherwise write out the abbreviation in its unquoted form.
+#[derive(Debug)]
+struct AbbreviationDisplay(Abbreviation);
+
+impl core::fmt::Display for AbbreviationDisplay {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        let s = self.0.as_str();
+        if s.chars().any(|ch| ch == '+' || ch == '-') {
+            write!(f, "<{s}>")
+        } else {
+            write!(f, "{s}")
+        }
+    }
+}
+
 // Note that most of the tests below are for the parsing. For the actual time
 // zone transition logic, that's unit tested in tz/mod.rs.
 #[cfg(test)]
 mod tests {
+    use std::string::ToString;
+
     use crate::civil::date;
 
     use super::*;
@@ -1640,8 +1789,13 @@ mod tests {
     fn reasonable_posix_time_zone(
         input: impl AsRef<[u8]>,
     ) -> ReasonablePosixTimeZone {
-        // PosixTz::parse(input).unwrap().unwrap_rule().reasonable().unwrap()
-        IanaTz::parse_v3plus(input).unwrap().into_tz()
+        let input = core::str::from_utf8(input.as_ref()).unwrap();
+        let tz = IanaTz::parse_v3plus(input).unwrap().into_tz();
+        // While we're here, assert that converting the TZ back
+        // to a string matches what we got. This isn't guaranteed
+        // in all cases, but good enough for what we test I think.
+        assert_eq!(tz.to_string(), input);
+        tz
     }
 
     /// DEBUG COMMAND
@@ -1729,7 +1883,6 @@ mod tests {
         assert_eq!(
             tz,
             ReasonablePosixTimeZone {
-                original: "EST24EDT,J1,J365".into(),
                 std_abbrev: "EST".into(),
                 std_offset: PosixOffset {
                     sign: None,
@@ -1758,7 +1911,6 @@ mod tests {
         assert_eq!(
             tz,
             ReasonablePosixTimeZone {
-                original: "EST-24EDT,J1,J365".into(),
                 std_abbrev: "EST".into(),
                 std_offset: PosixOffset {
                     sign: Some(C(-1).rinto()),
@@ -2003,7 +2155,6 @@ mod tests {
         assert_eq!(
             tz,
             PosixTz::Rule(PosixTimeZone {
-                original: "EST5EDT".into(),
                 std_abbrev: "EST".into(),
                 std_offset: PosixOffset {
                     sign: None,
@@ -2034,7 +2185,6 @@ mod tests {
         assert_eq!(
             p,
             IanaTz(ReasonablePosixTimeZone {
-                original: "CRAZY5SHORT,M12.5.0/50,0/2".into(),
                 std_abbrev: "CRAZY".into(),
                 std_offset: PosixOffset {
                     sign: None,
@@ -2088,7 +2238,6 @@ mod tests {
         assert_eq!(
             p.parse().unwrap(),
             PosixTimeZone {
-                original: "NZST-12NZDT,J60,J300".into(),
                 std_abbrev: "NZST".into(),
                 std_offset: PosixOffset {
                     sign: Some(Sign::N::<-1>()),
@@ -2123,7 +2272,6 @@ mod tests {
         assert_eq!(
             p.parse_posix_time_zone().unwrap(),
             PosixTimeZone {
-                original: "NZST-12NZDT,M9.5.0,M4.1.0/3".into(),
                 std_abbrev: "NZST".into(),
                 std_offset: PosixOffset {
                     sign: Some(Sign::N::<-1>()),
@@ -2169,7 +2317,6 @@ mod tests {
         assert_eq!(
             p.parse_posix_time_zone().unwrap(),
             PosixTimeZone {
-                original: "NZST-12NZDT,M9.5.0,M4.1.0/3WAT".into(),
                 std_abbrev: "NZST".into(),
                 std_offset: PosixOffset {
                     sign: Some(Sign::N::<-1>()),
@@ -2215,7 +2362,6 @@ mod tests {
         assert_eq!(
             p.parse_posix_time_zone().unwrap(),
             PosixTimeZone {
-                original: "NZST-12NZDT,J60,J300".into(),
                 std_abbrev: "NZST".into(),
                 std_offset: PosixOffset {
                     sign: Some(Sign::N::<-1>()),
@@ -2244,7 +2390,6 @@ mod tests {
         assert_eq!(
             p.parse_posix_time_zone().unwrap(),
             PosixTimeZone {
-                original: "NZST-12NZDT,J60,J300WAT".into(),
                 std_abbrev: "NZST".into(),
                 std_offset: PosixOffset {
                     sign: Some(Sign::N::<-1>()),

@@ -5125,8 +5125,9 @@ fn day_length(
     // FIXME: We should be doing this with a &TimeZone, but will need a
     // refactor so that we do zone-aware arithmetic using just a Timestamp and
     // a &TimeZone.
-    let tzname = alloc::string::String::from(tz.diagnostic_name());
-    let start = dt.start_of_day().to_zoned(tz).with_context(|| {
+    let tz2 = tz.clone();
+    let start = dt.start_of_day().to_zoned(tz).with_context(move || {
+        let tzname = tz2.diagnostic_name();
         err!("failed to find start of day for {dt} in time zone {tzname}")
     })?;
     let end = start.checked_add(Span::new().days_ranged(C(1))).with_context(
