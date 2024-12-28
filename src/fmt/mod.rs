@@ -7,8 +7,6 @@ implementations for printing and parsing respectively. The APIs in this module
 provide more configurable support for printing and parsing.
 */
 
-use alloc::{string::String, vec::Vec};
-
 use crate::{
     error::{err, Error},
     util::escape,
@@ -112,7 +110,7 @@ pub trait Write {
     }
 }
 
-impl Write for String {
+impl Write for alloc::string::String {
     #[inline]
     fn write_str(&mut self, string: &str) -> Result<(), Error> {
         self.push_str(string);
@@ -120,7 +118,7 @@ impl Write for String {
     }
 }
 
-impl Write for Vec<u8> {
+impl Write for alloc::vec::Vec<u8> {
     #[inline]
     fn write_str(&mut self, string: &str) -> Result<(), Error> {
         self.extend_from_slice(string.as_bytes());

@@ -534,7 +534,7 @@ pub mod timestamp {
                 v: u64,
             ) -> Result<crate::Timestamp, E> {
                 let v = i64::try_from(v).map_err(|_| {
-                    de::Error::custom(alloc::format!(
+                    de::Error::custom(format_args!(
                         "got unsigned integer {v} seconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
@@ -548,7 +548,7 @@ pub mod timestamp {
                 v: i128,
             ) -> Result<crate::Timestamp, E> {
                 let v = i64::try_from(v).map_err(|_| {
-                    de::Error::custom(alloc::format!(
+                    de::Error::custom(format_args!(
                         "got signed integer {v} seconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
@@ -562,7 +562,7 @@ pub mod timestamp {
                 v: u128,
             ) -> Result<crate::Timestamp, E> {
                 let v = i64::try_from(v).map_err(|_| {
-                    de::Error::custom(alloc::format!(
+                    de::Error::custom(format_args!(
                         "got unsigned integer {v} seconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
@@ -704,7 +704,7 @@ pub mod timestamp {
                 v: u64,
             ) -> Result<crate::Timestamp, E> {
                 let v = i64::try_from(v).map_err(|_| {
-                    de::Error::custom(alloc::format!(
+                    de::Error::custom(format_args!(
                         "got unsigned integer {v} milliseconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
@@ -718,7 +718,7 @@ pub mod timestamp {
                 v: i128,
             ) -> Result<crate::Timestamp, E> {
                 let v = i64::try_from(v).map_err(|_| {
-                    de::Error::custom(alloc::format!(
+                    de::Error::custom(format_args!(
                         "got signed integer {v} milliseconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
@@ -732,7 +732,7 @@ pub mod timestamp {
                 v: u128,
             ) -> Result<crate::Timestamp, E> {
                 let v = i64::try_from(v).map_err(|_| {
-                    de::Error::custom(alloc::format!(
+                    de::Error::custom(format_args!(
                         "got unsigned integer {v} milliseconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
@@ -874,7 +874,7 @@ pub mod timestamp {
                 v: u64,
             ) -> Result<crate::Timestamp, E> {
                 let v = i64::try_from(v).map_err(|_| {
-                    de::Error::custom(alloc::format!(
+                    de::Error::custom(format_args!(
                         "got unsigned integer {v} microseconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
@@ -888,7 +888,7 @@ pub mod timestamp {
                 v: i128,
             ) -> Result<crate::Timestamp, E> {
                 let v = i64::try_from(v).map_err(|_| {
-                    de::Error::custom(alloc::format!(
+                    de::Error::custom(format_args!(
                         "got signed integer {v} microseconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
@@ -902,7 +902,7 @@ pub mod timestamp {
                 v: u128,
             ) -> Result<crate::Timestamp, E> {
                 let v = i64::try_from(v).map_err(|_| {
-                    de::Error::custom(alloc::format!(
+                    de::Error::custom(format_args!(
                         "got unsigned integer {v} microseconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
@@ -1011,7 +1011,7 @@ pub mod timestamp {
                 v: u128,
             ) -> Result<crate::Timestamp, E> {
                 let v = i128::try_from(v).map_err(|_| {
-                    de::Error::custom(alloc::format!(
+                    de::Error::custom(format_args!(
                         "got unsigned integer {v} nanoseconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
