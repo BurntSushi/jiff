@@ -84,7 +84,7 @@ macro_rules! define_ranged {
                 what: &'static str,
                 given: $repr,
             ) -> Error {
-                Error::signed(what, given, Self::MIN_REPR, Self::MAX_REPR)
+                Error::range(what, given, Self::MIN_REPR, Self::MAX_REPR)
             }
 
             #[inline]
@@ -115,7 +115,7 @@ macro_rules! define_ranged {
                 let val = val.into();
                 #[allow(irrefutable_let_patterns)]
                 let Ok(val) = <$repr>::try_from(val) else {
-                    return Err(Error::signed(
+                    return Err(Error::range(
                         what,
                         val,
                         Self::MIN_REPR,
@@ -133,7 +133,7 @@ macro_rules! define_ranged {
                 let val = val.into();
                 #[allow(irrefutable_let_patterns)]
                 let Ok(val) = <$repr>::try_from(val) else {
-                    return Err(Error::signed(
+                    return Err(Error::range(
                         what,
                         val,
                         Self::MIN_REPR,
@@ -335,7 +335,7 @@ macro_rules! define_ranged {
                 min: impl Into<i128>,
                 max: impl Into<i128>,
             ) -> Error {
-                Error::signed(
+                Error::range(
                     what,
                     self.get_unchecked(),
                     min.into(),
@@ -1363,7 +1363,7 @@ macro_rules! define_ranged {
                     #[cfg(not(debug_assertions))]
                     {
                         let val = <$repr>::try_from(r.val).map_err(|_| {
-                            Error::signed(what, r.val, MIN2, MAX2)
+                            Error::range(what, r.val, MIN2, MAX2)
                         })?;
                         if !Self::contains(val) {
                             return Err(Self::error(what, val));
@@ -1373,7 +1373,7 @@ macro_rules! define_ranged {
                     #[cfg(debug_assertions)]
                     {
                         let val = <$repr>::try_from(r.val).map_err(|_| {
-                            Error::signed(what, r.val, MIN2, MAX2)
+                            Error::range(what, r.val, MIN2, MAX2)
                         })?;
                         if !Self::contains(val) {
                             return Err(Self::error(what, val));

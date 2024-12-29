@@ -1,5 +1,3 @@
-#![allow(warnings)]
-
 use crate::{
     error::{err, ErrorContext},
     fmt::{
@@ -11,7 +9,7 @@ use crate::{
         Write, WriteExt,
     },
     tz::Offset,
-    util::{escape, parse},
+    util::escape,
     Error,
 };
 
@@ -323,7 +321,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
 
     /// %V
     fn fmt_iana_nocolon(&mut self) -> Result<(), Error> {
-        let Some(iana) = self.tm.iana.as_ref() else {
+        let Some(iana) = self.tm.iana_time_zone() else {
             let offset = self.tm.offset.ok_or_else(|| {
                 err!(
                     "requires IANA time zone identifier or time \
@@ -338,7 +336,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
 
     /// %:V
     fn fmt_iana_colon(&mut self) -> Result<(), Error> {
-        let Some(iana) = self.tm.iana.as_ref() else {
+        let Some(iana) = self.tm.iana_time_zone() else {
             let offset = self.tm.offset.ok_or_else(|| {
                 err!(
                     "requires IANA time zone identifier or time \
@@ -415,7 +413,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         let tzabbrev = self.tm.tzabbrev.as_ref().ok_or_else(|| {
             err!("requires time zone abbreviation in broken down time")
         })?;
-        ext.write_str(Case::Upper, tzabbrev, self.wtr)
+        ext.write_str(Case::Upper, tzabbrev.as_str(), self.wtr)
     }
 
     /// %A
@@ -471,7 +469,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
 fn write_offset<W: Write>(
     offset: Offset,
     colon: bool,
-    mut wtr: &mut W,
+    wtr: &mut W,
 ) -> Result<(), Error> {
     static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
 
@@ -501,7 +499,7 @@ impl Extension {
         self,
         default: Case,
         string: &str,
-        mut wtr: &mut W,
+        wtr: &mut W,
     ) -> Result<(), Error> {
         let case = match self.flag {
             Some(Flag::Uppercase) => Case::Upper,
@@ -537,7 +535,7 @@ impl Extension {
         pad_byte: u8,
         pad_width: Option<u8>,
         number: impl Into<i64>,
-        mut wtr: &mut W,
+        wtr: &mut W,
     ) -> Result<(), Error> {
         let number = number.into();
         let pad_byte = match self.flag {
@@ -565,7 +563,7 @@ impl Extension {
     fn write_fractional_seconds<W: Write>(
         self,
         number: impl Into<i64>,
-        mut wtr: &mut W,
+        wtr: &mut W,
     ) -> Result<(), Error> {
         let number = number.into();
 
@@ -600,8 +598,6 @@ mod tests {
         fmt::strtime::format,
         Zoned,
     };
-
-    use super::*;
 
     #[test]
     fn ok_format_american_date() {

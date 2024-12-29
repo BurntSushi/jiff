@@ -604,7 +604,6 @@ impl Zoned {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    #[cfg(feature = "std")]
     #[inline]
     pub fn intz(&self, name: &str) -> Result<Zoned, Error> {
         let tz = crate::tz::db().get(name)?;
@@ -3077,7 +3076,6 @@ impl core::fmt::Display for Zoned {
 /// Note that this is only enabled when the `std` feature
 /// is enabled because it requires access to a global
 /// [`TimeZoneDatabase`](crate::tz::TimeZoneDatabase).
-#[cfg(feature = "std")]
 impl core::str::FromStr for Zoned {
     type Err = Error;
 
@@ -5244,11 +5242,25 @@ mod tests {
     fn zoned_size() {
         #[cfg(debug_assertions)]
         {
-            assert_eq!(96, core::mem::size_of::<Zoned>());
+            #[cfg(feature = "alloc")]
+            {
+                assert_eq!(96, core::mem::size_of::<Zoned>());
+            }
+            #[cfg(all(target_pointer_width = "64", not(feature = "alloc")))]
+            {
+                assert_eq!(120, core::mem::size_of::<Zoned>());
+            }
         }
         #[cfg(not(debug_assertions))]
         {
-            assert_eq!(40, core::mem::size_of::<Zoned>());
+            #[cfg(feature = "alloc")]
+            {
+                assert_eq!(40, core::mem::size_of::<Zoned>());
+            }
+            #[cfg(all(target_pointer_width = "64", not(feature = "alloc")))]
+            {
+                assert_eq!(56, core::mem::size_of::<Zoned>());
+            }
         }
     }
 

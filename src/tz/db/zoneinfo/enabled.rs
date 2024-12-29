@@ -244,9 +244,10 @@ impl CachedTimeZone {
         ttl: Duration,
     ) -> Result<CachedTimeZone, Error> {
         let path = &info.inner.full;
-        let mut file = File::open(path).map_err(|e| Error::fs(path, e))?;
+        let mut file =
+            File::open(path).map_err(|e| Error::io(e).path(path))?;
         let mut data = vec![];
-        file.read_to_end(&mut data).map_err(|e| Error::fs(path, e))?;
+        file.read_to_end(&mut data).map_err(|e| Error::io(e).path(path))?;
         let tz = TimeZone::tzif(&info.inner.original, &data)
             .map_err(|e| e.path(path))?;
         let name = info.clone();

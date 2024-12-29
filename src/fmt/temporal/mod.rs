@@ -975,6 +975,7 @@ impl DateTimePrinter {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[cfg(feature = "alloc")]
     pub fn zoned_to_string(&self, zdt: &Zoned) -> alloc::string::String {
         let mut buf = alloc::string::String::with_capacity(4);
         // OK because writing to `String` never fails.
@@ -1018,6 +1019,7 @@ impl DateTimePrinter {
     ///     "1970-01-01T00:00:00.000000001Z",
     /// );
     /// ```
+    #[cfg(feature = "alloc")]
     pub fn timestamp_to_string(
         &self,
         timestamp: &Timestamp,
@@ -1073,6 +1075,7 @@ impl DateTimePrinter {
     ///     "1970-01-01T00:00:00.000000001+00:00",
     /// );
     /// ```
+    #[cfg(feature = "alloc")]
     pub fn timestamp_with_offset_to_string(
         &self,
         timestamp: &Timestamp,
@@ -1099,6 +1102,7 @@ impl DateTimePrinter {
     /// let dt = date(2024, 6, 15).at(7, 0, 0, 0);
     /// assert_eq!(PRINTER.datetime_to_string(&dt), "2024-06-15T07:00:00");
     /// ```
+    #[cfg(feature = "alloc")]
     pub fn datetime_to_string(
         &self,
         dt: &civil::DateTime,
@@ -1124,6 +1128,7 @@ impl DateTimePrinter {
     /// let d = date(2024, 6, 15);
     /// assert_eq!(PRINTER.date_to_string(&d), "2024-06-15");
     /// ```
+    #[cfg(feature = "alloc")]
     pub fn date_to_string(&self, date: &civil::Date) -> alloc::string::String {
         let mut buf = alloc::string::String::with_capacity(4);
         // OK because writing to `String` never fails.
@@ -1146,6 +1151,7 @@ impl DateTimePrinter {
     /// let t = time(7, 0, 0, 0);
     /// assert_eq!(PRINTER.time_to_string(&t), "07:00:00");
     /// ```
+    #[cfg(feature = "alloc")]
     pub fn time_to_string(&self, time: &civil::Time) -> alloc::string::String {
         let mut buf = alloc::string::String::with_capacity(4);
         // OK because writing to `String` never fails.
@@ -1616,6 +1622,7 @@ impl SpanPrinter {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[cfg(feature = "alloc")]
     pub fn span_to_string(&self, span: &Span) -> alloc::string::String {
         let mut buf = alloc::string::String::with_capacity(4);
         // OK because writing to `String` never fails.
@@ -1644,6 +1651,7 @@ impl SpanPrinter {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[cfg(feature = "alloc")]
     pub fn duration_to_string(
         &self,
         duration: &SignedDuration,

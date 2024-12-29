@@ -4,9 +4,8 @@ use alloc::string::ToString;
 
 use crate::{
     error::{err, Error, ErrorContext},
-    sync::Arc,
     tz::{posix::PosixTz, TimeZone, TimeZoneDatabase},
-    util::cache::Expiration,
+    util::{cache::Expiration, sync::Arc},
 };
 
 #[cfg(unix)]

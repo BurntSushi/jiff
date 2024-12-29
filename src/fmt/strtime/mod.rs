@@ -220,6 +220,13 @@ is instead interpreted as a precision setting). When using a precision setting,
 truncation is used. If you need a different rounding mode, you should use
 higher level APIs like [`Timestamp::round`] or [`Zoned::round`].
 
+# Conditionally unsupported
+
+Jiff does not support `%V` or `%:V` (IANA time zone identifier) when the
+`alloc` crate feature is not enabled. This is because a time zone identifier
+is variable width data. If you have a use case for this, please
+[detail it in a new issue](https://github.com/BurntSushi/jiff/issues/new).
+
 # Unsupported
 
 The following things are currently unsupported:
@@ -232,8 +239,6 @@ The following things are currently unsupported:
 [`strftime`]: https://pubs.opengroup.org/onlinepubs/009695399/functions/strftime.html
 [`strptime`]: https://pubs.opengroup.org/onlinepubs/009695399/functions/strptime.html
 */
-
-use alloc::string::{String, ToString};
 
 use crate::{
     civil::{Date, DateTime, Time, Weekday},
@@ -252,6 +257,9 @@ use crate::{
 
 mod format;
 mod parse;
+
+/// Matches the abbreviation defined in `jiff::tz::posix`.
+type Abbreviation = crate::util::array_str::ArrayStr<30>;
 
 /// Parse the given `input` according to the given `format` string.
 ///
@@ -384,6 +392,7 @@ pub fn parse(
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+#[cfg(any(test, feature = "alloc"))]
 #[inline]
 pub fn format(
     format: impl AsRef<[u8]>,
@@ -464,10 +473,11 @@ pub struct BrokenDownTime {
     meridiem: Option<Meridiem>,
     // The time zone abbreviation. Used only when
     // formatting a `Zoned`.
-    tzabbrev: Option<String>,
+    tzabbrev: Option<Abbreviation>,
     // The IANA time zone identifier. Used only when
     // formatting a `Zoned`.
-    iana: Option<String>,
+    #[cfg(feature = "alloc")]
+    iana: Option<alloc::string::String>,
 }
 
 impl BrokenDownTime {
@@ -604,6 +614,7 @@ impl BrokenDownTime {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[cfg(feature = "alloc")]
     #[inline]
     pub fn to_string(
         &self,
@@ -744,7 +755,7 @@ impl BrokenDownTime {
         let dt = self
             .to_datetime()
             .context("datetime required to parse zoned datetime")?;
-        match (self.offset, self.iana.as_deref()) {
+        match (self.offset, self.iana_time_zone()) {
             (None, None) => Err(err!(
                 "either offset (from %z) or IANA time zone identifier \
                  (from %V) is required for parsing zoned datetime",
@@ -1311,6 +1322,9 @@ impl BrokenDownTime {
 
     /// Returns the time zone IANA identifier, if available.
     ///
+    /// Note that when `alloc` is disabled, this always returns `None`. (And
+    /// there is no way to set it.)
+    ///
     /// # Example
     ///
     /// This shows how to parse an IANA time zone identifier:
@@ -1333,7 +1347,14 @@ impl BrokenDownTime {
     /// ```
     #[inline]
     pub fn iana_time_zone(&self) -> Option<&str> {
-        self.iana.as_deref()
+        #[cfg(feature = "alloc")]
+        {
+            self.iana.as_deref()
+        }
+        #[cfg(not(feature = "alloc"))]
+        {
+            None
+        }
     }
 
     /// Returns the parsed weekday, if available.
@@ -1752,6 +1773,7 @@ impl BrokenDownTime {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[cfg(feature = "alloc")]
     #[inline]
     pub fn set_iana_time_zone(&mut self, id: Option<alloc::string::String>) {
         self.iana = id;
@@ -1804,10 +1826,19 @@ impl BrokenDownTime {
 impl<'a> From<&'a Zoned> for BrokenDownTime {
     fn from(zdt: &'a Zoned) -> BrokenDownTime {
         let (_, _, tzabbrev) = zdt.time_zone().to_offset(zdt.timestamp());
+        #[cfg(feature = "alloc")]
+        let iana = {
+            use alloc::string::ToString;
+            zdt.time_zone().iana_name().map(|s| s.to_string())
+        };
         BrokenDownTime {
             offset: Some(zdt.offset()),
-            tzabbrev: Some(tzabbrev.to_string()),
-            iana: zdt.time_zone().iana_name().map(|s| s.to_string()),
+            // In theory, this could fail, but I've never seen a time zone
+            // abbreviation longer than a few bytes. Please file an issue if
+            // this is a problem for you.
+            tzabbrev: Abbreviation::new(tzabbrev),
+            #[cfg(feature = "alloc")]
+            iana,
             ..BrokenDownTime::from(zdt.datetime())
         }
     }

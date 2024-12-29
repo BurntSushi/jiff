@@ -1,7 +1,5 @@
 use core::{cmp::Ordering, time::Duration as UnsignedDuration};
 
-use alloc::borrow::Cow;
-
 use crate::{
     civil::{Date, DateTime, Time},
     duration::{Duration, SDuration},
@@ -9,6 +7,7 @@ use crate::{
     fmt::{friendly, temporal},
     tz::TimeZone,
     util::{
+        borrow::DumbCow,
         escape,
         rangeint::{ri64, ri8, RFrom, RInto, TryRFrom, TryRInto},
         round::increment,
@@ -3103,7 +3102,8 @@ impl Span {
     ///
     /// This is useful for debugging. Normally, this would be the "alternate"
     /// debug impl (perhaps), but that's what insta uses and I preferred having
-    /// the standard serialization used there.
+    /// the friendly format used there since is much more terse.
+    #[cfg(feature = "alloc")]
     #[allow(dead_code)]
     fn debug(&self) -> alloc::string::String {
         use core::fmt::Write;
@@ -5158,7 +5158,7 @@ impl<'a> SpanRelativeTo<'a> {
             }
             SpanRelativeToKind::Zoned(zdt) => {
                 Ok(Relative::Zoned(RelativeZoned {
-                    zoned: Cow::Borrowed(zdt),
+                    zoned: DumbCow::Borrowed(zdt),
                 }))
             }
         }
@@ -5641,7 +5641,7 @@ impl RelativeCivil {
 /// A simple wrapper around a possibly borrowed `Zoned`.
 #[derive(Clone, Debug)]
 struct RelativeZoned<'a> {
-    zoned: Cow<'a, Zoned>,
+    zoned: DumbCow<'a, Zoned>,
 }
 
 impl<'a> RelativeZoned<'a> {
@@ -5658,7 +5658,7 @@ impl<'a> RelativeZoned<'a> {
         let zoned = self.zoned.checked_add(span).with_context(|| {
             err!("failed to add {span} to {zoned}", zoned = self.zoned)
         })?;
-        Ok(RelativeZoned { zoned: Cow::Owned(zoned) })
+        Ok(RelativeZoned { zoned: DumbCow::Owned(zoned) })
     }
 
     /// Returns the result of [`Zoned::checked_add`] with an absolute duration.
@@ -5674,7 +5674,7 @@ impl<'a> RelativeZoned<'a> {
         let zoned = self.zoned.checked_add(duration).with_context(|| {
             err!("failed to add {duration:?} to {zoned}", zoned = self.zoned)
         })?;
-        Ok(RelativeZoned { zoned: Cow::Owned(zoned) })
+        Ok(RelativeZoned { zoned: DumbCow::Owned(zoned) })
     }
 
     /// Returns the result of [`Zoned::until`].
