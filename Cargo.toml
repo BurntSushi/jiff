@@ -30,7 +30,7 @@ members = [
 # https://docs.rs/jiff/*/#crate-features
 [features]
 default = ["std", "tz-system", "tzdb-bundle-platform", "tzdb-zoneinfo"]
-std = ["alloc", "serde?/std"]
+std = ["alloc", "log?/std", "serde?/std"]
 alloc = ["serde?/alloc", "portable-atomic-util/alloc"]
 serde = ["dep:serde"]
 logging = ["dep:log"]
@@ -76,7 +76,7 @@ js = ["dep:wasm-bindgen", "dep:js-sys"]
 
 [dependencies]
 jiff-tzdb = { version = "0.1.1", path = "jiff-tzdb", optional = true }
-log = { version = "0.4.21", optional = true }
+log = { version = "0.4.21", optional = true, default-features = false }
 serde = { version = "1.0.203", optional = true, default-features = false }
 
 # Note that the `cfg` gate for the `tzdb-bundle-platform` must repeat the

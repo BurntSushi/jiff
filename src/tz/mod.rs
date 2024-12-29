@@ -83,30 +83,32 @@ TO get the system's default time zone, use [`TimeZone::system`].
 [`GetDynamicTimeZoneInformation`]: https://learn.microsoft.com/en-us/windows/win32/api/timezoneapi/nf-timezoneapi-getdynamictimezoneinformation
 */
 
-use alloc::string::{String, ToString};
-
 use crate::{
     civil::DateTime,
     error::{err, Error, ErrorContext},
-    sync::Arc,
-    util::array_str::ArrayStr,
+    util::{array_str::ArrayStr, sync::Arc},
     Timestamp, Zoned,
 };
 
-use self::{posix::ReasonablePosixTimeZone, tzif::Tzif};
+#[cfg(feature = "alloc")]
+use self::posix::ReasonablePosixTimeZone;
 
+#[cfg(feature = "alloc")]
+pub use self::db::TimeZoneNameIter;
 pub use self::{
-    db::{db, TimeZoneDatabase, TimeZoneNameIter},
+    db::{db, TimeZoneDatabase},
     offset::{Dst, Offset, OffsetArithmetic, OffsetConflict},
 };
 
 mod db;
 mod offset;
+#[cfg(feature = "alloc")]
 mod posix;
 #[cfg(feature = "tz-system")]
 mod system;
-#[cfg(test)]
+#[cfg(all(test, feature = "alloc"))]
 mod testdata;
+#[cfg(feature = "alloc")]
 mod tzif;
 // See module comment for WIP status. :-(
 #[cfg(test)]
@@ -533,6 +535,7 @@ impl TimeZone {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[cfg(feature = "alloc")]
     pub fn posix(posix_tz_string: &str) -> Result<TimeZone, Error> {
         let posix = TimeZonePosix::new(posix_tz_string)?;
         let kind = TimeZoneKind::Posix(posix);
@@ -556,7 +559,10 @@ impl TimeZone {
     ///
     /// This returns an error if the given data was not recognized as valid
     /// TZif.
+    #[cfg(feature = "alloc")]
     pub fn tzif(name: &str, data: &[u8]) -> Result<TimeZone, Error> {
+        use alloc::string::ToString;
+
         let tzif = TimeZoneTzif::new(Some(name.to_string()), data)?;
         let kind = TimeZoneKind::Tzif(tzif);
         Ok(TimeZone { kind: Some(Arc::new(kind)) })
@@ -620,6 +626,7 @@ impl TimeZone {
     pub fn iana_name(&self) -> Option<&str> {
         let Some(ref kind) = self.kind else { return Some("UTC") };
         match **kind {
+            #[cfg(feature = "alloc")]
             TimeZoneKind::Tzif(ref tz) => tz.name(),
             _ => None,
         }
@@ -706,14 +713,16 @@ impl TimeZone {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_offset(&self, timestamp: Timestamp) -> (Offset, Dst, &str) {
+    pub fn to_offset(&self, _timestamp: Timestamp) -> (Offset, Dst, &str) {
         let Some(ref kind) = self.kind else {
             return (Offset::UTC, Dst::No, "UTC");
         };
         match **kind {
             TimeZoneKind::Fixed(ref tz) => (tz.offset(), Dst::No, tz.name()),
-            TimeZoneKind::Posix(ref tz) => tz.to_offset(timestamp),
-            TimeZoneKind::Tzif(ref tz) => tz.to_offset(timestamp),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Posix(ref tz) => tz.to_offset(_timestamp),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Tzif(ref tz) => tz.to_offset(_timestamp),
         }
     }
 
@@ -763,7 +772,9 @@ impl TimeZone {
     #[inline]
     pub fn to_fixed_offset(&self) -> Result<Offset, Error> {
         let Some(ref kind) = self.kind else { return Ok(Offset::UTC) };
-        let TimeZoneKind::Fixed(ref tz) = **kind else {
+        #[allow(irrefutable_let_patterns)]
+        let TimeZoneKind::Fixed(ref tz) = **kind
+        else {
             return Err(err!(
                 "cannot convert non-fixed {kind} time zone to offset \
                  without timestamp or civil datetime",
@@ -1008,7 +1019,9 @@ impl TimeZone {
                 TimeZoneKind::Fixed(ref tz) => {
                     AmbiguousOffset::Unambiguous { offset: tz.offset() }
                 }
+                #[cfg(feature = "alloc")]
                 TimeZoneKind::Posix(ref tz) => tz.to_ambiguous_kind(dt),
+                #[cfg(feature = "alloc")]
                 TimeZoneKind::Tzif(ref tz) => tz.to_ambiguous_kind(dt),
             },
         };
@@ -1026,21 +1039,25 @@ impl TimeZone {
 
     #[allow(dead_code)]
     #[inline]
-    fn previous_transition(&self, timestamp: Timestamp) -> Option<Timestamp> {
+    fn previous_transition(&self, _timestamp: Timestamp) -> Option<Timestamp> {
         match **self.kind.as_ref()? {
             TimeZoneKind::Fixed(_) => None,
-            TimeZoneKind::Posix(ref tz) => tz.previous_transition(timestamp),
-            TimeZoneKind::Tzif(ref tz) => tz.previous_transition(timestamp),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Posix(ref tz) => tz.previous_transition(_timestamp),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Tzif(ref tz) => tz.previous_transition(_timestamp),
         }
     }
 
     #[allow(dead_code)]
     #[inline]
-    fn next_transition(&self, timestamp: Timestamp) -> Option<Timestamp> {
+    fn next_transition(&self, _timestamp: Timestamp) -> Option<Timestamp> {
         match **self.kind.as_ref()? {
             TimeZoneKind::Fixed(_) => None,
-            TimeZoneKind::Posix(ref tz) => tz.next_transition(timestamp),
-            TimeZoneKind::Tzif(ref tz) => tz.next_transition(timestamp),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Posix(ref tz) => tz.next_transition(_timestamp),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Tzif(ref tz) => tz.next_transition(_timestamp),
         }
     }
 
@@ -1053,7 +1070,9 @@ impl TimeZone {
         };
         match **kind {
             TimeZoneKind::Fixed(_) => "fixed",
+            #[cfg(feature = "alloc")]
             TimeZoneKind::Posix(_) => "POSIX",
+            #[cfg(feature = "alloc")]
             TimeZoneKind::Tzif(_) => "IANA",
         }
     }
@@ -1066,7 +1085,9 @@ impl core::fmt::Debug for TimeZone {
             None => &"UTC",
             Some(ref kind) => match &**kind {
                 TimeZoneKind::Fixed(ref tz) => tz,
+                #[cfg(feature = "alloc")]
                 TimeZoneKind::Posix(ref tz) => tz,
+                #[cfg(feature = "alloc")]
                 TimeZoneKind::Tzif(ref tz) => tz,
             },
         };
@@ -1075,9 +1096,12 @@ impl core::fmt::Debug for TimeZone {
 }
 
 #[derive(Debug, Eq, PartialEq)]
+#[cfg_attr(not(feature = "alloc"), derive(Clone))]
 enum TimeZoneKind {
     Fixed(TimeZoneFixed),
+    #[cfg(feature = "alloc")]
     Posix(TimeZonePosix),
+    #[cfg(feature = "alloc")]
     Tzif(TimeZoneTzif),
 }
 
@@ -1128,11 +1152,13 @@ impl PartialEq for TimeZoneFixed {
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[cfg(feature = "alloc")]
+#[derive(Clone, Eq, PartialEq)]
 struct TimeZonePosix {
     posix: ReasonablePosixTimeZone,
 }
 
+#[cfg(feature = "alloc")]
 impl TimeZonePosix {
     #[inline]
     fn new(s: &str) -> Result<TimeZonePosix, Error> {
@@ -1161,6 +1187,7 @@ impl TimeZonePosix {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl From<ReasonablePosixTimeZone> for TimeZonePosix {
     #[inline]
     fn from(posix: ReasonablePosixTimeZone) -> TimeZonePosix {
@@ -1170,6 +1197,7 @@ impl From<ReasonablePosixTimeZone> for TimeZonePosix {
 
 // This is implemented by hand because dumping out the full representation of
 // a `ReasonablePosixTimeZone` is way too much noise for users of Jiff.
+#[cfg(feature = "alloc")]
 impl core::fmt::Debug for TimeZonePosix {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -1177,6 +1205,7 @@ impl core::fmt::Debug for TimeZonePosix {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl core::fmt::Display for TimeZonePosix {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -1184,15 +1213,20 @@ impl core::fmt::Display for TimeZonePosix {
     }
 }
 
+#[cfg(feature = "alloc")]
 #[derive(Eq, PartialEq)]
 struct TimeZoneTzif {
-    tzif: Tzif,
+    tzif: self::tzif::Tzif,
 }
 
+#[cfg(feature = "alloc")]
 impl TimeZoneTzif {
     #[inline]
-    fn new(name: Option<String>, bytes: &[u8]) -> Result<TimeZoneTzif, Error> {
-        let tzif = Tzif::parse(name, bytes)?;
+    fn new(
+        name: Option<alloc::string::String>,
+        bytes: &[u8],
+    ) -> Result<TimeZoneTzif, Error> {
+        let tzif = self::tzif::Tzif::parse(name, bytes)?;
         Ok(TimeZoneTzif { tzif })
     }
 
@@ -1224,6 +1258,7 @@ impl TimeZoneTzif {
 
 // This is implemented by hand because dumping out the full representation of
 // all TZif data is too much noise for users of Jiff.
+#[cfg(feature = "alloc")]
 impl core::fmt::Debug for TimeZoneTzif {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -1246,7 +1281,9 @@ impl<'a> core::fmt::Display for DiagnosticName<'a> {
         let Some(ref kind) = self.0.kind else { return write!(f, "UTC") };
         match **kind {
             TimeZoneKind::Fixed(ref tz) => write!(f, "{tz}"),
+            #[cfg(feature = "alloc")]
             TimeZoneKind::Posix(ref tz) => write!(f, "{tz}"),
+            #[cfg(feature = "alloc")]
             TimeZoneKind::Tzif(ref tz) => {
                 write!(f, "{}", tz.name().unwrap_or("Local"))
             }
@@ -2556,7 +2593,9 @@ pub const fn offset(hours: i8) -> Offset {
 
 #[cfg(test)]
 mod tests {
-    use crate::{civil::date, tz::testdata::TzifTestFile};
+    use crate::civil::date;
+    #[cfg(feature = "alloc")]
+    use crate::tz::testdata::TzifTestFile;
 
     use super::*;
 
@@ -2595,6 +2634,7 @@ mod tests {
         AmbiguousOffset::Fold { before: earlier, after: later }
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_tzif_to_ambiguous_timestamp() {
         let tests: &[(&str, &[_])] = &[
@@ -2891,6 +2931,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_tzif_to_datetime() {
         let o = |hours| offset(hours);
@@ -3185,6 +3226,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_posix_to_ambiguous_timestamp() {
         let tests: &[(&str, &[_])] = &[
@@ -3353,6 +3395,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_posix_to_datetime() {
         let o = |hours| offset(hours);
@@ -3508,6 +3551,7 @@ mod tests {
         assert!(tz.to_zoned(dt).is_err());
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_tzif_previous_transition() {
         let tests: &[(&str, &[(&str, Option<&str>)])] = &[
@@ -3591,6 +3635,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_tzif_next_transition() {
         let tests: &[(&str, &[(&str, Option<&str>)])] = &[
@@ -3671,6 +3716,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_posix_previous_transition() {
         let tests: &[(&str, &[(&str, Option<&str>)])] = &[
@@ -3738,6 +3784,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_posix_next_transition() {
         let tests: &[(&str, &[(&str, Option<&str>)])] = &[
@@ -3811,8 +3858,22 @@ mod tests {
     /// it, and we want to keep its size as small as we can.
     #[test]
     fn time_zone_size() {
-        let word = core::mem::size_of::<usize>();
-        assert_eq!(word, core::mem::size_of::<TimeZone>());
+        #[cfg(feature = "alloc")]
+        {
+            let word = core::mem::size_of::<usize>();
+            assert_eq!(word, core::mem::size_of::<TimeZone>());
+        }
+        #[cfg(all(target_pointer_width = "64", not(feature = "alloc")))]
+        {
+            #[cfg(debug_assertions)]
+            {
+                assert_eq!(28, core::mem::size_of::<TimeZone>());
+            }
+            #[cfg(not(debug_assertions))]
+            {
+                assert_eq!(20, core::mem::size_of::<TimeZone>());
+            }
+        }
     }
 
     /// This tests a few other cases for `TimeZone::to_offset` that
@@ -3863,11 +3924,14 @@ mod tests {
         let tz = TimeZone::fixed(offset);
         assert_eq!(tz.to_fixed_offset().unwrap(), offset);
 
-        let tz = TimeZone::posix("EST5").unwrap();
-        assert!(tz.to_fixed_offset().is_err());
+        #[cfg(feature = "alloc")]
+        {
+            let tz = TimeZone::posix("EST5").unwrap();
+            assert!(tz.to_fixed_offset().is_err());
 
-        let test_file = TzifTestFile::get("America/New_York");
-        let tz = TimeZone::tzif(test_file.name, test_file.data).unwrap();
-        assert!(tz.to_fixed_offset().is_err());
+            let test_file = TzifTestFile::get("America/New_York");
+            let tz = TimeZone::tzif(test_file.name, test_file.data).unwrap();
+            assert!(tz.to_fixed_offset().is_err());
+        }
     }
 }

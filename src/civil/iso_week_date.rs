@@ -1,6 +1,6 @@
 use crate::{
     civil::{Date, Weekday},
-    error::Error,
+    error::{err, Error},
     util::{
         rangeint::RInto,
         t::{self, ISOWeek, ISOYear, C},
@@ -329,7 +329,9 @@ impl ISOWeekDate {
         debug_assert_eq!(t::Year::MIN, ISOYear::MIN);
         debug_assert_eq!(t::Year::MAX, ISOYear::MAX);
         if week == 53 && !is_long_year(year) {
-            return Err(Error::specific("ISO week number", week));
+            return Err(err!(
+                "ISO week number `{week}` is invalid for year `{year}`"
+            ));
         }
         // And also, the maximum Date constrains what we can utter with
         // ISOWeekDate so that we can preserve infallible conversions between
@@ -344,7 +346,7 @@ impl ISOWeekDate {
             && weekday.to_monday_zero_offset()
                 > Weekday::Friday.to_monday_zero_offset()
         {
-            return Err(Error::signed(
+            return Err(Error::range(
                 "weekday",
                 weekday.to_monday_zero_offset(),
                 Weekday::Monday.to_monday_one_offset(),

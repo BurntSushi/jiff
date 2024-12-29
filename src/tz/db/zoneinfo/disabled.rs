@@ -1,7 +1,6 @@
-use alloc::{string::String, vec::Vec};
-
 use crate::tz::TimeZone;
 
+#[derive(Clone)]
 pub(crate) struct ZoneInfo;
 
 impl ZoneInfo {
@@ -27,8 +26,9 @@ impl ZoneInfo {
         None
     }
 
-    pub(crate) fn available(&self) -> Vec<String> {
-        Vec::new()
+    #[cfg(feature = "alloc")]
+    pub(crate) fn available(&self) -> alloc::vec::Vec<alloc::string::String> {
+        alloc::vec::Vec::new()
     }
 
     pub(crate) fn is_definitively_empty(&self) -> bool {

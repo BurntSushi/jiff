@@ -102,6 +102,7 @@ pub(crate) static DEFAULT_DATETIME_PRINTER: DateTimePrinter =
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+#[cfg(feature = "alloc")]
 #[inline]
 pub fn to_string(zdt: &Zoned) -> Result<alloc::string::String, Error> {
     let mut buf = alloc::string::String::new();
@@ -1144,6 +1145,7 @@ impl DateTimePrinter {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[cfg(feature = "alloc")]
     pub fn zoned_to_string(
         &self,
         zdt: &Zoned,
@@ -1185,6 +1187,7 @@ impl DateTimePrinter {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[cfg(feature = "alloc")]
     pub fn timestamp_to_string(
         &self,
         timestamp: &Timestamp,
@@ -1230,6 +1233,7 @@ impl DateTimePrinter {
     /// ```
     ///
     /// [RFC 9110]: https://datatracker.ietf.org/doc/html/rfc9110#section-5.6.7-15
+    #[cfg(feature = "alloc")]
     pub fn timestamp_to_rfc9110_string(
         &self,
         timestamp: &Timestamp,

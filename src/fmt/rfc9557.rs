@@ -378,7 +378,9 @@ impl Parser {
     }
 
     // N.B. If we ever actually need the values, this should probably return a
-    // `Vec<&'i [u8]>`.
+    // `Vec<&'i [u8]>`. (Well, no, because that wouldn't be good for core-only
+    // configurations. So it will probably need to be something else. But,
+    // probably Jiff will never care about other values.)
     fn parse_annotation_values<'i>(
         &self,
         input: &'i [u8],
@@ -1034,7 +1036,7 @@ mod tests {
 
         insta::assert_snapshot!(
             p(b"[Foo]"),
-            @"failed to find timezone 'Foo' in time zone database",
+            @"failed to find time zone `Foo` in time zone database",
         );
     }
 

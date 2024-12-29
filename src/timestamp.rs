@@ -2084,11 +2084,10 @@ impl Timestamp {
     ) -> Result<Timestamp, Error> {
         let sign = sign.signum();
         let seconds = i64::try_from(duration.as_secs()).map_err(|_| {
-            Error::unsigned(
-                "duration seconds",
+            err!(
+                "could not convert unsigned `Duration` of `{} seconds` \
+                 to signed 64-bit integer",
                 duration.as_secs(),
-                UnixSeconds::MIN_REPR,
-                UnixSeconds::MAX_REPR,
             )
         })?;
         let nanos = i32::try_from(duration.subsec_nanos())
@@ -2153,7 +2152,7 @@ impl Timestamp {
     ) -> Result<Timestamp, Error> {
         let (second, nanosecond) = (second.rinto(), nanosecond.rinto());
         if second == UnixSeconds::MIN_REPR && nanosecond < 0 {
-            return Err(Error::signed(
+            return Err(Error::range(
                 "seconds and nanoseconds",
                 nanosecond,
                 0,

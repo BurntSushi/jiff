@@ -1,6 +1,6 @@
 use alloc::string::ToString;
 
-use crate::tz::Tzif;
+use crate::tz::tzif::Tzif;
 
 /// A list of all TZif files in our testdata directory.
 ///

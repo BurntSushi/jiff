@@ -113,12 +113,12 @@ use crate::{
     civil::{Date, DateTime, Time, Weekday},
     error::{err, Error, ErrorContext},
     span::{Span, ToSpan},
-    sync::Arc,
     timestamp::Timestamp,
     tz::{Dst, Offset},
     util::{
         parse,
         rangeint::RInto,
+        sync::Arc,
         t::{self, C},
     },
     Unit,
@@ -841,7 +841,7 @@ impl RuleSaveP {
         )?
         .get_seconds();
         let seconds = i32::try_from(seconds).map_err(|_| {
-            Error::signed("SAVE seconds", seconds, i32::MIN, i32::MAX)
+            Error::range("SAVE seconds", seconds, i32::MIN, i32::MAX)
         })?;
         Offset::from_seconds(seconds)
     }

@@ -43,6 +43,34 @@ Nevertheless, we generally use `IanaTz::parse` everywhere, even when parsing
 the `TZ` environment variable. The reason for this is that it seems to be what
 other programs do in practice (for example, GNU date).
 
+# `no-std` and `no-alloc` support
+
+This module works just fine in `no_std` mode. It also generally works fine
+without `alloc` too, modulo some APIs for parsing from an environment variable
+(which need `std` anyway). The main problem is that the type defined here takes
+up a lot of space (100+ bytes). A good chunk of that comes from representing
+time zone abbreviations inline. In theory, only 6-10 bytes are needed for
+simple cases like `TZ=EST5EDT,M3.2.0,M11.1.0`, but we make room for 30 byte
+length abbreviations (times two). Plus, there's a much of room made for the
+rule representation.
+
+When you then stuff this inside a `TimeZone` which cannot use heap allocation
+to force an indirection, you wind up with a very chunky `TimeZone`. And this in
+turn makes `Zoned` itself quite chunky.
+
+So while there isn't actually any particular reason why a
+`ReasonablePosixTimeZone` cannot be used in core-only environments, we don't
+include it in Jiff for now because it seems like bad juju to make `TimeZone`
+so big. So if you do need POSIX time zone support in core-only environments,
+please open an issue.
+
+My guess is that `Zoned` is itself kind of doomed in core-only environments.
+It's just too hard to bundle an entire time zone with every instant without
+using the heap to amortize copies of the time zone definition. I've been
+thinking about adding an `Unzoned` type that is just like `Zoned`, but requires
+the caller to pass in a `&TimeZone` for every API call. Less convenient for
+sure, but you get a more flexible type.
+
 [posix-env]: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap08.html#tag_08_03
 [iana-env]: https://data.iana.org/time-zones/tzdb-2024a/theory.html#functions
 [musl-env]: https://wiki.musl-libc.org/environment-variables
@@ -107,7 +135,12 @@ use crate::{
 ///
 /// [#168]: https://github.com/BurntSushi/jiff/issues/168
 const ABBREVIATION_MAX: usize = 30;
-type Abbreviation = ArrayStr<ABBREVIATION_MAX>;
+
+/// A type alias for centralizing the definition of a time zone abbreviation.
+///
+/// Basically, this creates one single coherent place where we control the
+/// length of a time zone abbreviation.
+pub(crate) type Abbreviation = ArrayStr<ABBREVIATION_MAX>;
 
 /// POSIX says the hour must be in the range `0..=24`, but that the default
 /// hour for DST is one hour more than standard time. Therefore, the actual
