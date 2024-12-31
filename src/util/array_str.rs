@@ -46,6 +46,11 @@ impl<const N: usize> ArrayStr<N> {
         Some(ArrayStr { bytes, len })
     }
 
+    /// Returns the capacity of this fixed string.
+    pub(crate) const fn capacity() -> usize {
+        N
+    }
+
     /// Append the bytes given to the end of this string.
     ///
     /// If the capacity would be exceeded, then this is a no-op and `false`
@@ -130,6 +135,55 @@ impl<const N: usize> core::fmt::Write for ArrayStr<N> {
         }
     }
 }
+
+/// A self-imposed limit on the size of a time zone abbreviation, in bytes.
+///
+/// POSIX says this:
+///
+/// > Indicate no less than three, nor more than {TZNAME_MAX}, bytes that are
+/// > the designation for the standard (std) or the alternative (dst -such as
+/// > Daylight Savings Time) timezone.
+///
+/// But it doesn't seem worth the trouble to query `TZNAME_MAX`. Interestingly,
+/// IANA says:
+///
+/// > are 3 or more characters specifying the standard and daylight saving time
+/// > (DST) zone abbreviations
+///
+/// Which implies that IANA thinks there is no limit. But that seems unwise.
+/// Moreover, in practice, it seems like the `date` utility supports fairly
+/// long abbreviations. On my mac (so, BSD `date` as I understand it):
+///
+/// ```text
+/// $ TZ=ZZZ5YYYYYYYYYYYYYYYYYYYYY date
+/// Sun Mar 17 20:05:58 YYYYYYYYYYYYYYYYYYYYY 2024
+/// ```
+///
+/// And on my Linux machine (so, GNU `date`):
+///
+/// ```text
+/// $ TZ=ZZZ5YYYYYYYYYYYYYYYYYYYYY date
+/// Sun Mar 17 08:05:36 PM YYYYYYYYYYYYYYYYYYYYY 2024
+/// ```
+///
+/// I don't know exactly what limit these programs use, but 30 seems good
+/// enough?
+///
+/// (Previously, I had been using 255 and stuffing the string in a `Box<str>`.
+/// But as part of work on [#168], I was looking to remove allocation from as
+/// many places as possible. And this was one candidate. But making room on the
+/// stack for 255 byte abbreviations seemed gratuitous. So I picked something
+/// smaller. If we come across an abbreviation bigger than this max, then we'll
+/// error.)
+///
+/// [#168]: https://github.com/BurntSushi/jiff/issues/168
+const ABBREVIATION_MAX: usize = 30;
+
+/// A type alias for centralizing the definition of a time zone abbreviation.
+///
+/// Basically, this creates one single coherent place where we control the
+/// length of a time zone abbreviation.
+pub(crate) type Abbreviation = ArrayStr<ABBREVIATION_MAX>;
 
 #[cfg(test)]
 mod tests {

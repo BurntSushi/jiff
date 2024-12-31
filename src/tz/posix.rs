@@ -84,7 +84,7 @@ use crate::{
     timestamp::Timestamp,
     tz::{AmbiguousOffset, Dst, Offset},
     util::{
-        array_str::ArrayStr,
+        array_str::Abbreviation,
         escape::{Byte, Bytes},
         parse,
         rangeint::{ri16, ri8, RFrom, RInto},
@@ -92,55 +92,6 @@ use crate::{
     },
     SignedDuration,
 };
-
-/// A self-imposed limit on the size of a time zone abbreviation, in bytes.
-///
-/// POSIX says this:
-///
-/// > Indicate no less than three, nor more than {TZNAME_MAX}, bytes that are
-/// > the designation for the standard (std) or the alternative (dst -such as
-/// > Daylight Savings Time) timezone.
-///
-/// But it doesn't seem worth the trouble to query `TZNAME_MAX`. Interestingly,
-/// IANA says:
-///
-/// > are 3 or more characters specifying the standard and daylight saving time
-/// > (DST) zone abbreviations
-///
-/// Which implies that IANA thinks there is no limit. But that seems unwise.
-/// Moreover, in practice, it seems like the `date` utility supports fairly
-/// long abbreviations. On my mac (so, BSD `date` as I understand it):
-///
-/// ```text
-/// $ TZ=ZZZ5YYYYYYYYYYYYYYYYYYYYY date
-/// Sun Mar 17 20:05:58 YYYYYYYYYYYYYYYYYYYYY 2024
-/// ```
-///
-/// And on my Linux machine (so, GNU `date`):
-///
-/// ```text
-/// $ TZ=ZZZ5YYYYYYYYYYYYYYYYYYYYY date
-/// Sun Mar 17 08:05:36 PM YYYYYYYYYYYYYYYYYYYYY 2024
-/// ```
-///
-/// I don't know exactly what limit these programs use, but 30 seems good
-/// enough?
-///
-/// (Previously, I had been using 255 and stuffing the string in a `Box<str>`.
-/// But as part of work on [#168], I was looking to remove allocation from as
-/// many places as possible. And this was one candidate. But making room on the
-/// stack for 255 byte abbreviations seemed gratuitous. So I picked something
-/// smaller. If we come across an abbreviation bigger than this max, then we'll
-/// error.)
-///
-/// [#168]: https://github.com/BurntSushi/jiff/issues/168
-const ABBREVIATION_MAX: usize = 30;
-
-/// A type alias for centralizing the definition of a time zone abbreviation.
-///
-/// Basically, this creates one single coherent place where we control the
-/// length of a time zone abbreviation.
-pub(crate) type Abbreviation = ArrayStr<ABBREVIATION_MAX>;
 
 /// POSIX says the hour must be in the range `0..=24`, but that the default
 /// hour for DST is one hour more than standard time. Therefore, the actual
@@ -1180,11 +1131,11 @@ impl<'s> Parser<'s> {
             if !self.byte().is_ascii_alphabetic() {
                 break;
             }
-            if i >= ABBREVIATION_MAX {
+            if i >= Abbreviation::capacity() {
                 return Err(err!(
                     "expected abbreviation with at most {} bytes, \
                      but found a longer abbreviation beginning with '{}'",
-                    ABBREVIATION_MAX,
+                    Abbreviation::capacity(),
                     Bytes(&self.tz[start..i]),
                 ));
             }
@@ -1214,7 +1165,7 @@ impl<'s> Parser<'s> {
             ));
         }
         // OK because we verified above that the abbreviation
-        // does not exceed ABBREVIATION_MAX.
+        // does not exceed `Abbreviation::capacity`.
         Ok(Abbreviation::new(abbrev).unwrap())
     }
 
@@ -1234,11 +1185,11 @@ impl<'s> Parser<'s> {
             {
                 break;
             }
-            if i >= ABBREVIATION_MAX {
+            if i >= Abbreviation::capacity() {
                 return Err(err!(
                     "expected abbreviation with at most {} bytes, \
                      but found a longer abbreviation beginning with '{}'",
-                    ABBREVIATION_MAX,
+                    Abbreviation::capacity(),
                     Bytes(&self.tz[start..i]),
                 ));
             }
@@ -1283,7 +1234,7 @@ impl<'s> Parser<'s> {
             ));
         }
         // OK because we verified above that the abbreviation
-        // does not exceed ABBREVIATION_MAX.
+        // does not exceed `Abbreviation::capacity()`.
         Ok(Abbreviation::new(abbrev).unwrap())
     }
 
