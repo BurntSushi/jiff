@@ -3047,7 +3047,9 @@ impl Span {
         let non_time_unit = self.largest_calendar_unit()?;
         Some(err!(
             "operation can only be performed with units of hours \
-             or smaller, but found non-zero {unit} units",
+             or smaller, but found non-zero {unit} units \
+             (operations on `Timestamp`, `tz::Offset` and `civil::Time` \
+              don't support calendar units in a `Span`)",
             unit = non_time_unit.singular(),
         ))
     }

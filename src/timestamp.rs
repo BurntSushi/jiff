@@ -1143,9 +1143,11 @@ impl Timestamp {
     /// If the sum would overflow the minimum or maximum timestamp values, then
     /// an error is returned.
     ///
-    /// This also returns an error if the given span has any non-zero units
-    /// greater than hours. If you want to use bigger units, convert this
-    /// timestamp to a `Zoned` and use [`Zoned::checked_add`].
+    /// This also returns an error if the given duration is a `Span` with any
+    /// non-zero units greater than hours. If you want to use bigger units,
+    /// convert this timestamp to a `Zoned` and use [`Zoned::checked_add`].
+    /// This error occurs because a `Timestamp` has no time zone attached to
+    /// it, and thus cannot unambiguously resolve the length of a single day.
     ///
     /// # Example
     ///
@@ -2466,21 +2468,25 @@ impl core::hash::Hash for Timestamp {
 
 /// Adds a span of time to a timestamp.
 ///
-/// This uses checked arithmetic and panics on overflow. To handle overflow
-/// without panics, use [`Timestamp::checked_add`].
+/// This uses checked arithmetic and panics when it fails. To handle arithmetic
+/// without panics, use [`Timestamp::checked_add`]. Note that the failure
+/// condition includes overflow and using a `Span` with non-zero units greater
+/// than hours.
 impl core::ops::Add<Span> for Timestamp {
     type Output = Timestamp;
 
     #[inline]
     fn add(self, rhs: Span) -> Timestamp {
-        self.checked_add(rhs).expect("adding span to timestamp overflowed")
+        self.checked_add(rhs).expect("adding span to timestamp failed")
     }
 }
 
 /// Adds a span of time to a timestamp in place.
 ///
-/// This uses checked arithmetic and panics on overflow. To handle overflow
-/// without panics, use [`Timestamp::checked_add`].
+/// This uses checked arithmetic and panics when it fails. To handle arithmetic
+/// without panics, use [`Timestamp::checked_add`]. Note that the failure
+/// condition includes overflow and using a `Span` with non-zero units greater
+/// than hours.
 impl core::ops::AddAssign<Span> for Timestamp {
     #[inline]
     fn add_assign(&mut self, rhs: Span) {
@@ -2490,22 +2496,25 @@ impl core::ops::AddAssign<Span> for Timestamp {
 
 /// Subtracts a span of time from a timestamp.
 ///
-/// This uses checked arithmetic and panics on overflow. To handle overflow
-/// without panics, use [`Timestamp::checked_sub`].
+/// This uses checked arithmetic and panics when it fails. To handle arithmetic
+/// without panics, use [`Timestamp::checked_sub`]. Note that the failure
+/// condition includes overflow and using a `Span` with non-zero units greater
+/// than hours.
 impl core::ops::Sub<Span> for Timestamp {
     type Output = Timestamp;
 
     #[inline]
     fn sub(self, rhs: Span) -> Timestamp {
-        self.checked_sub(rhs)
-            .expect("subtracting span from timestamp overflowed")
+        self.checked_sub(rhs).expect("subtracting span from timestamp failed")
     }
 }
 
 /// Subtracts a span of time from a timestamp in place.
 ///
-/// This uses checked arithmetic and panics on overflow. To handle overflow
-/// without panics, use [`Timestamp::checked_sub`].
+/// This uses checked arithmetic and panics when it fails. To handle arithmetic
+/// without panics, use [`Timestamp::checked_sub`]. Note that the failure
+/// condition includes overflow and using a `Span` with non-zero units greater
+/// than hours.
 impl core::ops::SubAssign<Span> for Timestamp {
     #[inline]
     fn sub_assign(&mut self, rhs: Span) {
