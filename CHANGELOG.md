@@ -3,8 +3,8 @@
 0.1.17 (2024-12-31)
 ===================
 This release enhances Jiff's support for `no_std` environments by making its
-`alloc` feature optional. When `alloc` is disabled, on fixed offset time zones
-are supported and error messages are significantly degraded. If you have
+`alloc` feature optional. When `alloc` is disabled, only fixed offset time
+zones are supported and error messages are significantly degraded. If you have
 core-only use cases for Jiff, I'd love to hear about them on the issue tracker.
 
 Enhancements:
