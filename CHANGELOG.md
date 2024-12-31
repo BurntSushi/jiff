@@ -1,13 +1,18 @@
 # CHANGELOG
 
-0.1.17 (TBD)
-============
-TBD.
+0.1.17 (2024-12-31)
+===================
+This release enhances Jiff's support for `no_std` environments by making its
+`alloc` feature optional. When `alloc` is disabled, on fixed offset time zones
+are supported and error messages are significantly degraded. If you have
+core-only use cases for Jiff, I'd love to hear about them on the issue tracker.
 
 Enhancements:
 
 * [#162](https://github.com/BurntSushi/jiff/issues/162):
 Support platforms that do not have atomics in `std`.
+* [#168](https://github.com/BurntSushi/jiff/issues/168):
+Jiff now supports disabling the `alloc` feature, which enables core-only mode.
 * [#169](https://github.com/BurntSushi/jiff/issues/169):
 Add `TimeZone::to_fixed_offset` for accessing an invariant offset if possible.
 
