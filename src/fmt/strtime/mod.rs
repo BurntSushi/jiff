@@ -249,7 +249,9 @@ use crate::{
     },
     tz::{Offset, OffsetConflict, TimeZone, TimeZoneDatabase},
     util::{
-        self, escape,
+        self,
+        array_str::Abbreviation,
+        escape,
         t::{self, C},
     },
     Error, Timestamp, Zoned,
@@ -257,9 +259,6 @@ use crate::{
 
 mod format;
 mod parse;
-
-/// Matches the abbreviation defined in `jiff::tz::posix`.
-type Abbreviation = crate::util::array_str::ArrayStr<30>;
 
 /// Parse the given `input` according to the given `format` string.
 ///
