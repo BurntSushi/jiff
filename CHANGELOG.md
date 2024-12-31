@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.1.18 (TBD)
+============
+TODO
+
+Enhancements:
+
+* [#145](https://github.com/BurntSushi/jiff/issues/145)
+Improve docs and error messages around fallible `Timestamp` arithmetic.
+
+
 0.1.17 (2024-12-31)
 ===================
 This release enhances Jiff's support for `no_std` environments by making its
