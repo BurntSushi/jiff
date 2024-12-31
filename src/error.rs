@@ -43,7 +43,7 @@ pub(crate) use err;
 /// [about error types].
 ///
 /// [about error types]: https://github.com/BurntSushi/jiff/issues/8
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Error {
     /// The internal representation of an error.
     ///
@@ -199,6 +199,28 @@ impl core::fmt::Display for Error {
         #[cfg(not(feature = "alloc"))]
         {
             write!(f, "{}", self.inner.kind)
+        }
+    }
+}
+
+impl core::fmt::Debug for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if !f.alternate() {
+            core::fmt::Display::fmt(self, f)
+        } else {
+            #[cfg(feature = "alloc")]
+            {
+                f.debug_struct("Error")
+                    .field("kind", &self.inner.kind)
+                    .field("cause", &self.inner.cause)
+                    .finish()
+            }
+            #[cfg(not(feature = "alloc"))]
+            {
+                f.debug_struct("Error")
+                    .field("kind", &self.inner.kind)
+                    .finish()
+            }
         }
     }
 }
