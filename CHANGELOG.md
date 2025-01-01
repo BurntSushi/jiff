@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.1.19 (TBD)
+============
+TODO
+
+Enhancements:
+
+* [#130](https://github.com/BurntSushi/jiff/issues/130):
+Document value ranges for methods like `year`, `day`, `hour` and so on.
+
+
 0.1.18 (2024-12-31)
 ===================
 This release includes a few minor enhancements. Namely, the ability to iterate
@@ -8,9 +18,9 @@ to failure modes when `Timestamp` and `Span` arithmetic fails.
 
 Enhancements:
 
-* [#144](https://github.com/BurntSushi/jiff/issues/144)
+* [#144](https://github.com/BurntSushi/jiff/issues/144):
 Add APIs for iterating over the transitions of a time zone.
-* [#145](https://github.com/BurntSushi/jiff/issues/145)
+* [#145](https://github.com/BurntSushi/jiff/issues/145):
 Improve docs and error messages around fallible `Timestamp` arithmetic.
 
 

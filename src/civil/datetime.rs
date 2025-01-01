@@ -440,6 +440,8 @@ impl DateTime {
 
     /// Returns the year for this datetime.
     ///
+    /// The value returned is guaranteed to be in the range `-9999..=9999`.
+    ///
     /// # Example
     ///
     /// ```
@@ -469,6 +471,8 @@ impl DateTime {
     ///
     /// The crate is designed this way so that years in the latest era (that
     /// is, `CE`) are aligned with years in this crate.
+    ///
+    /// The year returned is guaranteed to be in the range `1..=10000`.
     ///
     /// # Example
     ///
@@ -500,6 +504,8 @@ impl DateTime {
 
     /// Returns the month for this datetime.
     ///
+    /// The value returned is guaranteed to be in the range `1..=12`.
+    ///
     /// # Example
     ///
     /// ```
@@ -514,6 +520,8 @@ impl DateTime {
     }
 
     /// Returns the day for this datetime.
+    ///
+    /// The value returned is guaranteed to be in the range `1..=31`.
     ///
     /// # Example
     ///
@@ -530,6 +538,8 @@ impl DateTime {
 
     /// Returns the "hour" component of this datetime.
     ///
+    /// The value returned is guaranteed to be in the range `0..=23`.
+    ///
     /// # Example
     ///
     /// ```
@@ -544,6 +554,8 @@ impl DateTime {
     }
 
     /// Returns the "minute" component of this datetime.
+    ///
+    /// The value returned is guaranteed to be in the range `0..=59`.
     ///
     /// # Example
     ///
@@ -560,6 +572,8 @@ impl DateTime {
 
     /// Returns the "second" component of this datetime.
     ///
+    /// The value returned is guaranteed to be in the range `0..=59`.
+    ///
     /// # Example
     ///
     /// ```
@@ -574,6 +588,8 @@ impl DateTime {
     }
 
     /// Returns the "millisecond" component of this datetime.
+    ///
+    /// The value returned is guaranteed to be in the range `0..=999`.
     ///
     /// # Example
     ///
@@ -590,6 +606,8 @@ impl DateTime {
 
     /// Returns the "microsecond" component of this datetime.
     ///
+    /// The value returned is guaranteed to be in the range `0..=999`.
+    ///
     /// # Example
     ///
     /// ```
@@ -604,6 +622,8 @@ impl DateTime {
     }
 
     /// Returns the "nanosecond" component of this datetime.
+    ///
+    /// The value returned is guaranteed to be in the range `0..=999`.
     ///
     /// # Example
     ///
@@ -622,6 +642,8 @@ impl DateTime {
     ///
     /// If you want to set this value on `DateTime`, then use
     /// [`DateTimeWith::subsec_nanosecond`] via [`DateTime::with`].
+    ///
+    /// The value returned is guaranteed to be in the range `0..=999_999_999`.
     ///
     /// # Example
     ///

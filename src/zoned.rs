@@ -634,6 +634,8 @@ impl Zoned {
 
     /// Returns the year for this zoned datetime.
     ///
+    /// The value returned is guaranteed to be in the range `-9999..=9999`.
+    ///
     /// # Example
     ///
     /// ```
@@ -665,6 +667,8 @@ impl Zoned {
     ///
     /// The crate is designed this way so that years in the latest era (that
     /// is, `CE`) are aligned with years in this crate.
+    ///
+    /// The year returned is guaranteed to be in the range `1..=10000`.
     ///
     /// # Example
     ///
@@ -698,6 +702,8 @@ impl Zoned {
 
     /// Returns the month for this zoned datetime.
     ///
+    /// The value returned is guaranteed to be in the range `1..=12`.
+    ///
     /// # Example
     ///
     /// ```
@@ -715,6 +721,8 @@ impl Zoned {
 
     /// Returns the day for this zoned datetime.
     ///
+    /// The value returned is guaranteed to be in the range `1..=31`.
+    ///
     /// # Example
     ///
     /// ```
@@ -731,6 +739,8 @@ impl Zoned {
     }
 
     /// Returns the "hour" component of this zoned datetime.
+    ///
+    /// The value returned is guaranteed to be in the range `0..=23`.
     ///
     /// # Example
     ///
@@ -751,6 +761,8 @@ impl Zoned {
 
     /// Returns the "minute" component of this zoned datetime.
     ///
+    /// The value returned is guaranteed to be in the range `0..=59`.
+    ///
     /// # Example
     ///
     /// ```
@@ -769,6 +781,8 @@ impl Zoned {
     }
 
     /// Returns the "second" component of this zoned datetime.
+    ///
+    /// The value returned is guaranteed to be in the range `0..=59`.
     ///
     /// # Example
     ///
@@ -789,6 +803,8 @@ impl Zoned {
 
     /// Returns the "millisecond" component of this zoned datetime.
     ///
+    /// The value returned is guaranteed to be in the range `0..=999`.
+    ///
     /// # Example
     ///
     /// ```
@@ -808,6 +824,8 @@ impl Zoned {
 
     /// Returns the "microsecond" component of this zoned datetime.
     ///
+    /// The value returned is guaranteed to be in the range `0..=999`.
+    ///
     /// # Example
     ///
     /// ```
@@ -826,6 +844,8 @@ impl Zoned {
     }
 
     /// Returns the "nanosecond" component of this zoned datetime.
+    ///
+    /// The value returned is guaranteed to be in the range `0..=999`.
     ///
     /// # Example
     ///
@@ -848,6 +868,8 @@ impl Zoned {
     ///
     /// If you want to set this value on `Zoned`, then use
     /// [`ZonedWith::subsec_nanosecond`] via [`Zoned::with`].
+    ///
+    /// The value returned is guaranteed to be in the range `0..=999_999_999`.
     ///
     /// # Example
     ///

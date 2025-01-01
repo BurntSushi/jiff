@@ -415,6 +415,8 @@ impl Date {
 
     /// Returns the year for this date.
     ///
+    /// The value returned is guaranteed to be in the range `-9999..=9999`.
+    ///
     /// # Example
     ///
     /// ```
@@ -444,6 +446,8 @@ impl Date {
     ///
     /// The crate is designed this way so that years in the latest era (that
     /// is, `CE`) are aligned with years in this crate.
+    ///
+    /// The year returned is guaranteed to be in the range `1..=10000`.
     ///
     /// # Example
     ///
@@ -485,6 +489,8 @@ impl Date {
 
     /// Returns the month for this date.
     ///
+    /// The value returned is guaranteed to be in the range `1..=12`.
+    ///
     /// # Example
     ///
     /// ```
@@ -499,6 +505,8 @@ impl Date {
     }
 
     /// Returns the day for this date.
+    ///
+    /// The value returned is guaranteed to be in the range `1..=31`.
     ///
     /// # Example
     ///

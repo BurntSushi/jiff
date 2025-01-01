@@ -402,6 +402,8 @@ impl Time {
 
     /// Returns the "hour" component of this time.
     ///
+    /// The value returned is guaranteed to be in the range `0..=23`.
+    ///
     /// # Example
     ///
     /// ```
@@ -416,6 +418,8 @@ impl Time {
     }
 
     /// Returns the "minute" component of this time.
+    ///
+    /// The value returned is guaranteed to be in the range `0..=59`.
     ///
     /// # Example
     ///
@@ -432,6 +436,8 @@ impl Time {
 
     /// Returns the "second" component of this time.
     ///
+    /// The value returned is guaranteed to be in the range `0..=59`.
+    ///
     /// # Example
     ///
     /// ```
@@ -446,6 +452,8 @@ impl Time {
     }
 
     /// Returns the "millisecond" component of this time.
+    ///
+    /// The value returned is guaranteed to be in the range `0..=999`.
     ///
     /// # Example
     ///
@@ -462,6 +470,8 @@ impl Time {
 
     /// Returns the "microsecond" component of this time.
     ///
+    /// The value returned is guaranteed to be in the range `0..=999`.
+    ///
     /// # Example
     ///
     /// ```
@@ -476,6 +486,8 @@ impl Time {
     }
 
     /// Returns the "nanosecond" component of this time.
+    ///
+    /// The value returned is guaranteed to be in the range `0..=999`.
     ///
     /// # Example
     ///
@@ -494,6 +506,8 @@ impl Time {
     ///
     /// If you want to set this value on `Time`, then use
     /// [`TimeWith::subsec_nanosecond`] via [`Time::with`].
+    ///
+    /// The value returned is guaranteed to be in the range `0..=999_999_999`.
     ///
     /// # Example
     ///
