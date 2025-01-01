@@ -8,6 +8,8 @@ Enhancements:
 
 * [#130](https://github.com/BurntSushi/jiff/issues/130):
 Document value ranges for methods like `year`, `day`, `hour` and so on.
+* [#187](https://github.com/BurntSushi/jiff/issues/187):
+Add a rounding API (for time units only) on `SignedDuration`.
 
 Bug fixes:
 
