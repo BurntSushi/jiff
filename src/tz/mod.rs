@@ -1028,18 +1028,172 @@ impl TimeZone {
         AmbiguousTimestamp::new(dt, ambiguous_kind)
     }
 
-    // I'd like to export the prev/next transition routines below, but I'm
-    // not fully sure of their API. I'd like to understand use cases a bit
-    // better. And I suspect it would make more sense to not just return a
-    // timestamp, but also the offset associated with the time zone transition
-    // change. Otherwise, if one needs the offset, you need to go back and do
-    // another lookup via `TimeZone::to_offset`. Where as I believe finding the
-    // prev/next transition must also necessarily find the offset too. So we
-    // might as well return it.
-
-    #[allow(dead_code)]
+    /// Returns an iterator of time zone transitions preceding the given
+    /// timestamp. The iterator returned yields [`TimeZoneTransition`]
+    /// elements.
+    ///
+    /// The order of the iterator returned moves backward through time. If
+    /// there is a previous transition, then the timestamp of that transition
+    /// is guaranteed to be strictly less than the timestamp given.
+    ///
+    /// This is a low level API that you generally shouldn't need. It's
+    /// useful in cases where you need to know something about the specific
+    /// instants at which time zone transitions occur. For example, an embedded
+    /// device might need to be explicitly programmed with daylight saving
+    /// time transitions. APIs like this enable callers to explore those
+    /// transitions.
+    ///
+    /// A time zone transition refers to a specific point in time when the
+    /// offset from UTC for a particular geographical region changes. This
+    /// is usually a result of daylight saving time, but it can also occur
+    /// when a geographic region changes its permanent offset from UTC.
+    ///
+    /// The iterator returned is not guaranteed to yield any elements. For
+    /// example, this occurs with a fixed offset time zone. Logically, it
+    /// would also be possible for the iterator to be infinite, except that
+    /// eventually the timestamp would overflow Jiff's minimum timestamp
+    /// value, at which point, iteration stops.
+    ///
+    /// # Example: time since the previous transition
+    ///
+    /// This example shows how much time has passed since the previous time
+    /// zone transition:
+    ///
+    /// ```
+    /// use jiff::{Unit, Zoned};
+    ///
+    /// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+    /// let trans = now.time_zone().preceding(now.timestamp()).next().unwrap();
+    /// let prev_at = trans.timestamp().to_zoned(now.time_zone().clone());
+    /// let span = now.since((Unit::Year, &prev_at))?;
+    /// assert_eq!(format!("{span:#}"), "1mo 27d 17h 25m");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: show the 5 previous time zone transitions
+    ///
+    /// This shows how to find the 5 preceding time zone transitions (from a
+    /// particular datetime) for a particular time zone:
+    ///
+    /// ```
+    /// use jiff::{tz::offset, Zoned};
+    ///
+    /// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+    /// let transitions = now
+    ///     .time_zone()
+    ///     .preceding(now.timestamp())
+    ///     .take(5)
+    ///     .map(|t| (
+    ///         t.timestamp().to_zoned(now.time_zone().clone()),
+    ///         t.offset(),
+    ///         t.abbreviation(),
+    ///     ))
+    ///     .collect::<Vec<_>>();
+    /// assert_eq!(transitions, vec![
+    ///     ("2024-11-03 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+    ///     ("2024-03-10 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+    ///     ("2023-11-05 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+    ///     ("2023-03-12 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+    ///     ("2022-11-06 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+    /// ]);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
-    fn previous_transition(&self, _timestamp: Timestamp) -> Option<Timestamp> {
+    pub fn preceding<'t>(
+        &'t self,
+        timestamp: Timestamp,
+    ) -> TimeZonePrecedingTransitions<'t> {
+        TimeZonePrecedingTransitions { tz: self, cur: timestamp }
+    }
+
+    /// Returns an iterator of time zone transitions following the given
+    /// timestamp. The iterator returned yields [`TimeZoneTransition`]
+    /// elements.
+    ///
+    /// The order of the iterator returned moves forward through time. If
+    /// there is a following transition, then the timestamp of that transition
+    /// is guaranteed to be strictly greater than the timestamp given.
+    ///
+    /// This is a low level API that you generally shouldn't need. It's
+    /// useful in cases where you need to know something about the specific
+    /// instants at which time zone transitions occur. For example, an embedded
+    /// device might need to be explicitly programmed with daylight saving
+    /// time transitions. APIs like this enable callers to explore those
+    /// transitions.
+    ///
+    /// A time zone transition refers to a specific point in time when the
+    /// offset from UTC for a particular geographical region changes. This
+    /// is usually a result of daylight saving time, but it can also occur
+    /// when a geographic region changes its permanent offset from UTC.
+    ///
+    /// The iterator returned is not guaranteed to yield any elements. For
+    /// example, this occurs with a fixed offset time zone. Logically, it
+    /// would also be possible for the iterator to be infinite, except that
+    /// eventually the timestamp would overflow Jiff's maximum timestamp
+    /// value, at which point, iteration stops.
+    ///
+    /// # Example: time until the next transition
+    ///
+    /// This example shows how much time is left until the next time zone
+    /// transition:
+    ///
+    /// ```
+    /// use jiff::{Unit, Zoned};
+    ///
+    /// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+    /// let trans = now.time_zone().following(now.timestamp()).next().unwrap();
+    /// let next_at = trans.timestamp().to_zoned(now.time_zone().clone());
+    /// let span = now.until((Unit::Year, &next_at))?;
+    /// assert_eq!(format!("{span:#}"), "2mo 8d 7h 35m");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: show the 5 next time zone transitions
+    ///
+    /// This shows how to find the 5 following time zone transitions (from a
+    /// particular datetime) for a particular time zone:
+    ///
+    /// ```
+    /// use jiff::{tz::offset, Zoned};
+    ///
+    /// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+    /// let transitions = now
+    ///     .time_zone()
+    ///     .following(now.timestamp())
+    ///     .take(5)
+    ///     .map(|t| (
+    ///         t.timestamp().to_zoned(now.time_zone().clone()),
+    ///         t.offset(),
+    ///         t.abbreviation(),
+    ///     ))
+    ///     .collect::<Vec<_>>();
+    /// assert_eq!(transitions, vec![
+    ///     ("2025-03-09 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+    ///     ("2025-11-02 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+    ///     ("2026-03-08 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+    ///     ("2026-11-01 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+    ///     ("2027-03-14 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+    /// ]);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn following<'t>(
+        &'t self,
+        timestamp: Timestamp,
+    ) -> TimeZoneFollowingTransitions<'t> {
+        TimeZoneFollowingTransitions { tz: self, cur: timestamp }
+    }
+
+    /// Used by the "preceding transitions" iterator.
+    #[inline]
+    fn previous_transition(
+        &self,
+        _timestamp: Timestamp,
+    ) -> Option<TimeZoneTransition> {
         match **self.kind.as_ref()? {
             TimeZoneKind::Fixed(_) => None,
             #[cfg(feature = "alloc")]
@@ -1049,9 +1203,12 @@ impl TimeZone {
         }
     }
 
-    #[allow(dead_code)]
+    /// Used by the "following transitions" iterator.
     #[inline]
-    fn next_transition(&self, _timestamp: Timestamp) -> Option<Timestamp> {
+    fn next_transition(
+        &self,
+        _timestamp: Timestamp,
+    ) -> Option<TimeZoneTransition> {
         match **self.kind.as_ref()? {
             TimeZoneKind::Fixed(_) => None,
             #[cfg(feature = "alloc")]
@@ -1177,12 +1334,18 @@ impl TimeZonePosix {
     }
 
     #[inline]
-    fn previous_transition(&self, timestamp: Timestamp) -> Option<Timestamp> {
+    fn previous_transition(
+        &self,
+        timestamp: Timestamp,
+    ) -> Option<TimeZoneTransition> {
         self.posix.previous_transition(timestamp)
     }
 
     #[inline]
-    fn next_transition(&self, timestamp: Timestamp) -> Option<Timestamp> {
+    fn next_transition(
+        &self,
+        timestamp: Timestamp,
+    ) -> Option<TimeZoneTransition> {
         self.posix.next_transition(timestamp)
     }
 }
@@ -1246,12 +1409,18 @@ impl TimeZoneTzif {
     }
 
     #[inline]
-    fn previous_transition(&self, timestamp: Timestamp) -> Option<Timestamp> {
+    fn previous_transition(
+        &self,
+        timestamp: Timestamp,
+    ) -> Option<TimeZoneTransition> {
         self.tzif.previous_transition(timestamp)
     }
 
     #[inline]
-    fn next_transition(&self, timestamp: Timestamp) -> Option<Timestamp> {
+    fn next_transition(
+        &self,
+        timestamp: Timestamp,
+    ) -> Option<TimeZoneTransition> {
         self.tzif.next_transition(timestamp)
     }
 }
@@ -1265,6 +1434,282 @@ impl core::fmt::Debug for TimeZoneTzif {
         f.debug_tuple("TZif").field(&self.name().unwrap_or("Local")).finish()
     }
 }
+
+/// A representation a single time zone transition.
+///
+/// A time zone transition is an instant in time the marks the beginning of
+/// a change in the offset from UTC that civil time is computed from in a
+/// particular time zone. For example, when daylight saving time comes into
+/// effect (or goes away). Another example is when a geographic region changes
+/// its permanent offset from UTC.
+///
+/// This is a low level type that you generally shouldn't need. It's useful in
+/// cases where you need to know something about the specific instants at which
+/// time zone transitions occur. For example, an embedded device might need to
+/// be explicitly programmed with daylight saving time transitions. APIs like
+/// this enable callers to explore those transitions.
+///
+/// This type is yielded by the iterators
+/// [`TimeZonePrecedingTransitions`] and
+/// [`TimeZoneFollowingTransitions`]. The iterators are created by
+/// [`TimeZone::preceding`] and [`TimeZone::following`], respectively.
+///
+/// # Example
+///
+/// This shows a somewhat silly example that finds all of the unique civil
+/// (or "clock" or "local") times at which a time zone transition has occurred
+/// in a particular time zone:
+///
+/// ```
+/// use std::collections::BTreeSet;
+/// use jiff::{civil, tz::TimeZone};
+///
+/// let tz = TimeZone::get("America/New_York")?;
+/// let now = civil::date(2024, 12, 31).at(18, 25, 0, 0).to_zoned(tz.clone())?;
+/// let mut set = BTreeSet::new();
+/// for trans in tz.preceding(now.timestamp()) {
+///     let time = tz.to_datetime(trans.timestamp()).time();
+///     set.insert(time);
+/// }
+/// assert_eq!(Vec::from_iter(set), vec![
+///     civil::time(1, 0, 0, 0),  // typical transition out of DST
+///     civil::time(3, 0, 0, 0),  // typical transition into DST
+///     civil::time(12, 0, 0, 0), // from when IANA starts keeping track
+///     civil::time(19, 0, 0, 0), // from World War 2
+/// ]);
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Debug)]
+pub struct TimeZoneTransition<'t> {
+    // We don't currently do anything smart to make iterating over
+    // transitions faster. We could if we pushed the iterator impl down into
+    // the respective modules (`posix` and `tzif`), but it's not clear such
+    // optimization is really worth it. However, this API should permit that
+    // kind of optimization in the future.
+    timestamp: Timestamp,
+    offset: Offset,
+    abbrev: &'t str,
+    dst: Dst,
+}
+
+impl<'t> TimeZoneTransition<'t> {
+    /// Returns the timestamp at which this transition began.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil, tz::TimeZone};
+    ///
+    /// let tz = TimeZone::get("US/Eastern")?;
+    /// // Look for the first time zone transition in `US/Eastern` following
+    /// // 2023-03-09 00:00:00.
+    /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
+    /// let next = tz.following(start).next().unwrap();
+    /// assert_eq!(
+    ///     next.timestamp().to_zoned(tz.clone()).to_string(),
+    ///     "2024-03-10T03:00:00-04:00[US/Eastern]",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn timestamp(&self) -> Timestamp {
+        self.timestamp
+    }
+
+    /// Returns the offset corresponding to this time zone transition. All
+    /// instants at and following this transition's timestamp (and before the
+    /// next transition's timestamp) need to apply this offset from UTC to get
+    /// the civil or "local" time in the corresponding time zone.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil, tz::{TimeZone, offset}};
+    ///
+    /// let tz = TimeZone::get("US/Eastern")?;
+    /// // Get the offset of the next transition after
+    /// // 2023-03-09 00:00:00.
+    /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
+    /// let next = tz.following(start).next().unwrap();
+    /// assert_eq!(next.offset(), offset(-4));
+    /// // Or go backwards to find the previous transition.
+    /// let prev = tz.preceding(start).next().unwrap();
+    /// assert_eq!(prev.offset(), offset(-5));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn offset(&self) -> Offset {
+        self.offset
+    }
+
+    /// Returns the time zone abbreviation corresponding to this time
+    /// zone transition. All instants at and following this transition's
+    /// timestamp (and before the next transition's timestamp) may use this
+    /// abbreviation when creating a human readable string. For example,
+    /// this is the abbreviation used with the `%Z` specifier with Jiff's
+    /// [`fmt::strtime`](crate::fmt::strtime) module.
+    ///
+    /// Note that abbreviations can to be ambiguous. For example, the
+    /// abbreviation `CST` can be used for the time zones `Asia/Shanghai`,
+    /// `America/Chicago` and `America/Havana`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil, tz::TimeZone};
+    ///
+    /// let tz = TimeZone::get("US/Eastern")?;
+    /// // Get the abbreviation of the next transition after
+    /// // 2023-03-09 00:00:00.
+    /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
+    /// let next = tz.following(start).next().unwrap();
+    /// assert_eq!(next.abbreviation(), "EDT");
+    /// // Or go backwards to find the previous transition.
+    /// let prev = tz.preceding(start).next().unwrap();
+    /// assert_eq!(prev.abbreviation(), "EST");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn abbreviation(&self) -> &'t str {
+        self.abbrev
+    }
+
+    /// Returns whether daylight saving time is enabled for this time zone
+    /// transition.
+    ///
+    /// Callers should generally treat this as informational only. In
+    /// particular, not all time zone transitions are related to daylight
+    /// saving time. For example, some transitions are a result of a region
+    /// permanently changing their offset from UTC.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil, tz::{Dst, TimeZone}};
+    ///
+    /// let tz = TimeZone::get("US/Eastern")?;
+    /// // Get the DST status of the next transition after
+    /// // 2023-03-09 00:00:00.
+    /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
+    /// let next = tz.following(start).next().unwrap();
+    /// assert_eq!(next.dst(), Dst::Yes);
+    /// // Or go backwards to find the previous transition.
+    /// let prev = tz.preceding(start).next().unwrap();
+    /// assert_eq!(prev.dst(), Dst::No);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn dst(&self) -> Dst {
+        self.dst
+    }
+}
+
+/// An iterator over time zone transitions going backward in time.
+///
+/// This iterator is created by [`TimeZone::preceding`].
+///
+/// # Example: show the 5 previous time zone transitions
+///
+/// This shows how to find the 5 preceding time zone transitions (from a
+/// particular datetime) for a particular time zone:
+///
+/// ```
+/// use jiff::{tz::offset, Zoned};
+///
+/// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+/// let transitions = now
+///     .time_zone()
+///     .preceding(now.timestamp())
+///     .take(5)
+///     .map(|t| (
+///         t.timestamp().to_zoned(now.time_zone().clone()),
+///         t.offset(),
+///         t.abbreviation(),
+///     ))
+///     .collect::<Vec<_>>();
+/// assert_eq!(transitions, vec![
+///     ("2024-11-03 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+///     ("2024-03-10 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+///     ("2023-11-05 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+///     ("2023-03-12 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+///     ("2022-11-06 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+/// ]);
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Debug)]
+pub struct TimeZonePrecedingTransitions<'t> {
+    tz: &'t TimeZone,
+    cur: Timestamp,
+}
+
+impl<'t> Iterator for TimeZonePrecedingTransitions<'t> {
+    type Item = TimeZoneTransition<'t>;
+
+    fn next(&mut self) -> Option<TimeZoneTransition<'t>> {
+        let trans = self.tz.previous_transition(self.cur)?;
+        self.cur = trans.timestamp();
+        Some(trans)
+    }
+}
+
+impl<'t> core::iter::FusedIterator for TimeZonePrecedingTransitions<'t> {}
+
+/// An iterator over time zone transitions going forward in time.
+///
+/// This iterator is created by [`TimeZone::following`].
+///
+/// # Example: show the 5 next time zone transitions
+///
+/// This shows how to find the 5 following time zone transitions (from a
+/// particular datetime) for a particular time zone:
+///
+/// ```
+/// use jiff::{tz::offset, Zoned};
+///
+/// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+/// let transitions = now
+///     .time_zone()
+///     .following(now.timestamp())
+///     .take(5)
+///     .map(|t| (
+///         t.timestamp().to_zoned(now.time_zone().clone()),
+///         t.offset(),
+///         t.abbreviation(),
+///     ))
+///     .collect::<Vec<_>>();
+/// assert_eq!(transitions, vec![
+///     ("2025-03-09 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+///     ("2025-11-02 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+///     ("2026-03-08 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+///     ("2026-11-01 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+///     ("2027-03-14 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+/// ]);
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Debug)]
+pub struct TimeZoneFollowingTransitions<'t> {
+    tz: &'t TimeZone,
+    cur: Timestamp,
+}
+
+impl<'t> Iterator for TimeZoneFollowingTransitions<'t> {
+    type Item = TimeZoneTransition<'t>;
+
+    fn next(&mut self) -> Option<TimeZoneTransition<'t>> {
+        let trans = self.tz.next_transition(self.cur)?;
+        self.cur = trans.timestamp();
+        Some(trans)
+    }
+}
+
+impl<'t> core::iter::FusedIterator for TimeZoneFollowingTransitions<'t> {}
 
 /// A helper type for converting a `TimeZone` to a succinct human readable
 /// description.
@@ -3629,7 +4074,7 @@ mod tests {
                 let given: Timestamp = given.parse().unwrap();
                 let expected =
                     expected.map(|s| s.parse::<Timestamp>().unwrap());
-                let got = tz.previous_transition(given);
+                let got = tz.previous_transition(given).map(|t| t.timestamp());
                 assert_eq!(got, expected, "\nTZ: {tzname}\ngiven: {given}");
             }
         }
@@ -3710,7 +4155,7 @@ mod tests {
                 let given: Timestamp = given.parse().unwrap();
                 let expected =
                     expected.map(|s| s.parse::<Timestamp>().unwrap());
-                let got = tz.next_transition(given);
+                let got = tz.next_transition(given).map(|t| t.timestamp());
                 assert_eq!(got, expected, "\nTZ: {tzname}\ngiven: {given}");
             }
         }
@@ -3778,7 +4223,7 @@ mod tests {
                 let given: Timestamp = given.parse().unwrap();
                 let expected =
                     expected.map(|s| s.parse::<Timestamp>().unwrap());
-                let got = tz.previous_transition(given);
+                let got = tz.previous_transition(given).map(|t| t.timestamp());
                 assert_eq!(got, expected, "\nTZ: {posix_tz}\ngiven: {given}");
             }
         }
@@ -3846,7 +4291,7 @@ mod tests {
                 let given: Timestamp = given.parse().unwrap();
                 let expected =
                     expected.map(|s| s.parse::<Timestamp>().unwrap());
-                let got = tz.next_transition(given);
+                let got = tz.next_transition(given).map(|t| t.timestamp());
                 assert_eq!(got, expected, "\nTZ: {posix_tz}\ngiven: {given}");
             }
         }
