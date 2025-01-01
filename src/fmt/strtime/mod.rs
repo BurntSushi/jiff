@@ -2168,4 +2168,26 @@ mod tests {
             @"2024-07-30T00:56:25+04:00[+04:00]",
         );
     }
+
+    // Regression test for format strings with non-ASCII in them.
+    //
+    // We initially didn't support non-ASCII because I had thought it wouldn't
+    // be used. i.e., If someone wanted to do something with non-ASCII, then
+    // I thought they'd want to be using something more sophisticated that took
+    // locale into account. But apparently not.
+    //
+    // See: https://github.com/BurntSushi/jiff/issues/155
+    #[test]
+    fn ok_non_ascii() {
+        let fmt = "%Y年%m月%d日，%H时%M分%S秒";
+        let dt = crate::civil::date(2022, 2, 4).at(3, 58, 59, 0);
+        insta::assert_snapshot!(
+            dt.strftime(fmt),
+            @"2022年02月04日，03时58分59秒",
+        );
+        insta::assert_debug_snapshot!(
+            DateTime::strptime(fmt, "2022年02月04日，03时58分59秒").unwrap(),
+            @"2022-02-04T03:58:59",
+        );
+    }
 }
