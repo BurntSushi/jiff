@@ -9,6 +9,11 @@ Enhancements:
 * [#130](https://github.com/BurntSushi/jiff/issues/130):
 Document value ranges for methods like `year`, `day`, `hour` and so on.
 
+Bug fixes:
+
+* [#155](https://github.com/BurntSushi/jiff/issues/155):
+Relax `strftime` format strings from ASCII-only to all of UTF-8.
+
 
 0.1.18 (2024-12-31)
 ===================
