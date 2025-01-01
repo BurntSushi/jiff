@@ -1,8 +1,10 @@
 # CHANGELOG
 
-0.1.18 (TBD)
-============
-TODO
+0.1.18 (2024-12-31)
+===================
+This release includes a few minor enhancements. Namely, the ability to iterate
+over time zone transitions (in the future or the past), and some improvements
+to failure modes when `Timestamp` and `Span` arithmetic fails.
 
 Enhancements:
 
