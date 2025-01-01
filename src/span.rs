@@ -4986,14 +4986,6 @@ impl<'a> SpanRound<'a> {
                 smallest = smallest.singular(),
             ));
         }
-        // Now that we've got our configuration, we can actually short circuit
-        // if we know rounding will never change our span.
-        // if self.smallest == Unit::Nanosecond
-        // && largest == existing_largest
-        // && self.increment == 1
-        // {
-        // return Ok(span);
-        // }
         let relative = match self.relative {
             Some(ref r) => {
                 // If our reference point is civil time, then its units are
