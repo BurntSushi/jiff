@@ -6,6 +6,8 @@ TODO
 
 Enhancements:
 
+* [#144](https://github.com/BurntSushi/jiff/issues/144)
+Add APIs for iterating over the transitions of a time zone.
 * [#145](https://github.com/BurntSushi/jiff/issues/145)
 Improve docs and error messages around fallible `Timestamp` arithmetic.
 

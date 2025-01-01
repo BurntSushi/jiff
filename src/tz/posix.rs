@@ -82,7 +82,7 @@ use crate::{
     civil::{Date, DateTime, Time, Weekday},
     error::{err, Error, ErrorContext},
     timestamp::Timestamp,
-    tz::{AmbiguousOffset, Dst, Offset},
+    tz::{AmbiguousOffset, Dst, Offset, TimeZoneTransition},
     util::{
         array_str::Abbreviation,
         escape::{Byte, Bytes},
@@ -350,21 +350,29 @@ impl ReasonablePosixTimeZone {
     pub(crate) fn previous_transition(
         &self,
         timestamp: Timestamp,
-    ) -> Option<Timestamp> {
+    ) -> Option<TimeZoneTransition> {
         let dt = Offset::UTC.to_datetime(timestamp);
         let dst_info = self.dst_info_utc(dt.date().year_ranged())?;
         let (earlier, later) = dst_info.ordered();
-        let prev = if dt > later {
-            later
+        let (prev, dst_info) = if dt > later {
+            (later, dst_info)
         } else if dt > earlier {
-            earlier
+            (earlier, dst_info)
         } else {
             let prev_year = dt.date().year_ranged().checked_sub(C(1))?;
             let dst_info = self.dst_info_utc(prev_year)?;
             let (_, later) = dst_info.ordered();
-            later
+            (later, dst_info)
         };
-        Offset::UTC.to_timestamp(prev).ok()
+
+        let timestamp = Offset::UTC.to_timestamp(prev).ok()?;
+        let dt = Offset::UTC.to_datetime(timestamp);
+        let (offset, abbrev, dst) = if dst_info.in_dst(dt) {
+            (dst_info.offset, dst_info.dst.abbrev.as_str(), Dst::Yes)
+        } else {
+            (self.std_offset(), self.std_abbrev.as_str(), Dst::No)
+        };
+        Some(TimeZoneTransition { timestamp, offset, abbrev, dst })
     }
 
     /// Returns the timestamp of the soonest time zone transition after the
@@ -372,21 +380,29 @@ impl ReasonablePosixTimeZone {
     pub(crate) fn next_transition(
         &self,
         timestamp: Timestamp,
-    ) -> Option<Timestamp> {
+    ) -> Option<TimeZoneTransition> {
         let dt = Offset::UTC.to_datetime(timestamp);
         let dst_info = self.dst_info_utc(dt.date().year_ranged())?;
         let (earlier, later) = dst_info.ordered();
-        let next = if dt < earlier {
-            earlier
+        let (next, dst_info) = if dt < earlier {
+            (earlier, dst_info)
         } else if dt < later {
-            later
+            (later, dst_info)
         } else {
             let next_year = dt.date().year_ranged().checked_add(C(1))?;
             let dst_info = self.dst_info_utc(next_year)?;
             let (earlier, _) = dst_info.ordered();
-            earlier
+            (earlier, dst_info)
         };
-        Offset::UTC.to_timestamp(next).ok()
+
+        let timestamp = Offset::UTC.to_timestamp(next).ok()?;
+        let dt = Offset::UTC.to_datetime(timestamp);
+        let (offset, abbrev, dst) = if dst_info.in_dst(dt) {
+            (dst_info.offset, dst_info.dst.abbrev.as_str(), Dst::Yes)
+        } else {
+            (self.std_offset(), self.std_abbrev.as_str(), Dst::No)
+        };
+        Some(TimeZoneTransition { timestamp, offset, abbrev, dst })
     }
 
     /// Returns the offset for standard time in this POSIX time zone.
