@@ -691,7 +691,7 @@ extern crate alloc;
 
 pub use crate::{
     error::Error,
-    signed_duration::SignedDuration,
+    signed_duration::{SignedDuration, SignedDurationRound},
     span::{
         Span, SpanArithmetic, SpanCompare, SpanRelativeTo, SpanRound,
         SpanTotal, ToSpan, Unit,

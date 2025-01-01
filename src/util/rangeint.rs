@@ -1004,7 +1004,6 @@ macro_rules! define_ranged {
             {
                 #[inline]
                 fn rfrom(r: $name<MIN, MAX>) -> $smaller_repr {
-                    // <$smaller_repr>::rfrom(<$smaller_name<MIN, MAX>>::rfrom(r))
                     #[cfg(not(debug_assertions))]
                     {
                         r.val as $smaller_repr
@@ -1014,25 +1013,25 @@ macro_rules! define_ranged {
                         let Ok(val) = <$smaller_repr>::try_from(r.val) else {
                             panic!(
                                 "{from} value {val} does not fit in {to}",
-                                from = stringify!($smaller_name),
+                                from = stringify!($name),
                                 val = r.val,
-                                to = stringify!($name),
+                                to = stringify!($smaller_name),
                             );
                         };
                         if <$smaller_repr>::try_from(r.min).is_err() {
                             panic!(
                                 "{from} min value {val} does not fit in {to}",
-                                from = stringify!($smaller_name),
+                                from = stringify!($name),
                                 val = r.min,
-                                to = stringify!($name),
+                                to = stringify!($smaller_name),
                             );
                         }
                         if <$smaller_repr>::try_from(r.max).is_err() {
                             panic!(
                                 "{from} max value {val} does not fit in {to}",
-                                from = stringify!($smaller_name),
+                                from = stringify!($name),
                                 val = r.max,
-                                to = stringify!($name),
+                                to = stringify!($smaller_name),
                             );
                         }
                         val
