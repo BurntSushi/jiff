@@ -368,7 +368,7 @@ use jiff::civil::date;
 let zdt1 = date(2020, 8, 26).at(6, 27, 0, 0).intz("America/New_York")?;
 let zdt2 = date(2023, 12, 31).at(18, 30, 0, 0).intz("America/New_York")?;
 let span = &zdt2 - &zdt1;
-assert_eq!(span.to_string(), "PT29341h3m");
+assert_eq!(format!("{span:#}"), "29341h 3m");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -384,7 +384,7 @@ use jiff::{civil::date, Unit};
 let zdt1 = date(2020, 8, 26).at(6, 27, 0, 0).intz("America/New_York")?;
 let zdt2 = date(2023, 12, 31).at(18, 30, 0, 0).intz("America/New_York")?;
 let span = zdt1.until((Unit::Year, &zdt2))?;
-assert_eq!(span.to_string(), "P3y4m5dT12h3m");
+assert_eq!(format!("{span:#}"), "3y 4mo 5d 12h 3m");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```

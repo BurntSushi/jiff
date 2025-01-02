@@ -1198,12 +1198,12 @@ impl Time {
     ///
     /// // The default limits spans to using "hours" as the biggest unit.
     /// let span = t1.until(t2)?;
-    /// assert_eq!(span.to_string(), "PT12h5m29.9999965s");
+    /// assert_eq!(span.to_string(), "PT12H5M29.9999965S");
     ///
     /// // But we can ask for smaller units, like capping the biggest unit
     /// // to minutes instead of hours.
     /// let span = t1.until((Unit::Minute, t2))?;
-    /// assert_eq!(span.to_string(), "PT725m29.9999965s");
+    /// assert_eq!(span.to_string(), "PT725M29.9999965S");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```

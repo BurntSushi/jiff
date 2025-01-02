@@ -70,7 +70,7 @@ use crate::{
 /// use jiff::Span;
 ///
 /// let span = Span::new().days(5).hours(8).minutes(1);
-/// assert_eq!(span.to_string(), "P5dT8h1m");
+/// assert_eq!(span.to_string(), "P5DT8H1M");
 /// ```
 ///
 /// But Jiff provides a [`ToSpan`] trait that defines extension methods on
@@ -80,10 +80,10 @@ use crate::{
 /// use jiff::ToSpan;
 ///
 /// let span = 5.days().hours(8).minutes(1);
-/// assert_eq!(span.to_string(), "P5dT8h1m");
+/// assert_eq!(span.to_string(), "P5DT8H1M");
 /// // singular units on integers can be used too:
 /// let span = 1.day().hours(8).minutes(1);
-/// assert_eq!(span.to_string(), "P1dT8h1m");
+/// assert_eq!(span.to_string(), "P1DT8H1M");
 /// ```
 ///
 /// # Negative spans
@@ -99,25 +99,25 @@ use crate::{
 /// use jiff::{Span, ToSpan};
 ///
 /// let span = -Span::new().days(5);
-/// assert_eq!(span.to_string(), "-P5d");
+/// assert_eq!(span.to_string(), "-P5D");
 ///
 /// let span = Span::new().days(5).negate();
-/// assert_eq!(span.to_string(), "-P5d");
+/// assert_eq!(span.to_string(), "-P5D");
 ///
 /// let span = Span::new().days(-5);
-/// assert_eq!(span.to_string(), "-P5d");
+/// assert_eq!(span.to_string(), "-P5D");
 ///
 /// let span = -Span::new().days(-5).negate();
-/// assert_eq!(span.to_string(), "-P5d");
+/// assert_eq!(span.to_string(), "-P5D");
 ///
 /// let span = -5.days();
-/// assert_eq!(span.to_string(), "-P5d");
+/// assert_eq!(span.to_string(), "-P5D");
 ///
 /// let span = (-5).days();
-/// assert_eq!(span.to_string(), "-P5d");
+/// assert_eq!(span.to_string(), "-P5D");
 ///
 /// let span = -(5.days());
-/// assert_eq!(span.to_string(), "-P5d");
+/// assert_eq!(span.to_string(), "-P5D");
 /// ```
 ///
 /// The sign of a span applies to the entire span. When a span is negative,
@@ -180,10 +180,12 @@ use crate::{
 /// ```
 /// use jiff::{Span, ToSpan};
 ///
-/// let span: Span = "P2M10DT2H30M".parse()?;
-/// assert_eq!(span.to_string(), "P2m10dT2h30m");
+/// let span: Span = "P2m10dT2h30m".parse()?;
+/// // By default, capital unit designator labels are used.
+/// // This can be changed with `jiff::fmt::temporal::SpanPrinter::lowercase`.
+/// assert_eq!(span.to_string(), "P2M10DT2H30M");
 ///
-/// // Or use the "friendly" format by invoking the alternate:
+/// // Or use the "friendly" format by invoking the `Display` alternate:
 /// assert_eq!(format!("{span:#}"), "2mo 10d 2h 30m");
 ///
 /// // Parsing automatically supports both the ISO 8601 and "friendly" formats:
@@ -1227,9 +1229,9 @@ impl Span {
     /// use jiff::ToSpan;
     ///
     /// let span = -100.seconds();
-    /// assert_eq!(span.to_string(), "-PT100s");
+    /// assert_eq!(span.to_string(), "-PT100S");
     /// let span = span.abs();
-    /// assert_eq!(span.to_string(), "PT100s");
+    /// assert_eq!(span.to_string(), "PT100S");
     /// ```
     #[inline]
     pub fn abs(self) -> Span {
@@ -1251,9 +1253,9 @@ impl Span {
     /// use jiff::ToSpan;
     ///
     /// let span = 100.days();
-    /// assert_eq!(span.to_string(), "P100d");
+    /// assert_eq!(span.to_string(), "P100D");
     /// let span = span.negate();
-    /// assert_eq!(span.to_string(), "-P100d");
+    /// assert_eq!(span.to_string(), "-P100D");
     /// ```
     ///
     /// # Example: available via the negation operator
@@ -1264,9 +1266,9 @@ impl Span {
     /// use jiff::ToSpan;
     ///
     /// let span = 100.days();
-    /// assert_eq!(span.to_string(), "P100d");
+    /// assert_eq!(span.to_string(), "P100D");
     /// let span = -span;
-    /// assert_eq!(span.to_string(), "-P100d");
+    /// assert_eq!(span.to_string(), "-P100D");
     /// ```
     #[inline]
     pub fn negate(self) -> Span {
@@ -3708,13 +3710,13 @@ impl quickcheck::Arbitrary for Span {
 /// ```
 /// use jiff::ToSpan;
 ///
-/// assert_eq!(5.days().to_string(), "P5d");
-/// assert_eq!(5.days().hours(10).to_string(), "P5dT10h");
+/// assert_eq!(5.days().to_string(), "P5D");
+/// assert_eq!(5.days().hours(10).to_string(), "P5DT10H");
 ///
 /// // Negation works and it doesn't matter where the sign goes. It can be
 /// // applied to the span itself or to the integer.
-/// assert_eq!((-5.days()).to_string(), "-P5d");
-/// assert_eq!((-5).days().to_string(), "-P5d");
+/// assert_eq!((-5.days()).to_string(), "-P5D");
+/// assert_eq!((-5).days().to_string(), "-P5D");
 /// ```
 ///
 /// # Example: alternative via span parsing
@@ -3929,7 +3931,7 @@ impl_to_span!(i64);
 /// let zdt1: Zoned = "2024-07-06 17:40-04[America/New_York]".parse()?;
 /// let zdt2: Zoned = "2024-11-05 08:00-05[America/New_York]".parse()?;
 /// let span = zdt1.until((Unit::Year, &zdt2))?;
-/// assert_eq!(span.to_string(), "P3m29dT14h20m");
+/// assert_eq!(format!("{span:#}"), "3mo 29d 14h 20m");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -6507,7 +6509,7 @@ mod tests {
             .nanoseconds(10);
         insta::assert_snapshot!(
             span,
-            @"P1y2m3w4dT5h6m7.00800901s",
+            @"P1Y2M3W4DT5H6M7.00800901S",
         );
         insta::assert_snapshot!(
             alloc::format!("{span:#}"),
@@ -6575,27 +6577,27 @@ mod tests {
 
         insta::assert_snapshot!(
             p("1 day").unwrap(),
-            @"P1d",
+            @"P1D",
         );
         insta::assert_snapshot!(
             p("+1 day").unwrap(),
-            @"P1d",
+            @"P1D",
         );
         insta::assert_snapshot!(
             p("-1 day").unwrap(),
-            @"-P1d",
+            @"-P1D",
         );
         insta::assert_snapshot!(
             p("P1d").unwrap(),
-            @"P1d",
+            @"P1D",
         );
         insta::assert_snapshot!(
             p("+P1d").unwrap(),
-            @"P1d",
+            @"P1D",
         );
         insta::assert_snapshot!(
             p("-P1d").unwrap(),
-            @"-P1d",
+            @"-P1D",
         );
 
         insta::assert_snapshot!(
@@ -6620,27 +6622,27 @@ mod tests {
 
         insta::assert_snapshot!(
             p("1 day").unwrap(),
-            @"P1d",
+            @"P1D",
         );
         insta::assert_snapshot!(
             p("+1 day").unwrap(),
-            @"P1d",
+            @"P1D",
         );
         insta::assert_snapshot!(
             p("-1 day").unwrap(),
-            @"-P1d",
+            @"-P1D",
         );
         insta::assert_snapshot!(
             p("P1d").unwrap(),
-            @"P1d",
+            @"P1D",
         );
         insta::assert_snapshot!(
             p("+P1d").unwrap(),
-            @"P1d",
+            @"P1D",
         );
         insta::assert_snapshot!(
             p("-P1d").unwrap(),
-            @"-P1d",
+            @"-P1D",
         );
 
         insta::assert_snapshot!(

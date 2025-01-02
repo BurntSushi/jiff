@@ -32,7 +32,7 @@ use crate::util::libm::Float;
 /// use jiff::SignedDuration;
 ///
 /// let duration: SignedDuration = "PT2h30m".parse()?;
-/// assert_eq!(duration.to_string(), "PT2h30m");
+/// assert_eq!(duration.to_string(), "PT2H30M");
 ///
 /// // Or use the "friendly" format by invoking the alternate:
 /// assert_eq!(format!("{duration:#}"), "2h 30m");
@@ -75,7 +75,7 @@ use crate::util::libm::Float;
 /// let duration = span.to_jiff_duration(&relative)?;
 /// // This example also motivates *why* a relative date
 /// // is required. Not all days are the same length!
-/// assert_eq!(duration.to_string(), "PT25h");
+/// assert_eq!(duration.to_string(), "PT25H");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -2641,27 +2641,27 @@ mod tests {
 
         insta::assert_snapshot!(
             p("1 hour").unwrap(),
-            @"PT1h",
+            @"PT1H",
         );
         insta::assert_snapshot!(
             p("+1 hour").unwrap(),
-            @"PT1h",
+            @"PT1H",
         );
         insta::assert_snapshot!(
             p("-1 hour").unwrap(),
-            @"-PT1h",
+            @"-PT1H",
         );
         insta::assert_snapshot!(
             p("PT1h").unwrap(),
-            @"PT1h",
+            @"PT1H",
         );
         insta::assert_snapshot!(
             p("+PT1h").unwrap(),
-            @"PT1h",
+            @"PT1H",
         );
         insta::assert_snapshot!(
             p("-PT1h").unwrap(),
-            @"-PT1h",
+            @"-PT1H",
         );
 
         insta::assert_snapshot!(
@@ -2686,27 +2686,27 @@ mod tests {
 
         insta::assert_snapshot!(
             p("1 hour").unwrap(),
-            @"PT1h",
+            @"PT1H",
         );
         insta::assert_snapshot!(
             p("+1 hour").unwrap(),
-            @"PT1h",
+            @"PT1H",
         );
         insta::assert_snapshot!(
             p("-1 hour").unwrap(),
-            @"-PT1h",
+            @"-PT1H",
         );
         insta::assert_snapshot!(
             p("PT1h").unwrap(),
-            @"PT1h",
+            @"PT1H",
         );
         insta::assert_snapshot!(
             p("+PT1h").unwrap(),
-            @"PT1h",
+            @"PT1H",
         );
         insta::assert_snapshot!(
             p("-PT1h").unwrap(),
-            @"-PT1h",
+            @"-PT1H",
         );
 
         insta::assert_snapshot!(

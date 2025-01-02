@@ -68,8 +68,11 @@ But there are some details not easily captured by a simple regular expression:
 
 * At least one unit must be specified. To write a zero span, specify `0` for
 any unit. For example, `P0d` and `PT0s` are equivalent.
-* The format is case insensitive. The printer will by default capitalize the
-`P` and `T` designators, but lowercase the unit designators.
+* The format is case insensitive. The printer will by default capitalize all
+designators, but the unit designators can be configured to use lowercase with
+[`SpanPrinter::lowercase`]. For example, `P3y1m10dT5h` instead of
+`P3Y1M10DT5H`. You might prefer lowercase since you may find it easier to read.
+However, it is an extension to ISO 8601 and isn't as broadly supported.
 * Hours, minutes or seconds may be fractional. And the only units that may be
 fractional are the lowest units.
 * A span like `P99999999999y` is invalid because it exceeds the allowable range
@@ -1566,7 +1569,7 @@ impl SpanParser {
 /// let mut buf = vec![];
 /// // Printing to a `Vec<u8>` can never fail.
 /// PRINTER.print_span(&span, &mut buf).unwrap();
-/// assert_eq!(buf, "PT48m".as_bytes());
+/// assert_eq!(buf, "PT48M".as_bytes());
 /// ```
 ///
 /// # Example: using adapters with `std::io::Write` and `std::fmt::Write`
@@ -1605,6 +1608,30 @@ impl SpanPrinter {
         SpanPrinter { p: printer::SpanPrinter::new() }
     }
 
+    /// Use lowercase for unit designator labels.
+    ///
+    /// By default, unit designator labels are written in uppercase.
+    ///
+    /// # Example
+    ///
+    /// This shows the difference between the default (uppercase) and enabling
+    /// lowercase. Lowercase unit designator labels tend to be easier to read
+    /// (in this author's opinion), but they aren't as broadly supported since
+    /// they are an extension to ISO 8601.
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::SpanPrinter, ToSpan};
+    ///
+    /// let span = 5.years().days(10).hours(1);
+    /// let printer = SpanPrinter::new();
+    /// assert_eq!(printer.span_to_string(&span), "P5Y10DT1H");
+    /// assert_eq!(printer.lowercase(true).span_to_string(&span), "P5y10dT1h");
+    /// ```
+    #[inline]
+    pub const fn lowercase(self, yes: bool) -> SpanPrinter {
+        SpanPrinter { p: self.p.lowercase(yes) }
+    }
+
     /// Format a `Span` into a string.
     ///
     /// This is a convenience routine for [`SpanPrinter::print_span`] with
@@ -1618,7 +1645,7 @@ impl SpanPrinter {
     /// const PRINTER: SpanPrinter = SpanPrinter::new();
     ///
     /// let span = 3.years().months(5);
-    /// assert_eq!(PRINTER.span_to_string(&span), "P3y5m");
+    /// assert_eq!(PRINTER.span_to_string(&span), "P3Y5M");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1646,8 +1673,8 @@ impl SpanPrinter {
     /// const PRINTER: SpanPrinter = SpanPrinter::new();
     ///
     /// let dur = SignedDuration::new(86_525, 123_000_789);
-    /// assert_eq!(PRINTER.duration_to_string(&dur), "PT24h2m5.123000789s");
-    /// assert_eq!(PRINTER.duration_to_string(&-dur), "-PT24h2m5.123000789s");
+    /// assert_eq!(PRINTER.duration_to_string(&dur), "PT24H2M5.123000789S");
+    /// assert_eq!(PRINTER.duration_to_string(&-dur), "-PT24H2M5.123000789S");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1683,7 +1710,7 @@ impl SpanPrinter {
     /// let mut buf = String::new();
     /// // Printing to a `String` can never fail.
     /// PRINTER.print_span(&span, &mut buf).unwrap();
-    /// assert_eq!(buf, "P3y5m");
+    /// assert_eq!(buf, "P3Y5M");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1719,12 +1746,12 @@ impl SpanPrinter {
     /// let mut buf = String::new();
     /// // Printing to a `String` can never fail.
     /// PRINTER.print_duration(&dur, &mut buf).unwrap();
-    /// assert_eq!(buf, "PT24h2m5.123000789s");
+    /// assert_eq!(buf, "PT24H2M5.123000789S");
     ///
     /// // Negative durations are supported.
     /// buf.clear();
     /// PRINTER.print_duration(&-dur, &mut buf).unwrap();
-    /// assert_eq!(buf, "-PT24h2m5.123000789s");
+    /// assert_eq!(buf, "-PT24H2M5.123000789S");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
