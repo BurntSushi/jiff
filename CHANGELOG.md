@@ -1,5 +1,26 @@
 # CHANGELOG
 
+0.1.20 (2025-01-03)
+===================
+This release inclues a new type, `Pieces`, in the `jiff::fmt::temporal`
+sub-module. This exposes the individual components of a parsed Temporal
+ISO 8601 datetime string. It allows users of Jiff to circumvent the checks
+in the higher level parsing routines that prevent you from shooting yourself
+in the foot.
+
+For example, parsing into a `Zoned` will return an error for raw RFC 3339
+timestamps like `2025-01-03T22:03-05` because there is no time zone annotation.
+Without a time zone, Jiff cannot do time zone aware arithmetic and rounding.
+Instead, such a datetime can only be parsed into a `Timestamp`. This lower
+level `Pieces` API now permits users of Jiff to parse this string into its
+component parts and assemble it into a `Zoned` if they so choose.
+
+Enhancements:
+
+* [#188](https://github.com/BurntSushi/jiff/issues/188):
+Add `fmt::temporal::Pieces` for granular datetime parsing and formatting.
+
+
 0.1.19 (2025-01-02)
 ===================
 This releases includes a UTF-8 related bug fix and a few enhancements.

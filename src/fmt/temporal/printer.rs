@@ -2,6 +2,7 @@ use crate::{
     civil::{Date, DateTime, Time},
     error::Error,
     fmt::{
+        temporal::{Pieces, PiecesOffset, TimeZoneAnnotationKind},
         util::{DecimalFormatter, FractionalFormatter},
         Write, WriteExt,
     },
@@ -141,6 +142,73 @@ impl DateTimePrinter {
             )?;
         }
         Ok(())
+    }
+
+    pub(super) fn print_pieces<W: Write>(
+        &self,
+        pieces: &Pieces,
+        mut wtr: W,
+    ) -> Result<(), Error> {
+        if let Some(time) = pieces.time() {
+            let dt = DateTime::from_parts(pieces.date(), time);
+            self.print_datetime(&dt, &mut wtr)?;
+            if let Some(poffset) = pieces.offset() {
+                self.print_pieces_offset(&poffset, &mut wtr)?;
+            }
+        } else if let Some(poffset) = pieces.offset() {
+            // In this case, we have an offset but no time component. Since
+            // `2025-01-02-05:00` isn't valid, we forcefully write out the
+            // default time (which is what would be assumed anyway).
+            let dt = DateTime::from_parts(pieces.date(), Time::midnight());
+            self.print_datetime(&dt, &mut wtr)?;
+            self.print_pieces_offset(&poffset, &mut wtr)?;
+        } else {
+            // We have no time and no offset, so we can just write the date.
+            // It's okay to write this followed by an annotation, e.g.,
+            // `2025-01-02[America/New_York]` or even `2025-01-02[-05:00]`.
+            self.print_date(&pieces.date(), &mut wtr)?;
+        }
+        // For the time zone annotation, a `Pieces` gives us the annotation
+        // name or offset directly, where as with `Zoned`, we have a
+        // `TimeZone`. So we hand-roll our own formatter directly from the
+        // annotation.
+        if let Some(ann) = pieces.time_zone_annotation() {
+            // Note that we explicitly ignore `self.rfc9557` here, since with
+            // `Pieces`, the annotation has been explicitly provided. Also,
+            // at time of writing, `self.rfc9557` is always enabled anyway.
+            wtr.write_str("[")?;
+            if ann.is_critical() {
+                wtr.write_str("!")?;
+            }
+            match *ann.kind() {
+                TimeZoneAnnotationKind::Named(ref name) => {
+                    wtr.write_str(name.as_str())?
+                }
+                TimeZoneAnnotationKind::Offset(offset) => {
+                    self.print_offset(&offset, &mut wtr)?
+                }
+            }
+            wtr.write_str("]")?;
+        }
+        Ok(())
+    }
+
+    /// Formats the given "pieces" offset into the writer given.
+    fn print_pieces_offset<W: Write>(
+        &self,
+        poffset: &PiecesOffset,
+        mut wtr: W,
+    ) -> Result<(), Error> {
+        match *poffset {
+            PiecesOffset::Zulu => self.print_zulu(wtr),
+            PiecesOffset::Numeric(ref noffset) => {
+                if noffset.offset().is_zero() && noffset.is_negative() {
+                    wtr.write_str("-00:00")
+                } else {
+                    self.print_offset(&noffset.offset(), wtr)
+                }
+            }
+        }
     }
 
     /// Formats the given offset into the writer given.
