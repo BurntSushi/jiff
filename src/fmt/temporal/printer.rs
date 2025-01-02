@@ -220,14 +220,21 @@ impl Default for DateTimePrinter {
 /// Note that in Temporal, a "span" is called a "duration."
 #[derive(Debug)]
 pub(super) struct SpanPrinter {
-    /// There are currently no configuration options for this printer.
-    _priv: (),
+    /// Whether to use lowercase unit designators.
+    lowercase: bool,
 }
 
 impl SpanPrinter {
     /// Create a new Temporal span printer with the default configuration.
     pub(super) const fn new() -> SpanPrinter {
-        SpanPrinter { _priv: () }
+        SpanPrinter { lowercase: false }
+    }
+
+    /// Use lowercase for unit designator labels.
+    ///
+    /// By default, unit designator labels are written in uppercase.
+    pub(super) const fn lowercase(self, yes: bool) -> SpanPrinter {
+        SpanPrinter { lowercase: yes }
     }
 
     /// Print the given span to the writer given.
@@ -249,22 +256,22 @@ impl SpanPrinter {
         let mut non_zero_greater_than_second = false;
         if span.get_years_ranged() != 0 {
             wtr.write_int(&FMT_INT, span.get_years_ranged().get().abs())?;
-            wtr.write_str("y")?;
+            wtr.write_char(self.label('Y'))?;
             non_zero_greater_than_second = true;
         }
         if span.get_months_ranged() != 0 {
             wtr.write_int(&FMT_INT, span.get_months_ranged().get().abs())?;
-            wtr.write_str("m")?;
+            wtr.write_char(self.label('M'))?;
             non_zero_greater_than_second = true;
         }
         if span.get_weeks_ranged() != 0 {
             wtr.write_int(&FMT_INT, span.get_weeks_ranged().get().abs())?;
-            wtr.write_str("w")?;
+            wtr.write_char(self.label('W'))?;
             non_zero_greater_than_second = true;
         }
         if span.get_days_ranged() != 0 {
             wtr.write_int(&FMT_INT, span.get_days_ranged().get().abs())?;
-            wtr.write_str("d")?;
+            wtr.write_char(self.label('D'))?;
             non_zero_greater_than_second = true;
         }
 
@@ -275,7 +282,7 @@ impl SpanPrinter {
                 printed_time_prefix = true;
             }
             wtr.write_int(&FMT_INT, span.get_hours_ranged().get().abs())?;
-            wtr.write_str("h")?;
+            wtr.write_char(self.label('H'))?;
             non_zero_greater_than_second = true;
         }
         if span.get_minutes_ranged() != 0 {
@@ -284,7 +291,7 @@ impl SpanPrinter {
                 printed_time_prefix = true;
             }
             wtr.write_int(&FMT_INT, span.get_minutes_ranged().get().abs())?;
-            wtr.write_str("m")?;
+            wtr.write_char(self.label('M'))?;
             non_zero_greater_than_second = true;
         }
 
@@ -307,7 +314,7 @@ impl SpanPrinter {
                 wtr.write_str("T")?;
             }
             wtr.write_int(&FMT_INT, seconds.get())?;
-            wtr.write_str("s")?;
+            wtr.write_char(self.label('S'))?;
         } else if millis != 0 || micros != 0 || nanos != 0 {
             if !printed_time_prefix {
                 wtr.write_str("T")?;
@@ -336,7 +343,7 @@ impl SpanPrinter {
                 wtr.write_str(".")?;
                 wtr.write_fraction(&FMT_FRACTION, fraction_nano.get())?;
             }
-            wtr.write_str("s")?;
+            wtr.write_char(self.label('S'))?;
         }
         Ok(())
     }
@@ -370,24 +377,36 @@ impl SpanPrinter {
         secs = (secs % 60).abs();
         if hours != 0 {
             wtr.write_int(&FMT_INT, hours)?;
-            wtr.write_str("h")?;
+            wtr.write_char(self.label('H'))?;
             non_zero_greater_than_second = true;
         }
         if minutes != 0 {
             wtr.write_int(&FMT_INT, minutes)?;
-            wtr.write_str("m")?;
+            wtr.write_char(self.label('M'))?;
             non_zero_greater_than_second = true;
         }
         if (secs != 0 || !non_zero_greater_than_second) && nanos == 0 {
             wtr.write_int(&FMT_INT, secs)?;
-            wtr.write_str("s")?;
+            wtr.write_char(self.label('S'))?;
         } else if nanos != 0 {
             wtr.write_int(&FMT_INT, secs)?;
             wtr.write_str(".")?;
             wtr.write_fraction(&FMT_FRACTION, nanos)?;
-            wtr.write_str("s")?;
+            wtr.write_char(self.label('S'))?;
         }
         Ok(())
+    }
+
+    /// Converts the uppercase unit designator label to lowercase if this
+    /// printer is configured to use lowercase. Otherwise the label is returned
+    /// unchanged.
+    fn label(&self, upper: char) -> char {
+        debug_assert!(upper.is_ascii());
+        if self.lowercase {
+            upper.to_ascii_lowercase()
+        } else {
+            upper
+        }
     }
 }
 
@@ -450,25 +469,25 @@ mod tests {
             buf
         };
 
-        insta::assert_snapshot!(p(Span::new()), @"PT0s");
-        insta::assert_snapshot!(p(1.second()), @"PT1s");
-        insta::assert_snapshot!(p(-1.second()), @"-PT1s");
+        insta::assert_snapshot!(p(Span::new()), @"PT0S");
+        insta::assert_snapshot!(p(1.second()), @"PT1S");
+        insta::assert_snapshot!(p(-1.second()), @"-PT1S");
         insta::assert_snapshot!(p(
             1.second().milliseconds(1).microseconds(1).nanoseconds(1),
-        ), @"PT1.001001001s");
+        ), @"PT1.001001001S");
         insta::assert_snapshot!(p(
             0.second().milliseconds(999).microseconds(999).nanoseconds(999),
-        ), @"PT0.999999999s");
+        ), @"PT0.999999999S");
         insta::assert_snapshot!(p(
             1.year().months(1).weeks(1).days(1)
             .hours(1).minutes(1).seconds(1)
             .milliseconds(1).microseconds(1).nanoseconds(1),
-        ), @"P1y1m1w1dT1h1m1.001001001s");
+        ), @"P1Y1M1W1DT1H1M1.001001001S");
         insta::assert_snapshot!(p(
             -1.year().months(1).weeks(1).days(1)
             .hours(1).minutes(1).seconds(1)
             .milliseconds(1).microseconds(1).nanoseconds(1),
-        ), @"-P1y1m1w1dT1h1m1.001001001s");
+        ), @"-P1Y1M1W1DT1H1M1.001001001S");
     }
 
     #[test]
@@ -482,52 +501,52 @@ mod tests {
         // These are all sub-second trickery tests.
         insta::assert_snapshot!(p(
             0.second().milliseconds(1000).microseconds(1000).nanoseconds(1000),
-        ), @"PT1.001001s");
+        ), @"PT1.001001S");
         insta::assert_snapshot!(p(
             1.second().milliseconds(1000).microseconds(1000).nanoseconds(1000),
-        ), @"PT2.001001s");
+        ), @"PT2.001001S");
         insta::assert_snapshot!(p(
             0.second()
             .milliseconds(t::SpanMilliseconds::MAX_REPR),
-        ), @"PT631107417600s");
+        ), @"PT631107417600S");
         insta::assert_snapshot!(p(
             0.second()
             .microseconds(t::SpanMicroseconds::MAX_REPR),
-        ), @"PT631107417600s");
+        ), @"PT631107417600S");
         insta::assert_snapshot!(p(
             0.second()
             .nanoseconds(t::SpanNanoseconds::MAX_REPR),
-        ), @"PT9223372036.854775807s");
+        ), @"PT9223372036.854775807S");
 
         insta::assert_snapshot!(p(
             0.second()
             .milliseconds(t::SpanMilliseconds::MAX_REPR)
             .microseconds(999_999),
-        ), @"PT631107417600.999999s");
+        ), @"PT631107417600.999999S");
         // This is 1 microsecond more than the maximum number of seconds
         // representable in a span.
         insta::assert_snapshot!(p(
             0.second()
             .milliseconds(t::SpanMilliseconds::MAX_REPR)
             .microseconds(1_000_000),
-        ), @"PT631107417601s");
+        ), @"PT631107417601S");
         insta::assert_snapshot!(p(
             0.second()
             .milliseconds(t::SpanMilliseconds::MAX_REPR)
             .microseconds(1_000_001),
-        ), @"PT631107417601.000001s");
+        ), @"PT631107417601.000001S");
         // This is 1 nanosecond more than the maximum number of seconds
         // representable in a span.
         insta::assert_snapshot!(p(
             0.second()
             .milliseconds(t::SpanMilliseconds::MAX_REPR)
             .nanoseconds(1_000_000_000),
-        ), @"PT631107417601s");
+        ), @"PT631107417601S");
         insta::assert_snapshot!(p(
             0.second()
             .milliseconds(t::SpanMilliseconds::MAX_REPR)
             .nanoseconds(1_000_000_001),
-        ), @"PT631107417601.000000001s");
+        ), @"PT631107417601.000000001S");
 
         // The max millis, micros and nanos, combined.
         insta::assert_snapshot!(p(
@@ -535,7 +554,7 @@ mod tests {
             .milliseconds(t::SpanMilliseconds::MAX_REPR)
             .microseconds(t::SpanMicroseconds::MAX_REPR)
             .nanoseconds(t::SpanNanoseconds::MAX_REPR),
-        ), @"PT1271438207236.854775807s");
+        ), @"PT1271438207236.854775807S");
         // The max seconds, millis, micros and nanos, combined.
         insta::assert_snapshot!(p(
             Span::new()
@@ -543,7 +562,7 @@ mod tests {
             .milliseconds(t::SpanMilliseconds::MAX_REPR)
             .microseconds(t::SpanMicroseconds::MAX_REPR)
             .nanoseconds(t::SpanNanoseconds::MAX_REPR),
-        ), @"PT1902545624836.854775807s");
+        ), @"PT1902545624836.854775807S");
     }
 
     #[test]
@@ -557,52 +576,52 @@ mod tests {
         // These are all sub-second trickery tests.
         insta::assert_snapshot!(p(
             -0.second().milliseconds(1000).microseconds(1000).nanoseconds(1000),
-        ), @"-PT1.001001s");
+        ), @"-PT1.001001S");
         insta::assert_snapshot!(p(
             -1.second().milliseconds(1000).microseconds(1000).nanoseconds(1000),
-        ), @"-PT2.001001s");
+        ), @"-PT2.001001S");
         insta::assert_snapshot!(p(
             0.second()
             .milliseconds(t::SpanMilliseconds::MIN_REPR),
-        ), @"-PT631107417600s");
+        ), @"-PT631107417600S");
         insta::assert_snapshot!(p(
             0.second()
             .microseconds(t::SpanMicroseconds::MIN_REPR),
-        ), @"-PT631107417600s");
+        ), @"-PT631107417600S");
         insta::assert_snapshot!(p(
             0.second()
             .nanoseconds(t::SpanNanoseconds::MIN_REPR),
-        ), @"-PT9223372036.854775807s");
+        ), @"-PT9223372036.854775807S");
 
         insta::assert_snapshot!(p(
             0.second()
             .milliseconds(t::SpanMilliseconds::MIN_REPR)
             .microseconds(999_999),
-        ), @"-PT631107417600.999999s");
+        ), @"-PT631107417600.999999S");
         // This is 1 microsecond more than the maximum number of seconds
         // representable in a span.
         insta::assert_snapshot!(p(
             0.second()
             .milliseconds(t::SpanMilliseconds::MIN_REPR)
             .microseconds(1_000_000),
-        ), @"-PT631107417601s");
+        ), @"-PT631107417601S");
         insta::assert_snapshot!(p(
             0.second()
             .milliseconds(t::SpanMilliseconds::MIN_REPR)
             .microseconds(1_000_001),
-        ), @"-PT631107417601.000001s");
+        ), @"-PT631107417601.000001S");
         // This is 1 nanosecond more than the maximum number of seconds
         // representable in a span.
         insta::assert_snapshot!(p(
             0.second()
             .milliseconds(t::SpanMilliseconds::MIN_REPR)
             .nanoseconds(1_000_000_000),
-        ), @"-PT631107417601s");
+        ), @"-PT631107417601S");
         insta::assert_snapshot!(p(
             0.second()
             .milliseconds(t::SpanMilliseconds::MIN_REPR)
             .nanoseconds(1_000_000_001),
-        ), @"-PT631107417601.000000001s");
+        ), @"-PT631107417601.000000001S");
 
         // The max millis, micros and nanos, combined.
         insta::assert_snapshot!(p(
@@ -610,7 +629,7 @@ mod tests {
             .milliseconds(t::SpanMilliseconds::MIN_REPR)
             .microseconds(t::SpanMicroseconds::MIN_REPR)
             .nanoseconds(t::SpanNanoseconds::MIN_REPR),
-        ), @"-PT1271438207236.854775807s");
+        ), @"-PT1271438207236.854775807S");
         // The max seconds, millis, micros and nanos, combined.
         insta::assert_snapshot!(p(
             Span::new()
@@ -618,7 +637,7 @@ mod tests {
             .milliseconds(t::SpanMilliseconds::MIN_REPR)
             .microseconds(t::SpanMicroseconds::MIN_REPR)
             .nanoseconds(t::SpanNanoseconds::MIN_REPR),
-        ), @"-PT1902545624836.854775807s");
+        ), @"-PT1902545624836.854775807S");
     }
 
     #[test]
@@ -630,40 +649,40 @@ mod tests {
             buf
         };
 
-        insta::assert_snapshot!(p(0, 0), @"PT0s");
-        insta::assert_snapshot!(p(0, 1), @"PT0.000000001s");
-        insta::assert_snapshot!(p(1, 0), @"PT1s");
-        insta::assert_snapshot!(p(59, 0), @"PT59s");
-        insta::assert_snapshot!(p(60, 0), @"PT1m");
-        insta::assert_snapshot!(p(60, 1), @"PT1m0.000000001s");
-        insta::assert_snapshot!(p(61, 1), @"PT1m1.000000001s");
-        insta::assert_snapshot!(p(3_600, 0), @"PT1h");
-        insta::assert_snapshot!(p(3_600, 1), @"PT1h0.000000001s");
-        insta::assert_snapshot!(p(3_660, 0), @"PT1h1m");
-        insta::assert_snapshot!(p(3_660, 1), @"PT1h1m0.000000001s");
-        insta::assert_snapshot!(p(3_661, 0), @"PT1h1m1s");
-        insta::assert_snapshot!(p(3_661, 1), @"PT1h1m1.000000001s");
+        insta::assert_snapshot!(p(0, 0), @"PT0S");
+        insta::assert_snapshot!(p(0, 1), @"PT0.000000001S");
+        insta::assert_snapshot!(p(1, 0), @"PT1S");
+        insta::assert_snapshot!(p(59, 0), @"PT59S");
+        insta::assert_snapshot!(p(60, 0), @"PT1M");
+        insta::assert_snapshot!(p(60, 1), @"PT1M0.000000001S");
+        insta::assert_snapshot!(p(61, 1), @"PT1M1.000000001S");
+        insta::assert_snapshot!(p(3_600, 0), @"PT1H");
+        insta::assert_snapshot!(p(3_600, 1), @"PT1H0.000000001S");
+        insta::assert_snapshot!(p(3_660, 0), @"PT1H1M");
+        insta::assert_snapshot!(p(3_660, 1), @"PT1H1M0.000000001S");
+        insta::assert_snapshot!(p(3_661, 0), @"PT1H1M1S");
+        insta::assert_snapshot!(p(3_661, 1), @"PT1H1M1.000000001S");
 
-        insta::assert_snapshot!(p(0, -1), @"-PT0.000000001s");
-        insta::assert_snapshot!(p(-1, 0), @"-PT1s");
-        insta::assert_snapshot!(p(-59, 0), @"-PT59s");
-        insta::assert_snapshot!(p(-60, 0), @"-PT1m");
-        insta::assert_snapshot!(p(-60, -1), @"-PT1m0.000000001s");
-        insta::assert_snapshot!(p(-61, -1), @"-PT1m1.000000001s");
-        insta::assert_snapshot!(p(-3_600, 0), @"-PT1h");
-        insta::assert_snapshot!(p(-3_600, -1), @"-PT1h0.000000001s");
-        insta::assert_snapshot!(p(-3_660, 0), @"-PT1h1m");
-        insta::assert_snapshot!(p(-3_660, -1), @"-PT1h1m0.000000001s");
-        insta::assert_snapshot!(p(-3_661, 0), @"-PT1h1m1s");
-        insta::assert_snapshot!(p(-3_661, -1), @"-PT1h1m1.000000001s");
+        insta::assert_snapshot!(p(0, -1), @"-PT0.000000001S");
+        insta::assert_snapshot!(p(-1, 0), @"-PT1S");
+        insta::assert_snapshot!(p(-59, 0), @"-PT59S");
+        insta::assert_snapshot!(p(-60, 0), @"-PT1M");
+        insta::assert_snapshot!(p(-60, -1), @"-PT1M0.000000001S");
+        insta::assert_snapshot!(p(-61, -1), @"-PT1M1.000000001S");
+        insta::assert_snapshot!(p(-3_600, 0), @"-PT1H");
+        insta::assert_snapshot!(p(-3_600, -1), @"-PT1H0.000000001S");
+        insta::assert_snapshot!(p(-3_660, 0), @"-PT1H1M");
+        insta::assert_snapshot!(p(-3_660, -1), @"-PT1H1M0.000000001S");
+        insta::assert_snapshot!(p(-3_661, 0), @"-PT1H1M1S");
+        insta::assert_snapshot!(p(-3_661, -1), @"-PT1H1M1.000000001S");
 
         insta::assert_snapshot!(
             p(i64::MIN, -999_999_999),
-            @"-PT2562047788015215h30m8.999999999s",
+            @"-PT2562047788015215H30M8.999999999S",
         );
         insta::assert_snapshot!(
             p(i64::MAX, 999_999_999),
-            @"PT2562047788015215h30m7.999999999s",
+            @"PT2562047788015215H30M7.999999999S",
         );
     }
 }

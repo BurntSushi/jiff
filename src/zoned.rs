@@ -2366,11 +2366,11 @@ impl Zoned {
     ///
     /// // The default limits durations to using "hours" as the biggest unit.
     /// let span = zdt1.until(&zdt2)?;
-    /// assert_eq!(span.to_string(), "PT202956h5m29.9999965s");
+    /// assert_eq!(span.to_string(), "PT202956H5M29.9999965S");
     ///
     /// // But we can ask for units all the way up to years.
     /// let span = zdt1.until((Unit::Year, &zdt2))?;
-    /// assert_eq!(span.to_string(), "P23y1m24dT12h5m29.9999965s");
+    /// assert_eq!(span.to_string(), "P23Y1M24DT12H5M29.9999965S");
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///

@@ -975,78 +975,78 @@ mod tests {
     fn parse_span_basic() {
         let p = |s: &str| SpanParser::new().parse_span(s).unwrap();
 
-        insta::assert_snapshot!(p("5 years"), @"P5y");
-        insta::assert_snapshot!(p("5 years 4 months"), @"P5y4m");
-        insta::assert_snapshot!(p("5 years 4 months 3 hours"), @"P5y4mT3h");
-        insta::assert_snapshot!(p("5 years, 4 months, 3 hours"), @"P5y4mT3h");
+        insta::assert_snapshot!(p("5 years"), @"P5Y");
+        insta::assert_snapshot!(p("5 years 4 months"), @"P5Y4M");
+        insta::assert_snapshot!(p("5 years 4 months 3 hours"), @"P5Y4MT3H");
+        insta::assert_snapshot!(p("5 years, 4 months, 3 hours"), @"P5Y4MT3H");
 
-        insta::assert_snapshot!(p("01:02:03"), @"PT1h2m3s");
-        insta::assert_snapshot!(p("5 days 01:02:03"), @"P5dT1h2m3s");
+        insta::assert_snapshot!(p("01:02:03"), @"PT1H2M3S");
+        insta::assert_snapshot!(p("5 days 01:02:03"), @"P5DT1H2M3S");
         // This is Python's `str(timedelta)` format!
-        insta::assert_snapshot!(p("5 days, 01:02:03"), @"P5dT1h2m3s");
-        insta::assert_snapshot!(p("3yrs 5 days 01:02:03"), @"P3y5dT1h2m3s");
-        insta::assert_snapshot!(p("3yrs 5 days, 01:02:03"), @"P3y5dT1h2m3s");
+        insta::assert_snapshot!(p("5 days, 01:02:03"), @"P5DT1H2M3S");
+        insta::assert_snapshot!(p("3yrs 5 days 01:02:03"), @"P3Y5DT1H2M3S");
+        insta::assert_snapshot!(p("3yrs 5 days, 01:02:03"), @"P3Y5DT1H2M3S");
         insta::assert_snapshot!(
             p("3yrs 5 days, 01:02:03.123456789"),
-            @"P3y5dT1h2m3.123456789s",
+            @"P3Y5DT1H2M3.123456789S",
         );
-        insta::assert_snapshot!(p("999:999:999"), @"PT999h999m999s");
+        insta::assert_snapshot!(p("999:999:999"), @"PT999H999M999S");
     }
 
     #[test]
     fn parse_span_fractional() {
         let p = |s: &str| SpanParser::new().parse_span(s).unwrap();
 
-        insta::assert_snapshot!(p("1.5hrs"), @"PT1h30m");
-        insta::assert_snapshot!(p("1.5mins"), @"PT1m30s");
-        insta::assert_snapshot!(p("1.5secs"), @"PT1.5s");
-        insta::assert_snapshot!(p("1.5msecs"), @"PT0.0015s");
-        insta::assert_snapshot!(p("1.5µsecs"), @"PT0.0000015s");
+        insta::assert_snapshot!(p("1.5hrs"), @"PT1H30M");
+        insta::assert_snapshot!(p("1.5mins"), @"PT1M30S");
+        insta::assert_snapshot!(p("1.5secs"), @"PT1.5S");
+        insta::assert_snapshot!(p("1.5msecs"), @"PT0.0015S");
+        insta::assert_snapshot!(p("1.5µsecs"), @"PT0.0000015S");
 
-        insta::assert_snapshot!(p("1d 1.5hrs"), @"P1dT1h30m");
-        insta::assert_snapshot!(p("1h 1.5mins"), @"PT1h1m30s");
-        insta::assert_snapshot!(p("1m 1.5secs"), @"PT1m1.5s");
-        insta::assert_snapshot!(p("1s 1.5msecs"), @"PT1.0015s");
-        insta::assert_snapshot!(p("1ms 1.5µsecs"), @"PT0.0010015s");
+        insta::assert_snapshot!(p("1d 1.5hrs"), @"P1DT1H30M");
+        insta::assert_snapshot!(p("1h 1.5mins"), @"PT1H1M30S");
+        insta::assert_snapshot!(p("1m 1.5secs"), @"PT1M1.5S");
+        insta::assert_snapshot!(p("1s 1.5msecs"), @"PT1.0015S");
+        insta::assert_snapshot!(p("1ms 1.5µsecs"), @"PT0.0010015S");
 
-        insta::assert_snapshot!(p("1s2000ms"), @"PT3s");
+        insta::assert_snapshot!(p("1s2000ms"), @"PT3S");
     }
 
     #[test]
     fn parse_span_boundaries() {
         let p = |s: &str| SpanParser::new().parse_span(s).unwrap();
 
-        insta::assert_snapshot!(p("19998 years"), @"P19998y");
-        insta::assert_snapshot!(p("19998 years ago"), @"-P19998y");
-        insta::assert_snapshot!(p("239976 months"), @"P239976m");
-        insta::assert_snapshot!(p("239976 months ago"), @"-P239976m");
-        insta::assert_snapshot!(p("1043497 weeks"), @"P1043497w");
-        insta::assert_snapshot!(p("1043497 weeks ago"), @"-P1043497w");
-        insta::assert_snapshot!(p("7304484 days"), @"P7304484d");
-        insta::assert_snapshot!(p("7304484 days ago"), @"-P7304484d");
-        insta::assert_snapshot!(p("175307616 hours"), @"PT175307616h");
-        insta::assert_snapshot!(p("175307616 hours ago"), @"-PT175307616h");
-        insta::assert_snapshot!(p("10518456960 minutes"), @"PT10518456960m");
-        insta::assert_snapshot!(p("10518456960 minutes ago"), @"-PT10518456960m");
-        insta::assert_snapshot!(p("631107417600 seconds"), @"PT631107417600s");
-        insta::assert_snapshot!(p("631107417600 seconds ago"), @"-PT631107417600s");
-        insta::assert_snapshot!(p("631107417600000 milliseconds"), @"PT631107417600s");
-        insta::assert_snapshot!(p("631107417600000 milliseconds ago"), @"-PT631107417600s");
-        insta::assert_snapshot!(p("631107417600000000 microseconds"), @"PT631107417600s");
-        insta::assert_snapshot!(p("631107417600000000 microseconds ago"), @"-PT631107417600s");
-        insta::assert_snapshot!(p("9223372036854775807 nanoseconds"), @"PT9223372036.854775807s");
-        insta::assert_snapshot!(p("9223372036854775807 nanoseconds ago"), @"-PT9223372036.854775807s");
+        insta::assert_snapshot!(p("19998 years"), @"P19998Y");
+        insta::assert_snapshot!(p("19998 years ago"), @"-P19998Y");
+        insta::assert_snapshot!(p("239976 months"), @"P239976M");
+        insta::assert_snapshot!(p("239976 months ago"), @"-P239976M");
+        insta::assert_snapshot!(p("1043497 weeks"), @"P1043497W");
+        insta::assert_snapshot!(p("1043497 weeks ago"), @"-P1043497W");
+        insta::assert_snapshot!(p("7304484 days"), @"P7304484D");
+        insta::assert_snapshot!(p("7304484 days ago"), @"-P7304484D");
+        insta::assert_snapshot!(p("175307616 hours"), @"PT175307616H");
+        insta::assert_snapshot!(p("175307616 hours ago"), @"-PT175307616H");
+        insta::assert_snapshot!(p("10518456960 minutes"), @"PT10518456960M");
+        insta::assert_snapshot!(p("10518456960 minutes ago"), @"-PT10518456960M");
+        insta::assert_snapshot!(p("631107417600 seconds"), @"PT631107417600S");
+        insta::assert_snapshot!(p("631107417600 seconds ago"), @"-PT631107417600S");
+        insta::assert_snapshot!(p("631107417600000 milliseconds"), @"PT631107417600S");
+        insta::assert_snapshot!(p("631107417600000 milliseconds ago"), @"-PT631107417600S");
+        insta::assert_snapshot!(p("631107417600000000 microseconds"), @"PT631107417600S");
+        insta::assert_snapshot!(p("631107417600000000 microseconds ago"), @"-PT631107417600S");
+        insta::assert_snapshot!(p("9223372036854775807 nanoseconds"), @"PT9223372036.854775807S");
+        insta::assert_snapshot!(p("9223372036854775807 nanoseconds ago"), @"-PT9223372036.854775807S");
 
-        insta::assert_snapshot!(p("175307617 hours"), @"PT175307616h60m");
-        insta::assert_snapshot!(p("175307617 hours ago"), @"-PT175307616h60m");
-        insta::assert_snapshot!(p("10518456961 minutes"), @"PT10518456960m60s");
-        insta::assert_snapshot!(p("10518456961 minutes ago"), @"-PT10518456960m60s");
-        insta::assert_snapshot!(p("631107417601 seconds"), @"PT631107417601s");
-        insta::assert_snapshot!(p("631107417601 seconds ago"), @"-PT631107417601s");
-        insta::assert_snapshot!(p("631107417600001 milliseconds"), @"PT631107417600.001s");
-        insta::assert_snapshot!(p("631107417600001 milliseconds ago"), @"-PT631107417600.001s");
-        insta::assert_snapshot!(p("631107417600000001 microseconds"), @"PT631107417600.000001s");
-        insta::assert_snapshot!(p("631107417600000001 microseconds ago"), @"-PT631107417600.000001s");
+        insta::assert_snapshot!(p("175307617 hours"), @"PT175307616H60M");
+        insta::assert_snapshot!(p("175307617 hours ago"), @"-PT175307616H60M");
+        insta::assert_snapshot!(p("10518456961 minutes"), @"PT10518456960M60S");
+        insta::assert_snapshot!(p("10518456961 minutes ago"), @"-PT10518456960M60S");
+        insta::assert_snapshot!(p("631107417601 seconds"), @"PT631107417601S");
+        insta::assert_snapshot!(p("631107417601 seconds ago"), @"-PT631107417601S");
+        insta::assert_snapshot!(p("631107417600001 milliseconds"), @"PT631107417600.001S");
+        insta::assert_snapshot!(p("631107417600001 milliseconds ago"), @"-PT631107417600.001S");
+        insta::assert_snapshot!(p("631107417600000001 microseconds"), @"PT631107417600.000001S");
+        insta::assert_snapshot!(p("631107417600000001 microseconds ago"), @"-PT631107417600.000001S");
         // We don't include nanoseconds here, because that will fail to
         // parse due to overflowing i64.
     }
@@ -1073,7 +1073,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("1 year 1 mont"),
-            @r###"failed to parse "1 year 1 mont" in the "friendly" format: parsed value 'P1y1m', but unparsed input "nt" remains (expected no unparsed input)"###,
+            @r###"failed to parse "1 year 1 mont" in the "friendly" format: parsed value 'P1Y1M', but unparsed input "nt" remains (expected no unparsed input)"###,
         );
         insta::assert_snapshot!(
             p("2 months,"),
@@ -1085,7 +1085,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("2 months ,"),
-            @r###"failed to parse "2 months ," in the "friendly" format: parsed value 'P2m', but unparsed input "," remains (expected no unparsed input)"###,
+            @r###"failed to parse "2 months ," in the "friendly" format: parsed value 'P2M', but unparsed input "," remains (expected no unparsed input)"###,
         );
     }
 
@@ -1095,11 +1095,11 @@ mod tests {
 
         insta::assert_snapshot!(
             p("1yago"),
-            @r###"failed to parse "1yago" in the "friendly" format: parsed value 'P1y', but unparsed input "ago" remains (expected no unparsed input)"###,
+            @r###"failed to parse "1yago" in the "friendly" format: parsed value 'P1Y', but unparsed input "ago" remains (expected no unparsed input)"###,
         );
         insta::assert_snapshot!(
             p("1 year 1 monthago"),
-            @r###"failed to parse "1 year 1 monthago" in the "friendly" format: parsed value 'P1y1m', but unparsed input "ago" remains (expected no unparsed input)"###,
+            @r###"failed to parse "1 year 1 monthago" in the "friendly" format: parsed value 'P1Y1M', but unparsed input "ago" remains (expected no unparsed input)"###,
         );
         insta::assert_snapshot!(
             p("+1 year 1 month ago"),
@@ -1126,7 +1126,7 @@ mod tests {
         // one fewer is okay
         insta::assert_snapshot!(
             p("640330789636854775 micros"),
-            @"PT640330789636.854775s"
+            @"PT640330789636.854775S"
         );
 
         insta::assert_snapshot!(
@@ -1139,7 +1139,7 @@ mod tests {
         // one fewer is okay
         insta::assert_snapshot!(
             p("640330789636854775.807 micros"),
-            @"PT640330789636.854775807s"
+            @"PT640330789636.854775807S"
         );
     }
 
@@ -1233,9 +1233,9 @@ mod tests {
     fn parse_duration_basic() {
         let p = |s: &str| SpanParser::new().parse_duration(s).unwrap();
 
-        insta::assert_snapshot!(p("1 hour, 2 minutes, 3 seconds"), @"PT1h2m3s");
-        insta::assert_snapshot!(p("01:02:03"), @"PT1h2m3s");
-        insta::assert_snapshot!(p("999:999:999"), @"PT1015h55m39s");
+        insta::assert_snapshot!(p("1 hour, 2 minutes, 3 seconds"), @"PT1H2M3S");
+        insta::assert_snapshot!(p("01:02:03"), @"PT1H2M3S");
+        insta::assert_snapshot!(p("999:999:999"), @"PT1015H55M39S");
     }
 
     #[test]
@@ -1245,7 +1245,7 @@ mod tests {
 
         insta::assert_snapshot!(
             p("9223372036854775807s"),
-            @"PT2562047788015215h30m7s",
+            @"PT2562047788015215H30M7S",
         );
         insta::assert_snapshot!(
             perr("9223372036854775808s"),
@@ -1269,18 +1269,18 @@ mod tests {
     fn parse_duration_fractional() {
         let p = |s: &str| SpanParser::new().parse_duration(s).unwrap();
 
-        insta::assert_snapshot!(p("1.5hrs"), @"PT1h30m");
-        insta::assert_snapshot!(p("1.5mins"), @"PT1m30s");
-        insta::assert_snapshot!(p("1.5secs"), @"PT1.5s");
-        insta::assert_snapshot!(p("1.5msecs"), @"PT0.0015s");
-        insta::assert_snapshot!(p("1.5µsecs"), @"PT0.0000015s");
+        insta::assert_snapshot!(p("1.5hrs"), @"PT1H30M");
+        insta::assert_snapshot!(p("1.5mins"), @"PT1M30S");
+        insta::assert_snapshot!(p("1.5secs"), @"PT1.5S");
+        insta::assert_snapshot!(p("1.5msecs"), @"PT0.0015S");
+        insta::assert_snapshot!(p("1.5µsecs"), @"PT0.0000015S");
 
-        insta::assert_snapshot!(p("1h 1.5mins"), @"PT1h1m30s");
-        insta::assert_snapshot!(p("1m 1.5secs"), @"PT1m1.5s");
-        insta::assert_snapshot!(p("1s 1.5msecs"), @"PT1.0015s");
-        insta::assert_snapshot!(p("1ms 1.5µsecs"), @"PT0.0010015s");
+        insta::assert_snapshot!(p("1h 1.5mins"), @"PT1H1M30S");
+        insta::assert_snapshot!(p("1m 1.5secs"), @"PT1M1.5S");
+        insta::assert_snapshot!(p("1s 1.5msecs"), @"PT1.0015S");
+        insta::assert_snapshot!(p("1ms 1.5µsecs"), @"PT0.0010015S");
 
-        insta::assert_snapshot!(p("1s2000ms"), @"PT3s");
+        insta::assert_snapshot!(p("1s2000ms"), @"PT3S");
     }
 
     #[test]
@@ -1288,51 +1288,51 @@ mod tests {
         let p = |s: &str| SpanParser::new().parse_duration(s).unwrap();
         let pe = |s: &str| SpanParser::new().parse_duration(s).unwrap_err();
 
-        insta::assert_snapshot!(p("175307616 hours"), @"PT175307616h");
-        insta::assert_snapshot!(p("175307616 hours ago"), @"-PT175307616h");
-        insta::assert_snapshot!(p("10518456960 minutes"), @"PT175307616h");
-        insta::assert_snapshot!(p("10518456960 minutes ago"), @"-PT175307616h");
-        insta::assert_snapshot!(p("631107417600 seconds"), @"PT175307616h");
-        insta::assert_snapshot!(p("631107417600 seconds ago"), @"-PT175307616h");
-        insta::assert_snapshot!(p("631107417600000 milliseconds"), @"PT175307616h");
-        insta::assert_snapshot!(p("631107417600000 milliseconds ago"), @"-PT175307616h");
-        insta::assert_snapshot!(p("631107417600000000 microseconds"), @"PT175307616h");
-        insta::assert_snapshot!(p("631107417600000000 microseconds ago"), @"-PT175307616h");
-        insta::assert_snapshot!(p("9223372036854775807 nanoseconds"), @"PT2562047h47m16.854775807s");
-        insta::assert_snapshot!(p("9223372036854775807 nanoseconds ago"), @"-PT2562047h47m16.854775807s");
+        insta::assert_snapshot!(p("175307616 hours"), @"PT175307616H");
+        insta::assert_snapshot!(p("175307616 hours ago"), @"-PT175307616H");
+        insta::assert_snapshot!(p("10518456960 minutes"), @"PT175307616H");
+        insta::assert_snapshot!(p("10518456960 minutes ago"), @"-PT175307616H");
+        insta::assert_snapshot!(p("631107417600 seconds"), @"PT175307616H");
+        insta::assert_snapshot!(p("631107417600 seconds ago"), @"-PT175307616H");
+        insta::assert_snapshot!(p("631107417600000 milliseconds"), @"PT175307616H");
+        insta::assert_snapshot!(p("631107417600000 milliseconds ago"), @"-PT175307616H");
+        insta::assert_snapshot!(p("631107417600000000 microseconds"), @"PT175307616H");
+        insta::assert_snapshot!(p("631107417600000000 microseconds ago"), @"-PT175307616H");
+        insta::assert_snapshot!(p("9223372036854775807 nanoseconds"), @"PT2562047H47M16.854775807S");
+        insta::assert_snapshot!(p("9223372036854775807 nanoseconds ago"), @"-PT2562047H47M16.854775807S");
 
-        insta::assert_snapshot!(p("175307617 hours"), @"PT175307617h");
-        insta::assert_snapshot!(p("175307617 hours ago"), @"-PT175307617h");
-        insta::assert_snapshot!(p("10518456961 minutes"), @"PT175307616h1m");
-        insta::assert_snapshot!(p("10518456961 minutes ago"), @"-PT175307616h1m");
-        insta::assert_snapshot!(p("631107417601 seconds"), @"PT175307616h1s");
-        insta::assert_snapshot!(p("631107417601 seconds ago"), @"-PT175307616h1s");
-        insta::assert_snapshot!(p("631107417600001 milliseconds"), @"PT175307616h0.001s");
-        insta::assert_snapshot!(p("631107417600001 milliseconds ago"), @"-PT175307616h0.001s");
-        insta::assert_snapshot!(p("631107417600000001 microseconds"), @"PT175307616h0.000001s");
-        insta::assert_snapshot!(p("631107417600000001 microseconds ago"), @"-PT175307616h0.000001s");
+        insta::assert_snapshot!(p("175307617 hours"), @"PT175307617H");
+        insta::assert_snapshot!(p("175307617 hours ago"), @"-PT175307617H");
+        insta::assert_snapshot!(p("10518456961 minutes"), @"PT175307616H1M");
+        insta::assert_snapshot!(p("10518456961 minutes ago"), @"-PT175307616H1M");
+        insta::assert_snapshot!(p("631107417601 seconds"), @"PT175307616H1S");
+        insta::assert_snapshot!(p("631107417601 seconds ago"), @"-PT175307616H1S");
+        insta::assert_snapshot!(p("631107417600001 milliseconds"), @"PT175307616H0.001S");
+        insta::assert_snapshot!(p("631107417600001 milliseconds ago"), @"-PT175307616H0.001S");
+        insta::assert_snapshot!(p("631107417600000001 microseconds"), @"PT175307616H0.000001S");
+        insta::assert_snapshot!(p("631107417600000001 microseconds ago"), @"-PT175307616H0.000001S");
         // We don't include nanoseconds here, because that will fail to
         // parse due to overflowing i64.
 
         // The above were copied from the corresponding `Span` test, which has
         // tighter limits on components. But a `SignedDuration` supports the
         // full range of `i64` seconds.
-        insta::assert_snapshot!(p("2562047788015215hours"), @"PT2562047788015215h");
-        insta::assert_snapshot!(p("-2562047788015215hours"), @"-PT2562047788015215h");
+        insta::assert_snapshot!(p("2562047788015215hours"), @"PT2562047788015215H");
+        insta::assert_snapshot!(p("-2562047788015215hours"), @"-PT2562047788015215H");
         insta::assert_snapshot!(
             pe("2562047788015216hrs"),
             @r###"failed to parse "2562047788015216hrs" in the "friendly" format: converting 2562047788015216 hours to seconds overflows i64"###,
         );
 
-        insta::assert_snapshot!(p("153722867280912930minutes"), @"PT2562047788015215h30m");
-        insta::assert_snapshot!(p("153722867280912930minutes ago"), @"-PT2562047788015215h30m");
+        insta::assert_snapshot!(p("153722867280912930minutes"), @"PT2562047788015215H30M");
+        insta::assert_snapshot!(p("153722867280912930minutes ago"), @"-PT2562047788015215H30M");
         insta::assert_snapshot!(
             pe("153722867280912931mins"),
             @r###"failed to parse "153722867280912931mins" in the "friendly" format: parameter 'minutes-to-seconds' with value 60 is not in the required range of -9223372036854775808..=9223372036854775807"###,
         );
 
-        insta::assert_snapshot!(p("9223372036854775807seconds"), @"PT2562047788015215h30m7s");
-        insta::assert_snapshot!(p("-9223372036854775807seconds"), @"-PT2562047788015215h30m7s");
+        insta::assert_snapshot!(p("9223372036854775807seconds"), @"PT2562047788015215H30M7S");
+        insta::assert_snapshot!(p("-9223372036854775807seconds"), @"-PT2562047788015215H30M7S");
         insta::assert_snapshot!(
             pe("9223372036854775808s"),
             @r###"failed to parse "9223372036854775808s" in the "friendly" format: number '9223372036854775808' too big to parse into 64-bit integer"###,
@@ -1369,7 +1369,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("1 hour 1 minut"),
-            @r###"failed to parse "1 hour 1 minut" in the "friendly" format: parsed value 'PT1h1m', but unparsed input "ut" remains (expected no unparsed input)"###,
+            @r###"failed to parse "1 hour 1 minut" in the "friendly" format: parsed value 'PT1H1M', but unparsed input "ut" remains (expected no unparsed input)"###,
         );
         insta::assert_snapshot!(
             p("2 minutes,"),
@@ -1381,7 +1381,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("2 minutes ,"),
-            @r###"failed to parse "2 minutes ," in the "friendly" format: parsed value 'PT2m', but unparsed input "," remains (expected no unparsed input)"###,
+            @r###"failed to parse "2 minutes ," in the "friendly" format: parsed value 'PT2M', but unparsed input "," remains (expected no unparsed input)"###,
         );
     }
 
@@ -1391,11 +1391,11 @@ mod tests {
 
         insta::assert_snapshot!(
             p("1hago"),
-            @r###"failed to parse "1hago" in the "friendly" format: parsed value 'PT1h', but unparsed input "ago" remains (expected no unparsed input)"###,
+            @r###"failed to parse "1hago" in the "friendly" format: parsed value 'PT1H', but unparsed input "ago" remains (expected no unparsed input)"###,
         );
         insta::assert_snapshot!(
             p("1 hour 1 minuteago"),
-            @r###"failed to parse "1 hour 1 minuteago" in the "friendly" format: parsed value 'PT1h1m', but unparsed input "ago" remains (expected no unparsed input)"###,
+            @r###"failed to parse "1 hour 1 minuteago" in the "friendly" format: parsed value 'PT1H1M', but unparsed input "ago" remains (expected no unparsed input)"###,
         );
         insta::assert_snapshot!(
             p("+1 hour 1 minute ago"),
@@ -1421,7 +1421,7 @@ mod tests {
         // one fewer is okay
         insta::assert_snapshot!(
             p("9223372036854775807 micros"),
-            @"PT2562047788h54.775807s"
+            @"PT2562047788H54.775807S"
         );
     }
 

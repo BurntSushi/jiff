@@ -15,6 +15,9 @@ Bug fixes:
 
 * [#155](https://github.com/BurntSushi/jiff/issues/155):
 Relax `strftime` format strings from ASCII-only to all of UTF-8.
+* [#188](https://github.com/BurntSushi/jiff/issues/188):
+`Span` and `SignedDuration` now use uppercase unit designator labels in their
+default ISO 8601 `Display` implementation.
 
 
 0.1.18 (2024-12-31)
