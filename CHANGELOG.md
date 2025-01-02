@@ -1,8 +1,18 @@
 # CHANGELOG
 
-0.1.19 (TBD)
-============
-TODO
+0.1.19 (2025-01-02)
+===================
+This releases includes a UTF-8 related bug fix and a few enhancements.
+
+Firstly, a `Span`'s default `Display` implementation now writes uppercase
+unit designator labels. That means you'll get `P1Y2M3DT4H5M6S` instead
+of `P1y2m3dT4h5m6s` by default. You can restore previous behavior via
+`jiff::fmt::temporal::SpanPrinter::lowercase`. This change was made to improve
+interoperability.
+
+Secondly, `SignedDuration` now supports rounding via `SignedDuration::round`.
+Note that it only supports rounding time units (hours or smaller). In order to
+round with calendar units, you'll still need to use a `Span`.
 
 Enhancements:
 
@@ -10,14 +20,14 @@ Enhancements:
 Document value ranges for methods like `year`, `day`, `hour` and so on.
 * [#187](https://github.com/BurntSushi/jiff/issues/187):
 Add a rounding API (for time units only) on `SignedDuration`.
+* [#190](https://github.com/BurntSushi/jiff/issues/190):
+`Span` and `SignedDuration` now use uppercase unit designator labels in their
+default ISO 8601 `Display` implementation.
 
 Bug fixes:
 
 * [#155](https://github.com/BurntSushi/jiff/issues/155):
 Relax `strftime` format strings from ASCII-only to all of UTF-8.
-* [#190](https://github.com/BurntSushi/jiff/issues/190):
-`Span` and `SignedDuration` now use uppercase unit designator labels in their
-default ISO 8601 `Display` implementation.
 
 
 0.1.18 (2024-12-31)
