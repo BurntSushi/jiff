@@ -4,6 +4,7 @@ use crate::{
     fmt::{
         offset::{self, ParsedOffset},
         rfc9557::{self, ParsedAnnotations},
+        temporal::Pieces,
         util::{
             fractional_time_to_duration, fractional_time_to_span,
             parse_temporal_fraction,
@@ -36,6 +37,21 @@ pub(super) struct ParsedDateTime<'i> {
 
 impl<'i> ParsedDateTime<'i> {
     #[inline(always)]
+    pub(super) fn to_pieces(&self) -> Result<Pieces<'i>, Error> {
+        let mut pieces = Pieces::from(self.date.date);
+        if let Some(ref time) = self.time {
+            pieces = pieces.with_time(time.time);
+        }
+        if let Some(ref offset) = self.offset {
+            pieces = pieces.with_offset(offset.to_pieces_offset()?);
+        }
+        if let Some(ann) = self.annotations.to_time_zone_annotation()? {
+            pieces = pieces.with_time_zone_annotation(ann);
+        }
+        Ok(pieces)
+    }
+
+    #[inline(always)]
     pub(super) fn to_zoned(
         &self,
         db: &TimeZoneDatabase,
@@ -56,14 +72,15 @@ impl<'i> ParsedDateTime<'i> {
         let dt = DateTime::from_parts(self.date.date, time);
 
         // We always require a time zone when parsing a zoned instant.
-        let (tz, _critical) =
-            self.annotations.to_time_zone(db)?.ok_or_else(|| {
+        let tz_annotation =
+            self.annotations.to_time_zone_annotation()?.ok_or_else(|| {
                 err!(
                     "failed to find time zone in square brackets \
                      in {:?}, which is required for parsing a zoned instant",
                     self.input,
                 )
             })?;
+        let tz = tz_annotation.to_time_zone_with(db)?;
 
         // If there's no offset, then our only choice, regardless of conflict
         // resolution preference, is to use the time zone. That is, there is no
