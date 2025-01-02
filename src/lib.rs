@@ -594,8 +594,16 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
   finding your system's default time zone. But if you don't need that (or can
   bundle the Time Zone Database), then Jiff has nearly full functionality
   without `std` enabled, excepting things like `std::error::Error` trait
-  implementations. Jiff does require dynamic memory allocation. That is,
-  there is no way to use Jiff in `core`-only contexts.
+  implementations and a global time zone database (which is required for
+  things like [`Timestamp::intz`] to work).
+* **alloc** (enabled by default) -
+  When enabled, Jiff will depend on the `alloc` crate. In particular, this
+  enables functionality that requires or greatly benefits from dynamic memory
+  allocation. If you can enable this, it is strongly encouraged that you do so.
+  Without it, only fixed time zones are supported and error messages are
+  significantly degraded. Also, the sizes of some types get bigger. If you
+  have use cases for Jiff in a no-std and no-alloc context, I would love
+  feedback on the issue tracker about your use cases.
 * **logging** -
   When enabled, the `log` crate is used to emit messages where appropriate.
   Generally speaking, this is reserved for system interaction points, such as
@@ -675,34 +683,15 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
 #[cfg(not(any(target_pointer_width = "32", target_pointer_width = "64")))]
 compile_error!("jiff currently not supported on non-{32,64}");
 
-#[cfg(not(feature = "alloc"))]
-compile_error!("jiff currently requires dynamic memory allocation");
-
 #[cfg(any(test, feature = "std"))]
 extern crate std;
 
-// We don't currently support a non-alloc mode for Jiff. I'm not opposed to
-// doing it, but dynamic memory allocation is pretty heavily weaved into some
-// core parts of Jiff. In particular, its error types.
-//
-// When I originally started writing Jiff, my goal was to support a core-only
-// mode. But it became too painful to make every use of the heap conditional.
-//
-// With that said, I believe errors are the only thing that is "pervasive"
-// that allocates. That, and time zones. So if core-only was deeply desired,
-// we could probably pull the "much worse user experience" level and make it
-// happen. Alternatively, we could carve out a "jiff core" crate, although I
-// don't really know what that would look like.
-//
-// If you have a use case for a core-only Jiff, please file an issue. And
-// please don't just say, "I want Jiff without heap allocation." Please give a
-// detailed accounting of 1) why you can't use dynamic memory allocation and 2)
-// what specific functionality from Jiff you actually need.
+#[cfg(any(test, feature = "alloc"))]
 extern crate alloc;
 
 pub use crate::{
     error::Error,
-    signed_duration::SignedDuration,
+    signed_duration::{SignedDuration, SignedDurationRound},
     span::{
         Span, SpanArithmetic, SpanCompare, SpanRelativeTo, SpanRound,
         SpanTotal, ToSpan, Unit,
@@ -756,6 +745,7 @@ mod tests {
         std::println!("{zdt}");
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn topscratch() {
         use crate::util::t;

@@ -18,7 +18,7 @@ use crate::{
     timestamp::Timestamp,
     tz::{
         posix::{IanaTz, ReasonablePosixTimeZone},
-        AmbiguousOffset, Dst, Offset,
+        AmbiguousOffset, Dst, Offset, TimeZoneTransition,
     },
     util::{
         crc32,
@@ -260,41 +260,48 @@ impl Tzif {
     pub(crate) fn previous_transition(
         &self,
         ts: Timestamp,
-    ) -> Option<Timestamp> {
+    ) -> Option<TimeZoneTransition> {
         assert!(!self.transitions.is_empty(), "transitions is non-empty");
         let search =
             self.transitions.binary_search_by_key(&ts, |t| t.timestamp);
         let index = match search {
             Ok(i) | Err(i) => i.checked_sub(1)?,
         };
-        if index == 0 {
+        let trans = if index == 0 {
             // The first transition is a dummy that we insert, so if we land on
             // it here, treat it as if it doesn't exist.
-            None
+            return None;
         } else if index == self.transitions.len() - 1 {
-            let tzif_prev_trans = self.transitions[index].timestamp;
-            let Some(posix_tz) = self.posix_tz.as_ref() else {
-                // No POSIX TZ means the last transition is our only possible
-                // answer.
-                return Some(tzif_prev_trans);
-            };
-            // Since the POSIX TZ must be consistent with the last transition,
-            // it must be the case that tzif_prev_trans <= posix_prev_tans in
-            // all cases. So the transition according to the POSIX TZ is
-            // always correct here.
-            //
-            // What if this returns `None` though? I'm not sure in which cases
-            // that could matter, and I think it might be a violation of the
-            // TZif format if it does.
-            posix_tz.previous_transition(ts)
+            if let Some(ref posix_tz) = self.posix_tz {
+                // Since the POSIX TZ must be consistent with the last
+                // transition, it must be the case that tzif_last <=
+                // posix_prev_trans in all cases. So the transition according
+                // to the POSIX TZ is always correct here.
+                //
+                // What if this returns `None` though? I'm not sure in which
+                // cases that could matter, and I think it might be a violation
+                // of the TZif format if it does.
+                return posix_tz.previous_transition(ts);
+            }
+            &self.transitions[index]
         } else {
-            Some(self.transitions[index].timestamp)
-        }
+            &self.transitions[index]
+        };
+        let typ = &self.types[usize::from(trans.type_index)];
+        Some(TimeZoneTransition {
+            timestamp: trans.timestamp,
+            offset: typ.offset,
+            abbrev: self.designation(typ),
+            dst: typ.is_dst,
+        })
     }
 
     /// Returns the timestamp of the soonest time zone transition after the
     /// timestamp given. If one doesn't exist, `None` is returned.
-    pub(crate) fn next_transition(&self, ts: Timestamp) -> Option<Timestamp> {
+    pub(crate) fn next_transition(
+        &self,
+        ts: Timestamp,
+    ) -> Option<TimeZoneTransition> {
         assert!(!self.transitions.is_empty(), "transitions is non-empty");
         let search =
             self.transitions.binary_search_by_key(&ts, |t| t.timestamp);
@@ -302,30 +309,33 @@ impl Tzif {
             Ok(i) => i.checked_add(1)?,
             Err(i) => i,
         };
-        if index == 0 {
+        let trans = if index == 0 {
             // The first transition is a dummy that we insert, so if we land on
             // it here, treat it as if it doesn't exist.
-            None
+            return None;
         } else if index >= self.transitions.len() - 1 {
-            let tzif_next_trans =
-                self.transitions.last().expect("last transition").timestamp;
-            let Some(posix_tz) = self.posix_tz.as_ref() else {
-                // No POSIX TZ means the last transition is our only possible
-                // answer.
-                return Some(tzif_next_trans);
-            };
-            // Since the POSIX TZ must be consistent with the last transition,
-            // it must be the case that tzif_next_trans <= posix_next_tans in
-            // all cases. So the transition according to the POSIX TZ is
-            // always correct here.
-            //
-            // What if this returns `None` though? I'm not sure in which cases
-            // that could matter, and I think it might be a violation of the
-            // TZif format if it does.
-            posix_tz.next_transition(ts)
+            if let Some(ref posix_tz) = self.posix_tz {
+                // Since the POSIX TZ must be consistent with the last
+                // transition, it must be the case that next.timestamp <=
+                // posix_next_tans in all cases. So the transition according to
+                // the POSIX TZ is always correct here.
+                //
+                // What if this returns `None` though? I'm not sure in which
+                // cases that could matter, and I think it might be a violation
+                // of the TZif format if it does.
+                return posix_tz.next_transition(ts);
+            }
+            self.transitions.last().expect("last transition")
         } else {
-            Some(self.transitions[index].timestamp)
-        }
+            &self.transitions[index]
+        };
+        let typ = &self.types[usize::from(trans.type_index)];
+        Some(TimeZoneTransition {
+            timestamp: trans.timestamp,
+            offset: typ.offset,
+            abbrev: self.designation(typ),
+            dst: typ.is_dst,
+        })
     }
 
     fn local_time_type_to_offset(
@@ -437,7 +447,7 @@ impl Tzif {
                          of {}, but got {offset} according to POSIX TZ \
                          string {}",
                         typ.offset,
-                        tz.as_str(),
+                        tz,
                     ));
                 }
                 if dst != typ.is_dst {
@@ -447,7 +457,7 @@ impl Tzif {
                          string {}",
                         typ.is_dst.is_dst(),
                         dst.is_dst(),
-                        tz.as_str(),
+                        tz,
                     ));
                 }
                 if abbrev != tzif.designation(&typ) {
@@ -457,7 +467,7 @@ impl Tzif {
                          but got designation={} according to POSIX TZ \
                          string {}",
                         tzif.designation(&typ),
-                        tz.as_str(),
+                        tz,
                     ));
                 }
             }
@@ -1296,6 +1306,7 @@ impl Header {
 /// format. However, it is impossible for this to return false when the given
 /// data is TZif. That is, a false positive is allowed but a false negative is
 /// not.
+#[cfg(feature = "tzdb-zoneinfo")]
 pub(crate) fn is_possibly_tzif(data: &[u8]) -> bool {
     data.starts_with(b"TZif")
 }
@@ -1457,7 +1468,7 @@ mod tests {
         }
         if let Some(ref posix_tz) = tzif.posix_tz {
             writeln!(out, "POSIX TIME ZONE STRING").unwrap();
-            writeln!(out, "  {}", posix_tz.as_str()).unwrap();
+            writeln!(out, "  {}", posix_tz).unwrap();
         }
         String::from_utf8(out.into_inner().unwrap()).unwrap()
     }
@@ -1512,6 +1523,7 @@ mod tests {
     /// do much with it other than to ensure we don't panic or return an error.
     /// That is, we check that we can parse each file, but not that we do so
     /// correctly.
+    #[cfg(feature = "tzdb-zoneinfo")]
     #[cfg(target_os = "linux")]
     #[test]
     fn zoneinfo() {

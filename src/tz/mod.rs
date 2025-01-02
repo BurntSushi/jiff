@@ -83,32 +83,32 @@ TO get the system's default time zone, use [`TimeZone::system`].
 [`GetDynamicTimeZoneInformation`]: https://learn.microsoft.com/en-us/windows/win32/api/timezoneapi/nf-timezoneapi-getdynamictimezoneinformation
 */
 
-use alloc::{
-    boxed::Box,
-    string::{String, ToString},
-    sync::Arc,
-};
-
 use crate::{
     civil::DateTime,
     error::{err, Error, ErrorContext},
+    util::{array_str::ArrayStr, sync::Arc},
     Timestamp, Zoned,
 };
 
-use self::{posix::ReasonablePosixTimeZone, tzif::Tzif};
+#[cfg(feature = "alloc")]
+use self::posix::ReasonablePosixTimeZone;
 
+#[cfg(feature = "alloc")]
+pub use self::db::TimeZoneNameIter;
 pub use self::{
-    db::{db, TimeZoneDatabase, TimeZoneNameIter},
+    db::{db, TimeZoneDatabase},
     offset::{Dst, Offset, OffsetArithmetic, OffsetConflict},
 };
 
 mod db;
 mod offset;
+#[cfg(feature = "alloc")]
 mod posix;
 #[cfg(feature = "tz-system")]
 mod system;
-#[cfg(test)]
+#[cfg(all(test, feature = "alloc"))]
 mod testdata;
+#[cfg(feature = "alloc")]
 mod tzif;
 // See module comment for WIP status. :-(
 #[cfg(test)]
@@ -535,6 +535,7 @@ impl TimeZone {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[cfg(feature = "alloc")]
     pub fn posix(posix_tz_string: &str) -> Result<TimeZone, Error> {
         let posix = TimeZonePosix::new(posix_tz_string)?;
         let kind = TimeZoneKind::Posix(posix);
@@ -558,7 +559,10 @@ impl TimeZone {
     ///
     /// This returns an error if the given data was not recognized as valid
     /// TZif.
+    #[cfg(feature = "alloc")]
     pub fn tzif(name: &str, data: &[u8]) -> Result<TimeZone, Error> {
+        use alloc::string::ToString;
+
         let tzif = TimeZoneTzif::new(Some(name.to_string()), data)?;
         let kind = TimeZoneKind::Tzif(tzif);
         Ok(TimeZone { kind: Some(Arc::new(kind)) })
@@ -593,6 +597,7 @@ impl TimeZone {
     /// # Errors
     ///
     /// This returns an error if the given TZif data is invalid.
+    #[cfg(feature = "tz-system")]
     fn tzif_system(data: &[u8]) -> Result<TimeZone, Error> {
         let tzif = TimeZoneTzif::new(None, data)?;
         let kind = TimeZoneKind::Tzif(tzif);
@@ -600,13 +605,8 @@ impl TimeZone {
     }
 
     #[inline]
-    pub(crate) fn diagnostic_name(&self) -> &str {
-        let Some(ref kind) = self.kind else { return "UTC" };
-        match **kind {
-            TimeZoneKind::Fixed(ref tz) => tz.name(),
-            TimeZoneKind::Posix(ref tz) => tz.name(),
-            TimeZoneKind::Tzif(ref tz) => tz.name().unwrap_or("Local"),
-        }
+    pub(crate) fn diagnostic_name(&self) -> DiagnosticName<'_> {
+        DiagnosticName(self)
     }
 
     /// When this time zone was loaded from an IANA time zone database entry,
@@ -626,6 +626,7 @@ impl TimeZone {
     pub fn iana_name(&self) -> Option<&str> {
         let Some(ref kind) = self.kind else { return Some("UTC") };
         match **kind {
+            #[cfg(feature = "alloc")]
             TimeZoneKind::Tzif(ref tz) => tz.name(),
             _ => None,
         }
@@ -712,15 +713,75 @@ impl TimeZone {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_offset(&self, timestamp: Timestamp) -> (Offset, Dst, &str) {
+    pub fn to_offset(&self, _timestamp: Timestamp) -> (Offset, Dst, &str) {
         let Some(ref kind) = self.kind else {
             return (Offset::UTC, Dst::No, "UTC");
         };
         match **kind {
             TimeZoneKind::Fixed(ref tz) => (tz.offset(), Dst::No, tz.name()),
-            TimeZoneKind::Posix(ref tz) => tz.to_offset(timestamp),
-            TimeZoneKind::Tzif(ref tz) => tz.to_offset(timestamp),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Posix(ref tz) => tz.to_offset(_timestamp),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Tzif(ref tz) => tz.to_offset(_timestamp),
         }
+    }
+
+    /// If this time zone is a fixed offset, then this returns the offset.
+    /// If this time zone is not a fixed offset, then an error is returned.
+    ///
+    /// If you just need an offset for a given timestamp, then you can use
+    /// [`TimeZone::to_offset`]. Or, if you need an offset for a civil
+    /// datetime, then you can use [`TimeZone::to_ambiguous_timestamp`] or
+    /// [`TimeZone::to_ambiguous_zoned`], although the result may be ambiguous.
+    ///
+    /// Generally, this routine is useful when you need to know whether the
+    /// time zone is fixed, and you want to get the offset without having to
+    /// specify a timestamp. This is sometimes required for interoperating with
+    /// other datetime systems that need to distinguish between time zones that
+    /// are fixed and time zones that are based on rules such as those found in
+    /// the IANA time zone database.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::tz::{Offset, TimeZone};
+    ///
+    /// let tz = TimeZone::get("America/New_York")?;
+    /// // A named time zone is not a fixed offset
+    /// // and so cannot be converted to an offset
+    /// // without a timestamp or civil datetime.
+    /// assert_eq!(
+    ///     tz.to_fixed_offset().unwrap_err().to_string(),
+    ///     "cannot convert non-fixed IANA time zone \
+    ///      to offset without timestamp or civil datetime",
+    /// );
+    ///
+    /// let tz = TimeZone::UTC;
+    /// // UTC is a fixed offset and so can be converted
+    /// // without a timestamp.
+    /// assert_eq!(tz.to_fixed_offset()?, Offset::UTC);
+    ///
+    /// // And of course, creating a time zone from a
+    /// // fixed offset results in a fixed offset time
+    /// // zone too:
+    /// let tz = TimeZone::fixed(jiff::tz::offset(-10));
+    /// assert_eq!(tz.to_fixed_offset()?, jiff::tz::offset(-10));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn to_fixed_offset(&self) -> Result<Offset, Error> {
+        let Some(ref kind) = self.kind else { return Ok(Offset::UTC) };
+        #[allow(irrefutable_let_patterns)]
+        let TimeZoneKind::Fixed(ref tz) = **kind
+        else {
+            return Err(err!(
+                "cannot convert non-fixed {kind} time zone to offset \
+                 without timestamp or civil datetime",
+                kind = self.kind_description(),
+            ));
+        };
+        Ok(tz.offset())
     }
 
     /// Converts a civil datetime to a [`Zoned`] in this time zone.
@@ -958,39 +1019,218 @@ impl TimeZone {
                 TimeZoneKind::Fixed(ref tz) => {
                     AmbiguousOffset::Unambiguous { offset: tz.offset() }
                 }
+                #[cfg(feature = "alloc")]
                 TimeZoneKind::Posix(ref tz) => tz.to_ambiguous_kind(dt),
+                #[cfg(feature = "alloc")]
                 TimeZoneKind::Tzif(ref tz) => tz.to_ambiguous_kind(dt),
             },
         };
         AmbiguousTimestamp::new(dt, ambiguous_kind)
     }
 
-    // I'd like to export the prev/next transition routines below, but I'm
-    // not fully sure of their API. I'd like to understand use cases a bit
-    // better. And I suspect it would make more sense to not just return a
-    // timestamp, but also the offset associated with the time zone transition
-    // change. Otherwise, if one needs the offset, you need to go back and do
-    // another lookup via `TimeZone::to_offset`. Where as I believe finding the
-    // prev/next transition must also necessarily find the offset too. So we
-    // might as well return it.
-
-    #[allow(dead_code)]
+    /// Returns an iterator of time zone transitions preceding the given
+    /// timestamp. The iterator returned yields [`TimeZoneTransition`]
+    /// elements.
+    ///
+    /// The order of the iterator returned moves backward through time. If
+    /// there is a previous transition, then the timestamp of that transition
+    /// is guaranteed to be strictly less than the timestamp given.
+    ///
+    /// This is a low level API that you generally shouldn't need. It's
+    /// useful in cases where you need to know something about the specific
+    /// instants at which time zone transitions occur. For example, an embedded
+    /// device might need to be explicitly programmed with daylight saving
+    /// time transitions. APIs like this enable callers to explore those
+    /// transitions.
+    ///
+    /// A time zone transition refers to a specific point in time when the
+    /// offset from UTC for a particular geographical region changes. This
+    /// is usually a result of daylight saving time, but it can also occur
+    /// when a geographic region changes its permanent offset from UTC.
+    ///
+    /// The iterator returned is not guaranteed to yield any elements. For
+    /// example, this occurs with a fixed offset time zone. Logically, it
+    /// would also be possible for the iterator to be infinite, except that
+    /// eventually the timestamp would overflow Jiff's minimum timestamp
+    /// value, at which point, iteration stops.
+    ///
+    /// # Example: time since the previous transition
+    ///
+    /// This example shows how much time has passed since the previous time
+    /// zone transition:
+    ///
+    /// ```
+    /// use jiff::{Unit, Zoned};
+    ///
+    /// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+    /// let trans = now.time_zone().preceding(now.timestamp()).next().unwrap();
+    /// let prev_at = trans.timestamp().to_zoned(now.time_zone().clone());
+    /// let span = now.since((Unit::Year, &prev_at))?;
+    /// assert_eq!(format!("{span:#}"), "1mo 27d 17h 25m");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: show the 5 previous time zone transitions
+    ///
+    /// This shows how to find the 5 preceding time zone transitions (from a
+    /// particular datetime) for a particular time zone:
+    ///
+    /// ```
+    /// use jiff::{tz::offset, Zoned};
+    ///
+    /// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+    /// let transitions = now
+    ///     .time_zone()
+    ///     .preceding(now.timestamp())
+    ///     .take(5)
+    ///     .map(|t| (
+    ///         t.timestamp().to_zoned(now.time_zone().clone()),
+    ///         t.offset(),
+    ///         t.abbreviation(),
+    ///     ))
+    ///     .collect::<Vec<_>>();
+    /// assert_eq!(transitions, vec![
+    ///     ("2024-11-03 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+    ///     ("2024-03-10 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+    ///     ("2023-11-05 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+    ///     ("2023-03-12 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+    ///     ("2022-11-06 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+    /// ]);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
-    fn previous_transition(&self, timestamp: Timestamp) -> Option<Timestamp> {
+    pub fn preceding<'t>(
+        &'t self,
+        timestamp: Timestamp,
+    ) -> TimeZonePrecedingTransitions<'t> {
+        TimeZonePrecedingTransitions { tz: self, cur: timestamp }
+    }
+
+    /// Returns an iterator of time zone transitions following the given
+    /// timestamp. The iterator returned yields [`TimeZoneTransition`]
+    /// elements.
+    ///
+    /// The order of the iterator returned moves forward through time. If
+    /// there is a following transition, then the timestamp of that transition
+    /// is guaranteed to be strictly greater than the timestamp given.
+    ///
+    /// This is a low level API that you generally shouldn't need. It's
+    /// useful in cases where you need to know something about the specific
+    /// instants at which time zone transitions occur. For example, an embedded
+    /// device might need to be explicitly programmed with daylight saving
+    /// time transitions. APIs like this enable callers to explore those
+    /// transitions.
+    ///
+    /// A time zone transition refers to a specific point in time when the
+    /// offset from UTC for a particular geographical region changes. This
+    /// is usually a result of daylight saving time, but it can also occur
+    /// when a geographic region changes its permanent offset from UTC.
+    ///
+    /// The iterator returned is not guaranteed to yield any elements. For
+    /// example, this occurs with a fixed offset time zone. Logically, it
+    /// would also be possible for the iterator to be infinite, except that
+    /// eventually the timestamp would overflow Jiff's maximum timestamp
+    /// value, at which point, iteration stops.
+    ///
+    /// # Example: time until the next transition
+    ///
+    /// This example shows how much time is left until the next time zone
+    /// transition:
+    ///
+    /// ```
+    /// use jiff::{Unit, Zoned};
+    ///
+    /// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+    /// let trans = now.time_zone().following(now.timestamp()).next().unwrap();
+    /// let next_at = trans.timestamp().to_zoned(now.time_zone().clone());
+    /// let span = now.until((Unit::Year, &next_at))?;
+    /// assert_eq!(format!("{span:#}"), "2mo 8d 7h 35m");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: show the 5 next time zone transitions
+    ///
+    /// This shows how to find the 5 following time zone transitions (from a
+    /// particular datetime) for a particular time zone:
+    ///
+    /// ```
+    /// use jiff::{tz::offset, Zoned};
+    ///
+    /// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+    /// let transitions = now
+    ///     .time_zone()
+    ///     .following(now.timestamp())
+    ///     .take(5)
+    ///     .map(|t| (
+    ///         t.timestamp().to_zoned(now.time_zone().clone()),
+    ///         t.offset(),
+    ///         t.abbreviation(),
+    ///     ))
+    ///     .collect::<Vec<_>>();
+    /// assert_eq!(transitions, vec![
+    ///     ("2025-03-09 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+    ///     ("2025-11-02 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+    ///     ("2026-03-08 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+    ///     ("2026-11-01 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+    ///     ("2027-03-14 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+    /// ]);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn following<'t>(
+        &'t self,
+        timestamp: Timestamp,
+    ) -> TimeZoneFollowingTransitions<'t> {
+        TimeZoneFollowingTransitions { tz: self, cur: timestamp }
+    }
+
+    /// Used by the "preceding transitions" iterator.
+    #[inline]
+    fn previous_transition(
+        &self,
+        _timestamp: Timestamp,
+    ) -> Option<TimeZoneTransition> {
         match **self.kind.as_ref()? {
             TimeZoneKind::Fixed(_) => None,
-            TimeZoneKind::Posix(ref tz) => tz.previous_transition(timestamp),
-            TimeZoneKind::Tzif(ref tz) => tz.previous_transition(timestamp),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Posix(ref tz) => tz.previous_transition(_timestamp),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Tzif(ref tz) => tz.previous_transition(_timestamp),
         }
     }
 
-    #[allow(dead_code)]
+    /// Used by the "following transitions" iterator.
     #[inline]
-    fn next_transition(&self, timestamp: Timestamp) -> Option<Timestamp> {
+    fn next_transition(
+        &self,
+        _timestamp: Timestamp,
+    ) -> Option<TimeZoneTransition> {
         match **self.kind.as_ref()? {
             TimeZoneKind::Fixed(_) => None,
-            TimeZoneKind::Posix(ref tz) => tz.next_transition(timestamp),
-            TimeZoneKind::Tzif(ref tz) => tz.next_transition(timestamp),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Posix(ref tz) => tz.next_transition(_timestamp),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Tzif(ref tz) => tz.next_transition(_timestamp),
+        }
+    }
+
+    /// Returns a short description about the kind of this time zone.
+    ///
+    /// This is useful in error messages.
+    fn kind_description(&self) -> &str {
+        let Some(ref kind) = self.kind else {
+            return "UTC";
+        };
+        match **kind {
+            TimeZoneKind::Fixed(_) => "fixed",
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Posix(_) => "POSIX",
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Tzif(_) => "IANA",
         }
     }
 }
@@ -1002,7 +1242,9 @@ impl core::fmt::Debug for TimeZone {
             None => &"UTC",
             Some(ref kind) => match &**kind {
                 TimeZoneKind::Fixed(ref tz) => tz,
+                #[cfg(feature = "alloc")]
                 TimeZoneKind::Posix(ref tz) => tz,
+                #[cfg(feature = "alloc")]
                 TimeZoneKind::Tzif(ref tz) => tz,
             },
         };
@@ -1011,28 +1253,31 @@ impl core::fmt::Debug for TimeZone {
 }
 
 #[derive(Debug, Eq, PartialEq)]
+#[cfg_attr(not(feature = "alloc"), derive(Clone))]
 enum TimeZoneKind {
     Fixed(TimeZoneFixed),
+    #[cfg(feature = "alloc")]
     Posix(TimeZonePosix),
+    #[cfg(feature = "alloc")]
     Tzif(TimeZoneTzif),
 }
 
 #[derive(Clone)]
 struct TimeZoneFixed {
     offset: Offset,
-    name: Box<str>,
+    name: ArrayStr<9>,
 }
 
 impl TimeZoneFixed {
     #[inline]
     fn new(offset: Offset) -> TimeZoneFixed {
-        let name = offset.to_string().into();
+        let name = offset.to_array_str();
         TimeZoneFixed { offset, name }
     }
 
     #[inline]
     fn name(&self) -> &str {
-        &self.name
+        self.name.as_str()
     }
 
     #[inline]
@@ -1048,6 +1293,13 @@ impl core::fmt::Debug for TimeZoneFixed {
     }
 }
 
+impl core::fmt::Display for TimeZoneFixed {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        core::fmt::Display::fmt(&self.name, f)
+    }
+}
+
 impl Eq for TimeZoneFixed {}
 
 impl PartialEq for TimeZoneFixed {
@@ -1057,22 +1309,18 @@ impl PartialEq for TimeZoneFixed {
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[cfg(feature = "alloc")]
+#[derive(Clone, Eq, PartialEq)]
 struct TimeZonePosix {
-    name: Box<str>,
     posix: ReasonablePosixTimeZone,
 }
 
+#[cfg(feature = "alloc")]
 impl TimeZonePosix {
     #[inline]
     fn new(s: &str) -> Result<TimeZonePosix, Error> {
         let iana_tz = posix::IanaTz::parse_v3plus(s)?;
         Ok(TimeZonePosix::from(iana_tz.into_tz()))
-    }
-
-    #[inline]
-    fn name(&self) -> &str {
-        &self.name
     }
 
     #[inline]
@@ -1086,42 +1334,62 @@ impl TimeZonePosix {
     }
 
     #[inline]
-    fn previous_transition(&self, timestamp: Timestamp) -> Option<Timestamp> {
+    fn previous_transition(
+        &self,
+        timestamp: Timestamp,
+    ) -> Option<TimeZoneTransition> {
         self.posix.previous_transition(timestamp)
     }
 
     #[inline]
-    fn next_transition(&self, timestamp: Timestamp) -> Option<Timestamp> {
+    fn next_transition(
+        &self,
+        timestamp: Timestamp,
+    ) -> Option<TimeZoneTransition> {
         self.posix.next_transition(timestamp)
     }
 }
 
+#[cfg(feature = "alloc")]
 impl From<ReasonablePosixTimeZone> for TimeZonePosix {
     #[inline]
     fn from(posix: ReasonablePosixTimeZone) -> TimeZonePosix {
-        let name = posix.as_str().to_string().into();
-        TimeZonePosix { name, posix }
+        TimeZonePosix { posix }
     }
 }
 
 // This is implemented by hand because dumping out the full representation of
 // a `ReasonablePosixTimeZone` is way too much noise for users of Jiff.
+#[cfg(feature = "alloc")]
 impl core::fmt::Debug for TimeZonePosix {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.debug_tuple("Posix").field(&self.posix.as_str()).finish()
+        write!(f, "Posix({})", self.posix)
     }
 }
 
-#[derive(Eq, PartialEq)]
-struct TimeZoneTzif {
-    tzif: Tzif,
+#[cfg(feature = "alloc")]
+impl core::fmt::Display for TimeZonePosix {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        core::fmt::Display::fmt(&self.posix, f)
+    }
 }
 
+#[cfg(feature = "alloc")]
+#[derive(Eq, PartialEq)]
+struct TimeZoneTzif {
+    tzif: self::tzif::Tzif,
+}
+
+#[cfg(feature = "alloc")]
 impl TimeZoneTzif {
     #[inline]
-    fn new(name: Option<String>, bytes: &[u8]) -> Result<TimeZoneTzif, Error> {
-        let tzif = Tzif::parse(name, bytes)?;
+    fn new(
+        name: Option<alloc::string::String>,
+        bytes: &[u8],
+    ) -> Result<TimeZoneTzif, Error> {
+        let tzif = self::tzif::Tzif::parse(name, bytes)?;
         Ok(TimeZoneTzif { tzif })
     }
 
@@ -1141,22 +1409,330 @@ impl TimeZoneTzif {
     }
 
     #[inline]
-    fn previous_transition(&self, timestamp: Timestamp) -> Option<Timestamp> {
+    fn previous_transition(
+        &self,
+        timestamp: Timestamp,
+    ) -> Option<TimeZoneTransition> {
         self.tzif.previous_transition(timestamp)
     }
 
     #[inline]
-    fn next_transition(&self, timestamp: Timestamp) -> Option<Timestamp> {
+    fn next_transition(
+        &self,
+        timestamp: Timestamp,
+    ) -> Option<TimeZoneTransition> {
         self.tzif.next_transition(timestamp)
     }
 }
 
 // This is implemented by hand because dumping out the full representation of
 // all TZif data is too much noise for users of Jiff.
+#[cfg(feature = "alloc")]
 impl core::fmt::Debug for TimeZoneTzif {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         f.debug_tuple("TZif").field(&self.name().unwrap_or("Local")).finish()
+    }
+}
+
+/// A representation a single time zone transition.
+///
+/// A time zone transition is an instant in time the marks the beginning of
+/// a change in the offset from UTC that civil time is computed from in a
+/// particular time zone. For example, when daylight saving time comes into
+/// effect (or goes away). Another example is when a geographic region changes
+/// its permanent offset from UTC.
+///
+/// This is a low level type that you generally shouldn't need. It's useful in
+/// cases where you need to know something about the specific instants at which
+/// time zone transitions occur. For example, an embedded device might need to
+/// be explicitly programmed with daylight saving time transitions. APIs like
+/// this enable callers to explore those transitions.
+///
+/// This type is yielded by the iterators
+/// [`TimeZonePrecedingTransitions`] and
+/// [`TimeZoneFollowingTransitions`]. The iterators are created by
+/// [`TimeZone::preceding`] and [`TimeZone::following`], respectively.
+///
+/// # Example
+///
+/// This shows a somewhat silly example that finds all of the unique civil
+/// (or "clock" or "local") times at which a time zone transition has occurred
+/// in a particular time zone:
+///
+/// ```
+/// use std::collections::BTreeSet;
+/// use jiff::{civil, tz::TimeZone};
+///
+/// let tz = TimeZone::get("America/New_York")?;
+/// let now = civil::date(2024, 12, 31).at(18, 25, 0, 0).to_zoned(tz.clone())?;
+/// let mut set = BTreeSet::new();
+/// for trans in tz.preceding(now.timestamp()) {
+///     let time = tz.to_datetime(trans.timestamp()).time();
+///     set.insert(time);
+/// }
+/// assert_eq!(Vec::from_iter(set), vec![
+///     civil::time(1, 0, 0, 0),  // typical transition out of DST
+///     civil::time(3, 0, 0, 0),  // typical transition into DST
+///     civil::time(12, 0, 0, 0), // from when IANA starts keeping track
+///     civil::time(19, 0, 0, 0), // from World War 2
+/// ]);
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Debug)]
+pub struct TimeZoneTransition<'t> {
+    // We don't currently do anything smart to make iterating over
+    // transitions faster. We could if we pushed the iterator impl down into
+    // the respective modules (`posix` and `tzif`), but it's not clear such
+    // optimization is really worth it. However, this API should permit that
+    // kind of optimization in the future.
+    timestamp: Timestamp,
+    offset: Offset,
+    abbrev: &'t str,
+    dst: Dst,
+}
+
+impl<'t> TimeZoneTransition<'t> {
+    /// Returns the timestamp at which this transition began.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil, tz::TimeZone};
+    ///
+    /// let tz = TimeZone::get("US/Eastern")?;
+    /// // Look for the first time zone transition in `US/Eastern` following
+    /// // 2023-03-09 00:00:00.
+    /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
+    /// let next = tz.following(start).next().unwrap();
+    /// assert_eq!(
+    ///     next.timestamp().to_zoned(tz.clone()).to_string(),
+    ///     "2024-03-10T03:00:00-04:00[US/Eastern]",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn timestamp(&self) -> Timestamp {
+        self.timestamp
+    }
+
+    /// Returns the offset corresponding to this time zone transition. All
+    /// instants at and following this transition's timestamp (and before the
+    /// next transition's timestamp) need to apply this offset from UTC to get
+    /// the civil or "local" time in the corresponding time zone.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil, tz::{TimeZone, offset}};
+    ///
+    /// let tz = TimeZone::get("US/Eastern")?;
+    /// // Get the offset of the next transition after
+    /// // 2023-03-09 00:00:00.
+    /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
+    /// let next = tz.following(start).next().unwrap();
+    /// assert_eq!(next.offset(), offset(-4));
+    /// // Or go backwards to find the previous transition.
+    /// let prev = tz.preceding(start).next().unwrap();
+    /// assert_eq!(prev.offset(), offset(-5));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn offset(&self) -> Offset {
+        self.offset
+    }
+
+    /// Returns the time zone abbreviation corresponding to this time
+    /// zone transition. All instants at and following this transition's
+    /// timestamp (and before the next transition's timestamp) may use this
+    /// abbreviation when creating a human readable string. For example,
+    /// this is the abbreviation used with the `%Z` specifier with Jiff's
+    /// [`fmt::strtime`](crate::fmt::strtime) module.
+    ///
+    /// Note that abbreviations can to be ambiguous. For example, the
+    /// abbreviation `CST` can be used for the time zones `Asia/Shanghai`,
+    /// `America/Chicago` and `America/Havana`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil, tz::TimeZone};
+    ///
+    /// let tz = TimeZone::get("US/Eastern")?;
+    /// // Get the abbreviation of the next transition after
+    /// // 2023-03-09 00:00:00.
+    /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
+    /// let next = tz.following(start).next().unwrap();
+    /// assert_eq!(next.abbreviation(), "EDT");
+    /// // Or go backwards to find the previous transition.
+    /// let prev = tz.preceding(start).next().unwrap();
+    /// assert_eq!(prev.abbreviation(), "EST");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn abbreviation(&self) -> &'t str {
+        self.abbrev
+    }
+
+    /// Returns whether daylight saving time is enabled for this time zone
+    /// transition.
+    ///
+    /// Callers should generally treat this as informational only. In
+    /// particular, not all time zone transitions are related to daylight
+    /// saving time. For example, some transitions are a result of a region
+    /// permanently changing their offset from UTC.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil, tz::{Dst, TimeZone}};
+    ///
+    /// let tz = TimeZone::get("US/Eastern")?;
+    /// // Get the DST status of the next transition after
+    /// // 2023-03-09 00:00:00.
+    /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
+    /// let next = tz.following(start).next().unwrap();
+    /// assert_eq!(next.dst(), Dst::Yes);
+    /// // Or go backwards to find the previous transition.
+    /// let prev = tz.preceding(start).next().unwrap();
+    /// assert_eq!(prev.dst(), Dst::No);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn dst(&self) -> Dst {
+        self.dst
+    }
+}
+
+/// An iterator over time zone transitions going backward in time.
+///
+/// This iterator is created by [`TimeZone::preceding`].
+///
+/// # Example: show the 5 previous time zone transitions
+///
+/// This shows how to find the 5 preceding time zone transitions (from a
+/// particular datetime) for a particular time zone:
+///
+/// ```
+/// use jiff::{tz::offset, Zoned};
+///
+/// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+/// let transitions = now
+///     .time_zone()
+///     .preceding(now.timestamp())
+///     .take(5)
+///     .map(|t| (
+///         t.timestamp().to_zoned(now.time_zone().clone()),
+///         t.offset(),
+///         t.abbreviation(),
+///     ))
+///     .collect::<Vec<_>>();
+/// assert_eq!(transitions, vec![
+///     ("2024-11-03 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+///     ("2024-03-10 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+///     ("2023-11-05 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+///     ("2023-03-12 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+///     ("2022-11-06 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+/// ]);
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Debug)]
+pub struct TimeZonePrecedingTransitions<'t> {
+    tz: &'t TimeZone,
+    cur: Timestamp,
+}
+
+impl<'t> Iterator for TimeZonePrecedingTransitions<'t> {
+    type Item = TimeZoneTransition<'t>;
+
+    fn next(&mut self) -> Option<TimeZoneTransition<'t>> {
+        let trans = self.tz.previous_transition(self.cur)?;
+        self.cur = trans.timestamp();
+        Some(trans)
+    }
+}
+
+impl<'t> core::iter::FusedIterator for TimeZonePrecedingTransitions<'t> {}
+
+/// An iterator over time zone transitions going forward in time.
+///
+/// This iterator is created by [`TimeZone::following`].
+///
+/// # Example: show the 5 next time zone transitions
+///
+/// This shows how to find the 5 following time zone transitions (from a
+/// particular datetime) for a particular time zone:
+///
+/// ```
+/// use jiff::{tz::offset, Zoned};
+///
+/// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+/// let transitions = now
+///     .time_zone()
+///     .following(now.timestamp())
+///     .take(5)
+///     .map(|t| (
+///         t.timestamp().to_zoned(now.time_zone().clone()),
+///         t.offset(),
+///         t.abbreviation(),
+///     ))
+///     .collect::<Vec<_>>();
+/// assert_eq!(transitions, vec![
+///     ("2025-03-09 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+///     ("2025-11-02 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+///     ("2026-03-08 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+///     ("2026-11-01 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+///     ("2027-03-14 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+/// ]);
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Debug)]
+pub struct TimeZoneFollowingTransitions<'t> {
+    tz: &'t TimeZone,
+    cur: Timestamp,
+}
+
+impl<'t> Iterator for TimeZoneFollowingTransitions<'t> {
+    type Item = TimeZoneTransition<'t>;
+
+    fn next(&mut self) -> Option<TimeZoneTransition<'t>> {
+        let trans = self.tz.next_transition(self.cur)?;
+        self.cur = trans.timestamp();
+        Some(trans)
+    }
+}
+
+impl<'t> core::iter::FusedIterator for TimeZoneFollowingTransitions<'t> {}
+
+/// A helper type for converting a `TimeZone` to a succinct human readable
+/// description.
+///
+/// This is principally used in error messages in various places.
+///
+/// A previous iteration of this was just an `as_str() -> &str` method on
+/// `TimeZone`, but that's difficult to do without relying on dynamic memory
+/// allocation (or chunky arrays).
+pub(crate) struct DiagnosticName<'a>(&'a TimeZone);
+
+impl<'a> core::fmt::Display for DiagnosticName<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        let Some(ref kind) = self.0.kind else { return write!(f, "UTC") };
+        match **kind {
+            TimeZoneKind::Fixed(ref tz) => write!(f, "{tz}"),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Posix(ref tz) => write!(f, "{tz}"),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Tzif(ref tz) => {
+                write!(f, "{}", tz.name().unwrap_or("Local"))
+            }
+        }
     }
 }
 
@@ -2462,7 +3038,9 @@ pub const fn offset(hours: i8) -> Offset {
 
 #[cfg(test)]
 mod tests {
-    use crate::{civil::date, tz::testdata::TzifTestFile};
+    use crate::civil::date;
+    #[cfg(feature = "alloc")]
+    use crate::tz::testdata::TzifTestFile;
 
     use super::*;
 
@@ -2501,6 +3079,7 @@ mod tests {
         AmbiguousOffset::Fold { before: earlier, after: later }
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_tzif_to_ambiguous_timestamp() {
         let tests: &[(&str, &[_])] = &[
@@ -2797,6 +3376,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_tzif_to_datetime() {
         let o = |hours| offset(hours);
@@ -3091,6 +3671,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_posix_to_ambiguous_timestamp() {
         let tests: &[(&str, &[_])] = &[
@@ -3259,6 +3840,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_posix_to_datetime() {
         let o = |hours| offset(hours);
@@ -3414,6 +3996,7 @@ mod tests {
         assert!(tz.to_zoned(dt).is_err());
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_tzif_previous_transition() {
         let tests: &[(&str, &[(&str, Option<&str>)])] = &[
@@ -3491,12 +4074,13 @@ mod tests {
                 let given: Timestamp = given.parse().unwrap();
                 let expected =
                     expected.map(|s| s.parse::<Timestamp>().unwrap());
-                let got = tz.previous_transition(given);
+                let got = tz.previous_transition(given).map(|t| t.timestamp());
                 assert_eq!(got, expected, "\nTZ: {tzname}\ngiven: {given}");
             }
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_tzif_next_transition() {
         let tests: &[(&str, &[(&str, Option<&str>)])] = &[
@@ -3571,12 +4155,13 @@ mod tests {
                 let given: Timestamp = given.parse().unwrap();
                 let expected =
                     expected.map(|s| s.parse::<Timestamp>().unwrap());
-                let got = tz.next_transition(given);
+                let got = tz.next_transition(given).map(|t| t.timestamp());
                 assert_eq!(got, expected, "\nTZ: {tzname}\ngiven: {given}");
             }
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_posix_previous_transition() {
         let tests: &[(&str, &[(&str, Option<&str>)])] = &[
@@ -3638,12 +4223,13 @@ mod tests {
                 let given: Timestamp = given.parse().unwrap();
                 let expected =
                     expected.map(|s| s.parse::<Timestamp>().unwrap());
-                let got = tz.previous_transition(given);
+                let got = tz.previous_transition(given).map(|t| t.timestamp());
                 assert_eq!(got, expected, "\nTZ: {posix_tz}\ngiven: {given}");
             }
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[test]
     fn time_zone_posix_next_transition() {
         let tests: &[(&str, &[(&str, Option<&str>)])] = &[
@@ -3705,7 +4291,7 @@ mod tests {
                 let given: Timestamp = given.parse().unwrap();
                 let expected =
                     expected.map(|s| s.parse::<Timestamp>().unwrap());
-                let got = tz.next_transition(given);
+                let got = tz.next_transition(given).map(|t| t.timestamp());
                 assert_eq!(got, expected, "\nTZ: {posix_tz}\ngiven: {given}");
             }
         }
@@ -3717,7 +4303,80 @@ mod tests {
     /// it, and we want to keep its size as small as we can.
     #[test]
     fn time_zone_size() {
-        let word = core::mem::size_of::<usize>();
-        assert_eq!(word, core::mem::size_of::<TimeZone>());
+        #[cfg(feature = "alloc")]
+        {
+            let word = core::mem::size_of::<usize>();
+            assert_eq!(word, core::mem::size_of::<TimeZone>());
+        }
+        #[cfg(all(target_pointer_width = "64", not(feature = "alloc")))]
+        {
+            #[cfg(debug_assertions)]
+            {
+                assert_eq!(28, core::mem::size_of::<TimeZone>());
+            }
+            #[cfg(not(debug_assertions))]
+            {
+                assert_eq!(20, core::mem::size_of::<TimeZone>());
+            }
+        }
+    }
+
+    /// This tests a few other cases for `TimeZone::to_offset` that
+    /// probably aren't worth showing in doctest examples.
+    #[test]
+    fn time_zone_to_offset() {
+        let ts = Timestamp::from_second(123456789).unwrap();
+
+        let tz = TimeZone::fixed(offset(-5));
+        let (off, dst, label) = tz.to_offset(ts);
+        assert_eq!(off, offset(-5));
+        assert_eq!(dst, Dst::No);
+        assert_eq!(label, "-05");
+
+        let tz = TimeZone::fixed(offset(5));
+        let (off, dst, label) = tz.to_offset(ts);
+        assert_eq!(off, offset(5));
+        assert_eq!(dst, Dst::No);
+        assert_eq!(label, "+05");
+
+        let tz = TimeZone::fixed(offset(-12));
+        let (off, dst, label) = tz.to_offset(ts);
+        assert_eq!(off, offset(-12));
+        assert_eq!(dst, Dst::No);
+        assert_eq!(label, "-12");
+
+        let tz = TimeZone::fixed(offset(12));
+        let (off, dst, label) = tz.to_offset(ts);
+        assert_eq!(off, offset(12));
+        assert_eq!(dst, Dst::No);
+        assert_eq!(label, "+12");
+
+        let tz = TimeZone::fixed(offset(0));
+        let (off, dst, label) = tz.to_offset(ts);
+        assert_eq!(off, offset(0));
+        assert_eq!(dst, Dst::No);
+        assert_eq!(label, "UTC");
+    }
+
+    /// This tests a few other cases for `TimeZone::to_fixed_offset` that
+    /// probably aren't worth showing in doctest examples.
+    #[test]
+    fn time_zone_to_fixed_offset() {
+        let tz = TimeZone::UTC;
+        assert_eq!(tz.to_fixed_offset().unwrap(), Offset::UTC);
+
+        let offset = Offset::from_hours(1).unwrap();
+        let tz = TimeZone::fixed(offset);
+        assert_eq!(tz.to_fixed_offset().unwrap(), offset);
+
+        #[cfg(feature = "alloc")]
+        {
+            let tz = TimeZone::posix("EST5").unwrap();
+            assert!(tz.to_fixed_offset().is_err());
+
+            let test_file = TzifTestFile::get("America/New_York");
+            let tz = TimeZone::tzif(test_file.name, test_file.data).unwrap();
+            assert!(tz.to_fixed_offset().is_err());
+        }
     }
 }

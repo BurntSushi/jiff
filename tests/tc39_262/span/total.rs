@@ -1,4 +1,4 @@
-use jiff::{civil::date, tz, Timestamp, ToSpan, Unit, Zoned};
+use jiff::{civil::date, tz, Timestamp, ToSpan, Unit};
 
 use crate::tc39_262::Result;
 
@@ -66,6 +66,7 @@ fn calendar_possibly_required() -> Result {
 }
 
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/Duration/prototype/total/dst-balancing-result.js
+#[cfg(feature = "std")]
 #[test]
 fn dst_balancing_result() -> Result {
     if jiff::tz::db().is_definitively_empty() {
@@ -73,7 +74,8 @@ fn dst_balancing_result() -> Result {
     }
 
     let sp = 1.year().hours(24);
-    let zdt = "1999-10-29T01-07[America/Los_Angeles]".parse::<Zoned>()?;
+    let zdt =
+        "1999-10-29T01-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result = sp.total((Unit::Day, &zdt))?;
     assert_eq!(result, 366.96);
 
@@ -83,13 +85,15 @@ fn dst_balancing_result() -> Result {
     // But with real TZ data, a span of 1 year will pretty much always cover
     // a DST backward transition.
     let sp = 1.month().hours(24);
-    let zdt = "2000-09-29T01-07[America/Los_Angeles]".parse::<Zoned>()?;
+    let zdt =
+        "2000-09-29T01-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result = sp.total((Unit::Day, &zdt))?;
     assert_eq!(result, 30.96);
 
     // Try one month earlier, and we balance up to 1 day.
     let sp = 1.month().hours(24);
-    let zdt = "2000-08-29T01-07[America/Los_Angeles]".parse::<Zoned>()?;
+    let zdt =
+        "2000-08-29T01-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result = sp.total((Unit::Day, &zdt))?;
     assert_eq!(result, 32.0);
 
@@ -97,6 +101,7 @@ fn dst_balancing_result() -> Result {
 }
 
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/Duration/prototype/total/dst-day-length.js
+#[cfg(feature = "std")]
 #[test]
 fn dst_day_length() -> Result {
     if jiff::tz::db().is_definitively_empty() {
@@ -172,6 +177,7 @@ fn dst_day_length() -> Result {
 }
 
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/Duration/prototype/total/dst-rounding-result.js
+#[cfg(feature = "std")]
 #[test]
 fn dst_rounding_result() -> Result {
     if jiff::tz::db().is_definitively_empty() {

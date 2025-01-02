@@ -8,8 +8,6 @@ rounding increments up to days are supported. Similarly, rounding increments
 for time units must divide evenly into 1 unit of the next highest unit.
 */
 
-#![allow(warnings)] // REMOVE ME
-
 use crate::{
     error::{err, Error},
     util::{

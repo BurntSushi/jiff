@@ -1,5 +1,3 @@
-#![allow(warnings)]
-
 use crate::{
     error::{err, ErrorContext},
     fmt::{
@@ -11,7 +9,7 @@ use crate::{
         Write, WriteExt,
     },
     tz::Offset,
-    util::{escape, parse},
+    util::{escape, utf8},
     Error,
 };
 
@@ -25,15 +23,13 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     pub(super) fn format(&mut self) -> Result<(), Error> {
         while !self.fmt.is_empty() {
             if self.f() != b'%' {
-                if !self.f().is_ascii() {
-                    return Err(err!(
-                        "found non-ASCII byte {byte:?} in format \
-                         string (ASCII is currently required)",
-                        byte = escape::Byte(self.f()),
-                    ));
+                if self.f().is_ascii() {
+                    self.wtr.write_char(char::from(self.f()))?;
+                    self.bump_fmt();
+                } else {
+                    let ch = self.utf8_decode_and_bump()?;
+                    self.wtr.write_char(ch)?;
                 }
-                self.wtr.write_char(char::from(self.f()))?;
-                self.bump_fmt();
                 continue;
             }
             if !self.bump_fmt() {
@@ -141,6 +137,35 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     fn bump_fmt(&mut self) -> bool {
         self.fmt = &self.fmt[1..];
         !self.fmt.is_empty()
+    }
+
+    /// Decodes a Unicode scalar value from the beginning of `fmt` and advances
+    /// the parser accordingly.
+    ///
+    /// If a Unicode scalar value could not be decoded, then an error is
+    /// returned.
+    ///
+    /// It would be nice to just pass through bytes as-is instead of doing
+    /// actual UTF-8 decoding, but since the `Write` trait only represents
+    /// Unicode-accepting buffers, we need to actually do decoding here.
+    ///
+    /// # Panics
+    ///
+    /// When `self.fmt` is empty. i.e., Only call this when you know there is
+    /// some remaining bytes to parse.
+    #[inline(never)]
+    fn utf8_decode_and_bump(&mut self) -> Result<char, Error> {
+        match utf8::decode(self.fmt).expect("non-empty fmt") {
+            Ok(ch) => {
+                self.fmt = &self.fmt[ch.len_utf8()..];
+                return Ok(ch);
+            }
+            Err(invalid) => Err(err!(
+                "found invalid UTF-8 byte {byte:?} in format \
+                 string (format strings must be valid UTF-8)",
+                byte = escape::Byte(invalid),
+            )),
+        }
     }
 
     /// Parses optional extensions before a specifier directive. That is, right
@@ -323,7 +348,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
 
     /// %V
     fn fmt_iana_nocolon(&mut self) -> Result<(), Error> {
-        let Some(iana) = self.tm.iana.as_ref() else {
+        let Some(iana) = self.tm.iana_time_zone() else {
             let offset = self.tm.offset.ok_or_else(|| {
                 err!(
                     "requires IANA time zone identifier or time \
@@ -338,7 +363,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
 
     /// %:V
     fn fmt_iana_colon(&mut self) -> Result<(), Error> {
-        let Some(iana) = self.tm.iana.as_ref() else {
+        let Some(iana) = self.tm.iana_time_zone() else {
             let offset = self.tm.offset.ok_or_else(|| {
                 err!(
                     "requires IANA time zone identifier or time \
@@ -415,7 +440,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         let tzabbrev = self.tm.tzabbrev.as_ref().ok_or_else(|| {
             err!("requires time zone abbreviation in broken down time")
         })?;
-        ext.write_str(Case::Upper, tzabbrev, self.wtr)
+        ext.write_str(Case::Upper, tzabbrev.as_str(), self.wtr)
     }
 
     /// %A
@@ -471,7 +496,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
 fn write_offset<W: Write>(
     offset: Offset,
     colon: bool,
-    mut wtr: &mut W,
+    wtr: &mut W,
 ) -> Result<(), Error> {
     static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
 
@@ -501,7 +526,7 @@ impl Extension {
         self,
         default: Case,
         string: &str,
-        mut wtr: &mut W,
+        wtr: &mut W,
     ) -> Result<(), Error> {
         let case = match self.flag {
             Some(Flag::Uppercase) => Case::Upper,
@@ -537,7 +562,7 @@ impl Extension {
         pad_byte: u8,
         pad_width: Option<u8>,
         number: impl Into<i64>,
-        mut wtr: &mut W,
+        wtr: &mut W,
     ) -> Result<(), Error> {
         let number = number.into();
         let pad_byte = match self.flag {
@@ -565,7 +590,7 @@ impl Extension {
     fn write_fractional_seconds<W: Write>(
         self,
         number: impl Into<i64>,
-        mut wtr: &mut W,
+        wtr: &mut W,
     ) -> Result<(), Error> {
         let number = number.into();
 
@@ -600,8 +625,6 @@ mod tests {
         fmt::strtime::format,
         Zoned,
     };
-
-    use super::*;
 
     #[test]
     fn ok_format_american_date() {

@@ -7,8 +7,6 @@ implementations for printing and parsing respectively. The APIs in this module
 provide more configurable support for printing and parsing.
 */
 
-use alloc::{string::String, vec::Vec};
-
 use crate::{
     error::{err, Error},
     util::escape,
@@ -112,7 +110,8 @@ pub trait Write {
     }
 }
 
-impl Write for String {
+#[cfg(any(test, feature = "alloc"))]
+impl Write for alloc::string::String {
     #[inline]
     fn write_str(&mut self, string: &str) -> Result<(), Error> {
         self.push_str(string);
@@ -120,7 +119,8 @@ impl Write for String {
     }
 }
 
-impl Write for Vec<u8> {
+#[cfg(any(test, feature = "alloc"))]
+impl Write for alloc::vec::Vec<u8> {
     #[inline]
     fn write_str(&mut self, string: &str) -> Result<(), Error> {
         self.extend_from_slice(string.as_bytes());
@@ -183,6 +183,9 @@ impl<W: std::io::Write> Write for StdIoWrite<W> {
 /// to something with a `std::fmt::Write` trait implementation but not a
 /// `fmt::Write` implementation.
 ///
+/// (Despite using `Std` in this name, this type is available in `core`-only
+/// configurations.)
+///
 /// # Example
 ///
 /// This example shows the `std::fmt::Display` trait implementation for
@@ -211,7 +214,9 @@ pub struct StdFmtWrite<W>(pub W);
 impl<W: core::fmt::Write> Write for StdFmtWrite<W> {
     #[inline]
     fn write_str(&mut self, string: &str) -> Result<(), Error> {
-        self.0.write_str(string).map_err(Error::adhoc)
+        self.0
+            .write_str(string)
+            .map_err(|_| err!("an error occurred when formatting an argument"))
     }
 }
 

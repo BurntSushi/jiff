@@ -604,7 +604,6 @@ impl Zoned {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    #[cfg(feature = "std")]
     #[inline]
     pub fn intz(&self, name: &str) -> Result<Zoned, Error> {
         let tz = crate::tz::db().get(name)?;
@@ -634,6 +633,8 @@ impl Zoned {
     }
 
     /// Returns the year for this zoned datetime.
+    ///
+    /// The value returned is guaranteed to be in the range `-9999..=9999`.
     ///
     /// # Example
     ///
@@ -667,6 +668,8 @@ impl Zoned {
     /// The crate is designed this way so that years in the latest era (that
     /// is, `CE`) are aligned with years in this crate.
     ///
+    /// The year returned is guaranteed to be in the range `1..=10000`.
+    ///
     /// # Example
     ///
     /// ```
@@ -699,6 +702,8 @@ impl Zoned {
 
     /// Returns the month for this zoned datetime.
     ///
+    /// The value returned is guaranteed to be in the range `1..=12`.
+    ///
     /// # Example
     ///
     /// ```
@@ -716,6 +721,8 @@ impl Zoned {
 
     /// Returns the day for this zoned datetime.
     ///
+    /// The value returned is guaranteed to be in the range `1..=31`.
+    ///
     /// # Example
     ///
     /// ```
@@ -732,6 +739,8 @@ impl Zoned {
     }
 
     /// Returns the "hour" component of this zoned datetime.
+    ///
+    /// The value returned is guaranteed to be in the range `0..=23`.
     ///
     /// # Example
     ///
@@ -752,6 +761,8 @@ impl Zoned {
 
     /// Returns the "minute" component of this zoned datetime.
     ///
+    /// The value returned is guaranteed to be in the range `0..=59`.
+    ///
     /// # Example
     ///
     /// ```
@@ -770,6 +781,8 @@ impl Zoned {
     }
 
     /// Returns the "second" component of this zoned datetime.
+    ///
+    /// The value returned is guaranteed to be in the range `0..=59`.
     ///
     /// # Example
     ///
@@ -790,6 +803,8 @@ impl Zoned {
 
     /// Returns the "millisecond" component of this zoned datetime.
     ///
+    /// The value returned is guaranteed to be in the range `0..=999`.
+    ///
     /// # Example
     ///
     /// ```
@@ -809,6 +824,8 @@ impl Zoned {
 
     /// Returns the "microsecond" component of this zoned datetime.
     ///
+    /// The value returned is guaranteed to be in the range `0..=999`.
+    ///
     /// # Example
     ///
     /// ```
@@ -827,6 +844,8 @@ impl Zoned {
     }
 
     /// Returns the "nanosecond" component of this zoned datetime.
+    ///
+    /// The value returned is guaranteed to be in the range `0..=999`.
     ///
     /// # Example
     ///
@@ -849,6 +868,8 @@ impl Zoned {
     ///
     /// If you want to set this value on `Zoned`, then use
     /// [`ZonedWith::subsec_nanosecond`] via [`Zoned::with`].
+    ///
+    /// The value returned is guaranteed to be in the range `0..=999_999_999`.
     ///
     /// # Example
     ///
@@ -3077,7 +3098,6 @@ impl core::fmt::Display for Zoned {
 /// Note that this is only enabled when the `std` feature
 /// is enabled because it requires access to a global
 /// [`TimeZoneDatabase`](crate::tz::TimeZoneDatabase).
-#[cfg(feature = "std")]
 impl core::str::FromStr for Zoned {
     type Err = Error;
 
@@ -5125,8 +5145,9 @@ fn day_length(
     // FIXME: We should be doing this with a &TimeZone, but will need a
     // refactor so that we do zone-aware arithmetic using just a Timestamp and
     // a &TimeZone.
-    let tzname = alloc::string::String::from(tz.diagnostic_name());
-    let start = dt.start_of_day().to_zoned(tz).with_context(|| {
+    let tz2 = tz.clone();
+    let start = dt.start_of_day().to_zoned(tz).with_context(move || {
+        let tzname = tz2.diagnostic_name();
         err!("failed to find start of day for {dt} in time zone {tzname}")
     })?;
     let end = start.checked_add(Span::new().days_ranged(C(1))).with_context(
@@ -5243,15 +5264,29 @@ mod tests {
     fn zoned_size() {
         #[cfg(debug_assertions)]
         {
-            assert_eq!(96, core::mem::size_of::<Zoned>());
+            #[cfg(feature = "alloc")]
+            {
+                assert_eq!(96, core::mem::size_of::<Zoned>());
+            }
+            #[cfg(all(target_pointer_width = "64", not(feature = "alloc")))]
+            {
+                assert_eq!(120, core::mem::size_of::<Zoned>());
+            }
         }
         #[cfg(not(debug_assertions))]
         {
-            assert_eq!(40, core::mem::size_of::<Zoned>());
+            #[cfg(feature = "alloc")]
+            {
+                assert_eq!(40, core::mem::size_of::<Zoned>());
+            }
+            #[cfg(all(target_pointer_width = "64", not(feature = "alloc")))]
+            {
+                assert_eq!(56, core::mem::size_of::<Zoned>());
+            }
         }
     }
 
-    /// # `serde` deserializer compatibility test
+    /// A `serde` deserializer compatibility test.
     ///
     /// Serde YAML used to be unable to deserialize `jiff` types,
     /// as deserializing from bytes is not supported by the deserializer.
@@ -5260,6 +5295,10 @@ mod tests {
     /// - <https://github.com/BurntSushi/jiff/discussions/148>
     #[test]
     fn zoned_deserialize_yaml() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
         let expected =
             datetime(2024, 10, 31, 16, 33, 53, 123456789).intz("UTC").unwrap();
 

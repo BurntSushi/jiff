@@ -1,7 +1,5 @@
 use core::{cmp::Ordering, time::Duration as UnsignedDuration};
 
-use alloc::borrow::Cow;
-
 use crate::{
     civil::{Date, DateTime, Time},
     duration::{Duration, SDuration},
@@ -9,6 +7,7 @@ use crate::{
     fmt::{friendly, temporal},
     tz::TimeZone,
     util::{
+        borrow::DumbCow,
         escape,
         rangeint::{ri64, ri8, RFrom, RInto, TryRFrom, TryRInto},
         round::increment,
@@ -2907,7 +2906,7 @@ impl Span {
     /// if this span has maximal values for all units, then rebalancing is
     /// not possible because the number of days after balancing would exceed
     /// the limit.
-    #[allow(dead_code)] // REMOVE ME
+    #[cfg(test)] // currently only used in zic parser?
     #[inline]
     pub(crate) fn rebalance(self, unit: Unit) -> Result<Span, Error> {
         Span::from_invariant_nanoseconds(unit, self.to_invariant_nanoseconds())
@@ -3048,7 +3047,9 @@ impl Span {
         let non_time_unit = self.largest_calendar_unit()?;
         Some(err!(
             "operation can only be performed with units of hours \
-             or smaller, but found non-zero {unit} units",
+             or smaller, but found non-zero {unit} units \
+             (operations on `Timestamp`, `tz::Offset` and `civil::Time` \
+              don't support calendar units in a `Span`)",
             unit = non_time_unit.singular(),
         ))
     }
@@ -3103,7 +3104,8 @@ impl Span {
     ///
     /// This is useful for debugging. Normally, this would be the "alternate"
     /// debug impl (perhaps), but that's what insta uses and I preferred having
-    /// the standard serialization used there.
+    /// the friendly format used there since is much more terse.
+    #[cfg(feature = "alloc")]
     #[allow(dead_code)]
     fn debug(&self) -> alloc::string::String {
         use core::fmt::Write;
@@ -4984,14 +4986,6 @@ impl<'a> SpanRound<'a> {
                 smallest = smallest.singular(),
             ));
         }
-        // Now that we've got our configuration, we can actually short circuit
-        // if we know rounding will never change our span.
-        // if self.smallest == Unit::Nanosecond
-        // && largest == existing_largest
-        // && self.increment == 1
-        // {
-        // return Ok(span);
-        // }
         let relative = match self.relative {
             Some(ref r) => {
                 // If our reference point is civil time, then its units are
@@ -5158,7 +5152,7 @@ impl<'a> SpanRelativeTo<'a> {
             }
             SpanRelativeToKind::Zoned(zdt) => {
                 Ok(Relative::Zoned(RelativeZoned {
-                    zoned: Cow::Borrowed(zdt),
+                    zoned: DumbCow::Borrowed(zdt),
                 }))
             }
         }
@@ -5641,7 +5635,7 @@ impl RelativeCivil {
 /// A simple wrapper around a possibly borrowed `Zoned`.
 #[derive(Clone, Debug)]
 struct RelativeZoned<'a> {
-    zoned: Cow<'a, Zoned>,
+    zoned: DumbCow<'a, Zoned>,
 }
 
 impl<'a> RelativeZoned<'a> {
@@ -5658,7 +5652,7 @@ impl<'a> RelativeZoned<'a> {
         let zoned = self.zoned.checked_add(span).with_context(|| {
             err!("failed to add {span} to {zoned}", zoned = self.zoned)
         })?;
-        Ok(RelativeZoned { zoned: Cow::Owned(zoned) })
+        Ok(RelativeZoned { zoned: DumbCow::Owned(zoned) })
     }
 
     /// Returns the result of [`Zoned::checked_add`] with an absolute duration.
@@ -5674,7 +5668,7 @@ impl<'a> RelativeZoned<'a> {
         let zoned = self.zoned.checked_add(duration).with_context(|| {
             err!("failed to add {duration:?} to {zoned}", zoned = self.zoned)
         })?;
-        Ok(RelativeZoned { zoned: Cow::Owned(zoned) })
+        Ok(RelativeZoned { zoned: DumbCow::Owned(zoned) })
     }
 
     /// Returns the result of [`Zoned::until`].

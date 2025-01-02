@@ -21,14 +21,13 @@ pub(crate) use self::sys::*;
     target_os = "unknown"
 )))]
 mod sys {
-    use std::time::{Instant, SystemTime};
-
-    pub(crate) fn system_time() -> SystemTime {
-        SystemTime::now()
+    pub(crate) fn system_time() -> std::time::SystemTime {
+        std::time::SystemTime::now()
     }
 
-    pub(crate) fn monotonic_time() -> Option<Instant> {
-        Some(Instant::now())
+    #[cfg(any(feature = "tz-system", feature = "tzdb-zoneinfo"))]
+    pub(crate) fn monotonic_time() -> Option<std::time::Instant> {
+        Some(std::time::Instant::now())
     }
 }
 
@@ -38,10 +37,8 @@ mod sys {
     target_os = "unknown"
 ))]
 mod sys {
-    use std::time::{Instant, SystemTime};
-
-    pub(crate) fn system_time() -> SystemTime {
-        use std::time::Duration;
+    pub(crate) fn system_time() -> std::time::SystemTime {
+        use std::time::{Duration, SystemTime};
 
         #[cfg(not(feature = "std"))]
         use crate::util::libm::Float;
@@ -69,7 +66,8 @@ mod sys {
         timestamp
     }
 
-    pub(crate) fn monotonic_time() -> Option<Instant> {
+    #[cfg(any(feature = "tz-system", feature = "tzdb-zoneinfo"))]
+    pub(crate) fn monotonic_time() -> Option<std::time::Instant> {
         // :-(
         None
     }

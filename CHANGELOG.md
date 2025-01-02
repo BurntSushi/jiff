@@ -1,8 +1,51 @@
 # CHANGELOG
 
-0.1.17 (TBD)
+0.1.19 (TBD)
 ============
-TBD.
+TODO
+
+Enhancements:
+
+* [#130](https://github.com/BurntSushi/jiff/issues/130):
+Document value ranges for methods like `year`, `day`, `hour` and so on.
+* [#187](https://github.com/BurntSushi/jiff/issues/187):
+Add a rounding API (for time units only) on `SignedDuration`.
+
+Bug fixes:
+
+* [#155](https://github.com/BurntSushi/jiff/issues/155):
+Relax `strftime` format strings from ASCII-only to all of UTF-8.
+
+
+0.1.18 (2024-12-31)
+===================
+This release includes a few minor enhancements. Namely, the ability to iterate
+over time zone transitions (in the future or the past), and some improvements
+to failure modes when `Timestamp` and `Span` arithmetic fails.
+
+Enhancements:
+
+* [#144](https://github.com/BurntSushi/jiff/issues/144):
+Add APIs for iterating over the transitions of a time zone.
+* [#145](https://github.com/BurntSushi/jiff/issues/145):
+Improve docs and error messages around fallible `Timestamp` arithmetic.
+
+
+0.1.17 (2024-12-31)
+===================
+This release enhances Jiff's support for `no_std` environments by making its
+`alloc` feature optional. When `alloc` is disabled, only fixed offset time
+zones are supported and error messages are significantly degraded. If you have
+core-only use cases for Jiff, I'd love to hear about them on the issue tracker.
+
+Enhancements:
+
+* [#162](https://github.com/BurntSushi/jiff/issues/162):
+Support platforms that do not have atomics in `std`.
+* [#168](https://github.com/BurntSushi/jiff/issues/168):
+Jiff now supports disabling the `alloc` feature, which enables core-only mode.
+* [#169](https://github.com/BurntSushi/jiff/issues/169):
+Add `TimeZone::to_fixed_offset` for accessing an invariant offset if possible.
 
 
 0.1.16 (2024-12-26)

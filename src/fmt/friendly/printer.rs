@@ -922,6 +922,7 @@ impl SpanPrinter {
     /// let span = 3.years().months(5);
     /// assert_eq!(PRINTER.span_to_string(&span), "3y 5mo");
     /// ```
+    #[cfg(any(test, feature = "alloc"))]
     pub fn span_to_string(&self, span: &Span) -> alloc::string::String {
         let mut buf = alloc::string::String::with_capacity(4);
         // OK because writing to `String` never fails.
@@ -962,6 +963,7 @@ impl SpanPrinter {
     ///     "24h 2m 5.123000789s ago",
     /// );
     /// ```
+    #[cfg(any(test, feature = "alloc"))]
     pub fn duration_to_string(
         &self,
         duration: &SignedDuration,

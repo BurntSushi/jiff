@@ -105,7 +105,6 @@ use core::{ops::RangeInclusive, str::FromStr};
 use alloc::{
     collections::BTreeMap,
     string::{String, ToString},
-    sync::Arc,
     vec,
     vec::Vec,
 };
@@ -119,6 +118,7 @@ use crate::{
     util::{
         parse,
         rangeint::RInto,
+        sync::Arc,
         t::{self, C},
     },
     Unit,
@@ -841,7 +841,7 @@ impl RuleSaveP {
         )?
         .get_seconds();
         let seconds = i32::try_from(seconds).map_err(|_| {
-            Error::signed("SAVE seconds", seconds, i32::MIN, i32::MAX)
+            Error::range("SAVE seconds", seconds, i32::MIN, i32::MAX)
         })?;
         Offset::from_seconds(seconds)
     }

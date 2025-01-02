@@ -5,8 +5,8 @@ use crate::{
     error::{err, ErrorContext},
     fmt::{friendly, temporal},
     tz::Offset,
-    util::escape,
-    Error, Timestamp, Zoned,
+    util::{escape, rangeint::TryRFrom, t},
+    Error, RoundMode, Timestamp, Unit, Zoned,
 };
 
 #[cfg(not(feature = "std"))]
@@ -558,8 +558,8 @@ impl SignedDuration {
     ///
     /// Note that since this accepts an `i64`, this method cannot be used
     /// to construct the full range of possible signed duration values. In
-    /// particular, [`SignedDuration::as_nanos`] returns an `i128`, and this
-    /// may be a value that would otherwise overflow an `i64`.
+    /// particular, [`SignedDuration::as_nanos`] returns an `i128`, which may
+    /// be a value that would otherwise overflow an `i64`.
     ///
     /// # Example
     ///
@@ -1886,6 +1886,150 @@ impl SignedDuration {
     }
 }
 
+/// Jiff specific APIs.
+impl SignedDuration {
+    /// Returns a new signed duration that is rounded according to the given
+    /// configuration.
+    ///
+    /// Rounding a duration has a number of parameters, all of which are
+    /// optional. When no parameters are given, then no rounding is done, and
+    /// the duration as given is returned. That is, it's a no-op.
+    ///
+    /// As is consistent with `SignedDuration` itself, rounding only supports
+    /// time units, i.e., units of hours or smaller. If a calendar `Unit` is
+    /// provided, then an error is returned. In order to round a duration with
+    /// calendar units, you must use [`Span::round`](crate::Span::round) and
+    /// provide a relative datetime.
+    ///
+    /// The parameters are, in brief:
+    ///
+    /// * [`SignedDurationRound::smallest`] sets the smallest [`Unit`] that
+    /// is allowed to be non-zero in the duration returned. By default, it
+    /// is set to [`Unit::Nanosecond`], i.e., no rounding occurs. When the
+    /// smallest unit is set to something bigger than nanoseconds, then the
+    /// non-zero units in the duration smaller than the smallest unit are used
+    /// to determine how the duration should be rounded. For example, rounding
+    /// `1 hour 59 minutes` to the nearest hour using the default rounding mode
+    /// would produce `2 hours`.
+    /// * [`SignedDurationRound::mode`] determines how to handle the remainder
+    /// when rounding. The default is [`RoundMode::HalfExpand`], which
+    /// corresponds to how you were likely taught to round in school.
+    /// Alternative modes, like [`RoundMode::Trunc`], exist too. For example,
+    /// a truncating rounding of `1 hour 59 minutes` to the nearest hour would
+    /// produce `1 hour`.
+    /// * [`SignedDurationRound::increment`] sets the rounding granularity to
+    /// use for the configured smallest unit. For example, if the smallest unit
+    /// is minutes and the increment is 5, then the duration returned will
+    /// always have its minute units set to a multiple of `5`.
+    ///
+    /// # Errors
+    ///
+    /// In general, there are two main ways for rounding to fail: an improper
+    /// configuration like trying to round a duration to the nearest calendar
+    /// unit, or when overflow occurs. Overflow can occur when the duration
+    /// would exceed the minimum or maximum `SignedDuration` values. Typically,
+    /// this can only realistically happen if the duration before rounding is
+    /// already close to its minimum or maximum value.
+    ///
+    /// # Example: round to the nearest second
+    ///
+    /// This shows how to round a duration to the nearest second. This might
+    /// be useful when you want to chop off any sub-second component in a way
+    /// that depends on how close it is (or not) to the next second.
+    ///
+    /// ```
+    /// use jiff::{SignedDuration, Unit};
+    ///
+    /// // rounds up
+    /// let dur = SignedDuration::new(4 * 60 * 60 + 50 * 60 + 32, 500_000_000);
+    /// assert_eq!(
+    ///     dur.round(Unit::Second)?,
+    ///     SignedDuration::new(4 * 60 * 60 + 50 * 60 + 33, 0),
+    /// );
+    /// // rounds down
+    /// let dur = SignedDuration::new(4 * 60 * 60 + 50 * 60 + 32, 499_999_999);
+    /// assert_eq!(
+    ///     dur.round(Unit::Second)?,
+    ///     SignedDuration::new(4 * 60 * 60 + 50 * 60 + 32, 0),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: round to the nearest half minute
+    ///
+    /// One can use [`SignedDurationRound::increment`] to set the rounding
+    /// increment:
+    ///
+    /// ```
+    /// use jiff::{SignedDuration, SignedDurationRound, Unit};
+    ///
+    /// let options = SignedDurationRound::new()
+    ///     .smallest(Unit::Second)
+    ///     .increment(30);
+    ///
+    /// // rounds up
+    /// let dur = SignedDuration::from_secs(4 * 60 * 60 + 50 * 60 + 15);
+    /// assert_eq!(
+    ///     dur.round(options)?,
+    ///     SignedDuration::from_secs(4 * 60 * 60 + 50 * 60 + 30),
+    /// );
+    /// // rounds down
+    /// let dur = SignedDuration::from_secs(4 * 60 * 60 + 50 * 60 + 14);
+    /// assert_eq!(
+    ///     dur.round(options)?,
+    ///     SignedDuration::from_secs(4 * 60 * 60 + 50 * 60),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: overflow results in an error
+    ///
+    /// If rounding would result in a value that exceeds a `SignedDuration`'s
+    /// minimum or maximum values, then an error occurs:
+    ///
+    /// ```
+    /// use jiff::{SignedDuration, Unit};
+    ///
+    /// assert_eq!(
+    ///     SignedDuration::MAX.round(Unit::Hour).unwrap_err().to_string(),
+    ///     "rounding `2562047788015215h 30m 7s 999ms 999µs 999ns` to \
+    ///      nearest hour in increments of 1 resulted in \
+    ///      9223372036854777600 seconds, which does not fit into an i64 \
+    ///      and thus overflows `SignedDuration`",
+    /// );
+    /// assert_eq!(
+    ///     SignedDuration::MIN.round(Unit::Hour).unwrap_err().to_string(),
+    ///     "rounding `2562047788015215h 30m 8s 999ms 999µs 999ns ago` to \
+    ///      nearest hour in increments of 1 resulted in \
+    ///      -9223372036854777600 seconds, which does not fit into an i64 \
+    ///      and thus overflows `SignedDuration`",
+    /// );
+    /// ```
+    ///
+    /// # Example: rounding with a calendar unit results in an error
+    ///
+    /// ```
+    /// use jiff::{SignedDuration, Unit};
+    ///
+    /// assert_eq!(
+    ///     SignedDuration::ZERO.round(Unit::Day).unwrap_err().to_string(),
+    ///     "rounding `SignedDuration` failed \
+    ///      because a calendar unit of days was provided \
+    ///      (to round by calendar units, you must use a `Span`)",
+    /// );
+    /// ```
+    #[inline]
+    pub fn round<R: Into<SignedDurationRound>>(
+        self,
+        options: R,
+    ) -> Result<SignedDuration, Error> {
+        let options: SignedDurationRound = options.into();
+        options.round(self)
+    }
+}
+
 impl core::fmt::Display for SignedDuration {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -2085,6 +2229,214 @@ impl<'de> serde::Deserialize<'de> for SignedDuration {
         }
 
         deserializer.deserialize_str(SignedDurationVisitor)
+    }
+}
+
+/// Options for [`SignedDuration::round`].
+///
+/// This type provides a way to configure the rounding of a duration. This
+/// includes setting the smallest unit (i.e., the unit to round), the rounding
+/// increment and the rounding mode (e.g., "ceil" or "truncate").
+///
+/// `SignedDuration::round` accepts anything that implements
+/// `Into<SignedDurationRound>`. There are a few key trait implementations that
+/// make this convenient:
+///
+/// * `From<Unit> for SignedDurationRound` will construct a rounding
+/// configuration where the smallest unit is set to the one given.
+/// * `From<(Unit, i64)> for SignedDurationRound` will construct a rounding
+/// configuration where the smallest unit and the rounding increment are set to
+/// the ones given.
+///
+/// In order to set other options (like the rounding mode), one must explicitly
+/// create a `SignedDurationRound` and pass it to `SignedDuration::round`.
+///
+/// # Example
+///
+/// This example shows how to always round up to the nearest half-minute:
+///
+/// ```
+/// use jiff::{RoundMode, SignedDuration, SignedDurationRound, Unit};
+///
+/// let dur = SignedDuration::new(4 * 60 * 60 + 17 * 60 + 1, 123_456_789);
+/// let rounded = dur.round(
+///     SignedDurationRound::new()
+///         .smallest(Unit::Second)
+///         .increment(30)
+///         .mode(RoundMode::Expand),
+/// )?;
+/// assert_eq!(rounded, SignedDuration::from_secs(4 * 60 * 60 + 17 * 60 + 30));
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct SignedDurationRound {
+    smallest: Unit,
+    mode: RoundMode,
+    increment: i64,
+}
+
+impl SignedDurationRound {
+    /// Create a new default configuration for rounding a signed duration via
+    /// [`SignedDuration::round`].
+    ///
+    /// The default configuration does no rounding.
+    #[inline]
+    pub fn new() -> SignedDurationRound {
+        SignedDurationRound {
+            smallest: Unit::Nanosecond,
+            mode: RoundMode::HalfExpand,
+            increment: 1,
+        }
+    }
+
+    /// Set the smallest units allowed in the duration returned. These are the
+    /// units that the duration is rounded to.
+    ///
+    /// # Errors
+    ///
+    /// The unit must be [`Unit::Hour`] or smaller.
+    ///
+    /// # Example
+    ///
+    /// A basic example that rounds to the nearest minute:
+    ///
+    /// ```
+    /// use jiff::{SignedDuration, Unit};
+    ///
+    /// let duration = SignedDuration::new(15 * 60 + 46, 0);
+    /// assert_eq!(duration.round(Unit::Minute)?, SignedDuration::from_mins(16));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn smallest(self, unit: Unit) -> SignedDurationRound {
+        SignedDurationRound { smallest: unit, ..self }
+    }
+
+    /// Set the rounding mode.
+    ///
+    /// This defaults to [`RoundMode::HalfExpand`], which makes rounding work
+    /// like how you were taught in school.
+    ///
+    /// # Example
+    ///
+    /// A basic example that rounds to the nearest minute, but changing its
+    /// rounding mode to truncation:
+    ///
+    /// ```
+    /// use jiff::{RoundMode, SignedDuration, SignedDurationRound, Unit};
+    ///
+    /// let duration = SignedDuration::new(15 * 60 + 46, 0);
+    /// assert_eq!(
+    ///     duration.round(SignedDurationRound::new()
+    ///         .smallest(Unit::Minute)
+    ///         .mode(RoundMode::Trunc),
+    ///     )?,
+    ///     // The default round mode does rounding like
+    ///     // how you probably learned in school, and would
+    ///     // result in rounding up to 16 minutes. But we
+    ///     // change it to truncation here, which makes it
+    ///     // round down.
+    ///     SignedDuration::from_mins(15),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn mode(self, mode: RoundMode) -> SignedDurationRound {
+        SignedDurationRound { mode, ..self }
+    }
+
+    /// Set the rounding increment for the smallest unit.
+    ///
+    /// The default value is `1`. Other values permit rounding the smallest
+    /// unit to the nearest integer increment specified. For example, if the
+    /// smallest unit is set to [`Unit::Minute`], then a rounding increment of
+    /// `30` would result in rounding in increments of a half hour. That is,
+    /// the only minute value that could result would be `0` or `30`.
+    ///
+    /// # Errors
+    ///
+    /// The rounding increment must divide evenly into the next highest unit
+    /// after the smallest unit configured (and must not be equivalent to it).
+    /// For example, if the smallest unit is [`Unit::Nanosecond`], then *some*
+    /// of the valid values for the rounding increment are `1`, `2`, `4`, `5`,
+    /// `100` and `500`. Namely, any integer that divides evenly into `1,000`
+    /// nanoseconds since there are `1,000` nanoseconds in the next highest
+    /// unit (microseconds).
+    ///
+    /// # Example
+    ///
+    /// This shows how to round a duration to the nearest 5 minute increment:
+    ///
+    /// ```
+    /// use jiff::{SignedDuration, Unit};
+    ///
+    /// let duration = SignedDuration::new(4 * 60 * 60 + 2 * 60 + 30, 0);
+    /// assert_eq!(
+    ///     duration.round((Unit::Minute, 5))?,
+    ///     SignedDuration::new(4 * 60 * 60 + 5 * 60, 0),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn increment(self, increment: i64) -> SignedDurationRound {
+        SignedDurationRound { increment, ..self }
+    }
+
+    /// Does the actual duration rounding.
+    fn round(&self, dur: SignedDuration) -> Result<SignedDuration, Error> {
+        if self.smallest > Unit::Hour {
+            return Err(err!(
+                "rounding `SignedDuration` failed because \
+                 a calendar unit of {plural} was provided \
+                 (to round by calendar units, you must use a `Span`)",
+                plural = self.smallest.plural(),
+            ));
+        }
+        let nanos = t::NoUnits128::new_unchecked(dur.as_nanos());
+        let increment = t::NoUnits::new_unchecked(self.increment);
+        let rounded = self.mode.round_by_unit_in_nanoseconds(
+            nanos,
+            self.smallest,
+            increment,
+        );
+
+        let seconds = rounded / t::NANOS_PER_SECOND;
+        let seconds =
+            t::NoUnits::try_rfrom("seconds", seconds).map_err(|_| {
+                err!(
+                    "rounding `{dur:#}` to nearest {singular} in increments \
+                     of {increment} resulted in {seconds} seconds, which does \
+                     not fit into an i64 and thus overflows `SignedDuration`",
+                    singular = self.smallest.singular(),
+                )
+            })?;
+        let subsec_nanos = rounded % t::NANOS_PER_SECOND;
+        // OK because % 1_000_000_000 above guarantees that the result fits
+        // in a i32.
+        let subsec_nanos = i32::try_from(subsec_nanos).unwrap();
+        Ok(SignedDuration::new(seconds.get(), subsec_nanos))
+    }
+}
+
+impl Default for SignedDurationRound {
+    fn default() -> SignedDurationRound {
+        SignedDurationRound::new()
+    }
+}
+
+impl From<Unit> for SignedDurationRound {
+    fn from(unit: Unit) -> SignedDurationRound {
+        SignedDurationRound::default().smallest(unit)
+    }
+}
+
+impl From<(Unit, i64)> for SignedDurationRound {
+    fn from((unit, increment): (Unit, i64)) -> SignedDurationRound {
+        SignedDurationRound::default().smallest(unit).increment(increment)
     }
 }
 

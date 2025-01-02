@@ -120,7 +120,7 @@ pub(crate) fn fraction(
 ///
 /// This is effectively `OsStr::to_str`, but with a slightly better error
 /// message.
-#[cfg(feature = "std")]
+#[cfg(feature = "tzdb-zoneinfo")]
 pub(crate) fn os_str_utf8<'o, O>(os_str: &'o O) -> Result<&'o str, Error>
 where
     O: ?Sized + AsRef<std::ffi::OsStr>,
@@ -136,7 +136,7 @@ where
 /// The main difference between this and `OsStr::to_str` is that this will
 /// be a zero-cost conversion on Unix platforms to `&[u8]`. On Windows, this
 /// will do UTF-8 validation and return an error if it's invalid UTF-8.
-#[cfg(feature = "std")]
+#[cfg(feature = "tz-system")]
 pub(crate) fn os_str_bytes<'o, O>(os_str: &'o O) -> Result<&'o [u8], Error>
 where
     O: ?Sized + AsRef<std::ffi::OsStr>,

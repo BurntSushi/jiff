@@ -1,7 +1,5 @@
 use core::fmt::Write;
 
-use alloc::string::ToString;
-
 use crate::{
     civil::Weekday,
     error::{err, ErrorContext},
@@ -344,27 +342,48 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// Parse `%V`, which is the IANA time zone identifier or an offset without
     /// colons.
     fn parse_iana_nocolon(&mut self) -> Result<(), Error> {
-        if !self.inp.is_empty() && matches!(self.inp[0], b'+' | b'-') {
-            return self.parse_offset_nocolon();
+        #[cfg(not(feature = "alloc"))]
+        {
+            Err(err!(
+                "cannot parse `%V` without Jiff's `alloc` feature enabled"
+            ))
         }
-        let (iana, inp) = parse_iana(self.inp)?;
-        self.inp = inp;
-        self.tm.iana = Some(iana.to_string());
-        self.bump_fmt();
-        Ok(())
+        #[cfg(feature = "alloc")]
+        {
+            use alloc::string::ToString;
+
+            if !self.inp.is_empty() && matches!(self.inp[0], b'+' | b'-') {
+                return self.parse_offset_nocolon();
+            }
+            let (iana, inp) = parse_iana(self.inp)?;
+            self.inp = inp;
+            self.tm.iana = Some(iana.to_string());
+            self.bump_fmt();
+            Ok(())
+        }
     }
 
     /// Parse `%:V`, which is the IANA time zone identifier or an offset with
     /// colons.
     fn parse_iana_colon(&mut self) -> Result<(), Error> {
-        if !self.inp.is_empty() && matches!(self.inp[0], b'+' | b'-') {
-            return self.parse_offset_colon();
+        #[cfg(not(feature = "alloc"))]
+        {
+            Err(err!(
+                "cannot parse `%:V` without Jiff's `alloc` feature enabled"
+            ))
         }
-        let (iana, inp) = parse_iana(self.inp)?;
-        self.inp = inp;
-        self.tm.iana = Some(iana.to_string());
-        self.bump_fmt();
-        Ok(())
+        #[cfg(feature = "alloc")]
+        {
+            use alloc::string::ToString;
+            if !self.inp.is_empty() && matches!(self.inp[0], b'+' | b'-') {
+                return self.parse_offset_colon();
+            }
+            let (iana, inp) = parse_iana(self.inp)?;
+            self.inp = inp;
+            self.tm.iana = Some(iana.to_string());
+            self.bump_fmt();
+            Ok(())
+        }
     }
 
     /// Parse `%z`, which is a time zone offset without colons.
@@ -844,18 +863,27 @@ fn parse_choice<'i>(
             return Ok((i, input));
         }
     }
-    let mut err = alloc::format!(
-        "failed to find expected choice at beginning of {input:?}, \
-         available choices are: ",
-        input = escape::Bytes(input),
-    );
-    for (i, choice) in choices.iter().enumerate() {
-        if i > 0 {
-            write!(err, ", ").unwrap();
+    #[cfg(feature = "alloc")]
+    {
+        let mut err = alloc::format!(
+            "failed to find expected choice at beginning of {input:?}, \
+             available choices are: ",
+            input = escape::Bytes(input),
+        );
+        for (i, choice) in choices.iter().enumerate() {
+            if i > 0 {
+                write!(err, ", ").unwrap();
+            }
+            write!(err, "{}", escape::Bytes(choice)).unwrap();
         }
-        write!(err, "{}", escape::Bytes(choice)).unwrap();
+        Err(Error::adhoc(err))
     }
-    Err(Error::adhoc(err))
+    #[cfg(not(feature = "alloc"))]
+    {
+        Err(err!(
+            "failed to find expected value from a set of allowed choices"
+        ))
+    }
 }
 
 /// Like `parse_choice`, but specialized for AM/PM.

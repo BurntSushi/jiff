@@ -220,6 +220,13 @@ is instead interpreted as a precision setting). When using a precision setting,
 truncation is used. If you need a different rounding mode, you should use
 higher level APIs like [`Timestamp::round`] or [`Zoned::round`].
 
+# Conditionally unsupported
+
+Jiff does not support `%V` or `%:V` (IANA time zone identifier) when the
+`alloc` crate feature is not enabled. This is because a time zone identifier
+is variable width data. If you have a use case for this, please
+[detail it in a new issue](https://github.com/BurntSushi/jiff/issues/new).
+
 # Unsupported
 
 The following things are currently unsupported:
@@ -233,8 +240,6 @@ The following things are currently unsupported:
 [`strptime`]: https://pubs.opengroup.org/onlinepubs/009695399/functions/strptime.html
 */
 
-use alloc::string::{String, ToString};
-
 use crate::{
     civil::{Date, DateTime, Time, Weekday},
     error::{err, ErrorContext},
@@ -244,7 +249,9 @@ use crate::{
     },
     tz::{Offset, OffsetConflict, TimeZone, TimeZoneDatabase},
     util::{
-        self, escape,
+        self,
+        array_str::Abbreviation,
+        escape,
         t::{self, C},
     },
     Error, Timestamp, Zoned,
@@ -384,14 +391,15 @@ pub fn parse(
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+#[cfg(any(test, feature = "alloc"))]
 #[inline]
 pub fn format(
     format: impl AsRef<[u8]>,
     broken_down_time: impl Into<BrokenDownTime>,
-) -> Result<String, Error> {
+) -> Result<alloc::string::String, Error> {
     let broken_down_time: BrokenDownTime = broken_down_time.into();
 
-    let mut buf = String::new();
+    let mut buf = alloc::string::String::new();
     broken_down_time.format(format, &mut buf)?;
     Ok(buf)
 }
@@ -464,10 +472,11 @@ pub struct BrokenDownTime {
     meridiem: Option<Meridiem>,
     // The time zone abbreviation. Used only when
     // formatting a `Zoned`.
-    tzabbrev: Option<String>,
+    tzabbrev: Option<Abbreviation>,
     // The IANA time zone identifier. Used only when
     // formatting a `Zoned`.
-    iana: Option<String>,
+    #[cfg(feature = "alloc")]
+    iana: Option<alloc::string::String>,
 }
 
 impl BrokenDownTime {
@@ -604,12 +613,13 @@ impl BrokenDownTime {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[cfg(feature = "alloc")]
     #[inline]
     pub fn to_string(
         &self,
         format: impl AsRef<[u8]>,
-    ) -> Result<String, Error> {
-        let mut buf = String::new();
+    ) -> Result<alloc::string::String, Error> {
+        let mut buf = alloc::string::String::new();
         self.format(format, &mut buf)?;
         Ok(buf)
     }
@@ -744,7 +754,7 @@ impl BrokenDownTime {
         let dt = self
             .to_datetime()
             .context("datetime required to parse zoned datetime")?;
-        match (self.offset, self.iana.as_deref()) {
+        match (self.offset, self.iana_time_zone()) {
             (None, None) => Err(err!(
                 "either offset (from %z) or IANA time zone identifier \
                  (from %V) is required for parsing zoned datetime",
@@ -1311,6 +1321,9 @@ impl BrokenDownTime {
 
     /// Returns the time zone IANA identifier, if available.
     ///
+    /// Note that when `alloc` is disabled, this always returns `None`. (And
+    /// there is no way to set it.)
+    ///
     /// # Example
     ///
     /// This shows how to parse an IANA time zone identifier:
@@ -1333,7 +1346,14 @@ impl BrokenDownTime {
     /// ```
     #[inline]
     pub fn iana_time_zone(&self) -> Option<&str> {
-        self.iana.as_deref()
+        #[cfg(feature = "alloc")]
+        {
+            self.iana.as_deref()
+        }
+        #[cfg(not(feature = "alloc"))]
+        {
+            None
+        }
     }
 
     /// Returns the parsed weekday, if available.
@@ -1752,8 +1772,9 @@ impl BrokenDownTime {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[cfg(feature = "alloc")]
     #[inline]
-    pub fn set_iana_time_zone(&mut self, id: Option<String>) {
+    pub fn set_iana_time_zone(&mut self, id: Option<alloc::string::String>) {
         self.iana = id;
     }
 
@@ -1804,10 +1825,19 @@ impl BrokenDownTime {
 impl<'a> From<&'a Zoned> for BrokenDownTime {
     fn from(zdt: &'a Zoned) -> BrokenDownTime {
         let (_, _, tzabbrev) = zdt.time_zone().to_offset(zdt.timestamp());
+        #[cfg(feature = "alloc")]
+        let iana = {
+            use alloc::string::ToString;
+            zdt.time_zone().iana_name().map(|s| s.to_string())
+        };
         BrokenDownTime {
             offset: Some(zdt.offset()),
-            tzabbrev: Some(tzabbrev.to_string()),
-            iana: zdt.time_zone().iana_name().map(|s| s.to_string()),
+            // In theory, this could fail, but I've never seen a time zone
+            // abbreviation longer than a few bytes. Please file an issue if
+            // this is a problem for you.
+            tzabbrev: Abbreviation::new(tzabbrev),
+            #[cfg(feature = "alloc")]
+            iana,
             ..BrokenDownTime::from(zdt.datetime())
         }
     }
@@ -2136,6 +2166,28 @@ mod tests {
         insta::assert_snapshot!(
             Zoned::strptime("%Y%m%d-%H%M%S%z", "20240730-005625+0400").unwrap(),
             @"2024-07-30T00:56:25+04:00[+04:00]",
+        );
+    }
+
+    // Regression test for format strings with non-ASCII in them.
+    //
+    // We initially didn't support non-ASCII because I had thought it wouldn't
+    // be used. i.e., If someone wanted to do something with non-ASCII, then
+    // I thought they'd want to be using something more sophisticated that took
+    // locale into account. But apparently not.
+    //
+    // See: https://github.com/BurntSushi/jiff/issues/155
+    #[test]
+    fn ok_non_ascii() {
+        let fmt = "%Y年%m月%d日，%H时%M分%S秒";
+        let dt = crate::civil::date(2022, 2, 4).at(3, 58, 59, 0);
+        insta::assert_snapshot!(
+            dt.strftime(fmt),
+            @"2022年02月04日，03时58分59秒",
+        );
+        insta::assert_debug_snapshot!(
+            DateTime::strptime(fmt, "2022年02月04日，03时58分59秒").unwrap(),
+            @"2022-02-04T03:58:59",
         );
     }
 }

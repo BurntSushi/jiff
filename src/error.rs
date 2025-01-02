@@ -1,4 +1,4 @@
-use alloc::{boxed::Box, string::String, sync::Arc};
+use crate::util::sync::Arc;
 
 /// Creates a new ad hoc error with no causal chain.
 ///
@@ -6,7 +6,7 @@ use alloc::{boxed::Box, string::String, sync::Arc};
 /// creates is just a wrapper around the string created by `format!`.
 macro_rules! err {
     ($($tt:tt)*) => {{
-        crate::error::Error::adhoc(alloc::format!($($tt)*))
+        crate::error::Error::adhoc_from_args(format_args!($($tt)*))
     }}
 }
 
@@ -43,7 +43,7 @@ pub(crate) use err;
 /// [about error types].
 ///
 /// [about error types]: https://github.com/BurntSushi/jiff/issues/8
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Error {
     /// The internal representation of an error.
     ///
@@ -52,18 +52,22 @@ pub struct Error {
     /// `std` feature is enabled, which isn't cloneable.
     ///
     /// This also makes clones cheap. And it also make the size of error equal
-    /// to one word (although a `Box` would achieve that last goal).
+    /// to one word (although a `Box` would achieve that last goal). This is
+    /// why we put the `Arc` here instead of on `std::io::Error` directly.
     inner: Arc<ErrorInner>,
 }
 
 #[derive(Debug)]
+#[cfg_attr(not(feature = "alloc"), derive(Clone))]
 struct ErrorInner {
     kind: ErrorKind,
+    #[cfg(feature = "alloc")]
     cause: Option<Error>,
 }
 
 /// The underlying kind of a [`Error`].
 #[derive(Debug)]
+#[cfg_attr(not(feature = "alloc"), derive(Clone))]
 enum ErrorKind {
     /// An ad hoc error that is constructed from anything that implements
     /// the `core::fmt::Display` trait.
@@ -79,9 +83,6 @@ enum ErrorKind {
     /// of a public API, or as a result of an operation on a number that
     /// results in it being out of range.
     Range(RangeError),
-    /// An error that occurs when a lookup of a time zone, by name, fails
-    /// because that time zone does not exist.
-    TimeZoneLookup(TimeZoneLookupError),
     /// An error associated with a file path.
     ///
     /// This is generally expected to always have a cause attached to it
@@ -91,6 +92,7 @@ enum ErrorKind {
     /// The cause is typically `Adhoc` or `IO`.
     ///
     /// When `std` is not enabled, this variant can never be constructed.
+    #[allow(dead_code)] // not used in some feature configs
     FilePath(FilePathError),
     /// An error that occurs when interacting with the file system.
     ///
@@ -98,6 +100,7 @@ enum ErrorKind {
     /// `std::path::PathBuf`.
     ///
     /// When `std` is not enabled, this variant can never be constructed.
+    #[allow(dead_code)] // not used in some feature configs
     IO(IOError),
 }
 
@@ -109,61 +112,43 @@ impl Error {
     /// convenient. And the alternative is quite brutal given the varied ways
     /// in which things in a datetime library can fail. (Especially parsing
     /// errors.)
-    pub(crate) fn adhoc(
-        err: impl core::fmt::Display + Send + Sync + 'static,
-    ) -> Error {
-        Error::from(ErrorKind::Adhoc(AdhocError(Box::new(err))))
+    #[cfg(feature = "alloc")]
+    pub(crate) fn adhoc<'a>(message: impl core::fmt::Display + 'a) -> Error {
+        Error::from(ErrorKind::Adhoc(AdhocError::from_display(message)))
     }
 
-    pub(crate) fn unsigned(
-        what: &'static str,
-        given: impl Into<u128>,
-        min: impl Into<i128>,
-        max: impl Into<i128>,
+    /// Like `Error::adhoc`, but accepts a `core::fmt::Arguments`.
+    ///
+    /// This is used with the `err!` macro so that we can thread a
+    /// `core::fmt::Arguments` down. This lets us extract a `&'static str`
+    /// from some messages in core-only mode and provide somewhat decent error
+    /// messages in some cases.
+    pub(crate) fn adhoc_from_args<'a>(
+        message: core::fmt::Arguments<'a>,
     ) -> Error {
-        Error::from(ErrorKind::Range(RangeError::unsigned(
-            what, given, min, max,
-        )))
+        Error::from(ErrorKind::Adhoc(AdhocError::from_args(message)))
     }
 
-    pub(crate) fn signed(
+    /// Like `Error::adhoc`, but creates an error from a `&'static str`
+    /// directly.
+    ///
+    /// This is useful in contexts where you know you have a `&'static str`,
+    /// and avoids relying on `alloc`-only routines like `Error::adhoc`.
+    pub(crate) fn adhoc_from_static_str(message: &'static str) -> Error {
+        Error::from(ErrorKind::Adhoc(AdhocError::from_static_str(message)))
+    }
+
+    /// Creates a new error indicating that a `given` value is out of the
+    /// specified `min..=max` range. The given `what` label is used in the
+    /// error message as a human readable description of what exactly is out
+    /// of range. (e.g., "seconds")
+    pub(crate) fn range(
         what: &'static str,
         given: impl Into<i128>,
         min: impl Into<i128>,
         max: impl Into<i128>,
     ) -> Error {
-        Error::from(ErrorKind::Range(RangeError::signed(
-            what, given, min, max,
-        )))
-    }
-
-    pub(crate) fn specific(
-        what: &'static str,
-        given: impl Into<i128>,
-    ) -> Error {
-        Error::from(ErrorKind::Range(RangeError::specific(what, given)))
-    }
-
-    pub(crate) fn time_zone_lookup(name: impl Into<String>) -> Error {
-        let inner = TimeZoneLookupErrorInner { name: name.into() };
-        Error::from(ErrorKind::TimeZoneLookup(TimeZoneLookupError(Box::new(
-            inner,
-        ))))
-    }
-
-    /// A convenience constructor for building an I/O error associated with
-    /// a file path.
-    ///
-    /// Generallly speaking, an I/O error should always be associated with some
-    /// sort of context. In Jiff, it's always a file path (at time of writing).
-    ///
-    /// This is only available when the `std` feature is enabled.
-    #[cfg(feature = "std")]
-    pub(crate) fn fs(
-        path: impl Into<std::path::PathBuf>,
-        err: std::io::Error,
-    ) -> Error {
-        Error::io(err).path(path)
+        Error::from(ErrorKind::Range(RangeError::new(what, given, min, max)))
     }
 
     /// A convenience constructor for building an I/O error.
@@ -173,7 +158,7 @@ impl Error {
     /// kind of context to this error (like a file path).
     ///
     /// This is only available when the `std` feature is enabled.
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "tz-system", feature = "tzdb-zoneinfo"))]
     pub(crate) fn io(err: std::io::Error) -> Error {
         Error::from(ErrorKind::IO(IOError { err }))
     }
@@ -184,7 +169,7 @@ impl Error {
     /// `FilePathError`.
     ///
     /// This is only available when the `std` feature is enabled.
-    #[cfg(feature = "std")]
+    #[cfg(feature = "tzdb-zoneinfo")]
     pub(crate) fn path(self, path: impl Into<std::path::PathBuf>) -> Error {
         let err = Error::from(ErrorKind::FilePath(FilePathError {
             path: path.into(),
@@ -198,16 +183,45 @@ impl std::error::Error for Error {}
 
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        let mut err = self;
-        loop {
-            write!(f, "{}", err.inner.kind)?;
-            err = match err.inner.cause.as_ref() {
-                None => break,
-                Some(err) => err,
-            };
-            write!(f, ": ")?;
+        #[cfg(feature = "alloc")]
+        {
+            let mut err = self;
+            loop {
+                write!(f, "{}", err.inner.kind)?;
+                err = match err.inner.cause.as_ref() {
+                    None => break,
+                    Some(err) => err,
+                };
+                write!(f, ": ")?;
+            }
+            Ok(())
         }
-        Ok(())
+        #[cfg(not(feature = "alloc"))]
+        {
+            write!(f, "{}", self.inner.kind)
+        }
+    }
+}
+
+impl core::fmt::Debug for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if !f.alternate() {
+            core::fmt::Display::fmt(self, f)
+        } else {
+            #[cfg(feature = "alloc")]
+            {
+                f.debug_struct("Error")
+                    .field("kind", &self.inner.kind)
+                    .field("cause", &self.inner.cause)
+                    .finish()
+            }
+            #[cfg(not(feature = "alloc"))]
+            {
+                f.debug_struct("Error")
+                    .field("kind", &self.inner.kind)
+                    .finish()
+            }
+        }
     }
 }
 
@@ -216,7 +230,6 @@ impl core::fmt::Display for ErrorKind {
         match *self {
             ErrorKind::Adhoc(ref msg) => msg.fmt(f),
             ErrorKind::Range(ref err) => err.fmt(f),
-            ErrorKind::TimeZoneLookup(ref err) => err.fmt(f),
             ErrorKind::FilePath(ref err) => err.fmt(f),
             ErrorKind::IO(ref err) => err.fmt(f),
         }
@@ -225,24 +238,79 @@ impl core::fmt::Display for ErrorKind {
 
 impl From<ErrorKind> for Error {
     fn from(kind: ErrorKind) -> Error {
-        Error { inner: Arc::new(ErrorInner { kind, cause: None }) }
+        #[cfg(feature = "alloc")]
+        {
+            Error { inner: Arc::new(ErrorInner { kind, cause: None }) }
+        }
+        #[cfg(not(feature = "alloc"))]
+        {
+            Error { inner: Arc::new(ErrorInner { kind }) }
+        }
     }
 }
 
-struct AdhocError(Box<dyn core::fmt::Display + Send + Sync + 'static>);
+/// A generic error message.
+///
+/// This somewhat unfortunately represents most of the errors in Jiff. When I
+/// first started building Jiff, I had a goal of making every error structured.
+/// But this ended up being a ton of work, and I find it much easier and nicer
+/// for error messages to be embedded where they occur.
+#[cfg_attr(not(feature = "alloc"), derive(Clone))]
+struct AdhocError {
+    #[cfg(feature = "alloc")]
+    message: alloc::boxed::Box<str>,
+    #[cfg(not(feature = "alloc"))]
+    message: &'static str,
+}
+
+impl AdhocError {
+    #[cfg(feature = "alloc")]
+    fn from_display<'a>(message: impl core::fmt::Display + 'a) -> AdhocError {
+        use alloc::string::ToString;
+
+        let message = message.to_string().into_boxed_str();
+        AdhocError { message }
+    }
+
+    fn from_args<'a>(message: core::fmt::Arguments<'a>) -> AdhocError {
+        #[cfg(feature = "alloc")]
+        {
+            AdhocError::from_display(message)
+        }
+        #[cfg(not(feature = "alloc"))]
+        {
+            let message = message.as_str().unwrap_or(
+                "unknown Jiff error (better error messages require \
+                 enabling the `alloc` feature for the `jiff` crate)",
+            );
+            AdhocError::from_static_str(message)
+        }
+    }
+
+    fn from_static_str(message: &'static str) -> AdhocError {
+        #[cfg(feature = "alloc")]
+        {
+            AdhocError::from_display(message)
+        }
+        #[cfg(not(feature = "alloc"))]
+        {
+            AdhocError { message }
+        }
+    }
+}
 
 #[cfg(feature = "std")]
 impl std::error::Error for AdhocError {}
 
 impl core::fmt::Display for AdhocError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        self.0.fmt(f)
+        core::fmt::Display::fmt(&self.message, f)
     }
 }
 
 impl core::fmt::Debug for AdhocError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        self.0.fmt(f)
+        core::fmt::Debug::fmt(&self.message, f)
     }
 }
 
@@ -252,49 +320,33 @@ impl core::fmt::Debug for AdhocError {
 /// which input was out of bounds, the value given and its minimum and maximum
 /// allowed values.
 #[derive(Debug)]
-struct RangeError(Box<RangeErrorKind>);
-
-#[derive(Debug)]
-enum RangeErrorKind {
-    Positive { what: &'static str, given: u128, min: i128, max: i128 },
-    Negative { what: &'static str, given: i128, min: i128, max: i128 },
-    Specific { what: &'static str, given: i128 },
+#[cfg_attr(not(feature = "alloc"), derive(Clone))]
+struct RangeError {
+    what: &'static str,
+    #[cfg(feature = "alloc")]
+    given: i128,
+    #[cfg(feature = "alloc")]
+    min: i128,
+    #[cfg(feature = "alloc")]
+    max: i128,
 }
 
 impl RangeError {
-    fn unsigned(
+    fn new(
         what: &'static str,
-        given: impl Into<u128>,
-        min: impl Into<i128>,
-        max: impl Into<i128>,
+        _given: impl Into<i128>,
+        _min: impl Into<i128>,
+        _max: impl Into<i128>,
     ) -> RangeError {
-        RangeError(Box::new(RangeErrorKind::Positive {
+        RangeError {
             what,
-            given: given.into(),
-            min: min.into(),
-            max: max.into(),
-        }))
-    }
-
-    fn signed(
-        what: &'static str,
-        given: impl Into<i128>,
-        min: impl Into<i128>,
-        max: impl Into<i128>,
-    ) -> RangeError {
-        RangeError(Box::new(RangeErrorKind::Negative {
-            what,
-            given: given.into(),
-            min: min.into(),
-            max: max.into(),
-        }))
-    }
-
-    fn specific(what: &'static str, given: impl Into<i128>) -> RangeError {
-        RangeError(Box::new(RangeErrorKind::Specific {
-            what,
-            given: given.into(),
-        }))
+            #[cfg(feature = "alloc")]
+            given: _given.into(),
+            #[cfg(feature = "alloc")]
+            min: _min.into(),
+            #[cfg(feature = "alloc")]
+            max: _max.into(),
+        }
     }
 }
 
@@ -303,46 +355,20 @@ impl std::error::Error for RangeError {}
 
 impl core::fmt::Display for RangeError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        match *self.0 {
-            RangeErrorKind::Positive { what, given, min, max } => {
-                write!(
-                    f,
-                    "parameter '{what}' with value {given} \
-                     is not in the required range of {min}..={max}",
-                )
-            }
-            RangeErrorKind::Negative { what, given, min, max } => {
-                write!(
-                    f,
-                    "parameter '{what}' with value {given} \
-                     is not in the required range of {min}..={max}",
-                )
-            }
-            RangeErrorKind::Specific { what, given } => {
-                write!(f, "parameter '{what}' with value {given} is illegal",)
-            }
+        #[cfg(feature = "alloc")]
+        {
+            let RangeError { what, given, min, max } = *self;
+            write!(
+                f,
+                "parameter '{what}' with value {given} \
+                 is not in the required range of {min}..={max}",
+            )
         }
-    }
-}
-
-#[derive(Debug)]
-struct TimeZoneLookupError(Box<TimeZoneLookupErrorInner>);
-
-#[derive(Debug)]
-struct TimeZoneLookupErrorInner {
-    name: String,
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for TimeZoneLookupError {}
-
-impl core::fmt::Display for TimeZoneLookupError {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(
-            f,
-            "failed to find timezone '{}' in time zone database",
-            self.0.name
-        )
+        #[cfg(not(feature = "alloc"))]
+        {
+            let RangeError { what } = *self;
+            write!(f, "parameter '{what}' is not in the required range")
+        }
     }
 }
 
@@ -355,6 +381,7 @@ impl core::fmt::Display for TimeZoneLookupError {
 /// Otherwise, this type is a simple wrapper around `std::io::Error`. Its
 /// purpose is to encapsulate the conditional compilation based on the `std`
 /// feature.
+#[cfg_attr(not(feature = "alloc"), derive(Clone))]
 struct IOError {
     #[cfg(feature = "std")]
     err: std::io::Error,
@@ -396,6 +423,7 @@ impl From<std::io::Error> for IOError {
     }
 }
 
+#[cfg_attr(not(feature = "alloc"), derive(Clone))]
 struct FilePathError {
     #[cfg(feature = "std")]
     path: std::path::PathBuf,
@@ -450,11 +478,12 @@ impl IntoError for Error {
 
 impl IntoError for &'static str {
     fn into_error(self) -> Error {
-        Error::adhoc(self)
+        Error::adhoc_from_static_str(self)
     }
 }
 
-impl IntoError for String {
+#[cfg(feature = "alloc")]
+impl IntoError for alloc::string::String {
     fn into_error(self) -> Error {
         Error::adhoc(self)
     }
@@ -495,28 +524,46 @@ pub(crate) trait ErrorContext {
 
 impl ErrorContext for Error {
     fn context(self, consequent: impl IntoError) -> Error {
-        let mut err = consequent.into_error();
-        assert!(
-            err.inner.cause.is_none(),
-            "cause of consequence must be `None`"
-        );
-        // OK because we just created this error so the Arc has one reference.
-        Arc::get_mut(&mut err.inner).unwrap().cause = Some(self);
-        err
+        #[cfg(feature = "alloc")]
+        {
+            let mut err = consequent.into_error();
+            assert!(
+                err.inner.cause.is_none(),
+                "cause of consequence must be `None`"
+            );
+            // OK because we just created this error so the Arc
+            // has one reference.
+            Arc::get_mut(&mut err.inner).unwrap().cause = Some(self);
+            err
+        }
+        #[cfg(not(feature = "alloc"))]
+        {
+            // We just completely drop `self`. :-(
+            consequent.into_error()
+        }
     }
 
     fn with_context<E: IntoError>(
         self,
         consequent: impl FnOnce() -> E,
     ) -> Error {
-        let mut err = consequent().into_error();
-        assert!(
-            err.inner.cause.is_none(),
-            "cause of consequence must be `None`"
-        );
-        // OK because we just created this error so the Arc has one reference.
-        Arc::get_mut(&mut err.inner).unwrap().cause = Some(self);
-        err
+        #[cfg(feature = "alloc")]
+        {
+            let mut err = consequent().into_error();
+            assert!(
+                err.inner.cause.is_none(),
+                "cause of consequence must be `None`"
+            );
+            // OK because we just created this error so the Arc
+            // has one reference.
+            Arc::get_mut(&mut err.inner).unwrap().cause = Some(self);
+            err
+        }
+        #[cfg(not(feature = "alloc"))]
+        {
+            // We just completely drop `self`. :-(
+            consequent().into_error()
+        }
     }
 }
 
@@ -543,7 +590,29 @@ mod tests {
     // general, we should not increase the size without a very good reason.
     #[test]
     fn error_size() {
-        let expected_size = core::mem::size_of::<usize>();
+        let mut expected_size = core::mem::size_of::<usize>();
+        if !cfg!(feature = "alloc") {
+            // oooowwwwwwwwwwwch.
+            //
+            // Like, this is horrible, right? core-only environments are
+            // precisely the place where one want to keep things slim. But
+            // in core-only, I don't know of a way to introduce any sort of
+            // indirection in the library level without using a completely
+            // different API.
+            //
+            // This is what makes me doubt that core-only Jiff is actually
+            // useful. In what context are people using a huge library like
+            // Jiff but can't define a small little heap allocator?
+            //
+            // OK, this used to be `expected_size *= 10`, but I slimmed it down
+            // to x3. Still kinda sucks right? If we tried harder, I think we
+            // could probably slim this down more. And if we were willing to
+            // sacrifice error message quality even more (like, all the way),
+            // then we could make `Error` a zero sized type. Which might
+            // actually be the right trade-off for core-only, but I'll hold off
+            // until we have some real world use cases.
+            expected_size *= 3;
+        }
         assert_eq!(expected_size, core::mem::size_of::<Error>());
     }
 }

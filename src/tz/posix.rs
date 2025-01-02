@@ -43,27 +43,48 @@ Nevertheless, we generally use `IanaTz::parse` everywhere, even when parsing
 the `TZ` environment variable. The reason for this is that it seems to be what
 other programs do in practice (for example, GNU date).
 
+# `no-std` and `no-alloc` support
+
+This module works just fine in `no_std` mode. It also generally works fine
+without `alloc` too, modulo some APIs for parsing from an environment variable
+(which need `std` anyway). The main problem is that the type defined here takes
+up a lot of space (100+ bytes). A good chunk of that comes from representing
+time zone abbreviations inline. In theory, only 6-10 bytes are needed for
+simple cases like `TZ=EST5EDT,M3.2.0,M11.1.0`, but we make room for 30 byte
+length abbreviations (times two). Plus, there's a much of room made for the
+rule representation.
+
+When you then stuff this inside a `TimeZone` which cannot use heap allocation
+to force an indirection, you wind up with a very chunky `TimeZone`. And this in
+turn makes `Zoned` itself quite chunky.
+
+So while there isn't actually any particular reason why a
+`ReasonablePosixTimeZone` cannot be used in core-only environments, we don't
+include it in Jiff for now because it seems like bad juju to make `TimeZone`
+so big. So if you do need POSIX time zone support in core-only environments,
+please open an issue.
+
+My guess is that `Zoned` is itself kind of doomed in core-only environments.
+It's just too hard to bundle an entire time zone with every instant without
+using the heap to amortize copies of the time zone definition. I've been
+thinking about adding an `Unzoned` type that is just like `Zoned`, but requires
+the caller to pass in a `&TimeZone` for every API call. Less convenient for
+sure, but you get a more flexible type.
+
 [posix-env]: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap08.html#tag_08_03
 [iana-env]: https://data.iana.org/time-zones/tzdb-2024a/theory.html#functions
 [musl-env]: https://wiki.musl-libc.org/environment-variables
 */
 
-#![allow(warnings)] // REMOVE ME
-
 use core::cell::Cell;
-
-use alloc::{
-    boxed::Box,
-    string::{String, ToString},
-};
 
 use crate::{
     civil::{Date, DateTime, Time, Weekday},
     error::{err, Error, ErrorContext},
-    span::Span,
     timestamp::Timestamp,
-    tz::{AmbiguousOffset, Dst, Offset},
+    tz::{AmbiguousOffset, Dst, Offset, TimeZoneTransition},
     util::{
+        array_str::Abbreviation,
         escape::{Byte, Bytes},
         parse,
         rangeint::{ri16, ri8, RFrom, RInto},
@@ -71,40 +92,6 @@ use crate::{
     },
     SignedDuration,
 };
-
-/// A self-imposed limit on the size of a time zone abbreviation, in bytes.
-///
-/// POSIX says this:
-///
-/// > Indicate no less than three, nor more than {TZNAME_MAX}, bytes that are
-/// > the designation for the standard (std) or the alternative (dst -such as
-/// > Daylight Savings Time) timezone.
-///
-/// But it doesn't seem worth the trouble to query `TZNAME_MAX`. Interestingly,
-/// IANA says:
-///
-/// > are 3 or more characters specifying the standard and daylight saving time
-/// > (DST) zone abbreviations
-///
-/// Which implies that IANA thinks there is no limit. But that seems unwise.
-/// Moreover, in practice, it seems like the `date` utility supports fairly
-/// long abbreviations. On my mac (so, BSD `date` as I understand it):
-///
-/// ```text
-/// $ TZ=ZZZ5YYYYYYYYYYYYYYYYYYYYY date
-/// Sun Mar 17 20:05:58 YYYYYYYYYYYYYYYYYYYYY 2024
-/// ```
-///
-/// And on my Linux machine (so, GNU `date`):
-///
-/// ```text
-/// $ TZ=ZZZ5YYYYYYYYYYYYYYYYYYYYY date
-/// Sun Mar 17 08:05:36 PM YYYYYYYYYYYYYYYYYYYYY 2024
-/// ```
-///
-/// I don't know exactly what limit these programs use, but 255 seems like more
-/// than anyone could ever need, right?
-const ABBREVIATION_MAX: usize = 255;
 
 /// POSIX says the hour must be in the range `0..=24`, but that the default
 /// hour for DST is one hour more than standard time. Therefore, the actual
@@ -130,15 +117,17 @@ type PosixWeek = ri8<1, 5>;
 /// for example, `TZ="America/New_York"`, then that case isn't encapsulated by
 /// this type. Callers needing that functionality will need to handle the error
 /// returned by parsing this type and layer their own semantics on top.
+#[cfg(feature = "tz-system")]
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum PosixTz {
     /// A valid POSIX time zone with an optional DST transition rule.
     Rule(PosixTimeZone),
     /// An implementation defined string. This occurs when the `TZ` value
     /// starts with a `:`. The string returned here does not include the `:`.
-    Implementation(Box<str>),
+    Implementation(alloc::boxed::Box<str>),
 }
 
+#[cfg(feature = "tz-system")]
 impl PosixTz {
     /// Parse a POSIX `TZ` environment variable string from the given bytes.
     pub(crate) fn parse(bytes: impl AsRef<[u8]>) -> Result<PosixTz, Error> {
@@ -151,43 +140,26 @@ impl PosixTz {
                     Bytes(&bytes[1..]),
                 ));
             };
-            Ok(PosixTz::Implementation(string.to_string().into_boxed_str()))
+            Ok(PosixTz::Implementation(string.into()))
         } else {
-            // We enable the IANA v3+ extensions here. (Namely, that the time
-            // specification hour value has the range `-167..=167` instead of
-            // `0..=24`.) Requiring strict POSIX rules doesn't seem necessary
-            // since the extension is a strict superset. Plus, GNU tooling
-            // seems to accept the extension.
-            let parser = Parser { ianav3plus: true, ..Parser::new(bytes) };
-            parser.parse().map(PosixTz::Rule)
+            PosixTimeZone::parse(bytes).map(PosixTz::Rule)
         }
     }
 
     /// Parse a POSIX `TZ` environment variable string from the given `OsStr`.
-    #[cfg(feature = "std")]
     pub(crate) fn parse_os_str(
         osstr: impl AsRef<std::ffi::OsStr>,
     ) -> Result<PosixTz, Error> {
         PosixTz::parse(parse::os_str_bytes(osstr.as_ref())?)
     }
+}
 
-    /// When this is a `Rule`, returns the underlying `PosixTimeZone`. Panics
-    /// otherwise.
-    #[cfg(test)]
-    fn unwrap_rule(self) -> PosixTimeZone {
-        match self {
-            PosixTz::Rule(rule) => rule,
-            _ => unreachable!("expected PosixTz::Rule variant"),
-        }
-    }
-
-    /// When this is a `Implementation`, returns the underlying `Box<str>`.
-    /// Panics otherwise.
-    #[cfg(test)]
-    fn unwrap_implementation(self) -> Box<str> {
-        match self {
-            PosixTz::Implementation(string) => string,
-            _ => unreachable!("expected PosixTz::Implementation variant"),
+#[cfg(feature = "tz-system")]
+impl core::fmt::Display for PosixTz {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        match *self {
+            PosixTz::Rule(ref tz) => write!(f, "{tz}"),
+            PosixTz::Implementation(ref imp) => write!(f, ":{imp}"),
         }
     }
 }
@@ -204,31 +176,14 @@ impl PosixTz {
 pub(crate) struct IanaTz(ReasonablePosixTimeZone);
 
 impl IanaTz {
-    /// Parse a IANA tzfile v2 `TZ` string from the given bytes.
-    pub(crate) fn parse_v2(bytes: impl AsRef<[u8]>) -> Result<IanaTz, Error> {
-        let bytes = bytes.as_ref();
-        let posix_tz = Parser::new(bytes).parse().map_err(|e| {
-            e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
-        })?;
-        let Ok(reasonable) = posix_tz.reasonable() else {
-            return Err(err!(
-                "TZ string {:?} in v2 tzfile has DST but no transition rules",
-                Bytes(bytes),
-            ));
-        };
-        Ok(IanaTz(reasonable))
-    }
-
     /// Parse a IANA tzfile v3+ `TZ` string from the given bytes.
     pub(crate) fn parse_v3plus(
         bytes: impl AsRef<[u8]>,
     ) -> Result<IanaTz, Error> {
         let bytes = bytes.as_ref();
-        let posix_tz = Parser { ianav3plus: true, ..Parser::new(bytes) }
-            .parse()
-            .map_err(|e| {
-                e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
-            })?;
+        let posix_tz = PosixTimeZone::parse(bytes).map_err(|e| {
+            e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
+        })?;
         let Ok(reasonable) = posix_tz.reasonable() else {
             return Err(err!(
                 "TZ string {:?} in v3+ tzfile has DST but no transition rules",
@@ -248,6 +203,12 @@ impl IanaTz {
     }
 }
 
+impl core::fmt::Display for IanaTz {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// A "reasonable" POSIX time zone.
 ///
 /// This is the same as a regular POSIX time zone, but requires that if a DST
@@ -263,20 +224,14 @@ impl IanaTz {
 /// for reasonable POSIX time zone strings.
 ///
 /// [GNU C Library]: https://www.gnu.org/software/libc/manual/2.25/html_node/TZ-Variable.html
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ReasonablePosixTimeZone {
-    original: Box<str>,
-    std_abbrev: Box<str>,
+    std_abbrev: Abbreviation,
     std_offset: PosixOffset,
     dst: Option<ReasonablePosixDst>,
 }
 
 impl ReasonablePosixTimeZone {
-    /// The original POSIX time zone string.
-    pub(crate) fn as_str(&self) -> &str {
-        &self.original
-    }
-
     /// Returns the appropriate time zone offset to use for the given
     /// timestamp.
     ///
@@ -288,14 +243,18 @@ impl ReasonablePosixTimeZone {
         timestamp: Timestamp,
     ) -> (Offset, Dst, &str) {
         if self.dst.is_none() {
-            return (self.std_offset(), Dst::No, &self.std_abbrev);
+            return (self.std_offset(), Dst::No, self.std_abbrev.as_str());
         }
 
         let dt = Offset::UTC.to_datetime(timestamp);
         self.dst_info_utc(dt.date().year_ranged())
             .filter(|dst_info| dst_info.in_dst(dt))
-            .map(|dst_info| (dst_info.offset, Dst::Yes, &*dst_info.dst.abbrev))
-            .unwrap_or_else(|| (self.std_offset(), Dst::No, &self.std_abbrev))
+            .map(|dst_info| {
+                (dst_info.offset, Dst::Yes, dst_info.dst.abbrev.as_str())
+            })
+            .unwrap_or_else(|| {
+                (self.std_offset(), Dst::No, self.std_abbrev.as_str())
+            })
     }
 
     /// Returns a possibly ambiguous timestamp for the given civil datetime.
@@ -391,21 +350,29 @@ impl ReasonablePosixTimeZone {
     pub(crate) fn previous_transition(
         &self,
         timestamp: Timestamp,
-    ) -> Option<Timestamp> {
+    ) -> Option<TimeZoneTransition> {
         let dt = Offset::UTC.to_datetime(timestamp);
         let dst_info = self.dst_info_utc(dt.date().year_ranged())?;
         let (earlier, later) = dst_info.ordered();
-        let prev = if dt > later {
-            later
+        let (prev, dst_info) = if dt > later {
+            (later, dst_info)
         } else if dt > earlier {
-            earlier
+            (earlier, dst_info)
         } else {
             let prev_year = dt.date().year_ranged().checked_sub(C(1))?;
             let dst_info = self.dst_info_utc(prev_year)?;
             let (_, later) = dst_info.ordered();
-            later
+            (later, dst_info)
         };
-        Offset::UTC.to_timestamp(prev).ok()
+
+        let timestamp = Offset::UTC.to_timestamp(prev).ok()?;
+        let dt = Offset::UTC.to_datetime(timestamp);
+        let (offset, abbrev, dst) = if dst_info.in_dst(dt) {
+            (dst_info.offset, dst_info.dst.abbrev.as_str(), Dst::Yes)
+        } else {
+            (self.std_offset(), self.std_abbrev.as_str(), Dst::No)
+        };
+        Some(TimeZoneTransition { timestamp, offset, abbrev, dst })
     }
 
     /// Returns the timestamp of the soonest time zone transition after the
@@ -413,36 +380,34 @@ impl ReasonablePosixTimeZone {
     pub(crate) fn next_transition(
         &self,
         timestamp: Timestamp,
-    ) -> Option<Timestamp> {
+    ) -> Option<TimeZoneTransition> {
         let dt = Offset::UTC.to_datetime(timestamp);
         let dst_info = self.dst_info_utc(dt.date().year_ranged())?;
         let (earlier, later) = dst_info.ordered();
-        let next = if dt < earlier {
-            earlier
+        let (next, dst_info) = if dt < earlier {
+            (earlier, dst_info)
         } else if dt < later {
-            later
+            (later, dst_info)
         } else {
             let next_year = dt.date().year_ranged().checked_add(C(1))?;
             let dst_info = self.dst_info_utc(next_year)?;
             let (earlier, _) = dst_info.ordered();
-            earlier
+            (earlier, dst_info)
         };
-        Offset::UTC.to_timestamp(next).ok()
+
+        let timestamp = Offset::UTC.to_timestamp(next).ok()?;
+        let dt = Offset::UTC.to_datetime(timestamp);
+        let (offset, abbrev, dst) = if dst_info.in_dst(dt) {
+            (dst_info.offset, dst_info.dst.abbrev.as_str(), Dst::Yes)
+        } else {
+            (self.std_offset(), self.std_abbrev.as_str(), Dst::No)
+        };
+        Some(TimeZoneTransition { timestamp, offset, abbrev, dst })
     }
 
     /// Returns the offset for standard time in this POSIX time zone.
     fn std_offset(&self) -> Offset {
         self.std_offset.to_offset()
-    }
-
-    /// Returns the offset for daylight saving time in this POSIX time zone.
-    ///
-    /// If this POSIX time zone doesn't have DST, then this returns `None`.
-    ///
-    /// This returns `Some` in precisely the same cases that `dst_info` returns
-    /// `Some`.
-    fn dst_offset(&self) -> Option<Offset> {
-        Some(self.dst.as_ref()?.posix_offset(&self.std_offset).to_offset())
     }
 
     /// Returns the range in which DST occurs.
@@ -488,11 +453,18 @@ impl ReasonablePosixTimeZone {
     }
 }
 
-impl Eq for ReasonablePosixTimeZone {}
-
-impl PartialEq for ReasonablePosixTimeZone {
-    fn eq(&self, rhs: &ReasonablePosixTimeZone) -> bool {
-        self.original == rhs.original
+impl core::fmt::Display for ReasonablePosixTimeZone {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(
+            f,
+            "{}{}",
+            AbbreviationDisplay(self.std_abbrev),
+            self.std_offset
+        )?;
+        if let Some(ref dst) = self.dst {
+            write!(f, "{dst}")?;
+        }
+        Ok(())
     }
 }
 
@@ -552,9 +524,9 @@ impl<'a> DstInfo<'a> {
 /// A "reasonable" DST transition rule.
 ///
 /// Unlike what POSIX specifies, this requires a rule.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct ReasonablePosixDst {
-    abbrev: Box<str>,
+    abbrev: Abbreviation,
     offset: Option<PosixOffset>,
     /// This is the principal change. A "reasonable" DST must include a rule.
     rule: Rule,
@@ -579,16 +551,39 @@ impl ReasonablePosixDst {
     }
 }
 
+impl core::fmt::Display for ReasonablePosixDst {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{}", AbbreviationDisplay(self.abbrev))?;
+        if let Some(offset) = self.offset {
+            write!(f, "{offset}")?;
+        }
+        write!(f, ",{}", self.rule)?;
+        Ok(())
+    }
+}
+
 /// A POSIX time zone.
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) struct PosixTimeZone {
-    original: Box<str>,
-    std_abbrev: Box<str>,
+    std_abbrev: Abbreviation,
     std_offset: PosixOffset,
     dst: Option<PosixDst>,
 }
 
 impl PosixTimeZone {
+    /// Parse a POSIX `TZ` environment variable, assuming it's a rule and not
+    /// an implementation defined value, from the given bytes.
+    fn parse(bytes: impl AsRef<[u8]>) -> Result<PosixTimeZone, Error> {
+        // We enable the IANA v3+ extensions here. (Namely, that the time
+        // specification hour value has the range `-167..=167` instead of
+        // `0..=24`.) Requiring strict POSIX rules doesn't seem necessary
+        // since the extension is a strict superset. Plus, GNU tooling
+        // seems to accept the extension.
+        let parser =
+            Parser { ianav3plus: true, ..Parser::new(bytes.as_ref()) };
+        parser.parse()
+    }
+
     /// Transforms this POSIX time zone into a "reasonable" time zone.
     ///
     /// If this isn't a reasonable time zone, then the original time zone is
@@ -603,7 +598,6 @@ impl PosixTimeZone {
         if let Some(mut dst) = self.dst.take() {
             if let Some(rule) = dst.rule.take() {
                 Ok(ReasonablePosixTimeZone {
-                    original: self.original,
                     std_abbrev: self.std_abbrev,
                     std_offset: self.std_offset,
                     dst: Some(ReasonablePosixDst {
@@ -623,7 +617,6 @@ impl PosixTimeZone {
             // there's no DST at all. So no rule is required for this time
             // zone to be reasonable.
             Ok(ReasonablePosixTimeZone {
-                original: self.original,
                 std_abbrev: self.std_abbrev,
                 std_offset: self.std_offset,
                 dst: None,
@@ -632,12 +625,40 @@ impl PosixTimeZone {
     }
 }
 
+impl core::fmt::Display for PosixTimeZone {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(
+            f,
+            "{}{}",
+            AbbreviationDisplay(self.std_abbrev),
+            self.std_offset
+        )?;
+        if let Some(ref dst) = self.dst {
+            write!(f, "{dst}")?;
+        }
+        Ok(())
+    }
+}
+
 /// The daylight-saving-time abbreviation, offset and rule for this time zone.
 #[derive(Debug, Eq, PartialEq)]
 struct PosixDst {
-    abbrev: Box<str>,
+    abbrev: Abbreviation,
     offset: Option<PosixOffset>,
     rule: Option<Rule>,
+}
+
+impl core::fmt::Display for PosixDst {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{}", AbbreviationDisplay(self.abbrev))?;
+        if let Some(offset) = self.offset {
+            write!(f, "{offset}")?;
+        }
+        if let Some(rule) = self.rule {
+            write!(f, ",{rule}")?;
+        }
+        Ok(())
+    }
 }
 
 /// The offset from UTC for standard-time or daylight-saving-time for this
@@ -684,11 +705,37 @@ impl PosixOffset {
     }
 }
 
+impl core::fmt::Display for PosixOffset {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if let Some(sign) = self.sign {
+            if sign < 0 {
+                write!(f, "-")?;
+            } else {
+                write!(f, "+")?;
+            }
+        }
+        write!(f, "{}", self.hour)?;
+        if let Some(minute) = self.minute {
+            write!(f, ":{minute:02}")?;
+            if let Some(second) = self.second {
+                write!(f, ":{second:02}")?;
+            }
+        }
+        Ok(())
+    }
+}
+
 /// The rule for when a DST transition starts and ends.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Rule {
     start: PosixDateTimeSpec,
     end: PosixDateTimeSpec,
+}
+
+impl core::fmt::Display for Rule {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{},{}", self.start, self.end)
+    }
 }
 
 /// A specification for the day and an optional time at which a DST
@@ -759,6 +806,16 @@ impl PosixDateTimeSpec {
             second: None,
         };
         self.time.unwrap_or(DEFAULT)
+    }
+}
+
+impl core::fmt::Display for PosixDateTimeSpec {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{}", self.date)?;
+        if let Some(time) = self.time {
+            write!(f, "/{time}")?;
+        }
+        Ok(())
     }
 }
 
@@ -841,6 +898,16 @@ impl PosixDateSpec {
     }
 }
 
+impl core::fmt::Display for PosixDateSpec {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        match *self {
+            PosixDateSpec::JulianOne(n) => write!(f, "J{n}"),
+            PosixDateSpec::JulianZero(n) => write!(f, "{n}"),
+            PosixDateSpec::WeekdayOfMonth(wk) => write!(f, "{wk}"),
+        }
+    }
+}
+
 /// A specification for the day of the month at which a DST transition occurs.
 /// POSIX says:
 ///
@@ -873,6 +940,18 @@ impl WeekdayOfMonth {
     }
 }
 
+impl core::fmt::Display for WeekdayOfMonth {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(
+            f,
+            "M{month}.{week}.{weekday}",
+            month = self.month,
+            week = self.week,
+            weekday = self.weekday.to_sunday_zero_offset(),
+        )
+    }
+}
+
 /// A specification for "time" in a POSIX time zone, with optional minute and
 /// second components.
 ///
@@ -891,27 +970,6 @@ struct PosixTimeSpec {
 }
 
 impl PosixTimeSpec {
-    /// Converts this duration to a civil time if possible.
-    ///
-    /// While a POSIX time specification is technically a duration, most
-    /// instances can just be trivially expressed as a time-of-day. If we can
-    /// just construct the civil time directly, it is simpler and cheaper to
-    /// use it rather than do arithmetic.
-    fn to_civil_time(&self) -> Option<Time> {
-        if self.sign.map_or(false, |sign| sign != 1) {
-            return None;
-        }
-        if self.hour > 23 {
-            return None;
-        }
-        Some(Time::new_ranged(
-            self.hour.min(C(23)),
-            self.minute.unwrap_or(C(0).rinto()),
-            self.second.unwrap_or(C(0).rinto()),
-            C(0),
-        ))
-    }
-
     /// Returns this time specification as a duration of time.
     fn to_duration(&self) -> SignedDuration {
         let sign = i64::from(self.sign());
@@ -925,6 +983,26 @@ impl PosixTimeSpec {
     /// wasn't explicitly given.
     fn sign(&self) -> Sign {
         self.sign.unwrap_or(Sign::N::<1>())
+    }
+}
+
+impl core::fmt::Display for PosixTimeSpec {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if let Some(sign) = self.sign {
+            if sign < 0 {
+                write!(f, "-")?;
+            } else {
+                write!(f, "+")?;
+            }
+        }
+        write!(f, "{}", self.hour)?;
+        if let Some(minute) = self.minute {
+            write!(f, ":{minute:02}")?;
+            if let Some(second) = self.second {
+                write!(f, ":{second:02}")?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -976,7 +1054,6 @@ impl<'s> Parser<'s> {
     /// Upon success, the parser will be positioned immediately following the
     /// TZ string.
     fn parse_posix_time_zone(&self) -> Result<PosixTimeZone, Error> {
-        let original = String::from_utf8_lossy(self.remaining()).into();
         let std_abbrev = self
             .parse_abbreviation()
             .map_err(|e| e.context("failed to parse standard abbreviation"))?;
@@ -989,7 +1066,7 @@ impl<'s> Parser<'s> {
         {
             dst = Some(self.parse_posix_dst()?);
         }
-        Ok(PosixTimeZone { original, std_abbrev, std_offset, dst })
+        Ok(PosixTimeZone { std_abbrev, std_offset, dst })
     }
 
     /// Parse a DST zone with an optional explicit transition rule.
@@ -1042,7 +1119,7 @@ impl<'s> Parser<'s> {
     ///
     /// Upon success, the parser will be positioned immediately following the
     /// abbreviation name.
-    fn parse_abbreviation(&self) -> Result<Box<str>, Error> {
+    fn parse_abbreviation(&self) -> Result<Abbreviation, Error> {
         if self.byte() == b'<' {
             if !self.bump() {
                 return Err(err!(
@@ -1064,17 +1141,17 @@ impl<'s> Parser<'s> {
     ///
     /// Upon success, the parser will be positioned immediately after the
     /// last byte in the abbreviation.
-    fn parse_unquoted_abbreviation(&self) -> Result<Box<str>, Error> {
+    fn parse_unquoted_abbreviation(&self) -> Result<Abbreviation, Error> {
         let start = self.pos();
         for i in 0.. {
             if !self.byte().is_ascii_alphabetic() {
                 break;
             }
-            if i >= ABBREVIATION_MAX {
+            if i >= Abbreviation::capacity() {
                 return Err(err!(
                     "expected abbreviation with at most {} bytes, \
                      but found a longer abbreviation beginning with '{}'",
-                    ABBREVIATION_MAX,
+                    Abbreviation::capacity(),
                     Bytes(&self.tz[start..i]),
                 ));
             }
@@ -1084,7 +1161,7 @@ impl<'s> Parser<'s> {
         }
         let end = self.pos();
         let abbrev =
-            String::from_utf8(self.tz[start..end].to_vec()).map_err(|_| {
+            core::str::from_utf8(&self.tz[start..end]).map_err(|_| {
                 // NOTE: I believe this error is technically impossible since
                 // the loop above restricts letters in an abbreviation to
                 // ASCII. So everything from `start` to `end` is ASCII and
@@ -1103,7 +1180,9 @@ impl<'s> Parser<'s> {
                 abbrev.len(),
             ));
         }
-        Ok(abbrev.into())
+        // OK because we verified above that the abbreviation
+        // does not exceed `Abbreviation::capacity`.
+        Ok(Abbreviation::new(abbrev).unwrap())
     }
 
     /// Parses a quoted time zone abbreviation.
@@ -1113,7 +1192,7 @@ impl<'s> Parser<'s> {
     ///
     /// Upon success, the parser will be positioned immediately after the
     /// closing `>` quote.
-    fn parse_quoted_abbreviation(&self) -> Result<Box<str>, Error> {
+    fn parse_quoted_abbreviation(&self) -> Result<Abbreviation, Error> {
         let start = self.pos();
         for i in 0.. {
             if !self.byte().is_ascii_alphanumeric()
@@ -1122,11 +1201,11 @@ impl<'s> Parser<'s> {
             {
                 break;
             }
-            if i >= ABBREVIATION_MAX {
+            if i >= Abbreviation::capacity() {
                 return Err(err!(
                     "expected abbreviation with at most {} bytes, \
                      but found a longer abbreviation beginning with '{}'",
-                    ABBREVIATION_MAX,
+                    Abbreviation::capacity(),
                     Bytes(&self.tz[start..i]),
                 ));
             }
@@ -1136,7 +1215,7 @@ impl<'s> Parser<'s> {
         }
         let end = self.pos();
         let abbrev =
-            String::from_utf8(self.tz[start..end].to_vec()).map_err(|_| {
+            core::str::from_utf8(&self.tz[start..end]).map_err(|_| {
                 // NOTE: I believe this error is technically impossible since
                 // the loop above restricts letters in an abbreviation to
                 // ASCII. So everything from `start` to `end` is ASCII and
@@ -1170,7 +1249,9 @@ impl<'s> Parser<'s> {
                 abbrev.len(),
             ));
         }
-        Ok(abbrev.into())
+        // OK because we verified above that the abbreviation
+        // does not exceed `Abbreviation::capacity()`.
+        Ok(Abbreviation::new(abbrev).unwrap())
     }
 
     /// Parse a POSIX time offset.
@@ -1189,8 +1270,7 @@ impl<'s> Parser<'s> {
             )
         })?;
         let hour = self.parse_hour_posix()?;
-        let mut offset =
-            PosixOffset { sign, hour, minute: None, second: None };
+        let offset = PosixOffset { sign, hour, minute: None, second: None };
         if self.maybe_byte() != Some(b':') {
             return Ok(offset);
         }
@@ -1381,11 +1461,12 @@ impl<'s> Parser<'s> {
         Ok(WeekdayOfMonth { month, week, weekday })
     }
 
-    /// This parses a POSIX time specification in the format `hh?[:mm[:ss]]`.
+    /// This parses a POSIX time specification in the format
+    /// `[+/-]hh?[:mm[:ss]]`.
     ///
-    /// This assumes the parser is positioned at the first `h`. Upon success,
-    /// the parser will be positioned immediately following the end of the time
-    /// specification.
+    /// This assumes the parser is positioned at the first `h` (or the sign,
+    /// if present). Upon success, the parser will be positioned immediately
+    /// following the end of the time specification.
     fn parse_posix_time_spec(&self) -> Result<PosixTimeSpec, Error> {
         let (sign, hour) = if self.ianav3plus {
             let sign = self.parse_optional_sign().map_err(|e| {
@@ -1399,8 +1480,7 @@ impl<'s> Parser<'s> {
         } else {
             (None, self.parse_hour_posix()?.rinto())
         };
-        let mut spec =
-            PosixTimeSpec { sign, hour, minute: None, second: None };
+        let spec = PosixTimeSpec { sign, hour, minute: None, second: None };
         if self.maybe_byte() != Some(b':') {
             return Ok(spec);
         }
@@ -1587,7 +1667,7 @@ impl<'s> Parser<'s> {
     fn parse_number_with_upto_n_digits(&self, n: usize) -> Result<i64, Error> {
         assert!(n >= 1, "numbers must have at least 1 digit");
         let start = self.pos();
-        for i in 0..n {
+        for _ in 0..n {
             if self.is_done() || !self.byte().is_ascii_digit() {
                 break;
             }
@@ -1678,26 +1758,44 @@ impl<'s> Parser<'s> {
     }
 }
 
+/// A helper type for formatting a time zone abbreviation.
+///
+/// Basically, this will write the `<` and `>` quotes if necessary, and
+/// otherwise write out the abbreviation in its unquoted form.
+#[derive(Debug)]
+struct AbbreviationDisplay(Abbreviation);
+
+impl core::fmt::Display for AbbreviationDisplay {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        let s = self.0.as_str();
+        if s.chars().any(|ch| ch == '+' || ch == '-') {
+            write!(f, "<{s}>")
+        } else {
+            write!(f, "{s}")
+        }
+    }
+}
+
 // Note that most of the tests below are for the parsing. For the actual time
 // zone transition logic, that's unit tested in tz/mod.rs.
 #[cfg(test)]
 mod tests {
-    use alloc::string::ToString;
+    use std::string::ToString;
 
-    use crate::civil::{date, time};
+    use crate::civil::date;
 
     use super::*;
 
     fn reasonable_posix_time_zone(
         input: impl AsRef<[u8]>,
     ) -> ReasonablePosixTimeZone {
-        PosixTz::parse(input).unwrap().unwrap_rule().reasonable().unwrap()
-    }
-
-    fn reasonable_iana_time_zone(
-        input: impl AsRef<[u8]>,
-    ) -> ReasonablePosixTimeZone {
-        IanaTz::parse_v3plus(input).unwrap().into_tz()
+        let input = core::str::from_utf8(input.as_ref()).unwrap();
+        let tz = IanaTz::parse_v3plus(input).unwrap().into_tz();
+        // While we're here, assert that converting the TZ back
+        // to a string matches what we got. This isn't guaranteed
+        // in all cases, but good enough for what we test I think.
+        assert_eq!(tz.to_string(), input);
+        tz
     }
 
     /// DEBUG COMMAND
@@ -1738,7 +1836,7 @@ mod tests {
 
     #[test]
     fn reasonable_to_dst_civil_datetime_utc_range() {
-        let tz = reasonable_iana_time_zone("WART4WARST,J1/-3,J365/20");
+        let tz = reasonable_posix_time_zone("WART4WARST,J1/-3,J365/20");
         let dst_info = DstInfo {
             // We test this in other places. It's too annoying to write this
             // out here, and I didn't adopt snapshot testing until I had
@@ -1750,7 +1848,7 @@ mod tests {
         };
         assert_eq!(tz.dst_info_utc(C(2024)), Some(dst_info));
 
-        let tz = reasonable_iana_time_zone("WART4WARST,J1/-4,J365/21");
+        let tz = reasonable_posix_time_zone("WART4WARST,J1/-4,J365/21");
         let dst_info = DstInfo {
             dst: tz.dst.as_ref().unwrap(),
             offset: crate::tz::offset(-3),
@@ -1759,7 +1857,7 @@ mod tests {
         };
         assert_eq!(tz.dst_info_utc(C(2024)), Some(dst_info));
 
-        let tz = reasonable_iana_time_zone("EST5EDT,M3.2.0,M11.1.0");
+        let tz = reasonable_posix_time_zone("EST5EDT,M3.2.0,M11.1.0");
         let dst_info = DstInfo {
             dst: tz.dst.as_ref().unwrap(),
             offset: crate::tz::offset(-4),
@@ -1771,19 +1869,13 @@ mod tests {
 
     #[test]
     fn reasonable() {
-        assert!(PosixTz::parse("EST5")
+        assert!(PosixTimeZone::parse("EST5").unwrap().reasonable().is_ok());
+        assert!(PosixTimeZone::parse("EST5EDT")
             .unwrap()
-            .unwrap_rule()
-            .reasonable()
-            .is_ok());
-        assert!(PosixTz::parse("EST5EDT")
-            .unwrap()
-            .unwrap_rule()
             .reasonable()
             .is_err());
-        assert!(PosixTz::parse("EST5EDT,J1,J365")
+        assert!(PosixTimeZone::parse("EST5EDT,J1,J365")
             .unwrap()
-            .unwrap_rule()
             .reasonable()
             .is_ok());
 
@@ -1791,7 +1883,6 @@ mod tests {
         assert_eq!(
             tz,
             ReasonablePosixTimeZone {
-                original: "EST24EDT,J1,J365".into(),
                 std_abbrev: "EST".into(),
                 std_offset: PosixOffset {
                     sign: None,
@@ -1820,7 +1911,6 @@ mod tests {
         assert_eq!(
             tz,
             ReasonablePosixTimeZone {
-                original: "EST-24EDT,J1,J365".into(),
                 std_abbrev: "EST".into(),
                 std_offset: PosixOffset {
                     sign: Some(C(-1).rinto()),
@@ -1885,7 +1975,7 @@ mod tests {
             date(2024, 12, 31).at(2, 0, 0, 0),
         );
 
-        let tz = reasonable_iana_time_zone("EST5EDT,0/0,J365/25");
+        let tz = reasonable_posix_time_zone("EST5EDT,0/0,J365/25");
         assert_eq!(
             to_datetime(&tz.rule().start, 2024),
             date(2024, 1, 1).at(0, 0, 0, 0),
@@ -1915,8 +2005,9 @@ mod tests {
             date(2024, 12, 31).at(2, 0, 0, 0),
         );
 
-        let tz =
-            reasonable_iana_time_zone("XXX3EDT4,J1/-167:59:59,J365/167:59:59");
+        let tz = reasonable_posix_time_zone(
+            "XXX3EDT4,J1/-167:59:59,J365/167:59:59",
+        );
         assert_eq!(
             to_datetime(&tz.rule().start, 2024),
             date(2024, 1, 1).at(0, 0, 0, 0),
@@ -1993,33 +2084,33 @@ mod tests {
     fn posix_time_spec_to_civil_time() {
         let tz = reasonable_posix_time_zone("EST5EDT,J1,J365/5:12:34");
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.start.time().to_civil_time(),
-            Some(time(2, 0, 0, 0)),
+            tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
+            SignedDuration::from_hours(2),
         );
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.end.time().to_civil_time(),
-            Some(time(5, 12, 34, 0)),
+            tz.dst.as_ref().unwrap().rule.end.time().to_duration(),
+            SignedDuration::new(5 * 60 * 60 + 12 * 60 + 34, 0),
         );
 
         let tz =
             reasonable_posix_time_zone("EST5EDT,J1/23:59:59,J365/24:00:00");
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.start.time().to_civil_time(),
-            Some(time(23, 59, 59, 0)),
+            tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
+            SignedDuration::new(23 * 60 * 60 + 59 * 60 + 59, 0),
         );
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.end.time().to_civil_time(),
-            None,
+            tz.dst.as_ref().unwrap().rule.end.time().to_duration(),
+            SignedDuration::from_hours(24),
         );
 
-        let tz = reasonable_iana_time_zone("EST5EDT,J1/-1,J365/167:00:00");
+        let tz = reasonable_posix_time_zone("EST5EDT,J1/-1,J365/167:00:00");
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.start.time().to_civil_time(),
-            None,
+            tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
+            SignedDuration::from_hours(-1),
         );
         assert_eq!(
-            tz.dst.as_ref().unwrap().rule.end.time().to_civil_time(),
-            None,
+            tz.dst.as_ref().unwrap().rule.end.time().to_duration(),
+            SignedDuration::from_hours(167),
         );
     }
 
@@ -2046,7 +2137,7 @@ mod tests {
             SignedDuration::from_hours(24),
         );
 
-        let tz = reasonable_iana_time_zone("EST5EDT,J1/-1,J365/167:00:00");
+        let tz = reasonable_posix_time_zone("EST5EDT,J1/-1,J365/167:00:00");
         assert_eq!(
             tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
             SignedDuration::from_hours(-1),
@@ -2057,13 +2148,13 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "tz-system")]
     #[test]
     fn parse_posix_tz() {
         let tz = PosixTz::parse("EST5EDT").unwrap();
         assert_eq!(
             tz,
             PosixTz::Rule(PosixTimeZone {
-                original: "EST5EDT".into(),
                 std_abbrev: "EST".into(),
                 std_offset: PosixOffset {
                     sign: None,
@@ -2094,7 +2185,6 @@ mod tests {
         assert_eq!(
             p,
             IanaTz(ReasonablePosixTimeZone {
-                original: "CRAZY5SHORT,M12.5.0/50,0/2".into(),
                 std_abbrev: "CRAZY".into(),
                 std_offset: PosixOffset {
                     sign: None,
@@ -2148,7 +2238,6 @@ mod tests {
         assert_eq!(
             p.parse().unwrap(),
             PosixTimeZone {
-                original: "NZST-12NZDT,J60,J300".into(),
                 std_abbrev: "NZST".into(),
                 std_offset: PosixOffset {
                     sign: Some(Sign::N::<-1>()),
@@ -2183,7 +2272,6 @@ mod tests {
         assert_eq!(
             p.parse_posix_time_zone().unwrap(),
             PosixTimeZone {
-                original: "NZST-12NZDT,M9.5.0,M4.1.0/3".into(),
                 std_abbrev: "NZST".into(),
                 std_offset: PosixOffset {
                     sign: Some(Sign::N::<-1>()),
@@ -2229,7 +2317,6 @@ mod tests {
         assert_eq!(
             p.parse_posix_time_zone().unwrap(),
             PosixTimeZone {
-                original: "NZST-12NZDT,M9.5.0,M4.1.0/3WAT".into(),
                 std_abbrev: "NZST".into(),
                 std_offset: PosixOffset {
                     sign: Some(Sign::N::<-1>()),
@@ -2275,7 +2362,6 @@ mod tests {
         assert_eq!(
             p.parse_posix_time_zone().unwrap(),
             PosixTimeZone {
-                original: "NZST-12NZDT,J60,J300".into(),
                 std_abbrev: "NZST".into(),
                 std_offset: PosixOffset {
                     sign: Some(Sign::N::<-1>()),
@@ -2304,7 +2390,6 @@ mod tests {
         assert_eq!(
             p.parse_posix_time_zone().unwrap(),
             PosixTimeZone {
-                original: "NZST-12NZDT,J60,J300WAT".into(),
                 std_abbrev: "NZST".into(),
                 std_offset: PosixOffset {
                     sign: Some(Sign::N::<-1>()),
@@ -2465,13 +2550,13 @@ mod tests {
     #[test]
     fn parse_abbreviation() {
         let p = Parser::new("ABC");
-        assert_eq!(&*p.parse_abbreviation().unwrap(), "ABC");
+        assert_eq!(p.parse_abbreviation().unwrap(), "ABC");
 
         let p = Parser::new("<ABC>");
-        assert_eq!(&*p.parse_abbreviation().unwrap(), "ABC");
+        assert_eq!(p.parse_abbreviation().unwrap(), "ABC");
 
         let p = Parser::new("<+09>");
-        assert_eq!(&*p.parse_abbreviation().unwrap(), "+09");
+        assert_eq!(p.parse_abbreviation().unwrap(), "+09");
 
         let p = Parser::new("+09");
         assert!(p.parse_abbreviation().is_err());
@@ -2480,17 +2565,17 @@ mod tests {
     #[test]
     fn parse_unquoted_abbreviation() {
         let p = Parser::new("ABC");
-        assert_eq!(&*p.parse_unquoted_abbreviation().unwrap(), "ABC");
+        assert_eq!(p.parse_unquoted_abbreviation().unwrap(), "ABC");
 
         let p = Parser::new("ABCXYZ");
-        assert_eq!(&*p.parse_unquoted_abbreviation().unwrap(), "ABCXYZ");
+        assert_eq!(p.parse_unquoted_abbreviation().unwrap(), "ABCXYZ");
 
         let p = Parser::new("ABC123");
-        assert_eq!(&*p.parse_unquoted_abbreviation().unwrap(), "ABC");
+        assert_eq!(p.parse_unquoted_abbreviation().unwrap(), "ABC");
 
-        let tz = "a".repeat(255);
+        let tz = "a".repeat(30);
         let p = Parser::new(&tz);
-        assert_eq!(&*p.parse_unquoted_abbreviation().unwrap(), tz);
+        assert_eq!(p.parse_unquoted_abbreviation().unwrap(), &*tz);
 
         let p = Parser::new("a");
         assert!(p.parse_unquoted_abbreviation().is_err());
@@ -2501,7 +2586,7 @@ mod tests {
         let p = Parser::new("ab1");
         assert!(p.parse_unquoted_abbreviation().is_err());
 
-        let tz = "a".repeat(256);
+        let tz = "a".repeat(31);
         let p = Parser::new(&tz);
         assert!(p.parse_unquoted_abbreviation().is_err());
 
@@ -2516,31 +2601,31 @@ mod tests {
         // has been parsed.
 
         let p = Parser::new("ABC>");
-        assert_eq!(&*p.parse_quoted_abbreviation().unwrap(), "ABC");
+        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "ABC");
 
         let p = Parser::new("ABCXYZ>");
-        assert_eq!(&*p.parse_quoted_abbreviation().unwrap(), "ABCXYZ");
+        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "ABCXYZ");
 
         let p = Parser::new("ABC>123");
-        assert_eq!(&*p.parse_quoted_abbreviation().unwrap(), "ABC");
+        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "ABC");
 
         let p = Parser::new("ABC123>");
-        assert_eq!(&*p.parse_quoted_abbreviation().unwrap(), "ABC123");
+        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "ABC123");
 
         let p = Parser::new("ab1>");
-        assert_eq!(&*p.parse_quoted_abbreviation().unwrap(), "ab1");
+        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "ab1");
 
         let p = Parser::new("+09>");
-        assert_eq!(&*p.parse_quoted_abbreviation().unwrap(), "+09");
+        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "+09");
 
         let p = Parser::new("-09>");
-        assert_eq!(&*p.parse_quoted_abbreviation().unwrap(), "-09");
+        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "-09");
 
-        let tz = alloc::format!("{}>", "a".repeat(255));
+        let tz = alloc::format!("{}>", "a".repeat(30));
         let p = Parser::new(&tz);
         assert_eq!(
-            &*p.parse_quoted_abbreviation().unwrap(),
-            tz.trim_right_matches(">")
+            p.parse_quoted_abbreviation().unwrap(),
+            tz.trim_end_matches(">")
         );
 
         let p = Parser::new("a>");
@@ -2549,7 +2634,7 @@ mod tests {
         let p = Parser::new("ab>");
         assert!(p.parse_quoted_abbreviation().is_err());
 
-        let tz = alloc::format!("{}>", "a".repeat(256));
+        let tz = alloc::format!("{}>", "a".repeat(31));
         let p = Parser::new(&tz);
         assert!(p.parse_quoted_abbreviation().is_err());
 

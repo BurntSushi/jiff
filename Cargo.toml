@@ -1,6 +1,6 @@
 [package]
 name = "jiff"
-version = "0.1.16"  #:version
+version = "0.1.18"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 license = "Unlicense OR MIT"
 repository = "https://github.com/BurntSushi/jiff"
@@ -31,8 +31,8 @@ members = [
 # https://docs.rs/jiff/*/#crate-features
 [features]
 default = ["std", "tz-system", "tzdb-bundle-platform", "tzdb-zoneinfo"]
-std = ["alloc", "serde?/std"]
-alloc = ["serde?/alloc"]
+std = ["alloc", "log?/std", "serde?/std"]
+alloc = ["serde?/alloc", "portable-atomic-util/alloc"]
 serde = ["dep:serde"]
 logging = ["dep:log"]
 
@@ -77,7 +77,7 @@ js = ["dep:wasm-bindgen", "dep:js-sys"]
 
 [dependencies]
 jiff-tzdb = { version = "0.1.1", path = "jiff-tzdb", optional = true }
-log = { version = "0.4.21", optional = true }
+log = { version = "0.4.21", optional = true, default-features = false }
 serde = { version = "1.0.203", optional = true, default-features = false }
 
 # Note that the `cfg` gate for the `tzdb-bundle-platform` must repeat the
@@ -97,6 +97,16 @@ optional = true
 js-sys = { version = "0.3.50", optional = true }
 wasm-bindgen = { version = "0.2.70", optional = true }
 
+# For targets that have no atomics in `std`, we add a dependency on
+# `portable-atomic-util` for its Arc implementation.
+#
+# Note that for this to work, you may need to enable a `portable-atomic`
+# feature like `portable-atomic/unsafe-assume-single-core` or
+# `portable-atomic/critical-section`.
+[target.'cfg(not(target_has_atomic = "ptr"))'.dependencies]
+portable-atomic = { version = "1.10.0", default-features = false }
+portable-atomic-util = { version = "0.2.4", default-features = false }
+
 [dev-dependencies]
 anyhow = "1.0.81"
 chrono = { version = "0.4.38", features = ["serde"] }
@@ -109,7 +119,7 @@ icu = { version = "1.5.0", features = ["std"] }
 insta = "1.39.0"
 # We force `serde` to be enabled in dev mode so that the docs render and test
 # correctly. This is highly suspicious.
-jiff = { path = "./", features = ["serde"] }
+jiff = { path = "./", default-features = false, features = ["serde"] }
 quickcheck = { version = "1.0.3", default-features = false }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"

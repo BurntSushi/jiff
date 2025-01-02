@@ -415,6 +415,8 @@ impl Date {
 
     /// Returns the year for this date.
     ///
+    /// The value returned is guaranteed to be in the range `-9999..=9999`.
+    ///
     /// # Example
     ///
     /// ```
@@ -444,6 +446,8 @@ impl Date {
     ///
     /// The crate is designed this way so that years in the latest era (that
     /// is, `CE`) are aligned with years in this crate.
+    ///
+    /// The year returned is guaranteed to be in the range `1..=10000`.
     ///
     /// # Example
     ///
@@ -485,6 +489,8 @@ impl Date {
 
     /// Returns the month for this date.
     ///
+    /// The value returned is guaranteed to be in the range `1..=12`.
+    ///
     /// # Example
     ///
     /// ```
@@ -499,6 +505,8 @@ impl Date {
     }
 
     /// Returns the day for this date.
+    ///
+    /// The value returned is guaranteed to be in the range `1..=31`.
     ///
     /// # Example
     ///
@@ -857,7 +865,7 @@ impl Date {
 
         let nth = Nth::try_new("nth", nth)?;
         if nth == 0 {
-            Err(Error::specific("nth weekday", 0))
+            Err(err!("nth weekday of month cannot be `0`"))
         } else if nth > 0 {
             let nth = nth.max(C(1));
             let first_weekday = self.first_of_month().weekday();
@@ -1037,7 +1045,7 @@ impl Date {
 
         let nth = t::SpanWeeks::try_new("nth weekday", nth)?;
         if nth == 0 {
-            Err(Error::specific("nth weekday", 0))
+            Err(err!("nth weekday cannot be `0`"))
         } else if nth > 0 {
             let nth = nth.max(C(1));
             let weekday_diff = weekday.since_ranged(self.weekday().next());
@@ -3644,7 +3652,7 @@ fn day_of_year(year: Year, day: i16) -> Result<Date, Error> {
         // Can only happen given day=366 and this is a leap year.
         debug_assert_eq!(day, 366);
         debug_assert!(!start.in_leap_year());
-        return Err(Error::signed("day-of-year", day, 1, 365));
+        return Err(Error::range("day-of-year", day, 1, 365));
     }
     Ok(end)
 }

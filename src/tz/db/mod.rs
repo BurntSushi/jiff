@@ -1,6 +1,8 @@
-use alloc::{string::String, sync::Arc, vec::Vec};
-
-use crate::{error::Error, tz::TimeZone};
+use crate::{
+    error::{err, Error},
+    tz::TimeZone,
+    util::sync::Arc,
+};
 
 use self::{bundled::BundledZoneInfo, zoneinfo::ZoneInfo};
 
@@ -184,6 +186,8 @@ pub struct TimeZoneDatabase {
 }
 
 #[derive(Debug)]
+// Needed for core-only "dumb" `Arc`.
+#[cfg_attr(not(feature = "alloc"), derive(Clone))]
 struct TimeZoneDatabaseInner {
     zoneinfo: ZoneInfo,
     bundled: BundledZoneInfo,
@@ -213,6 +217,11 @@ impl TimeZoneDatabase {
     ///
     /// Typically, one does not need to call this routine directly. Instead,
     /// it's done for you as part of [`jiff::tz::db`](crate::tz::db()).
+    /// This does require Jiff's `std` feature to be enabled though. So for
+    /// example, you might use this constructor when the features `alloc`
+    /// and `tzdb-bundle-always` are enabled to get access to a bundled
+    /// copy of the IANA time zone database. (Accessing the system copy at
+    /// `/usr/share/zoneinfo` requires `std`.)
     ///
     /// Beware that calling this constructor will create a new _distinct_
     /// handle from the one returned by `jiff::tz::db` with its own cache.
@@ -282,10 +291,22 @@ impl TimeZoneDatabase {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn get(&self, name: &str) -> Result<TimeZone, Error> {
-        let inner = self
-            .inner
-            .as_deref()
-            .ok_or_else(|| Error::time_zone_lookup(name))?;
+        let inner = self.inner.as_deref().ok_or_else(|| {
+            if cfg!(feature = "std") {
+                err!(
+                    "failed to find time zone `{name}` since there is no \
+                     time zone database configured",
+                )
+            } else {
+                err!(
+                    "failed to find time zone `{name}`, there is no \
+                     global time zone database configured (and is currently \
+                     impossible to do so without Jiff's `std` feature \
+                     enabled, if you need this functionality, please file \
+                     an issue on Jiff's tracker with your use case)",
+                )
+            }
+        })?;
         if let Some(tz) = inner.zoneinfo.get(name) {
             trace!(
                 "found time zone {name} in system zoneinfo ({:?}) database",
@@ -297,7 +318,7 @@ impl TimeZoneDatabase {
             trace!("found time zone {name} in bundled zoneinfo database");
             return Ok(tz);
         }
-        Err(Error::time_zone_lookup(name))
+        Err(err!("failed to find time zone `{name}` in time zone database"))
     }
 
     /// Returns a list of all available time zone identifiers from this
@@ -318,9 +339,12 @@ impl TimeZoneDatabase {
     ///     println!("{tzid}");
     /// }
     /// ```
+    #[cfg(feature = "alloc")]
     pub fn available(&self) -> TimeZoneNameIter {
         let Some(ref inner) = self.inner else {
-            return TimeZoneNameIter { it: Vec::new().into_iter() };
+            return TimeZoneNameIter {
+                it: alloc::vec::Vec::new().into_iter(),
+            };
         };
         let mut all = inner.zoneinfo.available();
         all.extend(inner.bundled.available());
@@ -389,15 +413,17 @@ impl core::fmt::Debug for TimeZoneDatabase {
 ///
 /// There are no guarantees about the order in which this iterator yields
 /// time zone identifiers.
+#[cfg(feature = "alloc")]
 #[derive(Clone, Debug)]
 pub struct TimeZoneNameIter {
-    it: alloc::vec::IntoIter<String>,
+    it: alloc::vec::IntoIter<alloc::string::String>,
 }
 
+#[cfg(feature = "alloc")]
 impl Iterator for TimeZoneNameIter {
-    type Item = String;
+    type Item = alloc::string::String;
 
-    fn next(&mut self) -> Option<String> {
+    fn next(&mut self) -> Option<alloc::string::String> {
         self.it.next()
     }
 }
@@ -414,7 +440,15 @@ mod tests {
     /// accidentally increasing its size.
     #[test]
     fn time_zone_database_size() {
-        let word = core::mem::size_of::<usize>();
-        assert_eq!(word, core::mem::size_of::<TimeZoneDatabase>());
+        #[cfg(feature = "alloc")]
+        {
+            let word = core::mem::size_of::<usize>();
+            assert_eq!(word, core::mem::size_of::<TimeZoneDatabase>());
+        }
+        // A `TimeZoneDatabase` in core-only is vapid.
+        #[cfg(not(feature = "alloc"))]
+        {
+            assert_eq!(1, core::mem::size_of::<TimeZoneDatabase>());
+        }
     }
 }

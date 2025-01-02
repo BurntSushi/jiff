@@ -41,8 +41,6 @@ example, when dealing with email). But you should not choose it as a
 general interchange format for new applications.
 */
 
-use alloc::string::String;
-
 use crate::{
     civil::{Date, DateTime, Time, Weekday},
     error::{err, ErrorContext},
@@ -104,9 +102,10 @@ pub(crate) static DEFAULT_DATETIME_PRINTER: DateTimePrinter =
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+#[cfg(feature = "alloc")]
 #[inline]
-pub fn to_string(zdt: &Zoned) -> Result<String, Error> {
-    let mut buf = String::new();
+pub fn to_string(zdt: &Zoned) -> Result<alloc::string::String, Error> {
+    let mut buf = alloc::string::String::new();
     DEFAULT_DATETIME_PRINTER.print_zoned(zdt, &mut buf)?;
     Ok(buf)
 }
@@ -1146,8 +1145,12 @@ impl DateTimePrinter {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn zoned_to_string(&self, zdt: &Zoned) -> Result<String, Error> {
-        let mut buf = String::with_capacity(4);
+    #[cfg(feature = "alloc")]
+    pub fn zoned_to_string(
+        &self,
+        zdt: &Zoned,
+    ) -> Result<alloc::string::String, Error> {
+        let mut buf = alloc::string::String::with_capacity(4);
         self.print_zoned(zdt, &mut buf)?;
         Ok(buf)
     }
@@ -1184,11 +1187,12 @@ impl DateTimePrinter {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[cfg(feature = "alloc")]
     pub fn timestamp_to_string(
         &self,
         timestamp: &Timestamp,
-    ) -> Result<String, Error> {
-        let mut buf = String::with_capacity(4);
+    ) -> Result<alloc::string::String, Error> {
+        let mut buf = alloc::string::String::with_capacity(4);
         self.print_timestamp(timestamp, &mut buf)?;
         Ok(buf)
     }
@@ -1229,11 +1233,12 @@ impl DateTimePrinter {
     /// ```
     ///
     /// [RFC 9110]: https://datatracker.ietf.org/doc/html/rfc9110#section-5.6.7-15
+    #[cfg(feature = "alloc")]
     pub fn timestamp_to_rfc9110_string(
         &self,
         timestamp: &Timestamp,
-    ) -> Result<String, Error> {
-        let mut buf = String::with_capacity(4);
+    ) -> Result<alloc::string::String, Error> {
+        let mut buf = alloc::string::String::with_capacity(4);
         self.print_timestamp_rfc9110(timestamp, &mut buf)?;
         Ok(buf)
     }

@@ -100,6 +100,14 @@ impl ZoneInfo {
             let zones = self.zones.read().unwrap();
             if let Some(czone) = zones.get(query) {
                 if !czone.is_expired() {
+                    trace!(
+                        "for time zone query `{query}`, \
+                         found cached zone `{}` \
+                         (expiration={}, last_modified={:?})",
+                        czone.tz.diagnostic_name(),
+                        czone.expiration,
+                        czone.last_modified,
+                    );
                     return Some(czone.tz.clone());
                 }
             }
@@ -208,7 +216,7 @@ impl CachedZones {
 
     fn get_zone_index(&self, query: &str) -> Result<usize, usize> {
         self.zones.binary_search_by(|zone| {
-            cmp_ignore_ascii_case(zone.tz.diagnostic_name(), query)
+            cmp_ignore_ascii_case(zone.name.lower(), query)
         })
     }
 
@@ -220,6 +228,7 @@ impl CachedZones {
 #[derive(Clone, Debug)]
 struct CachedTimeZone {
     tz: TimeZone,
+    name: ZoneInfoName,
     expiration: Expiration,
     last_modified: Option<Timestamp>,
 }
@@ -235,14 +244,16 @@ impl CachedTimeZone {
         ttl: Duration,
     ) -> Result<CachedTimeZone, Error> {
         let path = &info.inner.full;
-        let mut file = File::open(path).map_err(|e| Error::fs(path, e))?;
+        let mut file =
+            File::open(path).map_err(|e| Error::io(e).path(path))?;
         let mut data = vec![];
-        file.read_to_end(&mut data).map_err(|e| Error::fs(path, e))?;
+        file.read_to_end(&mut data).map_err(|e| Error::io(e).path(path))?;
         let tz = TimeZone::tzif(&info.inner.original, &data)
             .map_err(|e| e.path(path))?;
+        let name = info.clone();
         let last_modified = last_modified_from_file(path, &file);
         let expiration = Expiration::after(ttl);
-        Ok(CachedTimeZone { tz, expiration, last_modified })
+        Ok(CachedTimeZone { tz, name, expiration, last_modified })
     }
 
     /// Returns true if this time zone has gone stale and should, at minimum,
@@ -505,6 +516,11 @@ impl ZoneInfoName {
         let inner =
             ZoneInfoNameInner { full, original: original.to_string(), lower };
         Ok(ZoneInfoName { inner: Arc::new(inner) })
+    }
+
+    /// Returns the lowercase name of this time zone.
+    fn lower(&self) -> &str {
+        &self.inner.lower
     }
 }
 
