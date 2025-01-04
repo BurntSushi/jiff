@@ -98,9 +98,9 @@ use crate::{
     error::{err, Error},
     fmt::{
         offset::{self, ParsedOffset},
+        temporal::{TimeZoneAnnotation, TimeZoneAnnotationKind},
         Parsed,
     },
-    tz::{TimeZone, TimeZoneDatabase},
     util::{escape, parse},
 };
 
@@ -130,41 +130,16 @@ impl<'i> ParsedAnnotations<'i> {
         ParsedAnnotations { input: escape::Bytes(&[]), time_zone: None }
     }
 
-    /// If a time zone annotation was parsed, then this returns the annotation
-    /// converted to a `TimeZone`, along with a flag indicating whether it
-    /// is "critical" or not. (When it's "critical," there should be more
-    /// stringent validation.)
+    /// Turns this parsed time zone into a structured time zone annotation,
+    /// if an annotation was found. Otherwise, returns `Ok(None)`.
     ///
-    /// If the time zone annotation parsed successfully but was either not
-    /// found in the database given or otherwise invalid, then an error is
-    /// returned.
-    ///
-    /// `None` is returned only when there was no time zone annotation.
-    pub(crate) fn to_time_zone(
+    /// This can return an error if the parsed offset could not be converted
+    /// to a `crate::tz::Offset`.
+    pub(crate) fn to_time_zone_annotation(
         &self,
-        db: &TimeZoneDatabase,
-    ) -> Result<Option<(TimeZone, bool)>, Error> {
+    ) -> Result<Option<TimeZoneAnnotation<'i>>, Error> {
         let Some(ref parsed) = self.time_zone else { return Ok(None) };
-        // NOTE: We don't currently utilize the critical flag here. Temporal
-        // seems to ignore it. It's not quite clear what else we'd do with it,
-        // particularly given that we provide a way to do conflict resolution
-        // between offsets and time zones.
-        match *parsed {
-            ParsedTimeZone::Named { critical, name } => {
-                let tz = match db.get(name) {
-                    Ok(tz) => tz,
-                    Err(err) => return Err(err!("{}", err)),
-                };
-                Ok(Some((tz, critical)))
-            }
-            ParsedTimeZone::Offset { critical, ref offset } => {
-                let offset = match offset.to_offset() {
-                    Ok(offset) => offset,
-                    Err(err) => return Err(err),
-                };
-                Ok(Some((TimeZone::fixed(offset), critical)))
-            }
-        }
+        Ok(Some(parsed.to_time_zone_annotation()?))
     }
 }
 
@@ -185,6 +160,31 @@ enum ParsedTimeZone<'i> {
         /// The parsed UTC offset.
         offset: ParsedOffset,
     },
+}
+
+impl<'i> ParsedTimeZone<'i> {
+    /// Turns this parsed time zone into a structured time zone annotation.
+    ///
+    /// This can return an error if the parsed offset could not be converted
+    /// to a `crate::tz::Offset`.
+    ///
+    /// This also includes a flag of whether the annotation is "critical" or
+    /// not.
+    pub(crate) fn to_time_zone_annotation(
+        &self,
+    ) -> Result<TimeZoneAnnotation<'i>, Error> {
+        let (kind, critical) = match *self {
+            ParsedTimeZone::Named { name, critical } => {
+                let kind = TimeZoneAnnotationKind::from(name);
+                (kind, critical)
+            }
+            ParsedTimeZone::Offset { ref offset, critical } => {
+                let kind = TimeZoneAnnotationKind::Offset(offset.to_offset()?);
+                (kind, critical)
+            }
+        };
+        Ok(TimeZoneAnnotation { kind, critical })
+    }
 }
 
 /// A parser for RFC 9557 annotations.
@@ -603,8 +603,9 @@ mod tests {
                 .parse(input)
                 .unwrap()
                 .value
-                .to_time_zone(crate::tz::db())
+                .to_time_zone_annotation()
                 .unwrap()
+                .map(|ann| (ann.to_time_zone().unwrap(), ann.is_critical()))
         };
 
         insta::assert_debug_snapshot!(p(b"[America/New_York]"), @r###"
@@ -1024,13 +1025,16 @@ mod tests {
 
     #[cfg(feature = "std")]
     #[test]
-    fn err_time_zone() {
+    fn err_time_zone_db_lookup() {
         let p = |input| {
             Parser::new()
                 .parse(input)
                 .unwrap()
                 .value
-                .to_time_zone(crate::tz::db())
+                .to_time_zone_annotation()
+                .unwrap()
+                .unwrap()
+                .to_time_zone()
                 .unwrap_err()
         };
 

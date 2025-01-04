@@ -496,8 +496,8 @@ impl Zoned {
     /// Create a builder for constructing a new `DateTime` from the fields of
     /// this datetime.
     ///
-    /// See the methods on [`DateTimeWith`] for the different ways one can set
-    /// the fields of a new `DateTime`.
+    /// See the methods on [`ZonedWith`] for the different ways one can set
+    /// the fields of a new `Zoned`.
     ///
     /// Note that this doesn't support changing the time zone. If you want a
     /// `Zoned` value of the same instant but in a different time zone, use
@@ -5038,10 +5038,6 @@ impl ZonedWith {
     /// let zdt2 = zdt1.with().hour(0).build()?;
     /// assert_eq!(
     ///     zdt2.to_string(),
-    ///     // Without taking the offset of the `Zoned` value into account,
-    ///     // this would have defaulted to using the "compatible"
-    ///     // disambiguation strategy, which would have selected the earlier
-    ///     // offset of -04 instead of sticking with the later offset of -05.
     ///     "2024-11-03T00:30:00-04:00[America/New_York]",
     /// );
     ///

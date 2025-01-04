@@ -343,6 +343,42 @@ impl Offset {
         Offset { span: -self.span }
     }
 
+    /// Returns the "sign number" or "signum" of this offset.
+    ///
+    /// The number returned is `-1` when this offset is negative,
+    /// `0` when this offset is zero and `1` when this span is positive.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::tz;
+    ///
+    /// assert_eq!(tz::offset(5).signum(), 1);
+    /// assert_eq!(tz::offset(0).signum(), 0);
+    /// assert_eq!(tz::offset(-5).signum(), -1);
+    /// ```
+    #[inline]
+    pub fn signum(self) -> i8 {
+        t::Sign::rfrom(self.span.signum()).get()
+    }
+
+    /// Returns true if and only if this offset is positive.
+    ///
+    /// This returns false when the offset is zero or negative.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::tz;
+    ///
+    /// assert!(tz::offset(5).is_positive());
+    /// assert!(!tz::offset(0).is_positive());
+    /// assert!(!tz::offset(-5).is_positive());
+    /// ```
+    pub fn is_positive(self) -> bool {
+        self.seconds_ranged() > 0
+    }
+
     /// Returns true if and only if this offset is less than zero.
     ///
     /// # Example
@@ -356,6 +392,23 @@ impl Offset {
     /// ```
     pub fn is_negative(self) -> bool {
         self.seconds_ranged() < 0
+    }
+
+    /// Returns true if and only if this offset is zero.
+    ///
+    /// Or equivalently, when this offset corresponds to [`Offset::UTC`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::tz;
+    ///
+    /// assert!(!tz::offset(5).is_zero());
+    /// assert!(tz::offset(0).is_zero());
+    /// assert!(!tz::offset(-5).is_zero());
+    /// ```
+    pub fn is_zero(self) -> bool {
+        self.seconds_ranged() == 0
     }
 
     /// Converts this offset into a [`TimeZone`].
@@ -1343,6 +1396,9 @@ pub enum OffsetConflict {
     /// unless the offset is invalid for the provided time zone. In that case,
     /// use the time zone. When the time zone is used, it's possible for an
     /// ambiguous datetime to be returned.
+    ///
+    /// See [`ZonedWith::offset_conflict`](crate::ZonedWith::offset_conflict)
+    /// for an example of when this strategy is useful.
     PreferOffset,
     /// When the offset and time zone are in conflict, this strategy always
     /// results in conflict resolution returning an error.
