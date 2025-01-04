@@ -1,8 +1,9 @@
 # CHANGELOG
 
-0.1.21 (TBD)
-============
-TODO
+0.1.21 (2025-01-04)
+===================
+This release includes a new API for setting the unit designator label in a
+friendly formatted duration for zero-length durations.
 
 Enhancements:
 
