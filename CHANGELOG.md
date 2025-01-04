@@ -1,5 +1,16 @@
 # CHANGELOG
 
+0.1.21 (TBD)
+============
+TODO
+
+Enhancements:
+
+* [#192](https://github.com/BurntSushi/jiff/issues/192):
+Add option to the friendly printer for setting the unit when writing a
+zero-length duration.
+
+
 0.1.20 (2025-01-03)
 ===================
 This release inclues a new type, `Pieces`, in the `jiff::fmt::temporal`

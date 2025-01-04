@@ -462,6 +462,7 @@ pub struct SpanPrinter {
     hms: bool,
     padding: Option<u8>,
     precision: Option<u8>,
+    zero_unit: Unit,
 }
 
 impl SpanPrinter {
@@ -497,6 +498,7 @@ impl SpanPrinter {
             hms: false,
             padding: None,
             precision: None,
+            zero_unit: Unit::Second,
         }
     }
 
@@ -905,6 +907,65 @@ impl SpanPrinter {
     #[inline]
     pub const fn precision(self, precision: Option<u8>) -> SpanPrinter {
         SpanPrinter { precision, ..self }
+    }
+
+    /// Sets the unit to use when printing a duration that is zero.
+    ///
+    /// When [`SpanPrinter::fractional`] is set, then this setting is ignored
+    /// and the zero unit corresponds to the fractional unit specified.
+    ///
+    /// This defaults to [`Unit::Second`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{fmt::friendly::{FractionalUnit, SpanPrinter}, ToSpan, Unit};
+    ///
+    /// // The default just always uses seconds.
+    /// let printer = SpanPrinter::new();
+    /// assert_eq!(printer.span_to_string(&0.years()), "0s");
+    ///
+    /// // We can set our own unit.
+    /// let printer = SpanPrinter::new().zero_unit(Unit::Year);
+    /// assert_eq!(printer.span_to_string(&0.years()), "0y");
+    ///
+    /// // But it's overridden if fractional units are set.
+    /// let printer = SpanPrinter::new()
+    ///     .zero_unit(Unit::Year)
+    ///     .fractional(Some(FractionalUnit::Minute));
+    /// assert_eq!(printer.span_to_string(&0.years()), "0m");
+    ///
+    /// // One use case for this option is if you're rounding
+    /// // spans and want the zero unit to reflect the smallest
+    /// // unit you're using.
+    /// let printer = SpanPrinter::new().zero_unit(Unit::Minute);
+    /// let span = 5.hours().minutes(30).seconds(59);
+    /// let rounded = span.round(Unit::Minute)?;
+    /// assert_eq!(printer.span_to_string(&rounded), "5h 31m");
+    ///
+    /// let span = 5.seconds();
+    /// let rounded = span.round(Unit::Minute)?;
+    /// assert_eq!(printer.span_to_string(&rounded), "0m");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// The same applies for `SignedDuration`:
+    ///
+    /// ```
+    /// use jiff::{fmt::friendly::SpanPrinter, SignedDuration, Unit};
+    ///
+    /// // The default just always uses seconds.
+    /// let printer = SpanPrinter::new();
+    /// assert_eq!(printer.duration_to_string(&SignedDuration::ZERO), "0s");
+    ///
+    /// // We can set our own unit.
+    /// let printer = SpanPrinter::new().zero_unit(Unit::Minute);
+    /// assert_eq!(printer.duration_to_string(&SignedDuration::ZERO), "0m");
+    /// ```
+    #[inline]
+    pub const fn zero_unit(self, unit: Unit) -> SpanPrinter {
+        SpanPrinter { zero_unit: unit, ..self }
     }
 
     /// Format a `Span` into a string using the "friendly" format.
@@ -1462,8 +1523,11 @@ impl<'p, 'w, W: Write> DesignatorWriter<'p, 'w, W> {
         }
         // If a fractional unit is set, then we should use that unit
         // specifically to express "zero."
-        let unit =
-            self.printer.fractional.map(Unit::from).unwrap_or(Unit::Second);
+        let unit = self
+            .printer
+            .fractional
+            .map(Unit::from)
+            .unwrap_or(self.printer.zero_unit);
         self.wtr.write_int(&self.fmtint, 0)?;
         self.wtr
             .write_str(self.printer.spacing.between_units_and_designators())?;
