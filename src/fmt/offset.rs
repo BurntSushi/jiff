@@ -106,6 +106,7 @@ from [Temporal's hybrid grammar].
 use crate::{
     error::{err, Error, ErrorContext},
     fmt::{
+        temporal::{PiecesNumericOffset, PiecesOffset},
         util::{parse_temporal_fraction, FractionalFormatter},
         Parsed,
     },
@@ -153,6 +154,24 @@ impl ParsedOffset {
         match self.kind {
             ParsedOffsetKind::Zulu => Ok(Offset::UTC),
             ParsedOffsetKind::Numeric(ref numeric) => numeric.to_offset(),
+        }
+    }
+
+    /// Convert a parsed offset to a more structured representation.
+    ///
+    /// This is like `to_offset`, but preserves `Z` and `-00:00` versus
+    /// `+00:00`. This does still attempt to create an `Offset`, and that
+    /// construction can fail.
+    pub(crate) fn to_pieces_offset(&self) -> Result<PiecesOffset, Error> {
+        match self.kind {
+            ParsedOffsetKind::Zulu => Ok(PiecesOffset::Zulu),
+            ParsedOffsetKind::Numeric(ref numeric) => {
+                let mut off = PiecesNumericOffset::from(numeric.to_offset()?);
+                if numeric.sign < 0 {
+                    off = off.with_negative_zero();
+                }
+                Ok(PiecesOffset::from(off))
+            }
         }
     }
 

@@ -1,8 +1,51 @@
 # CHANGELOG
 
-0.1.19 (TBD)
-============
-TODO
+0.1.21 (2025-01-04)
+===================
+This release includes a new API for setting the unit designator label in a
+friendly formatted duration for zero-length durations.
+
+Enhancements:
+
+* [#192](https://github.com/BurntSushi/jiff/issues/192):
+Add option to the friendly printer for setting the unit when writing a
+zero-length duration.
+
+
+0.1.20 (2025-01-03)
+===================
+This release inclues a new type, `Pieces`, in the `jiff::fmt::temporal`
+sub-module. This exposes the individual components of a parsed Temporal
+ISO 8601 datetime string. It allows users of Jiff to circumvent the checks
+in the higher level parsing routines that prevent you from shooting yourself
+in the foot.
+
+For example, parsing into a `Zoned` will return an error for raw RFC 3339
+timestamps like `2025-01-03T22:03-05` because there is no time zone annotation.
+Without a time zone, Jiff cannot do time zone aware arithmetic and rounding.
+Instead, such a datetime can only be parsed into a `Timestamp`. This lower
+level `Pieces` API now permits users of Jiff to parse this string into its
+component parts and assemble it into a `Zoned` if they so choose.
+
+Enhancements:
+
+* [#188](https://github.com/BurntSushi/jiff/issues/188):
+Add `fmt::temporal::Pieces` for granular datetime parsing and formatting.
+
+
+0.1.19 (2025-01-02)
+===================
+This releases includes a UTF-8 related bug fix and a few enhancements.
+
+Firstly, a `Span`'s default `Display` implementation now writes uppercase
+unit designator labels. That means you'll get `P1Y2M3DT4H5M6S` instead
+of `P1y2m3dT4h5m6s` by default. You can restore previous behavior via
+`jiff::fmt::temporal::SpanPrinter::lowercase`. This change was made to improve
+interoperability.
+
+Secondly, `SignedDuration` now supports rounding via `SignedDuration::round`.
+Note that it only supports rounding time units (hours or smaller). In order to
+round with calendar units, you'll still need to use a `Span`.
 
 Enhancements:
 
@@ -10,6 +53,9 @@ Enhancements:
 Document value ranges for methods like `year`, `day`, `hour` and so on.
 * [#187](https://github.com/BurntSushi/jiff/issues/187):
 Add a rounding API (for time units only) on `SignedDuration`.
+* [#190](https://github.com/BurntSushi/jiff/issues/190):
+`Span` and `SignedDuration` now use uppercase unit designator labels in their
+default ISO 8601 `Display` implementation.
 
 Bug fixes:
 

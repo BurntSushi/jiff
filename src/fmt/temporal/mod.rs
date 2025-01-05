@@ -68,8 +68,11 @@ But there are some details not easily captured by a simple regular expression:
 
 * At least one unit must be specified. To write a zero span, specify `0` for
 any unit. For example, `P0d` and `PT0s` are equivalent.
-* The format is case insensitive. The printer will by default capitalize the
-`P` and `T` designators, but lowercase the unit designators.
+* The format is case insensitive. The printer will by default capitalize all
+designators, but the unit designators can be configured to use lowercase with
+[`SpanPrinter::lowercase`]. For example, `P3y1m10dT5h` instead of
+`P3Y1M10DT5H`. You might prefer lowercase since you may find it easier to read.
+However, it is an extension to ISO 8601 and isn't as broadly supported.
 * Hours, minutes or seconds may be fractional. And the only units that may be
 fractional are the lowest units.
 * A span like `P99999999999y` is invalid because it exceeds the allowable range
@@ -172,7 +175,13 @@ use crate::{
     SignedDuration, Timestamp, Zoned,
 };
 
+pub use self::pieces::{
+    Pieces, PiecesNumericOffset, PiecesOffset, TimeZoneAnnotation,
+    TimeZoneAnnotationKind, TimeZoneAnnotationName,
+};
+
 mod parser;
+mod pieces;
 mod printer;
 
 /// The default date time parser that we use throughout Jiff.
@@ -750,6 +759,129 @@ impl DateTimeParser {
         let time = parsed_time.to_time();
         Ok(time)
     }
+
+    /// Parse a Temporal datetime string into [`Pieces`].
+    ///
+    /// This is a lower level routine meant to give callers raw access to the
+    /// individual "pieces" of a parsed Temporal ISO 8601 datetime string.
+    /// Note that this only includes strings that have a date component.
+    ///
+    /// The benefit of this routine is that it only checks that the datetime
+    /// is itself valid. It doesn't do any automatic diambiguation, offset
+    /// conflict resolution or attempt to prevent you from shooting yourself
+    /// in the foot. For example, this routine will let you parse a fixed
+    /// offset datetime into a `Zoned` without a time zone abbreviation.
+    ///
+    /// Note that when using this routine, the
+    /// [`DateTimeParser::offset_conflict`] and
+    /// [`DateTimeParser::disambiguation`] configuration knobs are completely
+    /// ignored. This is because with the lower level `Pieces`, callers must
+    /// handle offset conflict resolution (if they want it) themselves. See
+    /// the [`Pieces`] documentation for a case study on how to do this if
+    /// you need it.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the datetime string given is invalid or if it
+    /// is valid but doesn't fit in the date range supported by Jiff.
+    ///
+    /// # Example
+    ///
+    /// This shows how to parse a fixed offset timestamp into a `Zoned`.
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::DateTimeParser, tz::TimeZone};
+    ///
+    /// static PARSER: DateTimeParser = DateTimeParser::new();
+    ///
+    /// let timestamp = "2025-01-02T15:13-05";
+    ///
+    /// // Normally this operation will fail.
+    /// assert_eq!(
+    ///     PARSER.parse_zoned(timestamp).unwrap_err().to_string(),
+    ///     "failed to find time zone in square brackets in \
+    ///      \"2025-01-02T15:13-05\", which is required for \
+    ///      parsing a zoned instant",
+    /// );
+    ///
+    /// // But you can work-around this with `Pieces`, which gives you direct
+    /// // access to the components parsed from the string.
+    /// let pieces = PARSER.parse_pieces(timestamp)?;
+    /// let time = pieces.time().unwrap_or_else(jiff::civil::Time::midnight);
+    /// let dt = pieces.date().to_datetime(time);
+    /// let tz = match pieces.to_time_zone()? {
+    ///     Some(tz) => tz,
+    ///     None => {
+    ///         let Some(offset) = pieces.to_numeric_offset() else {
+    ///             let msg = format!(
+    ///                 "timestamp `{timestamp}` has no time zone \
+    ///                  or offset, and thus cannot be parsed into \
+    ///                  an instant",
+    ///             );
+    ///             return Err(msg.into());
+    ///         };
+    ///         TimeZone::fixed(offset)
+    ///     }
+    /// };
+    /// // We don't bother with offset conflict resolution. And note that
+    /// // this uses automatic "compatible" disambiguation in the case of
+    /// // discontinuities. Of course, this is all moot if `TimeZone` is
+    /// // fixed. The above code handles the case where it isn't!
+    /// let zdt = tz.to_zoned(dt)?;
+    /// assert_eq!(zdt.to_string(), "2025-01-02T15:13:00-05:00[-05:00]");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: work around errors when a `Z` (Zulu) offset is encountered
+    ///
+    /// Because parsing a date with a `Z` offset and interpreting it as
+    /// a civil date or time is usually a bug, it is forbidden:
+    ///
+    /// ```
+    /// use jiff::{civil::date, fmt::temporal::DateTimeParser};
+    ///
+    /// static PARSER: DateTimeParser = DateTimeParser::new();
+    ///
+    /// assert_eq!(
+    ///     PARSER.parse_date("2024-03-10T00:00:00Z").unwrap_err().to_string(),
+    ///     "cannot parse civil date from string with a Zulu offset, \
+    ///      parse as a `Timestamp` and convert to a civil date instead",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// But this sort of error checking doesn't happen when you parse into a
+    /// [`Pieces`]. You just get what was parsed, which lets you extract a
+    /// date even if the higher level APIs forbid it:
+    ///
+    /// ```
+    /// use jiff::{civil, fmt::temporal::DateTimeParser, tz::Offset};
+    ///
+    /// static PARSER: DateTimeParser = DateTimeParser::new();
+    ///
+    /// let pieces = PARSER.parse_pieces("2024-03-10T00:00:00Z")?;
+    /// assert_eq!(pieces.date(), civil::date(2024, 3, 10));
+    /// assert_eq!(pieces.time(), Some(civil::time(0, 0, 0, 0)));
+    /// assert_eq!(pieces.to_numeric_offset(), Some(Offset::UTC));
+    /// assert_eq!(pieces.to_time_zone()?, None);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// This is usually not the right thing to do. It isn't even suggested in
+    /// the error message above. But if you know it's the right thing, then
+    /// `Pieces` will let you do it.
+    pub fn parse_pieces<'i, I: ?Sized + AsRef<[u8]> + 'i>(
+        &self,
+        input: &'i I,
+    ) -> Result<Pieces<'i>, Error> {
+        let input = input.as_ref();
+        let parsed = self.p.parse_temporal_datetime(input)?.into_full()?;
+        let pieces = parsed.to_pieces()?;
+        Ok(pieces)
+    }
 }
 
 /// A printer for Temporal datetimes.
@@ -1159,6 +1291,50 @@ impl DateTimePrinter {
         buf
     }
 
+    /// Format `Pieces` of a Temporal datetime.
+    ///
+    /// This is a convenience routine for [`DateTimePrinter::print_pieces`]
+    /// with a `String`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{
+    ///     fmt::temporal::{DateTimePrinter, Pieces},
+    ///     tz::offset,
+    ///     Timestamp,
+    /// };
+    ///
+    /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
+    ///
+    /// let pieces = Pieces::from(Timestamp::UNIX_EPOCH);
+    /// assert_eq!(
+    ///     PRINTER.pieces_to_string(&pieces),
+    ///     "1970-01-01T00:00:00Z",
+    /// );
+    ///
+    /// let pieces = Pieces::from((Timestamp::UNIX_EPOCH, offset(0)));
+    /// assert_eq!(
+    ///     PRINTER.pieces_to_string(&pieces),
+    ///     "1970-01-01T00:00:00+00:00",
+    /// );
+    ///
+    /// let pieces = Pieces::from((Timestamp::UNIX_EPOCH, offset(-5)));
+    /// assert_eq!(
+    ///     PRINTER.pieces_to_string(&pieces),
+    ///     "1969-12-31T19:00:00-05:00",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[cfg(feature = "alloc")]
+    pub fn pieces_to_string(&self, pieces: &Pieces) -> alloc::string::String {
+        let mut buf = alloc::string::String::with_capacity(4);
+        // OK because writing to `String` never fails.
+        self.print_pieces(pieces, &mut buf).unwrap();
+        buf
+    }
+
     /// Print a `Zoned` datetime to the given writer.
     ///
     /// # Errors
@@ -1409,6 +1585,40 @@ impl DateTimePrinter {
     ) -> Result<(), Error> {
         self.p.print_time(time, wtr)
     }
+
+    /// Print the `Pieces` of a Temporal datetime.
+    ///
+    /// # Errors
+    ///
+    /// This only returns an error when writing to the given [`Write`]
+    /// implementation would fail. Some such implementations, like for `String`
+    /// and `Vec<u8>`, never fail (unless memory allocation fails). In such
+    /// cases, it would be appropriate to call `unwrap()` on the result.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::date, fmt::temporal::{DateTimePrinter, Pieces}};
+    ///
+    /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
+    ///
+    /// let pieces = Pieces::from(date(2024, 6, 15))
+    ///     .with_time_zone_name("US/Eastern");
+    ///
+    /// let mut buf = String::new();
+    /// // Printing to a `String` can never fail.
+    /// PRINTER.print_pieces(&pieces, &mut buf).unwrap();
+    /// assert_eq!(buf, "2024-06-15[US/Eastern]");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn print_pieces<W: Write>(
+        &self,
+        pieces: &Pieces,
+        wtr: W,
+    ) -> Result<(), Error> {
+        self.p.print_pieces(pieces, wtr)
+    }
 }
 
 /// A parser for Temporal durations.
@@ -1566,7 +1776,7 @@ impl SpanParser {
 /// let mut buf = vec![];
 /// // Printing to a `Vec<u8>` can never fail.
 /// PRINTER.print_span(&span, &mut buf).unwrap();
-/// assert_eq!(buf, "PT48m".as_bytes());
+/// assert_eq!(buf, "PT48M".as_bytes());
 /// ```
 ///
 /// # Example: using adapters with `std::io::Write` and `std::fmt::Write`
@@ -1605,6 +1815,30 @@ impl SpanPrinter {
         SpanPrinter { p: printer::SpanPrinter::new() }
     }
 
+    /// Use lowercase for unit designator labels.
+    ///
+    /// By default, unit designator labels are written in uppercase.
+    ///
+    /// # Example
+    ///
+    /// This shows the difference between the default (uppercase) and enabling
+    /// lowercase. Lowercase unit designator labels tend to be easier to read
+    /// (in this author's opinion), but they aren't as broadly supported since
+    /// they are an extension to ISO 8601.
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::SpanPrinter, ToSpan};
+    ///
+    /// let span = 5.years().days(10).hours(1);
+    /// let printer = SpanPrinter::new();
+    /// assert_eq!(printer.span_to_string(&span), "P5Y10DT1H");
+    /// assert_eq!(printer.lowercase(true).span_to_string(&span), "P5y10dT1h");
+    /// ```
+    #[inline]
+    pub const fn lowercase(self, yes: bool) -> SpanPrinter {
+        SpanPrinter { p: self.p.lowercase(yes) }
+    }
+
     /// Format a `Span` into a string.
     ///
     /// This is a convenience routine for [`SpanPrinter::print_span`] with
@@ -1618,7 +1852,7 @@ impl SpanPrinter {
     /// const PRINTER: SpanPrinter = SpanPrinter::new();
     ///
     /// let span = 3.years().months(5);
-    /// assert_eq!(PRINTER.span_to_string(&span), "P3y5m");
+    /// assert_eq!(PRINTER.span_to_string(&span), "P3Y5M");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1646,8 +1880,8 @@ impl SpanPrinter {
     /// const PRINTER: SpanPrinter = SpanPrinter::new();
     ///
     /// let dur = SignedDuration::new(86_525, 123_000_789);
-    /// assert_eq!(PRINTER.duration_to_string(&dur), "PT24h2m5.123000789s");
-    /// assert_eq!(PRINTER.duration_to_string(&-dur), "-PT24h2m5.123000789s");
+    /// assert_eq!(PRINTER.duration_to_string(&dur), "PT24H2M5.123000789S");
+    /// assert_eq!(PRINTER.duration_to_string(&-dur), "-PT24H2M5.123000789S");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1683,7 +1917,7 @@ impl SpanPrinter {
     /// let mut buf = String::new();
     /// // Printing to a `String` can never fail.
     /// PRINTER.print_span(&span, &mut buf).unwrap();
-    /// assert_eq!(buf, "P3y5m");
+    /// assert_eq!(buf, "P3Y5M");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1719,12 +1953,12 @@ impl SpanPrinter {
     /// let mut buf = String::new();
     /// // Printing to a `String` can never fail.
     /// PRINTER.print_duration(&dur, &mut buf).unwrap();
-    /// assert_eq!(buf, "PT24h2m5.123000789s");
+    /// assert_eq!(buf, "PT24H2M5.123000789S");
     ///
     /// // Negative durations are supported.
     /// buf.clear();
     /// PRINTER.print_duration(&-dur, &mut buf).unwrap();
-    /// assert_eq!(buf, "-PT24h2m5.123000789s");
+    /// assert_eq!(buf, "-PT24H2M5.123000789S");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```

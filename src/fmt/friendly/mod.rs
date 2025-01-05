@@ -77,11 +77,11 @@ format when using the `std::fmt::Display` trait implementation:
 use jiff::{SignedDuration, ToSpan};
 
 let span = 2.months().days(35).hours(2).minutes(30);
-assert_eq!(format!("{span}"), "P2m35dT2h30m");      // ISO 8601
+assert_eq!(format!("{span}"), "P2M35DT2H30M");      // ISO 8601
 assert_eq!(format!("{span:#}"), "2mo 35d 2h 30m");  // "friendly"
 
 let sdur = SignedDuration::new(2 * 60 * 60 + 30 * 60, 123_456_789);
-assert_eq!(format!("{sdur}"), "PT2h30m0.123456789s");         // ISO 8601
+assert_eq!(format!("{sdur}"), "PT2H30M0.123456789S");         // ISO 8601
 assert_eq!(format!("{sdur:#}"), "2h 30m 123ms 456µs 789ns");  // "friendly"
 ```
 
@@ -467,10 +467,11 @@ P1Y2M3DT4H59M1.1S
 P1y2m3dT4h59m1.1S
 ```
 
-When all of the unit designators are capital letters in particular, everything
-runs together and it's hard for the eye to distinguish where digits stop and
-letters begin. Using lowercase letters for unit designators helps somewhat,
-but this is an extension to ISO 8601 that isn't broadly supported.
+When all of the unit designators are capital letters in particular (which
+is the default), everything runs together and it's hard for the eye to
+distinguish where digits stop and letters begin. Using lowercase letters for
+unit designators helps somewhat, but this is an extension to ISO 8601 that
+isn't broadly supported.
 
 The "friendly" format resolves both of these problems by permitting sub-second
 components and allowing the use of whitespace and longer unit designator labels
