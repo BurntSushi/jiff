@@ -8,8 +8,12 @@ use crate::{
     util::{cache::Expiration, sync::Arc},
 };
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 #[path = "unix.rs"]
+mod sys;
+
+#[cfg(all(unix, target_os = "android"))]
+#[path = "android.rs"]
 mod sys;
 
 #[cfg(windows)]

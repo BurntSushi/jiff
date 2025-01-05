@@ -25,7 +25,11 @@ mod sys {
         std::time::SystemTime::now()
     }
 
-    #[cfg(any(feature = "tz-system", feature = "tzdb-zoneinfo"))]
+    #[cfg(any(
+        feature = "tz-system",
+        feature = "tzdb-zoneinfo",
+        feature = "tzdb-concatenated"
+    ))]
     pub(crate) fn monotonic_time() -> Option<std::time::Instant> {
         Some(std::time::Instant::now())
     }
@@ -66,7 +70,11 @@ mod sys {
         timestamp
     }
 
-    #[cfg(any(feature = "tz-system", feature = "tzdb-zoneinfo"))]
+    #[cfg(any(
+        feature = "tz-system",
+        feature = "tzdb-zoneinfo",
+        feature = "tzdb-concatenated"
+    ))]
     pub(crate) fn monotonic_time() -> Option<std::time::Instant> {
         // :-(
         None

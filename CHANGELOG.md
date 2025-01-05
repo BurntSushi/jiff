@@ -1,5 +1,18 @@
 # CHANGELOG
 
+0.1.22 (2025-01-12)
+===================
+This release adds support for Android. This support means that Jiff will
+automatically read its special concatenated time zone database, and will
+read the `persist.sys.timezone` property to determine the system's current
+time zone.
+
+See [PLATFORM] for more specific information about Android support.
+
+* [#140](https://github.com/BurntSushi/jiff/issues/140):
+Add support for the Android platform.
+
+
 0.1.21 (2025-01-04)
 ===================
 This release includes a new API for setting the unit designator label in a

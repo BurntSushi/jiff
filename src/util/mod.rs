@@ -1,10 +1,16 @@
 pub(crate) mod array_str;
 pub(crate) mod borrow;
-#[cfg(any(feature = "tz-system", feature = "tzdb-zoneinfo"))]
+#[cfg(any(
+    feature = "tz-system",
+    feature = "tzdb-zoneinfo",
+    feature = "tzdb-concatenated"
+))]
 pub(crate) mod cache;
 pub(crate) mod common;
 pub(crate) mod crc32;
 pub(crate) mod escape;
+#[cfg(feature = "std")]
+pub(crate) mod fs;
 #[cfg(not(feature = "std"))]
 pub(crate) mod libm;
 pub(crate) mod parse;
