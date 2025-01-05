@@ -100,6 +100,8 @@ pub use self::{
     offset::{Dst, Offset, OffsetArithmetic, OffsetConflict},
 };
 
+#[cfg(feature = "alloc")]
+mod concatenated;
 mod db;
 mod offset;
 #[cfg(feature = "alloc")]

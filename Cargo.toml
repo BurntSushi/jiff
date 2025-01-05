@@ -13,10 +13,13 @@ This library is heavily inspired by the Temporal project.
 categories = ["date-and-time", "no-std"]
 keywords = ["date", "time", "calendar", "zone", "duration"]
 edition = "2021"
-exclude = ["/.github", "/tmp"]
 autotests = false
 autoexamples = false
 rust-version = "1.70"
+# We include `/tests/lib.rs` to squash a `cargo package` warning that the
+# `integration` test target is being ignored. We don't include anything else
+# so tests obviously won't work, but it makes `cargo package` quiet.
+include = ["/src/**/*.rs", "/tests/lib.rs", "/*.md"]
 
 [workspace]
 members = [
@@ -29,7 +32,13 @@ members = [
 # Features are documented in the "Crate features" section of the crate docs:
 # https://docs.rs/jiff/*/#crate-features
 [features]
-default = ["std", "tz-system", "tzdb-bundle-platform", "tzdb-zoneinfo"]
+default = [
+  "std",
+  "tz-system",
+  "tzdb-bundle-platform",
+  "tzdb-zoneinfo",
+  "tzdb-concatenated",
+]
 std = ["alloc", "log?/std", "serde?/std"]
 alloc = ["serde?/alloc", "portable-atomic-util/alloc"]
 serde = ["dep:serde"]
@@ -53,6 +62,15 @@ tzdb-bundle-always = ["dep:jiff-tzdb", "alloc"]
 # This enables the system or "zoneinfo" time zone database. This is the
 # database that is typically found at /usr/share/zoneinfo on macOS and Linux.
 tzdb-zoneinfo = ["std"]
+
+# This enables the system concatenated time zone database. On some platforms,
+# like Android, this is the standard time zone database instead of the more
+# widespread `zoneinfo` directory created by `zic` itseld.
+#
+# This being enabled just means that some standard paths will be searched
+# for the concatenated database and it will be used if the standard zoneinfo
+# directory couldn't be found.
+tzdb-concatenated = ["std"]
 
 # This enables bindings to web browser APIs for retrieving the current time
 # and configured time zone. This ONLY applies on wasm32-unknown-unknown and

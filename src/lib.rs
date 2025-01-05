@@ -650,7 +650,15 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
 * **tzdb-zoneinfo** (enabled by default) -
   When enabled, Jiff will attempt to look for your system's copy of the Time
   Zone Database.
+* **tzdb-concatenated** (enabled by default) -
+  When enabled, Jiff will attempt to look for a system copy of the
+  [Concatenated Time Zone Database]. This is primarily meant for reading time
+  zone information on Android platforms. The `ANDROID_ROOT` and `ANDROID_DATA`
+  environment variables (with sensible default fallbacks) are used to construct
+  candidate paths to look for this database. For more on this, see the
+  [Android section of the platform support documentation](crate::_documentation::platform#android).
 
+[Concatenated Time Zone Database]: https://android.googlesource.com/platform/libcore/+/jb-mr2-release/luni/src/main/java/libcore/util/ZoneInfoDB.java
 */
 
 #![no_std]

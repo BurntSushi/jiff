@@ -15,9 +15,13 @@ impl ZoneInfo {
         Err(crate::error::err!(
             "system tzdb unavailable: \
              crate feature `tzdb-zoneinfo` is disabled, \
-             tzdb lookup for {dir} has therefore failed",
+             opening tzdb at {dir} has therefore failed",
             dir = dir.display(),
         ))
+    }
+
+    pub(crate) fn none() -> ZoneInfo {
+        ZoneInfo
     }
 
     pub(crate) fn reset(&self) {}

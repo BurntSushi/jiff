@@ -10,10 +10,12 @@ use windows_sys::Win32::System::Time::{
 use crate::{
     error::{err, Error, ErrorContext},
     tz::{TimeZone, TimeZoneDatabase},
+    util::utf8,
 };
 
 use self::windows_zones::WINDOWS_TO_IANA;
 
+#[allow(dead_code)] // we don't currently read the version
 mod windows_zones;
 
 /// Attempts to find the default "system" time zone.
@@ -74,7 +76,7 @@ pub(super) fn read(_db: &TimeZoneDatabase, path: &str) -> Option<TimeZone> {
 
 fn windows_to_iana(tz_key_name: &str) -> Result<&'static str, Error> {
     let result = WINDOWS_TO_IANA.binary_search_by(|(win_name, _)| {
-        cmp_ignore_ascii_case(win_name, &tz_key_name)
+        utf8::cmp_ignore_ascii_case(win_name, &tz_key_name)
     });
     let Ok(index) = result else {
         return Err(err!(
@@ -124,13 +126,6 @@ fn nul_terminated_utf16_to_string(
             err!("failed to convert u16 slice to UTF-8 (invalid UTF-16)")
         })?;
     Ok(string)
-}
-
-/// Like std's `eq_ignore_ascii_case`, but returns a full `Ordering`.
-fn cmp_ignore_ascii_case(s1: &str, s2: &str) -> core::cmp::Ordering {
-    let it1 = s1.as_bytes().iter().map(|&b| b.to_ascii_lowercase());
-    let it2 = s2.as_bytes().iter().map(|&b| b.to_ascii_lowercase());
-    it1.cmp(it2)
 }
 
 #[cfg(test)]

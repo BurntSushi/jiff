@@ -2,7 +2,6 @@ use alloc::{string::String, vec::Vec};
 
 use crate::tz::TimeZone;
 
-#[derive(Debug)]
 pub(crate) struct BundledZoneInfo;
 
 impl BundledZoneInfo {
@@ -46,6 +45,12 @@ impl BundledZoneInfo {
     }
 }
 
+impl core::fmt::Debug for BundledZoneInfo {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "Bundled(available)")
+    }
+}
+
 fn available() -> impl Iterator<Item = &'static str> {
     #[cfg(feature = "tzdb-bundle-always")]
     {
@@ -82,7 +87,7 @@ fn lookup(name: &str) -> Option<(&'static str, &'static [u8])> {
 mod global {
     use std::{string::String, string::ToString, sync::RwLock, vec::Vec};
 
-    use crate::tz::TimeZone;
+    use crate::{tz::TimeZone, util::utf8};
 
     static CACHED_ZONES: RwLock<CachedZones> =
         RwLock::new(CachedZones { zones: Vec::new() });
@@ -128,7 +133,7 @@ mod global {
 
         fn get_zone_index(&self, query: &str) -> Result<usize, usize> {
             self.zones.binary_search_by(|entry| {
-                cmp_ignore_ascii_case(&entry.name, query)
+                utf8::cmp_ignore_ascii_case(&entry.name, query)
             })
         }
 
@@ -141,12 +146,5 @@ mod global {
     struct CachedZone {
         name: String,
         tz: TimeZone,
-    }
-
-    /// Like std's `eq_ignore_ascii_case`, but returns a full `Ordering`.
-    fn cmp_ignore_ascii_case(s1: &str, s2: &str) -> core::cmp::Ordering {
-        let it1 = s1.as_bytes().iter().map(|&b| b.to_ascii_lowercase());
-        let it2 = s2.as_bytes().iter().map(|&b| b.to_ascii_lowercase());
-        it1.cmp(it2)
     }
 }

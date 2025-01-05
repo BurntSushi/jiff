@@ -2,6 +2,12 @@ use alloc::string::ToString;
 
 use crate::tz::tzif::Tzif;
 
+/// A concatenated list of TZif data with a header and an index block.
+///
+/// This was exactracted from an Android emulator file system via `adb`.
+pub(crate) static ANDROID_CONCATENATED_TZIF: &'static [u8] =
+    include_bytes!("testdata/android/tzdata");
+
 /// A list of all TZif files in our testdata directory.
 ///
 /// Feel free to add more if there are other "interesting" cases. Note that
@@ -13,7 +19,7 @@ use crate::tz::tzif::Tzif;
 /// * 2024-03-27: Initial set pulled from my local copy of `tzdata 2024a`.
 /// * 2024-07-05: Added `UTC`.
 /// * 2024-11-30: Added special Sydney time zone from RHEL8.
-pub(crate) const TZIF_TEST_FILES: &[TzifTestFile] = &[
+pub(crate) static TZIF_TEST_FILES: &[TzifTestFile] = &[
     TzifTestFile {
         name: "America/New_York",
         data: include_bytes!("testdata/america-new-york.tzif"),
