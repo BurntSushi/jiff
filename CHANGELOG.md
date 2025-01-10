@@ -11,6 +11,8 @@ Deprecations:
 
 Enhancements:
 
+* [#196](https://github.com/BurntSushi/jiff/discussions/196):
+Improve ISO week date documentation regarding weekday offsets.
 * [#197](https://github.com/BurntSushi/jiff/discussions/197):
 Add `Zoned::iso_week_date`, `DateTime::iso_week_date` and
 `Date::iso_week_date`.

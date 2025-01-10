@@ -243,7 +243,10 @@ impl ISOWeekDate {
     /// Returns the day component of this ISO 8601 week date.
     ///
     /// One can use methods on `Weekday` such as
-    /// [`Weekday::to_sunday_zero_offset`] to convert the weekday to a number.
+    /// [`Weekday::to_monday_one_offset`]
+    /// and
+    /// [`Weekday::to_sunday_zero_offset`]
+    /// to convert the weekday to a number.
     ///
     /// # Example
     ///
@@ -254,6 +257,10 @@ impl ISOWeekDate {
     /// assert_eq!(weekdate.year(), 1948);
     /// assert_eq!(weekdate.week(), 53);
     /// assert_eq!(weekdate.weekday(), Weekday::Friday);
+    /// assert_eq!(weekdate.weekday().to_monday_zero_offset(), 4);
+    /// assert_eq!(weekdate.weekday().to_monday_one_offset(), 5);
+    /// assert_eq!(weekdate.weekday().to_sunday_zero_offset(), 5);
+    /// assert_eq!(weekdate.weekday().to_sunday_one_offset(), 6);
     /// ```
     #[inline]
     pub fn weekday(self) -> Weekday {
