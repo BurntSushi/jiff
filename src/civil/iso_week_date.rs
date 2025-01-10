@@ -254,6 +254,7 @@ impl ISOWeekDate {
     /// assert_eq!(weekdate.week(), 53);
     /// assert_eq!(weekdate.weekday(), Weekday::Friday);
     /// assert_eq!(weekdate.weekday().to_monday_one_offset(), 5);
+    /// assert_eq!(weekdate.weekday().to_sunday_zero_offset(), 5);
     /// ```
     #[inline]
     pub fn weekday(self) -> Weekday {
