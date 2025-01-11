@@ -1238,7 +1238,7 @@ impl DateTimePrinter {
         &self,
         timestamp: &Timestamp,
     ) -> Result<alloc::string::String, Error> {
-        let mut buf = alloc::string::String::with_capacity(4);
+        let mut buf = alloc::string::String::with_capacity(29);
         self.print_timestamp_rfc9110(timestamp, &mut buf)?;
         Ok(buf)
     }
