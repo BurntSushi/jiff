@@ -226,7 +226,9 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
+      # Rust 1.84 fails for reasons unknown to me, and I'm not familiar enough
+      # with emscripten to figure out how to debug it.
+      uses: dtolnay/rust-toolchain@1.83.0
       with:
         toolchain: stable
     - name: Install and configure Cross
