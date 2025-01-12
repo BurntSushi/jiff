@@ -1,13 +1,13 @@
-use std::{ffi::c_void, sync::OnceLock};
+use std::{
+    ffi::{c_char, c_void},
+    sync::OnceLock,
+};
 
 use alloc::vec::Vec;
 
 use core::{ffi::CStr, mem, ptr::NonNull};
 
-use crate::{
-    tz::{TimeZone, TimeZoneDatabase},
-    util::escape,
-};
+use crate::tz::{TimeZone, TimeZoneDatabase};
 
 /// Attempts to find the default "system" time zone.
 pub(super) fn get(db: &TimeZoneDatabase) -> Option<TimeZone> {
@@ -24,7 +24,7 @@ pub(super) fn get(db: &TimeZoneDatabase) -> Option<TimeZone> {
         warn!(
             "found `{PROPERTY_NAME}` name `{name}` on Android, \
              but it's not valid UTF-8",
-            name = escape::Bytes(&tzname),
+            name = crate::util::escape::Bytes(&tzname),
         );
         return None;
     };
@@ -52,7 +52,7 @@ pub(super) fn get(db: &TimeZoneDatabase) -> Option<TimeZone> {
 /// This doesn't do any symlink shenanigans like in other Unix environments,
 /// although we could consider doing that. I think probably this is very
 /// unlikely to be used on Android, although it can be by setting `TZ`.
-pub(super) fn read(db: &TimeZoneDatabase, path: &str) -> Option<TimeZone> {
+pub(super) fn read(_db: &TimeZoneDatabase, path: &str) -> Option<TimeZone> {
     match super::read_unnamed_tzif_file(path) {
         Ok(tz) => Some(tz),
         Err(_err) => {
@@ -89,7 +89,11 @@ struct PropertyGetter {
     /// Note that since this is a bespoke property getter and we only ever
     /// create a single instance in a process global static, this never gets
     /// dropped. So we don't bother writing a `Drop` impl that calls `dlclose`.
-    libc: NonNull<c_void>,
+    /// Because it never gets dropped and because we load the symbols right
+    /// away at construction time, we never actually end up using it after
+    /// construction. We keep it around in case we want to refactor to this
+    /// to actually drop it for some reason.
+    _libc: NonNull<c_void>,
     system_property_find: SystemPropertyFind,
     system_property_read: SystemPropertyRead,
 }
@@ -116,9 +120,10 @@ impl PropertyGetter {
         // SAFETY: OK because we provide a valid NUL terminated string.
         let handle = unsafe { dlopen(cstr("libc.so\0").as_ptr(), 0) };
         let Some(libc) = NonNull::new(handle) else {
+            let _msg = dlerror_message();
             warn!(
                 "could not open libc.so via `dlopen`: {err}",
-                err = escape::Bytes(&dlerror_message()),
+                err = crate::util::escape::Bytes(&_msg),
             );
             return None;
         };
@@ -135,7 +140,7 @@ impl PropertyGetter {
         };
 
         Some(PropertyGetter {
-            libc,
+            _libc: libc,
             system_property_find,
             system_property_read,
         })
@@ -148,8 +153,8 @@ impl PropertyGetter {
     fn get(&self, name: &CStr) -> Option<Vec<u8>> {
         unsafe extern "C" fn callback(
             buf: *mut c_void,
-            _name: *const i8,
-            value: *const i8,
+            _name: *const c_char,
+            value: *const c_char,
             _serial: u32,
         ) {
             let buf = buf.cast::<Vec<u8>>();
@@ -170,7 +175,7 @@ impl PropertyGetter {
         if prop_info.is_null() {
             warn!(
                 "Android property name `{name}` not found",
-                name = escape::Bytes(name.to_bytes()),
+                name = crate::util::escape::Bytes(name.to_bytes()),
             );
             return None;
         }
@@ -197,7 +202,7 @@ impl PropertyGetter {
         if buf.is_empty() {
             warn!(
                 "reading Android property `{name}` resulted in empty value",
-                name = escape::Bytes(name.to_bytes()),
+                name = crate::util::escape::Bytes(name.to_bytes()),
             );
             return None;
         }
@@ -221,11 +226,12 @@ unsafe fn load_symbol<F>(handle: NonNull<c_void>, symbol: &CStr) -> Option<F> {
     if sym.is_null() {
         // SAFETY: We know `handle` is non-null.
         let _ = unsafe { dlclose(handle.as_ptr()) };
+        let _msg = dlerror_message();
         warn!(
             "could not load `{symbol}` \
              symbol from `libc.so: {err}",
-            symbol = escape::Bytes(symbol.to_bytes()),
-            err = escape::Bytes(&dlerror_message()),
+            symbol = crate::util::escape::Bytes(symbol.to_bytes()),
+            err = crate::util::escape::Bytes(&_msg),
         );
         return None;
     }
@@ -290,20 +296,21 @@ fn cstr(string: &'static str) -> &'static CStr {
 // deal. But if this turns out to be a problem in practice, I'm fine accepting
 // a target specific dependency on `libc` for Android.
 extern "C" {
-    fn dlopen(filename: *const i8, flag: i32) -> *mut c_void;
+    fn dlopen(filename: *const c_char, flag: i32) -> *mut c_void;
     fn dlclose(handle: *mut c_void) -> i32;
-    fn dlerror() -> *mut i8;
-    fn dlsym(handle: *mut c_void, symbol: *const i8) -> *mut c_void;
+    fn dlerror() -> *mut c_char;
+    fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
 }
 
 // These types come from:
 // https://android.googlesource.com/platform/bionic/+/master/libc/include/sys/system_properties.h
 type PropInfo = c_void;
-type SystemPropertyFind = unsafe extern "C" fn(*const i8) -> *const PropInfo;
+type SystemPropertyFind =
+    unsafe extern "C" fn(*const c_char) -> *const PropInfo;
 type SystemPropertyRead = unsafe extern "C" fn(
     *const PropInfo,
     SystemPropertyReadCallback,
     *mut c_void,
 );
 type SystemPropertyReadCallback =
-    unsafe extern "C" fn(*mut c_void, *const i8, *const i8, u32);
+    unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char, u32);

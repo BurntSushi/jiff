@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.1.23 (TBD)
+============
+TODO
+
+Bug fixes:
+
+* [#200](https://github.com/BurntSushi/jiff/issues/200):
+Fix compilation failure on Android in a Termux shell.
+
+
 0.1.22 (2025-01-12)
 ===================
 This release adds support for Android. This support means that Jiff will
@@ -8,6 +18,8 @@ read the `persist.sys.timezone` property to determine the system's current
 time zone.
 
 See [PLATFORM] for more specific information about Android support.
+
+Enhancements:
 
 * [#140](https://github.com/BurntSushi/jiff/issues/140):
 Add support for the Android platform.

@@ -138,6 +138,7 @@ jobs:
         - powerpc64-unknown-linux-gnu
         - s390x-unknown-linux-gnu
         - x86_64-linux-android
+        - aarch64-linux-android
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
