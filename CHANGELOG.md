@@ -4,6 +4,17 @@
 ============
 TODO
 
+Deprecations:
+
+* [#197](https://github.com/BurntSushi/jiff/discussions/197):
+`Date::to_iso_week_date` has been deprecated in favor of `Date::iso_week_date`.
+
+Enhancements:
+
+* [#197](https://github.com/BurntSushi/jiff/discussions/197):
+Add `Zoned::iso_week_date`, `DateTime::iso_week_date` and
+`Date::iso_week_date`.
+
 Bug fixes:
 
 * [#200](https://github.com/BurntSushi/jiff/issues/200):
