@@ -19,7 +19,14 @@ rust-version = "1.70"
 # We include `/tests/lib.rs` to squash a `cargo package` warning that the
 # `integration` test target is being ignored. We don't include anything else
 # so tests obviously won't work, but it makes `cargo package` quiet.
-include = ["/src/**/*.rs", "/tests/lib.rs", "/*.md"]
+include = [
+  "/src/**/*.rs",
+  "/tests/lib.rs",
+  "/*.md",
+  "COPYING",
+  "LICENSE-MIT",
+  "UNLICENSE",
+]
 
 [workspace]
 members = [

@@ -8,6 +8,8 @@ Bug fixes:
 
 * [#200](https://github.com/BurntSushi/jiff/issues/200):
 Fix compilation failure on Android in a Termux shell.
+* [#202](https://github.com/BurntSushi/jiff/pull/202):
+Re-add license files to crate artifact.
 
 
 0.1.22 (2025-01-12)
@@ -18,6 +20,10 @@ read the `persist.sys.timezone` property to determine the system's current
 time zone.
 
 See [PLATFORM] for more specific information about Android support.
+
+Note that this release also removed all non-essential files (including tests
+and test data) for the artifact uploaded to crates.io. If you need or want
+these files, please open a new issue.
 
 Enhancements:
 

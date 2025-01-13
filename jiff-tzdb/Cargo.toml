@@ -12,7 +12,7 @@ keywords = ["date", "time", "temporal", "zone", "iana"]
 workspace = ".."
 edition = "2021"
 rust-version = "1.70"
-include = ["/*.rs", "/*.dat"]
+include = ["/*.rs", "/*.dat", "COPYING", "LICENSE-MIT", "UNLICENSE"]
 
 [lib]
 name = "jiff_tzdb"
