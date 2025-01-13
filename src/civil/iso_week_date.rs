@@ -530,7 +530,7 @@ mod tests {
                 return quickcheck::TestResult::discard();
             }
             let prev_date = wd.to_date().checked_add(-1.days()).unwrap();
-            quickcheck::TestResult::from_bool(prev_date.to_iso_week_date() < wd)
+            quickcheck::TestResult::from_bool(prev_date.iso_week_date() < wd)
         }
 
         fn prop_next_day_is_greater(wd: ISOWeekDate) -> quickcheck::TestResult {
@@ -540,7 +540,7 @@ mod tests {
                 return quickcheck::TestResult::discard();
             }
             let next_date = wd.to_date().checked_add(1.days()).unwrap();
-            quickcheck::TestResult::from_bool(wd < next_date.to_iso_week_date())
+            quickcheck::TestResult::from_bool(wd < next_date.iso_week_date())
         }
     }
 }

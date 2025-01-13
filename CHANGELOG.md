@@ -9,7 +9,9 @@ in line with similar functions.
 
 My current plan is to make a reasonably quick transition to `jiff 0.2` with a
 few pending breaking changes. I will be making some `jiff 0.1` releases with
-deprecations in order to make the transition as smooth as possible.
+deprecations in order to make the transition as smooth as possible. If all goes
+well with `jiff 0.2`, then my plan is still to do a Jiff 1.0 release in the
+Summer of 2025.
 
 Deprecations:
 
