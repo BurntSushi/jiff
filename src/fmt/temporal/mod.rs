@@ -913,7 +913,7 @@ impl DateTimeParser {
 /// // A printer can be created in a const context.
 /// const PRINTER: DateTimePrinter = DateTimePrinter::new().separator(b' ');
 ///
-/// let zdt = date(2024, 6, 15).at(7, 0, 0, 123456789).intz("America/New_York")?;
+/// let zdt = date(2024, 6, 15).at(7, 0, 0, 123456789).in_tz("America/New_York")?;
 ///
 /// let mut buf = String::new();
 /// // Printing to a `String` can never fail.
@@ -937,7 +937,7 @@ impl DateTimeParser {
 ///
 /// use jiff::{civil::date, fmt::{StdIoWrite, temporal::DateTimePrinter}};
 ///
-/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).intz("America/New_York")?;
+/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("America/New_York")?;
 ///
 /// let path = Path::new("/tmp/output");
 /// let mut file = BufWriter::new(File::create(path)?);
@@ -975,7 +975,7 @@ impl DateTimePrinter {
     ///
     /// const PRINTER: DateTimePrinter = DateTimePrinter::new().lowercase(true);
     ///
-    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).intz("America/New_York")?;
+    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("America/New_York")?;
     ///
     /// let mut buf = String::new();
     /// // Printing to a `String` can never fail.
@@ -1007,7 +1007,7 @@ impl DateTimePrinter {
     /// // use this method with an ASCII space.
     /// const PRINTER: DateTimePrinter = DateTimePrinter::new().separator(b'~');
     ///
-    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).intz("America/New_York")?;
+    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("America/New_York")?;
     ///
     /// let mut buf = String::new();
     /// // Printing to a `String` can never fail.
@@ -1040,7 +1040,7 @@ impl DateTimePrinter {
     /// const PRINTER: DateTimePrinter =
     ///     DateTimePrinter::new().precision(Some(3));
     ///
-    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 123_456_789).intz("US/Eastern")?;
+    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 123_456_789).in_tz("US/Eastern")?;
     ///
     /// let mut buf = String::new();
     /// // Printing to a `String` can never fail.
@@ -1059,7 +1059,7 @@ impl DateTimePrinter {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 123_000_000).intz("US/Eastern")?;
+    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 123_000_000).in_tz("US/Eastern")?;
     /// assert_eq!(
     ///     format!("{zdt:.6}"),
     ///     "2024-06-15T07:00:00.123000-04:00[US/Eastern]",
@@ -1099,7 +1099,7 @@ impl DateTimePrinter {
     ///
     /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
     ///
-    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).intz("America/New_York")?;
+    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("America/New_York")?;
     /// assert_eq!(
     ///     PRINTER.zoned_to_string(&zdt),
     ///     "2024-06-15T07:00:00-04:00[America/New_York]",
@@ -1351,7 +1351,7 @@ impl DateTimePrinter {
     ///
     /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
     ///
-    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).intz("America/New_York")?;
+    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("America/New_York")?;
     ///
     /// let mut buf = String::new();
     /// // Printing to a `String` can never fail.

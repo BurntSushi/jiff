@@ -504,8 +504,8 @@ respectively. For example, this:
 ```rust
 use jiff::{civil::date, ToSpan};
 
-let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).intz("America/New_York")?;
-let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).intz("America/New_York")?;
+let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).in_tz("America/New_York")?;
+let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).in_tz("America/New_York")?;
 assert_eq!(zdt1.until(&zdt2)?, 744.hours().seconds(36));
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -516,8 +516,8 @@ Is equivalent to:
 ```rust
 use jiff::{civil::date, ToSpan, ZonedDifference};
 
-let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).intz("America/New_York")?;
-let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).intz("America/New_York")?;
+let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).in_tz("America/New_York")?;
+let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).in_tz("America/New_York")?;
 assert_eq!(zdt1.until(ZonedDifference::new(&zdt2))?, 744.hours().seconds(36));
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -529,8 +529,8 @@ configuration. For example, rounding the span returned:
 ```rust
 use jiff::{civil::date, ToSpan, Unit, ZonedDifference};
 
-let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).intz("America/New_York")?;
-let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).intz("America/New_York")?;
+let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).in_tz("America/New_York")?;
+let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).in_tz("America/New_York")?;
 assert_eq!(
     zdt1.until(ZonedDifference::new(&zdt2).smallest(Unit::Minute))?,
     744.hours(),
@@ -553,8 +553,8 @@ instead of this:
 ```rust
 use jiff::{civil::date, ToSpan, Unit, ZonedDifference};
 
-let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).intz("America/New_York")?;
-let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).intz("America/New_York")?;
+let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).in_tz("America/New_York")?;
+let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).in_tz("America/New_York")?;
 let diff = ZonedDifference::new(&zdt2)
     .largest(Unit::Month)
     .smallest(Unit::Minute);
@@ -568,8 +568,8 @@ One would need to do this:
 ```rust
 use jiff::{civil::date, RoundMode, SpanRound, ToSpan, Unit};
 
-let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).intz("America/New_York")?;
-let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).intz("America/New_York")?;
+let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).in_tz("America/New_York")?;
+let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).in_tz("America/New_York")?;
 let span = zdt1.until(&zdt2)?;
 let rounded = span.round(
     SpanRound::new()

@@ -373,8 +373,8 @@ use crate::{
 /// ```
 /// use jiff::{civil::date, ToSpan, Unit};
 ///
-/// let zdt1 = date(2024, 7, 7).at(15, 23, 0, 0).intz("America/New_York")?;
-/// let zdt2 = date(2024, 11, 5).at(8, 0, 0, 0).intz("America/New_York")?;
+/// let zdt1 = date(2024, 7, 7).at(15, 23, 0, 0).in_tz("America/New_York")?;
+/// let zdt2 = date(2024, 11, 5).at(8, 0, 0, 0).in_tz("America/New_York")?;
 ///
 /// // To make arithmetic reversible, the default largest unit for spans of
 /// // time computed from zoned datetimes is hours:
@@ -443,7 +443,7 @@ use crate::{
 ///
 /// // 2024-03-10 in New York was 23 hours long,
 /// // because of a jump to DST at 2am.
-/// let zdt = date(2024, 3, 9).at(21, 0, 0, 0).intz("America/New_York")?;
+/// let zdt = date(2024, 3, 9).at(21, 0, 0, 0).in_tz("America/New_York")?;
 /// // Goes from days to hours:
 /// assert_eq!(
 ///     1.day().round(SpanRound::new().largest(Unit::Hour).relative(&zdt))?,
@@ -470,7 +470,7 @@ use crate::{
 ///
 /// // 2024-11-03 in New York was 25 hours long,
 /// // because of a repetition of the 1 o'clock AM hour.
-/// let zdt = date(2024, 11, 2).at(21, 0, 0, 0).intz("America/New_York")?;
+/// let zdt = date(2024, 11, 2).at(21, 0, 0, 0).in_tz("America/New_York")?;
 /// // Goes from days to hours:
 /// assert_eq!(
 ///     1.day().round(SpanRound::new().largest(Unit::Hour).relative(&zdt))?,
@@ -625,7 +625,7 @@ use crate::{
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy)]
 pub struct Span {
     sign: Sign,
     years: t::SpanYears,
@@ -1336,6 +1336,44 @@ impl Span {
         self.sign == 0
     }
 
+    /// Returns this `Span` as a value with a type that implements the
+    /// `Hash`, `Eq` and `PartialEq` traits in a fieldwise fashion.
+    ///
+    /// A `SpanFieldwise` is meant to make it easy to compare two spans in a
+    /// "dumb" way based purely on its unit values. This is distinct from
+    /// something like [`Span::compare`] that performs a comparison on the
+    /// actual elapsed time of two spans.
+    ///
+    /// It is generally discouraged to use `SpanFieldwise` since spans that
+    /// represent an equivalent elapsed amount of time may compare unequal.
+    /// However, in some cases, it is useful to be able to assert precise
+    /// field values. For example, Jiff itself makes heavy use of fieldwise
+    /// comparisons for tests.
+    ///
+    /// **NOTE:** In `jiff 0.1`, the `Span` type itself also implements the
+    /// `Eq` and `PartialEq` traits. This was considered a bug in the API and
+    /// these trait implementations have been deprecated and will be removed
+    /// in `jiff 0.2`.
+    ///
+    /// # Example: the difference between `SpanFieldwise` and `Span::compare`
+    ///
+    /// In short, `SpanFieldwise` considers `2 hours` and `120 minutes` to be
+    /// distinct values, but `Span::compare` considers them to be equivalent:
+    ///
+    /// ```
+    /// use std::cmp::Ordering;
+    /// use jiff::ToSpan;
+    ///
+    /// assert_ne!(120.minutes().fieldwise(), 2.hours().fieldwise());
+    /// assert_eq!(120.minutes().compare(2.hours())?, Ordering::Equal);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn fieldwise(self) -> SpanFieldwise {
+        SpanFieldwise(self)
+    }
+
     /// Multiplies each field in this span by a given integer.
     ///
     /// If this would cause any individual field in this span to overflow, then
@@ -1899,7 +1937,7 @@ impl Span {
     /// use jiff::{civil::date, ToSpan, Unit};
     ///
     /// let span = 744.hours();
-    /// let relative = date(2024, 3, 1).intz("America/New_York")?;
+    /// let relative = date(2024, 3, 1).in_tz("America/New_York")?;
     /// // Because of the short day, 744 hours is actually a little *more* than
     /// // 1 month starting from 2024-03-01.
     /// assert_eq!(span.total((Unit::Month, &relative))?, 1.0013888888888889);
@@ -3203,6 +3241,16 @@ impl Default for Span {
     }
 }
 
+/*
+impl Eq for Span {}
+
+impl PartialEq for Span {
+    fn eq(&self, rhs: &Span) -> bool {
+        self.fieldwise() == rhs.fieldwise()
+    }
+}
+*/
+
 impl core::fmt::Debug for Span {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -3685,6 +3733,125 @@ impl quickcheck::Arbitrary for Span {
                     },
                 ),
         )
+    }
+}
+
+/// A wrapper for [`Span`] that implements the `Hash`, `Eq` and `PartialEq`
+/// traits.
+///
+/// A `SpanFieldwise` is meant to make it easy to compare two spans in a "dumb"
+/// way based purely on its unit values, while still providing a speed bump
+/// to avoid accidentally doing this comparison on `Span` directly. This is
+/// distinct from something like [`Span::compare`] that performs a comparison
+/// on the actual elapsed time of two spans.
+///
+/// It is generally discouraged to use `SpanFieldwise` since spans that
+/// represent an equivalent elapsed amount of time may compare unequal.
+/// However, in some cases, it is useful to be able to assert precise field
+/// values. For example, Jiff itself makes heavy use of fieldwise comparisons
+/// for tests.
+///
+/// **NOTE:** In `jiff 0.1`, the `Span` type itself also implements the
+/// `Eq` and `PartialEq` traits. This was considered a bug in the API and
+/// these trait implementations have been deprecated and will be removed
+/// in `jiff 0.2`.
+///
+/// # Construction
+///
+/// While callers may use `SpanFieldwise(span)` (where `span` has type [`Span`])
+/// to construct a value of this type, callers may find [`Span::fieldwise`]
+/// more convenient. Namely, `Span::fieldwise` may avoid the need to explicitly
+/// import `SpanFieldwise`.
+///
+/// # Trait implementations
+///
+/// In addition to implementing the `Hash`, `Eq` and `PartialEq` traits, this
+/// type also provides `PartialEq` impls for comparing a `Span` with a
+/// `SpanFieldwise`. This simplifies comparisons somewhat while still requiring
+/// that at least one of the values has an explicit fieldwise comparison type.
+///
+/// # Safety
+///
+/// This type is guaranteed to have the same layout in memory as [`Span`].
+///
+/// # Example: the difference between `SpanFieldwise` and [`Span::compare`]
+///
+/// In short, `SpanFieldwise` considers `2 hours` and `120 minutes` to be
+/// distinct values, but `Span::compare` considers them to be equivalent:
+///
+/// ```
+/// use std::cmp::Ordering;
+/// use jiff::ToSpan;
+///
+/// assert_ne!(120.minutes().fieldwise(), 2.hours().fieldwise());
+/// assert_eq!(120.minutes().compare(2.hours())?, Ordering::Equal);
+///
+/// // These comparisons are allowed between a `Span` and a `SpanFieldwise`.
+/// // Namely, as long as one value is "fieldwise," then the comparison is OK.
+/// assert_ne!(120.minutes().fieldwise(), 2.hours());
+/// assert_ne!(120.minutes(), 2.hours().fieldwise());
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Copy, Debug, Default)]
+#[repr(transparent)]
+pub struct SpanFieldwise(pub Span);
+
+impl Eq for SpanFieldwise {}
+
+impl PartialEq for SpanFieldwise {
+    fn eq(&self, rhs: &SpanFieldwise) -> bool {
+        self.0.sign == rhs.0.sign
+            && self.0.years == rhs.0.years
+            && self.0.months == rhs.0.months
+            && self.0.weeks == rhs.0.weeks
+            && self.0.days == rhs.0.days
+            && self.0.hours == rhs.0.hours
+            && self.0.minutes == rhs.0.minutes
+            && self.0.seconds == rhs.0.seconds
+            && self.0.milliseconds == rhs.0.milliseconds
+            && self.0.microseconds == rhs.0.microseconds
+            && self.0.nanoseconds == rhs.0.nanoseconds
+    }
+}
+
+impl<'a> PartialEq<SpanFieldwise> for &'a SpanFieldwise {
+    fn eq(&self, rhs: &SpanFieldwise) -> bool {
+        *self == rhs
+    }
+}
+
+impl PartialEq<Span> for SpanFieldwise {
+    fn eq(&self, rhs: &Span) -> bool {
+        self == rhs.fieldwise()
+    }
+}
+
+impl PartialEq<SpanFieldwise> for Span {
+    fn eq(&self, rhs: &SpanFieldwise) -> bool {
+        self.fieldwise() == *rhs
+    }
+}
+
+impl<'a> PartialEq<SpanFieldwise> for &'a Span {
+    fn eq(&self, rhs: &SpanFieldwise) -> bool {
+        self.fieldwise() == *rhs
+    }
+}
+
+impl core::hash::Hash for SpanFieldwise {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.0.sign.hash(state);
+        self.0.years.hash(state);
+        self.0.months.hash(state);
+        self.0.weeks.hash(state);
+        self.0.days.hash(state);
+        self.0.hours.hash(state);
+        self.0.minutes.hash(state);
+        self.0.seconds.hash(state);
+        self.0.milliseconds.hash(state);
+        self.0.microseconds.hash(state);
+        self.0.nanoseconds.hash(state);
     }
 }
 
@@ -4479,7 +4646,7 @@ impl<'a, 'b> From<(&'a Span, &'b Zoned)> for SpanCompare<'b> {
 /// use jiff::{civil::date, ToSpan, Unit};
 ///
 /// let span = 744.hours();
-/// let relative = date(2024, 3, 1).intz("America/New_York")?;
+/// let relative = date(2024, 3, 1).in_tz("America/New_York")?;
 /// // Because of the short day, 744 hours is actually a little *more* than
 /// // 1 month starting from 2024-03-01.
 /// assert_eq!(span.total((Unit::Month, &relative))?, 1.0013888888888889);
@@ -6118,7 +6285,7 @@ mod tests {
 
         let span = 2756.hours();
         let dt = date(2020, 1, 1).at(0, 0, 0, 0);
-        let zdt = dt.intz("Europe/Rome").unwrap();
+        let zdt = dt.in_tz("Europe/Rome").unwrap();
         let total = span.total((Unit::Month, &zdt)).unwrap();
         assert_eq!(total, 3.7958333333333334);
         let total = span.total((Unit::Month, dt)).unwrap();
@@ -6139,7 +6306,7 @@ mod tests {
         assert_eq!(array, [span3, span1, span2]);
 
         let dt = date(2020, 11, 1).at(0, 0, 0, 0);
-        let zdt = dt.intz("America/Los_Angeles").unwrap();
+        let zdt = dt.in_tz("America/Los_Angeles").unwrap();
         array.sort_by(|sp1, sp2| sp1.compare((sp2, &zdt)).unwrap());
         assert_eq!(array, [span1, span3, span2]);
     }
@@ -6250,7 +6417,7 @@ mod tests {
 
         let span = 2756.hours();
         let relative =
-            date(2020, 1, 1).at(0, 0, 0, 0).intz("America/New_York").unwrap();
+            date(2020, 1, 1).at(0, 0, 0, 0).in_tz("America/New_York").unwrap();
         let options = SpanRound::new()
             .largest(Unit::Year)
             .smallest(Unit::Day)
@@ -6261,7 +6428,7 @@ mod tests {
         let span = 24.hours().nanoseconds(5);
         let relative = date(2000, 10, 29)
             .at(0, 0, 0, 0)
-            .intz("America/Vancouver")
+            .in_tz("America/Vancouver")
             .unwrap();
         let options = SpanRound::new()
             .largest(Unit::Day)
@@ -6279,8 +6446,10 @@ mod tests {
 
         // Ref: https://github.com/tc39/proposal-temporal/issues/2816#issuecomment-2115608460
         let span = -1.month().hours(24);
-        let relative: crate::Zoned =
-            date(2024, 4, 11).at(2, 0, 0, 0).intz("America/New_York").unwrap();
+        let relative: crate::Zoned = date(2024, 4, 11)
+            .at(2, 0, 0, 0)
+            .in_tz("America/New_York")
+            .unwrap();
         let options =
             SpanRound::new().smallest(Unit::Millisecond).relative(&relative);
         let rounded = span.round(options).unwrap();
@@ -6294,8 +6463,10 @@ mod tests {
         // duration includes a 23 hour day, and so an additional hour has to be
         // added to the span to account for that.)
         let span = -1.month().hours(24);
-        let relative =
-            date(2024, 6, 11).at(2, 0, 0, 0).intz("America/New_York").unwrap();
+        let relative = date(2024, 6, 11)
+            .at(2, 0, 0, 0)
+            .in_tz("America/New_York")
+            .unwrap();
         let options =
             SpanRound::new().smallest(Unit::Millisecond).relative(&relative);
         let rounded = span.round(options).unwrap();
@@ -6310,21 +6481,21 @@ mod tests {
 
         let span = 2756.hours();
         let relative =
-            date(2020, 1, 1).at(0, 0, 0, 0).intz("America/New_York").unwrap();
+            date(2020, 1, 1).at(0, 0, 0, 0).in_tz("America/New_York").unwrap();
         let options = SpanRound::new().largest(Unit::Year).relative(&relative);
         let rounded = span.round(options).unwrap();
         assert_eq!(rounded, 3.months().days(23).hours(21));
 
         let span = 2756.hours();
         let relative =
-            date(2020, 9, 1).at(0, 0, 0, 0).intz("America/New_York").unwrap();
+            date(2020, 9, 1).at(0, 0, 0, 0).in_tz("America/New_York").unwrap();
         let options = SpanRound::new().largest(Unit::Year).relative(&relative);
         let rounded = span.round(options).unwrap();
         assert_eq!(rounded, 3.months().days(23).hours(19));
 
         let span = 3.hours();
         let relative =
-            date(2020, 3, 8).at(0, 0, 0, 0).intz("America/New_York").unwrap();
+            date(2020, 3, 8).at(0, 0, 0, 0).in_tz("America/New_York").unwrap();
         let options = SpanRound::new().largest(Unit::Year).relative(&relative);
         let rounded = span.round(options).unwrap();
         assert_eq!(rounded, 3.hours());

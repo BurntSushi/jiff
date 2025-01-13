@@ -15,7 +15,7 @@ mod zoneinfo;
 /// Returns a copy of the global [`TimeZoneDatabase`].
 ///
 /// This is the same database used for convenience routines like
-/// [`Timestamp::intz`](crate::Timestamp::intz) and parsing routines
+/// [`Timestamp::in_tz`](crate::Timestamp::in_tz) and parsing routines
 /// for [`Zoned`](crate::Zoned) that need to do IANA time zone identifier
 /// lookups. Basically, whenever an implicit time zone database is needed,
 /// it is *this* copy of the time zone database that is used.
@@ -105,7 +105,7 @@ pub fn db() -> &'static TimeZoneDatabase {
 /// and parsing the time zone transitions out of that file requires
 /// a fair amount of work, a `TimeZoneDatabase` does a fair bit of
 /// caching. This means that the vast majority of calls to, for example,
-/// [`Timestamp::intz`](crate::Timestamp::intz) don't actually need to hit
+/// [`Timestamp::in_tz`](crate::Timestamp::in_tz) don't actually need to hit
 /// disk. It will just find a cached copy of a [`TimeZone`] and return that.
 ///
 /// Of course, with caching comes problems of cache invalidation. Invariably,

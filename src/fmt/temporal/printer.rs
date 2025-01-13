@@ -493,13 +493,13 @@ mod tests {
         }
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.intz("America/New_York").unwrap();
+        let zoned: Zoned = dt.in_tz("America/New_York").unwrap();
         let mut buf = String::new();
         DateTimePrinter::new().print_zoned(&zoned, &mut buf).unwrap();
         assert_eq!(buf, "2024-03-10T05:34:45-04:00[America/New_York]");
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.intz("America/New_York").unwrap();
+        let zoned: Zoned = dt.in_tz("America/New_York").unwrap();
         let zoned = zoned.with_time_zone(TimeZone::UTC);
         let mut buf = String::new();
         DateTimePrinter::new().print_zoned(&zoned, &mut buf).unwrap();
@@ -513,7 +513,7 @@ mod tests {
         }
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.intz("America/New_York").unwrap();
+        let zoned: Zoned = dt.in_tz("America/New_York").unwrap();
         let mut buf = String::new();
         DateTimePrinter::new()
             .print_timestamp(&zoned.timestamp(), None, &mut buf)
@@ -521,7 +521,7 @@ mod tests {
         assert_eq!(buf, "2024-03-10T09:34:45Z");
 
         let dt = date(-2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.intz("America/New_York").unwrap();
+        let zoned: Zoned = dt.in_tz("America/New_York").unwrap();
         let mut buf = String::new();
         DateTimePrinter::new()
             .print_timestamp(&zoned.timestamp(), None, &mut buf)

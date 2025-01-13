@@ -1,5 +1,16 @@
 # CHANGELOG
 
+0.1.25 (TBD)
+============
+TODO
+
+Deprecations:
+
+* [#28](https://github.com/BurntSushi/jiff/issues/28):
+The `intz` methods on `Zoned`, `Timestamp`, `civil::DateTime` and `civil::Date`
+have been deprecated in favor of `in_tz`.
+
+
 0.1.24 (2025-01-16)
 ===================
 This release updates Jiff's bundled copy of the [IANA Time Zone Database] to

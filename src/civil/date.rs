@@ -1152,7 +1152,7 @@ impl Date {
     /// time zone and setting the clock time to midnight.
     ///
     /// This is a convenience function for
-    /// `date.to_datetime(midnight).intz(name)`. See [`DateTime::to_zoned`]
+    /// `date.to_datetime(midnight).in_tz(name)`. See [`DateTime::to_zoned`]
     /// for more details. Note that ambiguous datetimes are handled in the
     /// same way as `DateTime::to_zoned`.
     ///
@@ -1174,7 +1174,7 @@ impl Date {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt = date(2024, 6, 20).intz("America/New_York")?;
+    /// let zdt = date(2024, 6, 20).in_tz("America/New_York")?;
     /// assert_eq!(zdt.to_string(), "2024-06-20T00:00:00-04:00[America/New_York]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1195,7 +1195,7 @@ impl Date {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt = date(2024, 3, 10).intz("Cuba")?;
+    /// let zdt = date(2024, 3, 10).in_tz("Cuba")?;
     /// assert_eq!(zdt.to_string(), "2024-03-10T01:00:00-04:00[Cuba]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1223,7 +1223,7 @@ impl Date {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn intz(self, time_zone_name: &str) -> Result<Zoned, Error> {
+    pub fn in_tz(self, time_zone_name: &str) -> Result<Zoned, Error> {
         let tz = crate::tz::db().get(time_zone_name)?;
         self.to_zoned(tz)
     }
@@ -1237,7 +1237,7 @@ impl Date {
     /// way as `DateTime::to_zoned`.
     ///
     /// In the common case of a time zone being represented as a name string,
-    /// like `Australia/Tasmania`, consider using [`Date::intz`]
+    /// like `Australia/Tasmania`, consider using [`Date::in_tz`]
     /// instead.
     ///
     /// # Errors
@@ -2067,6 +2067,17 @@ impl Date {
     #[inline]
     pub fn to_iso_week_date(self) -> ISOWeekDate {
         self.iso_week_date()
+    }
+
+    /// A deprecated equivalent to [`Date::in_tz`].
+    ///
+    /// This will be removed in `jiff 0.2`. The method was renamed to make
+    /// it clearer that the name stood for "in time zone."
+    #[deprecated(since = "0.1.25", note = "use Date::in_tz instead")]
+    #[inline]
+    pub fn intz(self, time_zone_name: &str) -> Result<Zoned, Error> {
+        let tz = crate::tz::db().get(time_zone_name)?;
+        self.to_zoned(tz)
     }
 }
 

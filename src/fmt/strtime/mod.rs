@@ -38,7 +38,7 @@ And this shows how to format a zoned datetime with a time zone abbreviation:
 ```
 use jiff::civil::date;
 
-let zdt = date(2024, 7, 15).at(17, 30, 59, 0).intz("Australia/Tasmania")?;
+let zdt = date(2024, 7, 15).at(17, 30, 59, 0).in_tz("Australia/Tasmania")?;
 // %-I instead of %I means no padding.
 let string = zdt.strftime("%A, %B %d, %Y at %-I:%M%P %Z").to_string();
 assert_eq!(string, "Monday, July 15, 2024 at 5:30pm AEST");
@@ -57,7 +57,7 @@ let zdt = Zoned::strptime(
 )?;
 assert_eq!(
     zdt,
-    date(2024, 7, 15).at(17, 30, 0, 0).intz("Australia/Tasmania")?,
+    date(2024, 7, 15).at(17, 30, 0, 0).in_tz("Australia/Tasmania")?,
 );
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -310,7 +310,7 @@ mod parse;
 /// )?.to_zoned()?;
 /// assert_eq!(
 ///     zdt,
-///     date(2024, 7, 15).at(16, 24, 59, 123_456_789).intz("America/New_York")?,
+///     date(2024, 7, 15).at(16, 24, 59, 123_456_789).in_tz("America/New_York")?,
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -351,7 +351,7 @@ pub fn parse(
 /// ```
 /// use jiff::{civil::date, fmt::strtime, tz};
 ///
-/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).intz("America/New_York")?;
+/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 /// let string = strtime::format("%a, %-d %b %Y %T %z", &zdt)?;
 /// assert_eq!(string, "Mon, 15 Jul 2024 16:24:59 -0400");
 ///
@@ -371,7 +371,7 @@ pub fn parse(
 /// ```
 /// use jiff::{civil::date, fmt::strtime, tz};
 ///
-/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).intz("America/New_York")?;
+/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 /// let string = strtime::format("%a %b %e %I:%M:%S %p %Z %Y", &zdt)?;
 /// assert_eq!(string, "Mon Jul 15 04:24:59 PM EDT 2024");
 ///
@@ -385,7 +385,7 @@ pub fn parse(
 ///
 /// let zdt = date(2024, 7, 15)
 ///     .at(16, 24, 59, 123_456_789)
-///     .intz("America/New_York")?;
+///     .in_tz("America/New_York")?;
 /// let string = strtime::format("%Y-%m-%dT%H:%M:%S%.f%:z", &zdt)?;
 /// assert_eq!(string, "2024-07-15T16:24:59.123456789-04:00");
 ///
@@ -556,7 +556,7 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::{civil::date, fmt::strtime::BrokenDownTime};
     ///
-    /// let zdt = date(2024, 7, 9).at(16, 24, 0, 0).intz("America/New_York")?;
+    /// let zdt = date(2024, 7, 9).at(16, 24, 0, 0).in_tz("America/New_York")?;
     /// let tm = BrokenDownTime::from(&zdt);
     ///
     /// let mut buf = String::new();
@@ -606,7 +606,7 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::{civil::date, fmt::strtime::BrokenDownTime};
     ///
-    /// let zdt = date(2024, 7, 9).at(16, 24, 0, 0).intz("America/New_York")?;
+    /// let zdt = date(2024, 7, 9).at(16, 24, 0, 0).in_tz("America/New_York")?;
     /// let tm = BrokenDownTime::from(&zdt);
     /// let string = tm.to_string("%a %b %e %I:%M:%S %p %Z %Y")?;
     /// assert_eq!(string, "Tue Jul  9 04:24:00 PM EDT 2024");
@@ -1694,7 +1694,7 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::{civil::date, fmt::strtime::BrokenDownTime, tz};
     ///
-    /// let zdt = date(2024, 8, 28).at(14, 56, 0, 0).intz("US/Eastern")?;
+    /// let zdt = date(2024, 8, 28).at(14, 56, 0, 0).in_tz("US/Eastern")?;
     /// let mut tm = BrokenDownTime::from(&zdt);
     /// tm.set_offset(Some(tz::offset(12)));
     /// assert_eq!(
@@ -1753,7 +1753,7 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::{civil::date, fmt::strtime::BrokenDownTime, tz};
     ///
-    /// let zdt = date(2024, 8, 28).at(14, 56, 0, 0).intz("US/Eastern")?;
+    /// let zdt = date(2024, 8, 28).at(14, 56, 0, 0).in_tz("US/Eastern")?;
     /// let mut tm = BrokenDownTime::from(&zdt);
     /// tm.set_iana_time_zone(Some(String::from("Australia/Tasmania")));
     /// assert_eq!(
@@ -1937,7 +1937,7 @@ impl From<Time> for BrokenDownTime {
 /// ```
 /// use jiff::{civil::date, fmt::strtime, tz};
 ///
-/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).intz("America/New_York")?;
+/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 /// let string = zdt.strftime("%a, %-d %b %Y %T %z").to_string();
 /// assert_eq!(string, "Mon, 15 Jul 2024 16:24:59 -0400");
 ///
@@ -1949,7 +1949,7 @@ impl From<Time> for BrokenDownTime {
 /// ```
 /// use jiff::{civil::date, fmt::strtime, tz};
 ///
-/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).intz("America/New_York")?;
+/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 ///
 /// let string = format!("the date is: {}", zdt.strftime("%-m/%-d/%-Y"));
 /// assert_eq!(string, "the date is: 7/15/2024");

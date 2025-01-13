@@ -21,7 +21,7 @@ fn civil_datetime_to_instant_with_tzdb_lookup(c: &mut Criterion) {
         let dt = jiff::civil::date(2024, 6, 30).at(9, 46, 0, 0);
         c.bench_function(&format!("jiff/{NAME}"), |b| {
             b.iter(|| {
-                let zdt = bb(dt).intz(bb(TZNAME)).unwrap();
+                let zdt = bb(dt).in_tz(bb(TZNAME)).unwrap();
                 assert_eq!(zdt.timestamp().as_second(), STAMP)
             })
         });
