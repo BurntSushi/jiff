@@ -746,7 +746,7 @@ mod tests {
 
         let zdt = date(2024, 7, 14)
             .at(22, 24, 0, 0)
-            .intz("America/New_York")
+            .in_tz("America/New_York")
             .unwrap();
         insta::assert_snapshot!(f("%z", &zdt), @"-0400");
         insta::assert_snapshot!(f("%:z", &zdt), @"-04:00");
@@ -808,7 +808,7 @@ mod tests {
 
         let zdt = date(2024, 7, 14)
             .at(22, 24, 0, 0)
-            .intz("America/New_York")
+            .in_tz("America/New_York")
             .unwrap();
         insta::assert_snapshot!(f("%Z", &zdt), @"EDT");
         insta::assert_snapshot!(f("%^Z", &zdt), @"EDT");
@@ -828,7 +828,7 @@ mod tests {
 
         let zdt = date(2024, 7, 14)
             .at(22, 24, 0, 0)
-            .intz("America/New_York")
+            .in_tz("America/New_York")
             .unwrap();
         insta::assert_snapshot!(f("%V", &zdt), @"America/New_York");
         insta::assert_snapshot!(f("%:V", &zdt), @"America/New_York");

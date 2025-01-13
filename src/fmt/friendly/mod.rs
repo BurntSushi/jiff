@@ -172,8 +172,8 @@ hour before printing:
 ```
 use jiff::{civil, RoundMode, ToSpan, Unit, ZonedDifference};
 
-let commented_at = civil::date(2024, 8, 1).at(19, 29, 13, 123_456_789).intz("US/Eastern")?;
-let now = civil::date(2024, 12, 26).at(12, 49, 0, 0).intz("US/Eastern")?;
+let commented_at = civil::date(2024, 8, 1).at(19, 29, 13, 123_456_789).in_tz("US/Eastern")?;
+let now = civil::date(2024, 12, 26).at(12, 49, 0, 0).in_tz("US/Eastern")?;
 
 // The default, with units permitted up to years.
 let span = now.since((Unit::Year, &commented_at))?;
@@ -378,22 +378,22 @@ use jiff::{civil, Span};
 let span: Span = "1 day".parse()?;
 let dur = humantime::parse_duration("1 day")?;
 
-let zdt = civil::date(2024, 3, 9).at(17, 0, 0, 0).intz("US/Eastern")?;
+let zdt = civil::date(2024, 3, 9).at(17, 0, 0, 0).in_tz("US/Eastern")?;
 
 // Adding 1 day gives the generally expected result of the same clock
 // time on the following day when adding a `Span`.
-assert_eq!(&zdt + span, civil::date(2024, 3, 10).at(17, 0, 0, 0).intz("US/Eastern")?);
+assert_eq!(&zdt + span, civil::date(2024, 3, 10).at(17, 0, 0, 0).in_tz("US/Eastern")?);
 // But with humantime, all days are assumed to be exactly 24 hours. So
 // you get an instant in time that is 24 hours later, even when some
 // days are shorter and some are longer.
-assert_eq!(&zdt + dur, civil::date(2024, 3, 10).at(18, 0, 0, 0).intz("US/Eastern")?);
+assert_eq!(&zdt + dur, civil::date(2024, 3, 10).at(18, 0, 0, 0).in_tz("US/Eastern")?);
 
 // Notice also that this inaccuracy can occur merely by a duration that
 // _crosses_ a time zone transition boundary (like DST) at any point. It
 // doesn't require your datetimes to be "close" to when DST occurred.
 let dur = humantime::parse_duration("20 day")?;
-let zdt = civil::date(2024, 3, 1).at(17, 0, 0, 0).intz("US/Eastern")?;
-assert_eq!(&zdt + dur, civil::date(2024, 3, 21).at(18, 0, 0, 0).intz("US/Eastern")?);
+let zdt = civil::date(2024, 3, 1).at(17, 0, 0, 0).in_tz("US/Eastern")?;
+assert_eq!(&zdt + dur, civil::date(2024, 3, 21).at(18, 0, 0, 0).in_tz("US/Eastern")?);
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```

@@ -533,12 +533,12 @@ impl Time {
     /// use jiff::{civil, Timestamp};
     ///
     /// // 1,234 nanoseconds after the Unix epoch.
-    /// let zdt = Timestamp::new(0, 1_234)?.intz("UTC")?;
+    /// let zdt = Timestamp::new(0, 1_234)?.in_tz("UTC")?;
     /// let time = zdt.datetime().time();
     /// assert_eq!(time.subsec_nanosecond(), 1_234);
     ///
     /// // 1,234 nanoseconds before the Unix epoch.
-    /// let zdt = Timestamp::new(0, -1_234)?.intz("UTC")?;
+    /// let zdt = Timestamp::new(0, -1_234)?.in_tz("UTC")?;
     /// let time = zdt.datetime().time();
     /// // The nanosecond is equal to `1_000_000_000 - 1_234`.
     /// assert_eq!(time.subsec_nanosecond(), 999998766);

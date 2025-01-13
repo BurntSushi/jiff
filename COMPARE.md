@@ -61,7 +61,7 @@ time zone:
 use jiff::civil::date;
 
 fn main() -> anyhow::Result<()> {
-    let zdt = date(2024, 6, 30).at(9, 46, 0, 0).intz("America/New_York")?;
+    let zdt = date(2024, 6, 30).at(9, 46, 0, 0).in_tz("America/New_York")?;
     assert_eq!(zdt.to_string(), "2024-06-30T09:46:00-04:00[America/New_York]");
     Ok(())
 }
@@ -137,7 +137,7 @@ expect it to still perform DST arithmetic:
 use jiff::{civil::date, ToSpan, Zoned};
 
 fn main() -> anyhow::Result<()> {
-    let zdt = date(2024, 3, 10).at(1, 59, 59, 0).intz("America/New_York")?;
+    let zdt = date(2024, 3, 10).at(1, 59, 59, 0).in_tz("America/New_York")?;
 
     let json = serde_json::to_string_pretty(&zdt)?;
     assert_eq!(json, "\"2024-03-10T01:59:59-05:00[America/New_York]\"");
@@ -253,7 +253,7 @@ datetimes. And they agree on the results.
 use jiff::{civil::date, ToSpan, Unit};
 
 fn main() -> anyhow::Result<()> {
-    let zdt1 = date(2024, 3, 9).at(21, 0, 0, 0).intz("America/New_York")?;
+    let zdt1 = date(2024, 3, 9).at(21, 0, 0, 0).in_tz("America/New_York")?;
     let zdt2 = zdt1.checked_add(1.day())?;
 
     // Even though 2 o'clock didn't occur on 2024-03-10, adding 1 day
@@ -411,8 +411,8 @@ In Jiff, one can round the duration computed between two datetimes:
 use jiff::{civil::date, RoundMode, ToSpan, Unit, ZonedDifference};
 
 fn main() -> anyhow::Result<()> {
-    let zdt1 = date(2001, 11, 18).at(8, 30, 0, 0).intz("America/New_York")?;
-    let zdt2 = date(2024, 7, 11).at(22, 38, 0, 0).intz("America/New_York")?;
+    let zdt1 = date(2001, 11, 18).at(8, 30, 0, 0).in_tz("America/New_York")?;
+    let zdt2 = date(2024, 7, 11).at(22, 38, 0, 0).in_tz("America/New_York")?;
 
     let round_options = ZonedDifference::new(&zdt2)
         .largest(Unit::Year)
@@ -444,8 +444,8 @@ is that we provide a reference datetime with which to interpret the span.
 use jiff::{civil::date, SpanRound, ToSpan, Unit};
 
 fn main() -> anyhow::Result<()> {
-    let gapday = date(2024, 3, 10).intz("America/New_York")?;
-    let foldday = date(2024, 11, 3).intz("America/New_York")?;
+    let gapday = date(2024, 3, 10).in_tz("America/New_York")?;
+    let foldday = date(2024, 11, 3).in_tz("America/New_York")?;
 
     let span1 = 11.hours().minutes(30);
     let span2 = span1.round(
@@ -476,8 +476,8 @@ This example is like the one above, except we choose a smaller "largest" unit:
 use jiff::{civil::date, RoundMode, ToSpan, Unit, ZonedDifference};
 
 fn main() -> anyhow::Result<()> {
-    let zdt1 = date(2001, 11, 18).at(8, 30, 0, 0).intz("America/New_York")?;
-    let zdt2 = date(2024, 7, 11).at(22, 38, 0, 0).intz("America/New_York")?;
+    let zdt1 = date(2001, 11, 18).at(8, 30, 0, 0).in_tz("America/New_York")?;
+    let zdt2 = date(2024, 7, 11).at(22, 38, 0, 0).in_tz("America/New_York")?;
 
     let round_options = ZonedDifference::new(&zdt2)
         .largest(Unit::Month)
@@ -496,7 +496,7 @@ fn main() -> anyhow::Result<()> {
 use jiff::civil::{date, Weekday};
 
 fn main() -> anyhow::Result<()> {
-    let zdt = date(2024, 7, 11).at(22, 59, 0, 0).intz("America/New_York")?;
+    let zdt = date(2024, 7, 11).at(22, 59, 0, 0).in_tz("America/New_York")?;
     assert_eq!(zdt.weekday(), Weekday::Thursday);
 
     let next_tuesday = zdt.nth_weekday(1, Weekday::Tuesday)?;
@@ -626,7 +626,7 @@ use jiff::{civil::date, SpanRound, ToSpan, Unit};
 
 fn main() -> anyhow::Result<()> {
     // In the case of a gap (typically transitioning in DST):
-    let zdt = date(2024, 3, 9).at(21, 0, 0, 0).intz("America/New_York")?;
+    let zdt = date(2024, 3, 9).at(21, 0, 0, 0).in_tz("America/New_York")?;
     let span1 = 1.day();
     let span2 = span1.round(
         SpanRound::new().largest(Unit::Hour).relative(&zdt)
@@ -634,7 +634,7 @@ fn main() -> anyhow::Result<()> {
     assert_eq!(span2, 23.hours());
 
     // In the case of a fold (typically transitioning out of DST):
-    let zdt = date(2024, 11, 2).at(21, 0, 0, 0).intz("America/New_York")?;
+    let zdt = date(2024, 11, 2).at(21, 0, 0, 0).in_tz("America/New_York")?;
     let span1 = 1.day();
     let span2 = span1.round(
         SpanRound::new().largest(Unit::Hour).relative(&zdt)
@@ -731,7 +731,7 @@ only create a datetime with an offset, but with a _time zone_:
 use jiff::{civil::date, ToSpan};
 
 fn main() -> anyhow::Result<()> {
-    let zdt1 = date(2024, 3, 10).at(1, 30, 0, 0).intz("America/New_York")?;
+    let zdt1 = date(2024, 3, 10).at(1, 30, 0, 0).in_tz("America/New_York")?;
     let zdt2 = zdt1.checked_add(1.hour())?;
     assert_eq!(zdt2.to_string(), "2024-03-10T03:30:00-04:00[America/New_York]");
 
@@ -863,7 +863,7 @@ use jiff::{civil::date, Unit, Zoned};
 fn main() -> anyhow::Result<()> {
     // Can also use `.to_zoned(TimeZone::system())` to use your system's
     // default time zone.
-    let zdt1 = date(2024, 7, 11).at(16, 46, 0, 0).intz("America/New_York")?;
+    let zdt1 = date(2024, 7, 11).at(16, 46, 0, 0).in_tz("America/New_York")?;
     let zdt2 = zdt1.round(Unit::Hour)?;
     assert_eq!(zdt2.to_string(), "2024-07-11T17:00:00-04:00[America/New_York]");
 
@@ -884,8 +884,8 @@ In Jiff, one can round the duration computed between two datetimes
 use jiff::{civil::date, RoundMode, ToSpan, Unit, ZonedDifference};
 
 fn main() -> anyhow::Result<()> {
-    let zdt1 = date(2001, 11, 18).at(8, 30, 0, 0).intz("America/New_York")?;
-    let zdt2 = date(2024, 7, 11).at(22, 38, 0, 0).intz("America/New_York")?;
+    let zdt1 = date(2001, 11, 18).at(8, 30, 0, 0).in_tz("America/New_York")?;
+    let zdt2 = date(2024, 7, 11).at(22, 38, 0, 0).in_tz("America/New_York")?;
 
     let round_options = ZonedDifference::new(&zdt2)
         .largest(Unit::Year)
@@ -908,7 +908,7 @@ With Jiff, you can add durations with calendar units:
 use jiff::{civil::date, ToSpan, Unit};
 
 fn main() -> anyhow::Result<()> {
-    let zdt1 = date(2024, 7, 11).at(21, 0, 0, 0).intz("America/New_York")?;
+    let zdt1 = date(2024, 7, 11).at(21, 0, 0, 0).in_tz("America/New_York")?;
     let zdt2 = zdt1.checked_add(2.years().months(6).days(1))?;
     assert_eq!(zdt2.to_string(), "2027-01-12T21:00:00-05:00[America/New_York]");
 
@@ -1139,7 +1139,7 @@ use jiff::Timestamp;
 
 fn main() -> anyhow::Result<()> {
     let ts: Timestamp = "2024-09-10T23:37:20Z".parse()?;
-    let zoned = ts.intz("Asia/Tokyo")?;
+    let zoned = ts.in_tz("Asia/Tokyo")?;
 
     // Create ICU datetime.
     let datetime = DateTime::try_new_iso_datetime(

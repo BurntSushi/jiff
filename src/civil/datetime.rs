@@ -673,12 +673,12 @@ impl DateTime {
     /// use jiff::{civil, Timestamp};
     ///
     /// // 1,234 nanoseconds after the Unix epoch.
-    /// let zdt = Timestamp::new(0, 1_234)?.intz("UTC")?;
+    /// let zdt = Timestamp::new(0, 1_234)?.in_tz("UTC")?;
     /// let dt = zdt.datetime();
     /// assert_eq!(dt.subsec_nanosecond(), 1_234);
     ///
     /// // 1,234 nanoseconds before the Unix epoch.
-    /// let zdt = Timestamp::new(0, -1_234)?.intz("UTC")?;
+    /// let zdt = Timestamp::new(0, -1_234)?.in_tz("UTC")?;
     /// let dt = zdt.datetime();
     /// // The nanosecond is equal to `1_000_000_000 - 1_234`.
     /// assert_eq!(dt.subsec_nanosecond(), 999998766);
@@ -1353,7 +1353,7 @@ impl DateTime {
     /// use jiff::civil::DateTime;
     ///
     /// let dt: DateTime = "2024-06-20 15:06".parse()?;
-    /// let zdt = dt.intz("America/New_York")?;
+    /// let zdt = dt.in_tz("America/New_York")?;
     /// assert_eq!(zdt.to_string(), "2024-06-20T15:06:00-04:00[America/New_York]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1378,12 +1378,12 @@ impl DateTime {
     ///
     /// // This is the gap, where by default we select the later time.
     /// let dt: DateTime = "2024-03-10 02:30".parse()?;
-    /// let zdt = dt.intz("America/New_York")?;
+    /// let zdt = dt.in_tz("America/New_York")?;
     /// assert_eq!(zdt.to_string(), "2024-03-10T03:30:00-04:00[America/New_York]");
     ///
     /// // This is the fold, where by default we select the earlier time.
     /// let dt: DateTime = "2024-11-03 01:30".parse()?;
-    /// let zdt = dt.intz("America/New_York")?;
+    /// let zdt = dt.in_tz("America/New_York")?;
     /// // Since this is a fold, the wall clock time is repeated. It might be
     /// // hard to see that this is the earlier time, but notice the offset:
     /// // it is the offset for DST time in New York. The later time, or the
@@ -1402,7 +1402,7 @@ impl DateTime {
     /// use jiff::civil::date;
     ///
     /// let dt = date(2024, 6, 20).at(15, 6, 0, 0);
-    /// assert!(dt.intz("does not exist").is_err());
+    /// assert!(dt.in_tz("does not exist").is_err());
     /// ```
     ///
     /// Note that even if a time zone exists in, say, the IANA database, there
@@ -1420,9 +1420,9 @@ impl DateTime {
     /// let dt = DateTime::MAX;
     /// // All errors because the combination of the offset and the datetime
     /// // isn't enough to fit into timestamp limits.
-    /// assert!(dt.intz("UTC").is_err());
-    /// assert!(dt.intz("America/New_York").is_err());
-    /// assert!(dt.intz("Australia/Tasmania").is_err());
+    /// assert!(dt.in_tz("UTC").is_err());
+    /// assert!(dt.in_tz("America/New_York").is_err());
+    /// assert!(dt.in_tz("Australia/Tasmania").is_err());
     /// // In fact, the only valid offset one can use to turn the maximum civil
     /// // datetime into a Zoned value is the maximum offset:
     /// let tz = Offset::from_seconds(93_599).unwrap().to_time_zone();
@@ -1441,7 +1441,7 @@ impl DateTime {
     /// always a way to convert a `Zoned` instant to a human readable wall
     /// clock time.
     #[inline]
-    pub fn intz(self, time_zone_name: &str) -> Result<Zoned, Error> {
+    pub fn in_tz(self, time_zone_name: &str) -> Result<Zoned, Error> {
         let tz = crate::tz::db().get(time_zone_name)?;
         self.to_zoned(tz)
     }
@@ -1461,7 +1461,7 @@ impl DateTime {
     /// strategy, use [`TimeZone::to_ambiguous_zoned`].
     ///
     /// In the common case of a time zone being represented as a name string,
-    /// like `Australia/Tasmania`, consider using [`DateTime::intz`]
+    /// like `Australia/Tasmania`, consider using [`DateTime::in_tz`]
     /// instead.
     ///
     /// # Errors
@@ -2356,6 +2356,20 @@ impl DateTime {
         format: &'f F,
     ) -> fmt::strtime::Display<'f> {
         fmt::strtime::Display { fmt: format.as_ref(), tm: (*self).into() }
+    }
+}
+
+/// Deprecated APIs.
+impl DateTime {
+    /// A deprecated equivalent to [`DateTime::in_tz`].
+    ///
+    /// This will be removed in `jiff 0.2`. The method was renamed to make
+    /// it clearer that the name stood for "in time zone."
+    #[deprecated(since = "0.1.25", note = "use DateTime::in_tz instead")]
+    #[inline]
+    pub fn intz(self, time_zone_name: &str) -> Result<Zoned, Error> {
+        let tz = crate::tz::db().get(time_zone_name)?;
+        self.to_zoned(tz)
     }
 }
 

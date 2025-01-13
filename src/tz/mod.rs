@@ -8,7 +8,7 @@ converts a civil datetime to a zone aware datetime:
 ```
 use jiff::civil::date;
 
-let zdt = date(2024, 7, 10).at(20, 48, 0, 0).intz("America/New_York")?;
+let zdt = date(2024, 7, 10).at(20, 48, 0, 0).in_tz("America/New_York")?;
 assert_eq!(zdt.to_string(), "2024-07-10T20:48:00-04:00[America/New_York]");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -149,7 +149,7 @@ mod zic;
 /// use jiff::Timestamp;
 ///
 /// let ts = Timestamp::from_second(1_456_789_123)?;
-/// let zdt = ts.intz("America/New_York")?;
+/// let zdt = ts.in_tz("America/New_York")?;
 /// assert_eq!(zdt.to_string(), "2016-02-29T18:38:43-05:00[America/New_York]");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -162,7 +162,7 @@ mod zic;
 /// use jiff::civil::date;
 ///
 /// let dt = date(2024, 7, 15).at(21, 27, 0, 0);
-/// let zdt = dt.intz("America/New_York")?;
+/// let zdt = dt.in_tz("America/New_York")?;
 /// assert_eq!(zdt.to_string(), "2024-07-15T21:27:00-04:00[America/New_York]");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -174,8 +174,8 @@ mod zic;
 /// use jiff::civil::date;
 ///
 /// let dt = date(2024, 7, 15).at(21, 27, 0, 0);
-/// let zdt1 = dt.intz("America/New_York")?;
-/// let zdt2 = zdt1.intz("Israel")?;
+/// let zdt1 = dt.in_tz("America/New_York")?;
+/// let zdt2 = zdt1.in_tz("Israel")?;
 /// assert_eq!(zdt2.to_string(), "2024-07-16T04:27:00+03:00[Israel]");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -664,7 +664,7 @@ impl TimeZone {
     /// ```
     /// use jiff::{tz::TimeZone, Timestamp};
     ///
-    /// let zdt = Timestamp::UNIX_EPOCH.intz("Europe/Rome")?;
+    /// let zdt = Timestamp::UNIX_EPOCH.in_tz("Europe/Rome")?;
     /// assert_eq!(zdt.datetime().to_string(), "1970-01-01T01:00:00");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())

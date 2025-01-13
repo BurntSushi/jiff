@@ -27,7 +27,7 @@ use crate::{
 ///
 /// To obtain civil or "local" datetime units like year, month, day or hour, a
 /// timestamp needs to be combined with a [`TimeZone`] to create a [`Zoned`].
-/// That can be done with [`Timestamp::intz`] or [`Timestamp::to_zoned`].
+/// That can be done with [`Timestamp::in_tz`] or [`Timestamp::to_zoned`].
 ///
 /// The integer count of nanoseconds since the Unix epoch is signed, where
 /// the Unix epoch is `1970-01-01 00:00:00Z`. A positive timestamp indicates
@@ -247,8 +247,8 @@ use crate::{
 /// assert_eq!(after_hour_jump.to_string(), "2024-03-10T07:30:00Z");
 ///
 /// // Now let's attach each instant to an `America/New_York` time zone.
-/// let zdt_before = before_hour_jump.intz("America/New_York")?;
-/// let zdt_after = after_hour_jump.intz("America/New_York")?;
+/// let zdt_before = before_hour_jump.in_tz("America/New_York")?;
+/// let zdt_after = after_hour_jump.in_tz("America/New_York")?;
 /// // And now we can see that even though the original instant refers to
 /// // the 2 o'clock hour, since that hour never existed on the clocks in
 /// // `America/New_York`, an instant with a time zone correctly adjusts.
@@ -308,7 +308,7 @@ use crate::{
 /// ```
 /// use jiff::civil::date;
 ///
-/// let clock = date(2024, 6, 30).at(8, 36, 0, 0).intz("America/New_York")?;
+/// let clock = date(2024, 6, 30).at(8, 36, 0, 0).in_tz("America/New_York")?;
 /// assert_eq!(clock.timestamp().to_string(), "2024-06-30T12:36:00Z");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1035,7 +1035,7 @@ impl Timestamp {
     /// use jiff::Timestamp;
     ///
     /// let ts = Timestamp::new(123_456_789, 0).unwrap();
-    /// let zdt = ts.intz("America/New_York")?;
+    /// let zdt = ts.in_tz("America/New_York")?;
     /// assert_eq!(zdt.to_string(), "1973-11-29T16:33:09-05:00[America/New_York]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1048,7 +1048,7 @@ impl Timestamp {
     /// use jiff::Timestamp;
     ///
     /// // Time zone database lookups are case insensitive!
-    /// let zdt = Timestamp::UNIX_EPOCH.intz("australia/tasmania")?;
+    /// let zdt = Timestamp::UNIX_EPOCH.in_tz("australia/tasmania")?;
     /// assert_eq!(zdt.to_string(), "1970-01-01T11:00:00+11:00[Australia/Tasmania]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1061,10 +1061,10 @@ impl Timestamp {
     /// ```
     /// use jiff::Timestamp;
     ///
-    /// assert!(Timestamp::UNIX_EPOCH.intz("does not exist").is_err());
+    /// assert!(Timestamp::UNIX_EPOCH.in_tz("does not exist").is_err());
     /// ```
     #[inline]
-    pub fn intz(self, time_zone_name: &str) -> Result<Zoned, Error> {
+    pub fn in_tz(self, time_zone_name: &str) -> Result<Zoned, Error> {
         let tz = crate::tz::db().get(time_zone_name)?;
         Ok(self.to_zoned(tz))
     }
@@ -1081,7 +1081,7 @@ impl Timestamp {
     /// a gap, typically DST starting).
     ///
     /// In the common case of a time zone being represented as a name string,
-    /// like `Australia/Tasmania`, consider using [`Timestamp::intz`]
+    /// like `Australia/Tasmania`, consider using [`Timestamp::in_tz`]
     /// instead.
     ///
     /// # Example
@@ -2146,6 +2146,17 @@ impl Timestamp {
         let nanosecond = u32::try_from(self.subsec_nanosecond().abs())
             .expect("nanosecond always fit in a u32");
         (self.signum(), core::time::Duration::new(second, nanosecond))
+    }
+
+    /// A deprecated equivalent to [`Timestamp::in_tz`].
+    ///
+    /// This will be removed in `jiff 0.2`. The method was renamed to make
+    /// it clearer that the name stood for "in time zone."
+    #[deprecated(since = "0.1.25", note = "use Timestamp::in_tz instead")]
+    #[inline]
+    pub fn intz(self, time_zone_name: &str) -> Result<Zoned, Error> {
+        let tz = crate::tz::db().get(time_zone_name)?;
+        Ok(self.to_zoned(tz))
     }
 }
 

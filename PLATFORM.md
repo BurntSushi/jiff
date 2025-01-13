@@ -246,7 +246,7 @@ database to be compiled into your binary. Nothing else needs to be done. Jiff
 will automatically use the bundled copy.
 * Manually create `TimeZone` values via `TimeZone::tzif` from TZif formatted
 data. With this approach, you may need to change how you use Jiff in some
-cases. For example, any `intz` method will need to be changed to use the
+cases. For example, any `in_tz` method will need to be changed to use the
 `to_zoned` equivalent.
 
 #### System time zone
