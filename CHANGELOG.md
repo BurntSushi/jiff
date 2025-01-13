@@ -1,8 +1,15 @@
 # CHANGELOG
 
-0.1.23 (TBD)
-============
-TODO
+0.1.23 (2025-01-13)
+===================
+This release includes some bug fixes, particularly for compilation on
+`aarch64-linux-android`. There are also some minor enhancements, such as making
+`Zoned::iso_week_date` a convenience function for `civil::Date::iso_week_date`,
+in line with similar functions.
+
+My current plan is to make a reasonably quick transition to `jiff 0.2` with a
+few pending breaking changes. I will be making some `jiff 0.1` releases with
+deprecations in order to make the transition as smooth as possible.
 
 Deprecations:
 
