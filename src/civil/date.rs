@@ -1079,44 +1079,44 @@ impl Date {
     ///
     /// # Example
     ///
-    /// This shows a number of examples demonstrating the conversion from an
-    /// ISO 8601 week date to a Gregorian date.
+    /// This shows a number of examples demonstrating the conversion from a
+    /// Gregorian date to an ISO 8601 week date:
     ///
     /// ```
     /// use jiff::civil::{Date, Weekday, date};
     ///
-    /// let weekdate = date(1995, 1, 1).to_iso_week_date();
+    /// let weekdate = date(1995, 1, 1).iso_week_date();
     /// assert_eq!(weekdate.year(), 1994);
     /// assert_eq!(weekdate.week(), 52);
     /// assert_eq!(weekdate.weekday(), Weekday::Sunday);
     ///
-    /// let weekdate = date(1996, 12, 31).to_iso_week_date();
+    /// let weekdate = date(1996, 12, 31).iso_week_date();
     /// assert_eq!(weekdate.year(), 1997);
     /// assert_eq!(weekdate.week(), 1);
     /// assert_eq!(weekdate.weekday(), Weekday::Tuesday);
     ///
-    /// let weekdate = date(2019, 12, 30).to_iso_week_date();
+    /// let weekdate = date(2019, 12, 30).iso_week_date();
     /// assert_eq!(weekdate.year(), 2020);
     /// assert_eq!(weekdate.week(), 1);
     /// assert_eq!(weekdate.weekday(), Weekday::Monday);
     ///
-    /// let weekdate = date(2024, 3, 9).to_iso_week_date();
+    /// let weekdate = date(2024, 3, 9).iso_week_date();
     /// assert_eq!(weekdate.year(), 2024);
     /// assert_eq!(weekdate.week(), 10);
     /// assert_eq!(weekdate.weekday(), Weekday::Saturday);
     ///
-    /// let weekdate = Date::MIN.to_iso_week_date();
+    /// let weekdate = Date::MIN.iso_week_date();
     /// assert_eq!(weekdate.year(), -9999);
     /// assert_eq!(weekdate.week(), 1);
     /// assert_eq!(weekdate.weekday(), Weekday::Monday);
     ///
-    /// let weekdate = Date::MAX.to_iso_week_date();
+    /// let weekdate = Date::MAX.iso_week_date();
     /// assert_eq!(weekdate.year(), 9999);
     /// assert_eq!(weekdate.week(), 52);
     /// assert_eq!(weekdate.weekday(), Weekday::Friday);
     /// ```
     #[inline]
-    pub fn to_iso_week_date(self) -> ISOWeekDate {
+    pub fn iso_week_date(self) -> ISOWeekDate {
         let days = t::NoUnits32::rfrom(self.to_unix_epoch_days());
         let year = t::NoUnits32::rfrom(self.year_ranged());
         let week_start = t::NoUnits32::vary([days, year], |[days, year]| {
@@ -2050,6 +2050,19 @@ impl Date {
         format: &'f F,
     ) -> fmt::strtime::Display<'f> {
         fmt::strtime::Display { fmt: format.as_ref(), tm: (*self).into() }
+    }
+}
+
+/// Deprecated APIs.
+impl Date {
+    /// A deprecated equivalent to [`Date::iso_week_date`].
+    ///
+    /// This method will be removed in `jiff 0.2`. This was done to make naming
+    /// more consistent throughout the crate.
+    #[deprecated(since = "0.1.23", note = "use Date::iso_week_date instead")]
+    #[inline]
+    pub fn to_iso_week_date(self) -> ISOWeekDate {
+        self.iso_week_date()
     }
 }
 
@@ -3741,7 +3754,7 @@ mod tests {
                 let month = Month::new(month).unwrap();
                 for day in 20..=days_in_month(year, month).get() {
                     let date = date(year.get(), month.get(), day);
-                    let wd = date.to_iso_week_date();
+                    let wd = date.iso_week_date();
                     let got = wd.to_date();
                     assert_eq!(
                         date, got,

@@ -1,10 +1,11 @@
 use crate::{
-    civil::{Date, Weekday},
+    civil::{Date, DateTime, Weekday},
     error::{err, Error},
     util::{
         rangeint::RInto,
         t::{self, ISOWeek, ISOYear, C},
     },
+    Zoned,
 };
 
 /// A type representing an [ISO 8601 week date].
@@ -190,7 +191,7 @@ impl ISOWeekDate {
     /// ```
     #[inline]
     pub fn from_date(date: Date) -> ISOWeekDate {
-        date.to_iso_week_date()
+        date.iso_week_date()
     }
 
     // N.B. I tried defining a `ISOWeekDate::constant` for defining ISO week
@@ -448,6 +449,27 @@ impl From<Date> for ISOWeekDate {
     #[inline]
     fn from(date: Date) -> ISOWeekDate {
         ISOWeekDate::from_date(date)
+    }
+}
+
+impl From<DateTime> for ISOWeekDate {
+    #[inline]
+    fn from(dt: DateTime) -> ISOWeekDate {
+        ISOWeekDate::from(dt.date())
+    }
+}
+
+impl From<Zoned> for ISOWeekDate {
+    #[inline]
+    fn from(zdt: Zoned) -> ISOWeekDate {
+        ISOWeekDate::from(zdt.date())
+    }
+}
+
+impl<'a> From<&'a Zoned> for ISOWeekDate {
+    #[inline]
+    fn from(zdt: &'a Zoned) -> ISOWeekDate {
+        ISOWeekDate::from(zdt.date())
     }
 }
 

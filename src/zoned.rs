@@ -1,7 +1,10 @@
 use core::time::Duration as UnsignedDuration;
 
 use crate::{
-    civil::{Date, DateTime, DateTimeRound, DateTimeWith, Era, Time, Weekday},
+    civil::{
+        Date, DateTime, DateTimeRound, DateTimeWith, Era, ISOWeekDate, Time,
+        Weekday,
+    },
     duration::{Duration, SDuration},
     error::{err, Error, ErrorContext},
     fmt::{
@@ -1852,6 +1855,56 @@ impl Zoned {
     #[inline]
     pub fn time(&self) -> Time {
         self.datetime().time()
+    }
+
+    /// Construct a civil [ISO 8601 week date] from this zoned datetime.
+    ///
+    /// The [`ISOWeekDate`] type describes itself in more detail, but in
+    /// brief, the ISO week date calendar system eschews months in favor of
+    /// weeks.
+    ///
+    /// This routine is equivalent to
+    /// [`ISOWeekDate::from_date(zdt.date())`](ISOWeekDate::from_date).
+    ///
+    /// [ISO 8601 week date]: https://en.wikipedia.org/wiki/ISO_week_date
+    ///
+    /// # Example
+    ///
+    /// This shows a number of examples demonstrating the conversion from a
+    /// Gregorian date to an ISO 8601 week date:
+    ///
+    /// ```
+    /// use jiff::civil::{Date, Time, Weekday, date};
+    ///
+    /// let zdt = date(1995, 1, 1).at(18, 45, 0, 0).intz("US/Eastern")?;
+    /// let weekdate = zdt.iso_week_date();
+    /// assert_eq!(weekdate.year(), 1994);
+    /// assert_eq!(weekdate.week(), 52);
+    /// assert_eq!(weekdate.weekday(), Weekday::Sunday);
+    ///
+    /// let zdt = date(1996, 12, 31).at(18, 45, 0, 0).intz("US/Eastern")?;
+    /// let weekdate = zdt.iso_week_date();
+    /// assert_eq!(weekdate.year(), 1997);
+    /// assert_eq!(weekdate.week(), 1);
+    /// assert_eq!(weekdate.weekday(), Weekday::Tuesday);
+    ///
+    /// let zdt = date(2019, 12, 30).at(18, 45, 0, 0).intz("US/Eastern")?;
+    /// let weekdate = zdt.iso_week_date();
+    /// assert_eq!(weekdate.year(), 2020);
+    /// assert_eq!(weekdate.week(), 1);
+    /// assert_eq!(weekdate.weekday(), Weekday::Monday);
+    ///
+    /// let zdt = date(2024, 3, 9).at(18, 45, 0, 0).intz("US/Eastern")?;
+    /// let weekdate = zdt.iso_week_date();
+    /// assert_eq!(weekdate.year(), 2024);
+    /// assert_eq!(weekdate.week(), 10);
+    /// assert_eq!(weekdate.weekday(), Weekday::Saturday);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn iso_week_date(self) -> ISOWeekDate {
+        self.date().iso_week_date()
     }
 
     /// Returns the time zone offset of this zoned datetime.
