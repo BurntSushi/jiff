@@ -786,12 +786,12 @@ impl Offset {
     ///
     /// assert_eq!(
     ///     tz::offset(-5).until(tz::Offset::UTC),
-    ///     (5 * 60 * 60).seconds(),
+    ///     (5 * 60 * 60).seconds().fieldwise(),
     /// );
     /// // Flipping the operands in this case results in a negative span.
     /// assert_eq!(
     ///     tz::Offset::UTC.until(tz::offset(-5)),
-    ///     -(5 * 60 * 60).seconds(),
+    ///     -(5 * 60 * 60).seconds().fieldwise(),
     /// );
     /// ```
     #[inline]
@@ -817,12 +817,12 @@ impl Offset {
     ///
     /// assert_eq!(
     ///     tz::Offset::UTC.since(tz::offset(-5)),
-    ///     (5 * 60 * 60).seconds(),
+    ///     (5 * 60 * 60).seconds().fieldwise(),
     /// );
     /// // Flipping the operands in this case results in a negative span.
     /// assert_eq!(
     ///     tz::offset(-5).since(tz::Offset::UTC),
-    ///     -(5 * 60 * 60).seconds(),
+    ///     -(5 * 60 * 60).seconds().fieldwise(),
     /// );
     /// ```
     #[inline]

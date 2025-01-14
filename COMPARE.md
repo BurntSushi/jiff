@@ -260,9 +260,9 @@ fn main() -> anyhow::Result<()> {
     // returns the same civil time the next day.
     assert_eq!(zdt2.to_string(), "2024-03-10T21:00:00-04:00[America/New_York]");
     // The span of time is 23 hours:
-    assert_eq!(&zdt2 - &zdt1, 23.hours());
+    assert_eq!(&zdt2 - &zdt1, 23.hours().fieldwise());
     // But if you ask for the span in units of days, you get exactly 1:
-    assert_eq!(zdt1.until((Unit::Day, &zdt2))?, 1.day());
+    assert_eq!(zdt1.until((Unit::Day, &zdt2))?, 1.day().fieldwise());
 
     Ok(())
 }
@@ -331,7 +331,7 @@ fn main() -> anyhow::Result<()> {
     assert_eq!(json, "\"P5Y2M1DT20H\"");
 
     let got: Span = serde_json::from_str(&json)?;
-    assert_eq!(got, span);
+    assert_eq!(got, span.fieldwise());
 
     Ok(())
 }
@@ -419,7 +419,7 @@ fn main() -> anyhow::Result<()> {
         .smallest(Unit::Day)
         .mode(RoundMode::HalfExpand);
     let span = zdt1.until(round_options)?;
-    assert_eq!(span, 22.years().months(7).days(24));
+    assert_eq!(span.fieldwise(), 22.years().months(7).days(24));
 
     Ok(())
 }
@@ -452,14 +452,14 @@ fn main() -> anyhow::Result<()> {
         SpanRound::new().smallest(Unit::Day).relative(&gapday),
     )?;
     // rounds up, even though on a normal day 11.5 hours would round down.
-    assert_eq!(span2, 1.day());
+    assert_eq!(span2, 1.day().fieldwise());
 
     let span1 = 12.hours();
     let span2 = span1.round(
         SpanRound::new().smallest(Unit::Day).relative(&foldday),
     )?;
     // rounds down, even though on a normal day 12 hours would round up.
-    assert_eq!(span2, 0.days());
+    assert_eq!(span2, 0.days().fieldwise());
 
     Ok(())
 }
@@ -484,7 +484,7 @@ fn main() -> anyhow::Result<()> {
         .smallest(Unit::Day)
         .mode(RoundMode::HalfExpand);
     let span = zdt1.until(round_options)?;
-    assert_eq!(span, 271.months().days(24));
+    assert_eq!(span, 271.months().days(24).fieldwise());
 
     Ok(())
 }
@@ -591,7 +591,7 @@ fn main() -> anyhow::Result<()> {
     let span1 = 2.years().months(4).days(25).hours(23);
     let span2 = 3.hours();
     let span3 = span1.checked_add((span2, date(2024, 1, 1)))?;
-    assert_eq!(span3, 2.years().months(4).days(26).hours(2));
+    assert_eq!(span3.fieldwise(), 2.years().months(4).days(26).hours(2));
 
     Ok(())
 }
@@ -612,7 +612,7 @@ use jiff::{SpanRound, ToSpan, Unit};
 fn main() -> anyhow::Result<()> {
     let span1 = 1.day();
     let span2 = span1.round(SpanRound::new().largest(Unit::Hour))?;
-    assert_eq!(span2, 24.hours());
+    assert_eq!(span2, 24.hours().fieldwise());
 
     Ok(())
 }
@@ -631,7 +631,7 @@ fn main() -> anyhow::Result<()> {
     let span2 = span1.round(
         SpanRound::new().largest(Unit::Hour).relative(&zdt)
     )?;
-    assert_eq!(span2, 23.hours());
+    assert_eq!(span2, 23.hours().fieldwise());
 
     // In the case of a fold (typically transitioning out of DST):
     let zdt = date(2024, 11, 2).at(21, 0, 0, 0).in_tz("America/New_York")?;
@@ -639,7 +639,7 @@ fn main() -> anyhow::Result<()> {
     let span2 = span1.round(
         SpanRound::new().largest(Unit::Hour).relative(&zdt)
     )?;
-    assert_eq!(span2, 25.hours());
+    assert_eq!(span2, 25.hours().fieldwise());
 
     Ok(())
 }
@@ -892,7 +892,7 @@ fn main() -> anyhow::Result<()> {
         .smallest(Unit::Day)
         .mode(RoundMode::HalfExpand);
     let span = zdt1.until(round_options)?;
-    assert_eq!(span, 22.years().months(7).days(24));
+    assert_eq!(span, 22.years().months(7).days(24).fieldwise());
 
     Ok(())
 }
@@ -932,12 +932,12 @@ fn main() -> anyhow::Result<()> {
     // Balance down to seconds.
     let span1 = 4.hours().minutes(36).seconds(59);
     let span2 = span1.round(SpanRound::new().largest(Unit::Second))?;
-    assert_eq!(span2, 16_619.seconds());
+    assert_eq!(span2, 16_619.seconds().fieldwise());
 
     // Now go back by balancing up to hours.
     let span1 = 16_619.seconds();
     let span2 = span1.round(SpanRound::new().largest(Unit::Hour))?;
-    assert_eq!(span2, 4.hours().minutes(36).seconds(59));
+    assert_eq!(span2, 4.hours().minutes(36).seconds(59).fieldwise());
 
     Ok(())
 }
@@ -1071,7 +1071,7 @@ fn main() -> anyhow::Result<()> {
     let ts1: Timestamp = "2015-06-30T23:00:00Z".parse()?;
     let ts2: Timestamp = "2015-07-01T00:00:00Z".parse()?;
     let span = ts2 - ts1;
-    assert_eq!(span, 3_600.seconds());
+    assert_eq!(span, 3_600.seconds().fieldwise());
 
     Ok(())
 }

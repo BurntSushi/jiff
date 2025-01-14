@@ -27,10 +27,16 @@ use crate::{
 /// use jiff::{RoundMode, SpanRound, ToSpan, Unit};
 ///
 /// // The default rounds like how you were taught in school:
-/// assert_eq!(1.hour().minutes(59).round(Unit::Hour)?, 2.hours());
+/// assert_eq!(
+///     1.hour().minutes(59).round(Unit::Hour)?,
+///     2.hours().fieldwise(),
+/// );
 /// // But we can change the mode, e.g., truncation:
 /// let options = SpanRound::new().smallest(Unit::Hour).mode(RoundMode::Trunc);
-/// assert_eq!(1.hour().minutes(59).round(options)?, 1.hour());
+/// assert_eq!(
+///     1.hour().minutes(59).round(options)?,
+///     1.hour().fieldwise(),
+/// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```

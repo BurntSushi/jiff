@@ -115,7 +115,7 @@ use crate::{
 ///
 /// let date1 = date(2024, 3, 3);
 /// let date2 = date(2024, 2, 25);
-/// assert_eq!(date1 - date2, 7.days());
+/// assert_eq!(date1 - date2, 7.days().fieldwise());
 /// ```
 ///
 /// The `until` and `since` APIs are polymorphic and allow re-balancing and
@@ -129,7 +129,7 @@ use crate::{
 /// let date2 = date(2024, 2, 25);
 /// assert_eq!(
 ///     date1.since((Unit::Year, date2))?,
-///     2.months().days(7),
+///     2.months().days(7).fieldwise(),
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -148,7 +148,7 @@ use crate::{
 ///             .smallest(Unit::Month)
 ///             .largest(Unit::Year),
 ///     )?,
-///     2.months(),
+///     2.months().fieldwise(),
 /// );
 /// // `DateDifference` uses truncation as a rounding mode by default,
 /// // but you can set the rounding mode to break ties away from zero:
@@ -160,7 +160,7 @@ use crate::{
 ///             .mode(RoundMode::HalfExpand),
 ///     )?,
 ///     // Rounds up to 8 days.
-///     3.months(),
+///     3.months().fieldwise(),
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1615,12 +1615,12 @@ impl Date {
     ///
     /// let earlier = date(2006, 8, 24);
     /// let later = date(2019, 1, 31);
-    /// assert_eq!(earlier.until(later)?, 4543.days());
+    /// assert_eq!(earlier.until(later)?, 4543.days().fieldwise());
     ///
     /// // Flipping the dates is fine, but you'll get a negative span.
     /// let earlier = date(2006, 8, 24);
     /// let later = date(2019, 1, 31);
-    /// assert_eq!(later.until(earlier)?, -4543.days());
+    /// assert_eq!(later.until(earlier)?, -4543.days().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1663,7 +1663,7 @@ impl Date {
     /// let d2 = date(2019, 02, 06);
     ///
     /// let span = d1.until(DateDifference::from(d2).smallest(Unit::Month))?;
-    /// assert_eq!(span, 277.months());
+    /// assert_eq!(span, 277.months().fieldwise());
     ///
     /// // Or even include years to make the span a bit more comprehensible.
     /// let span = d1.until(
@@ -1673,7 +1673,7 @@ impl Date {
     /// )?;
     /// // Notice that we are one day shy of 23y2m. Rounding spans computed
     /// // between dates uses truncation by default.
-    /// assert_eq!(span, 23.years().months(1));
+    /// assert_eq!(span, 23.years().months(1).fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1691,7 +1691,7 @@ impl Date {
     /// let d2 = date(2024, 5, 1);
     ///
     /// let span = d1.until((Unit::Month, d2))?;
-    /// assert_eq!(span, 1.month().days(29));
+    /// assert_eq!(span, 1.month().days(29).fieldwise());
     /// let maybe_original = d2.checked_sub(span)?;
     /// // Not the same as the original datetime!
     /// assert_eq!(maybe_original, date(2024, 3, 3));
@@ -1699,7 +1699,7 @@ impl Date {
     /// // But in the default configuration, days are always the biggest unit
     /// // and reversibility is guaranteed.
     /// let span = d1.until(d2)?;
-    /// assert_eq!(span, 60.days());
+    /// assert_eq!(span, 60.days().fieldwise());
     /// let is_original = d2.checked_sub(span)?;
     /// assert_eq!(is_original, d1);
     ///
@@ -1743,9 +1743,9 @@ impl Date {
     ///
     /// let earlier = date(2006, 8, 24);
     /// let later = date(2019, 1, 31);
-    /// assert_eq!(later - earlier, 4543.days());
+    /// assert_eq!(later - earlier, 4543.days().fieldwise());
     /// // Equivalent to:
-    /// assert_eq!(later.since(earlier).unwrap(), 4543.days());
+    /// assert_eq!(later.since(earlier).unwrap(), 4543.days().fieldwise());
     /// ```
     #[inline]
     pub fn since<A: Into<DateDifference>>(
@@ -1819,7 +1819,7 @@ impl Date {
     /// let d2 = date(2025, 4, 1);
     ///
     /// let span = d1.until((Unit::Year, d2))?;
-    /// assert_eq!(span, 1.year().months(3));
+    /// assert_eq!(span, 1.year().months(3).fieldwise());
     ///
     /// let duration = d1.duration_until(d2);
     /// assert_eq!(duration, SignedDuration::from_hours(456 * 24));
@@ -1829,7 +1829,7 @@ impl Date {
     /// // it to a span and then balance it by providing a relative date!
     /// let options = SpanRound::new().largest(Unit::Year).relative(d1);
     /// let span = Span::try_from(duration)?.round(options)?;
-    /// assert_eq!(span, 1.year().months(3));
+    /// assert_eq!(span, 1.year().months(3).fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2715,7 +2715,7 @@ impl<'a> From<&'a UnsignedDuration> for DateArithmetic {
 ///         .smallest(Unit::Year)
 ///         .mode(RoundMode::HalfExpand),
 /// )?;
-/// assert_eq!(span, 6.years());
+/// assert_eq!(span, 6.years().fieldwise());
 ///
 /// // If the span were one day longer, it would round up to 7 years.
 /// let d2 = "2030-09-14".parse::<Date>()?;
@@ -2724,7 +2724,7 @@ impl<'a> From<&'a UnsignedDuration> for DateArithmetic {
 ///         .smallest(Unit::Year)
 ///         .mode(RoundMode::HalfExpand),
 /// )?;
-/// assert_eq!(span, 7.years());
+/// assert_eq!(span, 7.years().fieldwise());
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -2776,7 +2776,7 @@ impl DateDifference {
     ///         .largest(Unit::Week)
     ///         .mode(RoundMode::HalfExpand),
     /// )?;
-    /// assert_eq!(span, 349.weeks());
+    /// assert_eq!(span, 349.weeks().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2814,7 +2814,7 @@ impl DateDifference {
     /// let span = d1.until(
     ///     DateDifference::new(d2).largest(Unit::Month),
     /// )?;
-    /// assert_eq!(span, 80.months().days(7));
+    /// assert_eq!(span, 80.months().days(7).fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2846,7 +2846,7 @@ impl DateDifference {
     ///         .mode(RoundMode::Ceil),
     /// )?;
     /// // Only 7 months and 1 day elapsed, but we asked to always round up!
-    /// assert_eq!(span, 8.months());
+    /// assert_eq!(span, 8.months().fieldwise());
     ///
     /// // Since `Ceil` always rounds toward positive infinity, the behavior
     /// // flips for a negative span.
@@ -2855,7 +2855,7 @@ impl DateDifference {
     ///         .smallest(Unit::Month)
     ///         .mode(RoundMode::Ceil),
     /// )?;
-    /// assert_eq!(span, -7.months());
+    /// assert_eq!(span, -7.months().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2887,7 +2887,7 @@ impl DateDifference {
     ///         .increment(2)
     ///         .mode(RoundMode::HalfExpand),
     /// )?;
-    /// assert_eq!(span, 8.months());
+    /// assert_eq!(span, 8.months().fieldwise());
     ///
     /// // If our second date was just one day less, rounding would truncate
     /// // down to 6 months!
@@ -2898,7 +2898,7 @@ impl DateDifference {
     ///         .increment(2)
     ///         .mode(RoundMode::HalfExpand),
     /// )?;
-    /// assert_eq!(span, 6.months());
+    /// assert_eq!(span, 6.months().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -3689,7 +3689,7 @@ fn day_of_year(year: Year, day: i16) -> Result<Date, Error> {
 mod tests {
     use std::io::Cursor;
 
-    use crate::{civil::date, tz::TimeZone, Timestamp, ToSpan};
+    use crate::{civil::date, span::span_eq, tz::TimeZone, Timestamp, ToSpan};
 
     use super::*;
 
@@ -3794,23 +3794,23 @@ mod tests {
         let d1 = date(2023, 4, 15);
         let d2 = date(2019, 2, 22);
         let span = d1.since((Unit::Year, d2)).unwrap();
-        assert_eq!(span, 4.years().months(1).days(21));
+        span_eq!(span, 4.years().months(1).days(21));
         let span = d2.since((Unit::Year, d1)).unwrap();
-        assert_eq!(span, -4.years().months(1).days(24));
+        span_eq!(span, -4.years().months(1).days(24));
 
         let d1 = date(2023, 2, 22);
         let d2 = date(2019, 4, 15);
         let span = d1.since((Unit::Year, d2)).unwrap();
-        assert_eq!(span, 3.years().months(10).days(7));
+        span_eq!(span, 3.years().months(10).days(7));
         let span = d2.since((Unit::Year, d1)).unwrap();
-        assert_eq!(span, -3.years().months(10).days(7));
+        span_eq!(span, -3.years().months(10).days(7));
 
         let d1 = date(9999, 12, 31);
         let d2 = date(-9999, 1, 1);
         let span = d1.since((Unit::Year, d2)).unwrap();
-        assert_eq!(span, 19998.years().months(11).days(30));
+        span_eq!(span, 19998.years().months(11).days(30));
         let span = d2.since((Unit::Year, d1)).unwrap();
-        assert_eq!(span, -19998.years().months(11).days(30));
+        span_eq!(span, -19998.years().months(11).days(30));
     }
 
     #[test]
@@ -3818,36 +3818,36 @@ mod tests {
         let d1 = date(2024, 7, 24);
         let d2 = date(2024, 2, 22);
         let span = d1.since((Unit::Month, d2)).unwrap();
-        assert_eq!(span, 5.months().days(2));
+        span_eq!(span, 5.months().days(2));
         let span = d2.since((Unit::Month, d1)).unwrap();
-        assert_eq!(span, -5.months().days(2));
+        span_eq!(span, -5.months().days(2));
         assert_eq!(d2, d1.checked_sub(5.months().days(2)).unwrap());
         assert_eq!(d1, d2.checked_sub(-5.months().days(2)).unwrap());
 
         let d1 = date(2024, 7, 15);
         let d2 = date(2024, 2, 22);
         let span = d1.since((Unit::Month, d2)).unwrap();
-        assert_eq!(span, 4.months().days(22));
+        span_eq!(span, 4.months().days(22));
         let span = d2.since((Unit::Month, d1)).unwrap();
-        assert_eq!(span, -4.months().days(23));
+        span_eq!(span, -4.months().days(23));
         assert_eq!(d2, d1.checked_sub(4.months().days(22)).unwrap());
         assert_eq!(d1, d2.checked_sub(-4.months().days(23)).unwrap());
 
         let d1 = date(2023, 4, 15);
         let d2 = date(2023, 2, 22);
         let span = d1.since((Unit::Month, d2)).unwrap();
-        assert_eq!(span, 1.month().days(21));
+        span_eq!(span, 1.month().days(21));
         let span = d2.since((Unit::Month, d1)).unwrap();
-        assert_eq!(span, -1.month().days(24));
+        span_eq!(span, -1.month().days(24));
         assert_eq!(d2, d1.checked_sub(1.month().days(21)).unwrap());
         assert_eq!(d1, d2.checked_sub(-1.month().days(24)).unwrap());
 
         let d1 = date(2023, 4, 15);
         let d2 = date(2019, 2, 22);
         let span = d1.since((Unit::Month, d2)).unwrap();
-        assert_eq!(span, 49.months().days(21));
+        span_eq!(span, 49.months().days(21));
         let span = d2.since((Unit::Month, d1)).unwrap();
-        assert_eq!(span, -49.months().days(24));
+        span_eq!(span, -49.months().days(24));
     }
 
     #[test]
@@ -3855,9 +3855,9 @@ mod tests {
         let d1 = date(2024, 7, 15);
         let d2 = date(2024, 6, 22);
         let span = d1.since((Unit::Week, d2)).unwrap();
-        assert_eq!(span, 3.weeks().days(2));
+        span_eq!(span, 3.weeks().days(2));
         let span = d2.since((Unit::Week, d1)).unwrap();
-        assert_eq!(span, -3.weeks().days(2));
+        span_eq!(span, -3.weeks().days(2));
     }
 
     #[test]
@@ -3865,9 +3865,9 @@ mod tests {
         let d1 = date(2024, 7, 15);
         let d2 = date(2024, 2, 22);
         let span = d1.since((Unit::Day, d2)).unwrap();
-        assert_eq!(span, 144.days());
+        span_eq!(span, 144.days());
         let span = d2.since((Unit::Day, d1)).unwrap();
-        assert_eq!(span, -144.days());
+        span_eq!(span, -144.days());
     }
 
     #[test]
@@ -3876,12 +3876,12 @@ mod tests {
         let feb1 = date(2020, 2, 1);
         let mar1 = date(2020, 3, 1);
 
-        assert_eq!(jan1.until(feb1).unwrap(), 31.days());
-        assert_eq!(jan1.until((Unit::Month, feb1)).unwrap(), 1.month());
-        assert_eq!(feb1.until(mar1).unwrap(), 29.days());
-        assert_eq!(feb1.until((Unit::Month, mar1)).unwrap(), 1.month());
-        assert_eq!(jan1.until(mar1).unwrap(), 60.days());
-        assert_eq!(jan1.until((Unit::Month, mar1)).unwrap(), 2.months());
+        span_eq!(jan1.until(feb1).unwrap(), 31.days());
+        span_eq!(jan1.until((Unit::Month, feb1)).unwrap(), 1.month());
+        span_eq!(feb1.until(mar1).unwrap(), 29.days());
+        span_eq!(feb1.until((Unit::Month, mar1)).unwrap(), 1.month());
+        span_eq!(jan1.until(mar1).unwrap(), 60.days());
+        span_eq!(jan1.until((Unit::Month, mar1)).unwrap(), 2.months());
     }
 
     // Ref: https://github.com/tc39/proposal-temporal/issues/2845#issuecomment-2121057896
@@ -3895,10 +3895,10 @@ mod tests {
         let d2 = date(2020, 2, 29);
 
         let since = d1.since((Unit::Month, d2)).unwrap();
-        assert_eq!(since, 2.months());
+        span_eq!(since, 2.months());
 
         let until = d2.until((Unit::Month, d1)).unwrap();
-        assert_eq!(until, 2.months().days(1));
+        span_eq!(until, 2.months().days(1));
     }
 
     // Ref: https://github.com/tc39/proposal-temporal/issues/2893
@@ -3909,14 +3909,14 @@ mod tests {
         let earlier = date(2019, 1, 8);
         let later = date(2021, 9, 7);
         let span = earlier.until((Unit::Week, later)).unwrap();
-        assert_eq!(span, 139.weeks());
+        span_eq!(span, 139.weeks());
 
         let options = SpanRound::new()
             .smallest(Unit::Week)
             .mode(RoundMode::HalfExpand)
             .relative(earlier.to_datetime(Time::midnight()));
         let rounded = span.round(options).unwrap();
-        assert_eq!(rounded, 139.weeks());
+        span_eq!(rounded, 139.weeks());
     }
 
     // This test checks current behavior, but I think it's wrong. I think the
@@ -3927,11 +3927,11 @@ mod tests {
     fn until_months_no_balance() {
         let sp =
             date(2023, 5, 31).until((Unit::Month, date(2024, 4, 30))).unwrap();
-        assert_eq!(sp, 10.months().days(30));
+        span_eq!(sp, 10.months().days(30));
 
         let sp =
             date(2023, 5, 31).until((Unit::Month, date(2023, 6, 30))).unwrap();
-        assert_eq!(sp, 30.days());
+        span_eq!(sp, 30.days());
     }
 
     #[test]

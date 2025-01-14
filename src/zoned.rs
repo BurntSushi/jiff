@@ -223,7 +223,7 @@ use crate::{
 ///
 /// let zdt1 = date(2024, 5, 3).at(23, 30, 0, 0).in_tz("America/New_York")?;
 /// let zdt2 = date(2024, 2, 25).at(7, 0, 0, 0).in_tz("America/New_York")?;
-/// assert_eq!(&zdt1 - &zdt2, 1647.hours().minutes(30));
+/// assert_eq!(&zdt1 - &zdt2, 1647.hours().minutes(30).fieldwise());
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -239,7 +239,7 @@ use crate::{
 /// let zdt2 = date(2024, 2, 25).at(7, 0, 0, 0).in_tz("America/New_York")?;
 /// assert_eq!(
 ///     zdt1.since((Unit::Year, &zdt2))?,
-///     2.months().days(7).hours(16).minutes(30),
+///     2.months().days(7).hours(16).minutes(30).fieldwise(),
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -258,7 +258,7 @@ use crate::{
 ///             .smallest(Unit::Day)
 ///             .largest(Unit::Year),
 ///     )?,
-///     2.months().days(7),
+///     2.months().days(7).fieldwise(),
 /// );
 /// // `ZonedDifference` uses truncation as a rounding mode by default,
 /// // but you can set the rounding mode to break ties away from zero:
@@ -270,7 +270,7 @@ use crate::{
 ///             .mode(RoundMode::HalfExpand),
 ///     )?,
 ///     // Rounds up to 8 days.
-///     2.months().days(8),
+///     2.months().days(8).fieldwise(),
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -2397,10 +2397,16 @@ impl Zoned {
     ///
     /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0).in_tz("America/New_York")?;
     /// let later = date(2019, 1, 31).at(21, 0, 0, 0).in_tz("America/New_York")?;
-    /// assert_eq!(earlier.until(&later)?, 109_031.hours().minutes(30));
+    /// assert_eq!(
+    ///     earlier.until(&later)?,
+    ///     109_031.hours().minutes(30).fieldwise(),
+    /// );
     ///
     /// // Flipping the dates is fine, but you'll get a negative span.
-    /// assert_eq!(later.until(&earlier)?, -109_031.hours().minutes(30));
+    /// assert_eq!(
+    ///     later.until(&earlier)?,
+    ///     -109_031.hours().minutes(30).fieldwise(),
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2423,7 +2429,7 @@ impl Zoned {
     ///
     /// // But we can ask for units all the way up to years.
     /// let span = zdt1.until((Unit::Year, &zdt2))?;
-    /// assert_eq!(span.to_string(), "P23Y1M24DT12H5M29.9999965S");
+    /// assert_eq!(format!("{span:#}"), "23y 1mo 24d 12h 5m 29s 999ms 996µs 500ns");
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
@@ -2445,7 +2451,7 @@ impl Zoned {
     /// let span = zdt1.until(
     ///     ZonedDifference::from(&zdt2).smallest(Unit::Second),
     /// )?;
-    /// assert_eq!(span, 202_956.hours().minutes(5).seconds(29));
+    /// assert_eq!(format!("{span:#}"), "202956h 5m 29s");
     ///
     /// // We can combine smallest and largest units too!
     /// let span = zdt1.until(
@@ -2453,7 +2459,7 @@ impl Zoned {
     ///         .smallest(Unit::Second)
     ///         .largest(Unit::Year),
     /// )?;
-    /// assert_eq!(span, 23.years().months(1).days(24).hours(12).minutes(5).seconds(29));
+    /// assert_eq!(span.to_string(), "P23Y1M24DT12H5M29S");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2471,7 +2477,7 @@ impl Zoned {
     /// let zdt2 = date(2024, 5, 1).at(0, 0, 0, 0).in_tz("America/New_York")?;
     ///
     /// let span = zdt1.until((Unit::Month, &zdt2))?;
-    /// assert_eq!(span, 1.month().days(29));
+    /// assert_eq!(span, 1.month().days(29).fieldwise());
     /// let maybe_original = zdt2.checked_sub(span)?;
     /// // Not the same as the original datetime!
     /// assert_eq!(
@@ -2482,7 +2488,7 @@ impl Zoned {
     /// // But in the default configuration, hours are always the biggest unit
     /// // and reversibility is guaranteed.
     /// let span = zdt1.until(&zdt2)?;
-    /// assert_eq!(span, 1439.hours());
+    /// assert_eq!(span.to_string(), "PT1439H");
     /// let is_original = zdt2.checked_sub(span)?;
     /// assert_eq!(is_original, zdt1);
     ///
@@ -2529,7 +2535,7 @@ impl Zoned {
     ///
     /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0).in_tz("America/New_York")?;
     /// let later = date(2019, 1, 31).at(21, 0, 0, 0).in_tz("America/New_York")?;
-    /// assert_eq!(&later - &earlier, 109_031.hours().minutes(30));
+    /// assert_eq!(&later - &earlier, 109_031.hours().minutes(30).fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2611,7 +2617,7 @@ impl Zoned {
     /// let zdt2 = date(2024, 3, 11).at(0, 0, 0, 0).in_tz("US/Eastern")?;
     ///
     /// let span = zdt1.until((Unit::Day, &zdt2))?;
-    /// assert_eq!(span, 1.day());
+    /// assert_eq!(format!("{span:#}"), "1d");
     ///
     /// let duration = zdt1.duration_until(&zdt2);
     /// // This day was only 23 hours long!
@@ -2622,7 +2628,7 @@ impl Zoned {
     /// // it to a span and then balance it by providing a relative date!
     /// let options = SpanRound::new().largest(Unit::Day).relative(&zdt1);
     /// let span = Span::try_from(duration)?.round(options)?;
-    /// assert_eq!(span, 1.day());
+    /// assert_eq!(format!("{span:#}"), "1d");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -3662,7 +3668,7 @@ impl<'a> From<&'a UnsignedDuration> for ZonedArithmetic {
 ///         .mode(RoundMode::HalfExpand)
 ///         .increment(30),
 /// )?;
-/// assert_eq!(span, 6.years().days(7).hours(7));
+/// assert_eq!(span, 6.years().days(7).hours(7).fieldwise());
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -3715,7 +3721,7 @@ impl<'a> ZonedDifference<'a> {
     ///         .largest(Unit::Week)
     ///         .mode(RoundMode::HalfExpand),
     /// )?;
-    /// assert_eq!(span, 349.weeks());
+    /// assert_eq!(format!("{span:#}"), "349w");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -3754,7 +3760,7 @@ impl<'a> ZonedDifference<'a> {
     /// let span = zdt1.until(
     ///     ZonedDifference::new(&zdt2).largest(Unit::Second),
     /// )?;
-    /// assert_eq!(span, 211079760.seconds());
+    /// assert_eq!(span.to_string(), "PT211079760S");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -3787,7 +3793,7 @@ impl<'a> ZonedDifference<'a> {
     ///         .mode(RoundMode::Ceil),
     /// )?;
     /// // Only one minute elapsed, but we asked to always round up!
-    /// assert_eq!(span, 1.hour());
+    /// assert_eq!(span, 1.hour().fieldwise());
     ///
     /// // Since `Ceil` always rounds toward positive infinity, the behavior
     /// // flips for a negative span.
@@ -3796,7 +3802,7 @@ impl<'a> ZonedDifference<'a> {
     ///         .smallest(Unit::Hour)
     ///         .mode(RoundMode::Ceil),
     /// )?;
-    /// assert_eq!(span, 0.hour());
+    /// assert_eq!(span, 0.hour().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -3842,7 +3848,7 @@ impl<'a> ZonedDifference<'a> {
     ///         .increment(5)
     ///         .mode(RoundMode::HalfExpand),
     /// )?;
-    /// assert_eq!(span, 4.hour().minutes(35));
+    /// assert_eq!(format!("{span:#}"), "4h 35m");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -5241,6 +5247,7 @@ mod tests {
 
     use crate::{
         civil::{date, datetime},
+        span::span_eq,
         ToSpan,
     };
 
@@ -5259,7 +5266,7 @@ mod tests {
         let zdt2: Zoned =
             date(2019, 1, 31).at(15, 30, 0, 0).in_tz("Asia/Kolkata").unwrap();
         let span = zdt1.until(&zdt2).unwrap();
-        assert_eq!(
+        span_eq!(
             span,
             202956
                 .hours()
@@ -5270,7 +5277,7 @@ mod tests {
                 .nanoseconds(500)
         );
         let span = zdt1.until((Unit::Year, &zdt2)).unwrap();
-        assert_eq!(
+        span_eq!(
             span,
             23.years()
                 .months(1)
@@ -5284,7 +5291,7 @@ mod tests {
         );
 
         let span = zdt2.until((Unit::Year, &zdt1)).unwrap();
-        assert_eq!(
+        span_eq!(
             span,
             -23.years()
                 .months(1)
@@ -5297,7 +5304,7 @@ mod tests {
                 .nanoseconds(500)
         );
         let span = zdt1.until((Unit::Nanosecond, &zdt2)).unwrap();
-        assert_eq!(span, 730641929999996500i64.nanoseconds());
+        span_eq!(span, 730641929999996500i64.nanoseconds());
 
         let zdt1: Zoned =
             date(2020, 1, 1).at(0, 0, 0, 0).in_tz("America/New_York").unwrap();
@@ -5306,9 +5313,9 @@ mod tests {
             .in_tz("America/New_York")
             .unwrap();
         let span = zdt1.until(&zdt2).unwrap();
-        assert_eq!(span, 2756.hours());
+        span_eq!(span, 2756.hours());
         let span = zdt1.until((Unit::Year, &zdt2)).unwrap();
-        assert_eq!(span, 3.months().days(23).hours(21));
+        span_eq!(span, 3.months().days(23).hours(21));
 
         let zdt1: Zoned = date(2000, 10, 29)
             .at(0, 0, 0, 0)
@@ -5319,7 +5326,7 @@ mod tests {
             .in_tz("America/Vancouver")
             .unwrap();
         let span = zdt1.until((Unit::Day, &zdt2)).unwrap();
-        assert_eq!(span, 24.hours().nanoseconds(5));
+        span_eq!(span, 24.hours().nanoseconds(5));
     }
 
     #[cfg(target_pointer_width = "64")]
