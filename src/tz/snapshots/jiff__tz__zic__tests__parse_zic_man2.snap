@@ -23,13 +23,17 @@ ZicP {
                     day: 1,
                 },
                 at: RuleAtP {
-                    span: 1h,
+                    span: SpanFieldwise(
+                        1h,
+                    ),
                     suffix: Some(
                         Universal,
                     ),
                 },
                 save: RuleSaveP {
-                    span: 1h,
+                    span: SpanFieldwise(
+                        1h,
+                    ),
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -51,13 +55,17 @@ ZicP {
                     weekday: Sunday,
                 },
                 at: RuleAtP {
-                    span: 1h,
+                    span: SpanFieldwise(
+                        1h,
+                    ),
                     suffix: Some(
                         Universal,
                     ),
                 },
                 save: RuleSaveP {
-                    span: 0s,
+                    span: SpanFieldwise(
+                        0s,
+                    ),
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -79,13 +87,17 @@ ZicP {
                     day: 1,
                 },
                 at: RuleAtP {
-                    span: 1h,
+                    span: SpanFieldwise(
+                        1h,
+                    ),
                     suffix: Some(
                         Universal,
                     ),
                 },
                 save: RuleSaveP {
-                    span: 0s,
+                    span: SpanFieldwise(
+                        0s,
+                    ),
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -109,13 +121,17 @@ ZicP {
                     weekday: Sunday,
                 },
                 at: RuleAtP {
-                    span: 1h,
+                    span: SpanFieldwise(
+                        1h,
+                    ),
                     suffix: Some(
                         Universal,
                     ),
                 },
                 save: RuleSaveP {
-                    span: 0s,
+                    span: SpanFieldwise(
+                        0s,
+                    ),
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -137,13 +153,17 @@ ZicP {
                     weekday: Sunday,
                 },
                 at: RuleAtP {
-                    span: 1h,
+                    span: SpanFieldwise(
+                        1h,
+                    ),
                     suffix: Some(
                         Universal,
                     ),
                 },
                 save: RuleSaveP {
-                    span: 1h,
+                    span: SpanFieldwise(
+                        1h,
+                    ),
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -165,13 +185,17 @@ ZicP {
                     weekday: Sunday,
                 },
                 at: RuleAtP {
-                    span: 1h,
+                    span: SpanFieldwise(
+                        1h,
+                    ),
                     suffix: Some(
                         Universal,
                     ),
                 },
                 save: RuleSaveP {
-                    span: 0s,
+                    span: SpanFieldwise(
+                        0s,
+                    ),
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -198,11 +222,15 @@ ZicP {
                     day: 1,
                 },
                 at: RuleAtP {
-                    span: 1h,
+                    span: SpanFieldwise(
+                        1h,
+                    ),
                     suffix: None,
                 },
                 save: RuleSaveP {
-                    span: 1h,
+                    span: SpanFieldwise(
+                        1h,
+                    ),
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -227,11 +255,15 @@ ZicP {
                     day: 1,
                 },
                 at: RuleAtP {
-                    span: 2h,
+                    span: SpanFieldwise(
+                        2h,
+                    ),
                     suffix: None,
                 },
                 save: RuleSaveP {
-                    span: 0s,
+                    span: SpanFieldwise(
+                        0s,
+                    ),
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -247,7 +279,9 @@ ZicP {
                     name: "Europe/Zurich",
                 },
                 stdoff: ZoneStdoffP {
-                    span: 34m 8s,
+                    span: SpanFieldwise(
+                        34m 8s,
+                    ),
                 },
                 rules: None,
                 format: Static {
@@ -268,7 +302,9 @@ ZicP {
             continuations: [
                 ZoneContinuationP {
                     stdoff: ZoneStdoffP {
-                        span: 29m 45s 500ms,
+                        span: SpanFieldwise(
+                            29m 45s 500ms,
+                        ),
                     },
                     rules: None,
                     format: Static {
@@ -285,7 +321,9 @@ ZicP {
                 },
                 ZoneContinuationP {
                     stdoff: ZoneStdoffP {
-                        span: 1h,
+                        span: SpanFieldwise(
+                            1h,
+                        ),
                     },
                     rules: Named(
                         RuleNameP {
@@ -304,7 +342,9 @@ ZicP {
                 },
                 ZoneContinuationP {
                     stdoff: ZoneStdoffP {
-                        span: 1h,
+                        span: SpanFieldwise(
+                            1h,
+                        ),
                     },
                     rules: Named(
                         RuleNameP {

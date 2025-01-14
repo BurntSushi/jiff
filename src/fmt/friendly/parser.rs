@@ -42,7 +42,7 @@ use crate::{
 /// use jiff::{SignedDuration, Span, ToSpan};
 ///
 /// let span: Span = "5 years, 2 months".parse()?;
-/// assert_eq!(span, 5.years().months(2));
+/// assert_eq!(span, 5.years().months(2).fieldwise());
 ///
 /// let sdur: SignedDuration = "5 hours, 2 minutes".parse()?;
 /// assert_eq!(sdur, SignedDuration::new(5 * 60 * 60 + 2 * 60, 0));
@@ -61,12 +61,18 @@ use crate::{
 ///
 /// let string = "1 year, 3 months, 15:00:01.3";
 /// let span = PARSER.parse_span(string)?;
-/// assert_eq!(span, 1.year().months(3).hours(15).seconds(1).milliseconds(300));
+/// assert_eq!(
+///     span,
+///     1.year().months(3).hours(15).seconds(1).milliseconds(300).fieldwise(),
+/// );
 ///
 /// // Negative durations are supported too!
 /// let string = "1 year, 3 months, 15:00:01.3 ago";
 /// let span = PARSER.parse_span(string)?;
-/// assert_eq!(span, -1.year().months(3).hours(15).seconds(1).milliseconds(300));
+/// assert_eq!(
+///     span,
+///     -1.year().months(3).hours(15).seconds(1).milliseconds(300).fieldwise(),
+/// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -94,7 +100,10 @@ impl SpanParser {
     ///
     /// let bytes = b"1 year 3 months 15 hours 1300ms";
     /// let span = PARSER.parse_span(bytes)?;
-    /// assert_eq!(span, 1.year().months(3).hours(15).milliseconds(1300));
+    /// assert_eq!(
+    ///     span,
+    ///     1.year().months(3).hours(15).milliseconds(1300).fieldwise(),
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -162,7 +171,11 @@ impl SpanParser {
     /// static PARSER: SpanParser = SpanParser::new();
     /// for (string, span) in spans {
     ///     let parsed = PARSER.parse_span(string)?;
-    ///     assert_eq!(span, parsed, "result of parsing {string:?}");
+    ///     assert_eq!(
+    ///         span.fieldwise(),
+    ///         parsed.fieldwise(),
+    ///         "result of parsing {string:?}",
+    ///     );
     /// }
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())

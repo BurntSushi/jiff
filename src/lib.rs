@@ -448,7 +448,7 @@ use jiff::Span;
 
 let span: Span = "P5y1w10dT5h59m".parse()?;
 let expected = Span::new().years(5).weeks(1).days(10).hours(5).minutes(59);
-assert_eq!(span, expected);
+assert_eq!(span, expected.fieldwise());
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -464,11 +464,11 @@ use jiff::Span;
 
 let expected = Span::new().years(5).weeks(1).days(10).hours(5).minutes(59);
 let span: Span = "5 years, 1 week, 10 days, 5 hours, 59 minutes".parse()?;
-assert_eq!(span, expected);
+assert_eq!(span, expected.fieldwise());
 let span: Span = "5yrs 1wk 10d 5hrs 59mins".parse()?;
-assert_eq!(span, expected);
+assert_eq!(span, expected.fieldwise());
 let span: Span = "5y 1w 10d 5h 59m".parse()?;
-assert_eq!(span, expected);
+assert_eq!(span, expected.fieldwise());
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```

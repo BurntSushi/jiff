@@ -112,7 +112,7 @@ use alloc::{
 use crate::{
     civil::{Date, DateTime, Time, Weekday},
     error::{err, Error, ErrorContext},
-    span::{Span, ToSpan},
+    span::{Span, SpanFieldwise, ToSpan},
     timestamp::Timestamp,
     tz::{Dst, Offset},
     util::{
@@ -756,7 +756,7 @@ impl FromStr for RuleOnP {
 struct RuleAtP {
     /// The amount of time to add to the start of the day specified by
     /// `RuleOnP`. This may be negative.
-    span: Span,
+    span: SpanFieldwise,
     /// An optional suffix indicating how to interpret the overall time at
     /// which a rule takes effect. As I understand it, this applies to the
     /// entire datetime that is specified by IN, ON and AT and not just the
@@ -785,11 +785,11 @@ impl FromStr for RuleAtP {
         }
         let (span_string, suffix_string) = at.split_at(at.len() - 1);
         if suffix_string.chars().all(|ch| ch.is_ascii_alphabetic()) {
-            let span = parse_span(span_string)?;
+            let span = parse_span(span_string)?.fieldwise();
             let suffix = suffix_string.parse()?;
             Ok(RuleAtP { span, suffix: Some(suffix) })
         } else {
-            let span = parse_span(at)?;
+            let span = parse_span(at)?.fieldwise();
             Ok(RuleAtP { span, suffix: None })
         }
     }
@@ -822,7 +822,7 @@ impl FromStr for RuleAtSuffixP {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct RuleSaveP {
     /// The amount of time to add. This may be negative.
-    span: Span,
+    span: SpanFieldwise,
     /// An optional suffix indicating how the resulting time after applying
     /// this rule should be interpreted. When absent, this defaults to DST.
     suffix: Option<RuleSaveSuffixP>,
@@ -837,7 +837,7 @@ impl RuleSaveP {
         // the nearest even second?
         let seconds = Span::from_invariant_nanoseconds(
             Unit::Second,
-            self.span.to_invariant_nanoseconds(),
+            self.span.0.to_invariant_nanoseconds(),
         )?
         .get_seconds();
         let seconds = i32::try_from(seconds).map_err(|_| {
@@ -852,7 +852,7 @@ impl RuleSaveP {
     /// span in the field.
     fn suffix(&self) -> RuleSaveSuffixP {
         self.suffix.unwrap_or_else(|| {
-            if self.span.is_zero() {
+            if self.span.0.is_zero() {
                 RuleSaveSuffixP::Standard
             } else {
                 RuleSaveSuffixP::Dst
@@ -870,11 +870,11 @@ impl FromStr for RuleSaveP {
         }
         let (span_string, suffix_string) = at.split_at(at.len() - 1);
         if suffix_string.chars().all(|ch| ch.is_ascii_alphabetic()) {
-            let span = parse_span(span_string)?;
+            let span = parse_span(span_string)?.fieldwise();
             let suffix = suffix_string.parse()?;
             Ok(RuleSaveP { span, suffix: Some(suffix) })
         } else {
-            let span = parse_span(at)?;
+            let span = parse_span(at)?.fieldwise();
             Ok(RuleSaveP { span, suffix: None })
         }
     }
@@ -956,14 +956,14 @@ impl FromStr for ZoneNameP {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ZoneStdoffP {
     /// The duration. This only uses units of hours or lower.
-    span: Span,
+    span: SpanFieldwise,
 }
 
 impl FromStr for ZoneStdoffP {
     type Err = Error;
 
     fn from_str(stdoff: &str) -> Result<ZoneStdoffP, Error> {
-        let span = parse_span(stdoff)?;
+        let span = parse_span(stdoff)?.fieldwise();
         Ok(ZoneStdoffP { span })
     }
 }
@@ -1139,8 +1139,9 @@ impl ZoneUntilP {
 
     fn to_datetime(&self) -> Result<DateTime, Error> {
         let date = self.on().date(self.year(), self.month())?;
-        let dt =
-            date.to_datetime(Time::midnight()).checked_add(self.at().span)?;
+        let dt = date
+            .to_datetime(Time::midnight())
+            .checked_add(self.at().span.0)?;
         Ok(dt)
     }
 
@@ -1182,7 +1183,7 @@ impl ZoneUntilP {
 
         match *self {
             Year { .. } | YearMonth { .. } | YearMonthDay { .. } => {
-                RuleAtP { span: Span::new(), suffix: None }
+                RuleAtP { span: Span::new().fieldwise(), suffix: None }
             }
             YearMonthDayTime { duration, .. } => duration,
         }
@@ -1547,12 +1548,13 @@ mod tests {
 
     use super::*;
 
-    fn td(seconds: i64, nanoseconds: i32) -> Span {
+    fn td(seconds: i64, nanoseconds: i32) -> SpanFieldwise {
         Span::new()
             .seconds(seconds)
             .nanoseconds(nanoseconds)
             .rebalance(Unit::Hour)
             .unwrap()
+            .fieldwise()
     }
 
     #[test]
@@ -1712,13 +1714,17 @@ mod tests {
                 weekday: Sunday,
             },
             at: RuleAtP {
-                span: 2h,
+                span: SpanFieldwise(
+                    2h,
+                ),
                 suffix: Some(
                     Wall,
                 ),
             },
             save: RuleSaveP {
-                span: 1h,
+                span: SpanFieldwise(
+                    1h,
+                ),
                 suffix: Some(
                     Dst,
                 ),
@@ -1754,7 +1760,9 @@ mod tests {
                 name: "America/Menominee",
             },
             stdoff: ZoneStdoffP {
-                span: 5h ago,
+                span: SpanFieldwise(
+                    5h ago,
+                ),
             },
             rules: None,
             format: Static {
@@ -1781,7 +1789,9 @@ mod tests {
                 name: "America/Menominee",
             },
             stdoff: ZoneStdoffP {
-                span: 5h ago,
+                span: SpanFieldwise(
+                    5h ago,
+                ),
             },
             rules: None,
             format: Static {
@@ -1797,7 +1807,9 @@ mod tests {
                         day: 29,
                     },
                     duration: RuleAtP {
-                        span: 2h,
+                        span: SpanFieldwise(
+                            2h,
+                        ),
                         suffix: None,
                     },
                 },
@@ -1825,7 +1837,9 @@ mod tests {
         insta::assert_debug_snapshot!(zone, @r###"
         ZoneContinuationP {
             stdoff: ZoneStdoffP {
-                span: 5h ago,
+                span: SpanFieldwise(
+                    5h ago,
+                ),
             },
             rules: None,
             format: Static {
@@ -1842,7 +1856,9 @@ mod tests {
         insta::assert_debug_snapshot!(zone, @r###"
         ZoneContinuationP {
             stdoff: ZoneStdoffP {
-                span: 5h ago,
+                span: SpanFieldwise(
+                    5h ago,
+                ),
             },
             rules: None,
             format: Static {
@@ -1858,7 +1874,9 @@ mod tests {
                         day: 29,
                     },
                     duration: RuleAtP {
-                        span: 2h,
+                        span: SpanFieldwise(
+                            2h,
+                        ),
                         suffix: None,
                     },
                 },

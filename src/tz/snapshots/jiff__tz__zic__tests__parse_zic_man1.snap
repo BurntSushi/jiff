@@ -22,11 +22,15 @@ ZicP {
                     weekday: Sunday,
                 },
                 at: RuleAtP {
-                    span: 2h,
+                    span: SpanFieldwise(
+                        2h,
+                    ),
                     suffix: None,
                 },
                 save: RuleSaveP {
-                    span: 0s,
+                    span: SpanFieldwise(
+                        0s,
+                    ),
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -50,11 +54,15 @@ ZicP {
                     weekday: Sunday,
                 },
                 at: RuleAtP {
-                    span: 2h,
+                    span: SpanFieldwise(
+                        2h,
+                    ),
                     suffix: None,
                 },
                 save: RuleSaveP {
-                    span: 1h,
+                    span: SpanFieldwise(
+                        1h,
+                    ),
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -70,7 +78,9 @@ ZicP {
                     name: "America/Menominee",
                 },
                 stdoff: ZoneStdoffP {
-                    span: 5h ago,
+                    span: SpanFieldwise(
+                        5h ago,
+                    ),
                 },
                 rules: None,
                 format: Static {
@@ -86,7 +96,9 @@ ZicP {
                             day: 29,
                         },
                         duration: RuleAtP {
-                            span: 2h,
+                            span: SpanFieldwise(
+                                2h,
+                            ),
                             suffix: None,
                         },
                     },
@@ -95,7 +107,9 @@ ZicP {
             continuations: [
                 ZoneContinuationP {
                     stdoff: ZoneStdoffP {
-                        span: 6h ago,
+                        span: SpanFieldwise(
+                            6h ago,
+                        ),
                     },
                     rules: Named(
                         RuleNameP {

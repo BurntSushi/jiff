@@ -53,7 +53,11 @@ let spans = [
 ];
 for (string, span) in spans {
     let parsed: Span = string.parse()?;
-    assert_eq!(span, parsed, "result of parsing {string:?}");
+    assert_eq!(
+        span.fieldwise(),
+        parsed.fieldwise(),
+        "result of parsing {string:?}",
+    );
 }
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -106,9 +110,9 @@ use jiff::{SignedDuration, Span, ToSpan};
 
 let expected = 2.months().days(35).hours(2).minutes(30);
 let span: Span = "2 months, 35 days, 02:30:00".parse()?;
-assert_eq!(span, expected);
+assert_eq!(span, expected.fieldwise());
 let span: Span = "P2M35DT2H30M".parse()?;
-assert_eq!(span, expected);
+assert_eq!(span, expected.fieldwise());
 
 let expected = SignedDuration::new(2 * 60 * 60 + 30 * 60, 123_456_789);
 let sdur: SignedDuration = "2h 30m 0,123456789s".parse()?;
@@ -142,7 +146,10 @@ struct Record {
 
 let json = r#"{"span":"1 year 2 months 36 hours 1100ms"}"#;
 let got: Record = serde_json::from_str(&json)?;
-assert_eq!(got.span, 1.year().months(2).hours(36).milliseconds(1100));
+assert_eq!(
+    got.span.fieldwise(),
+    1.year().months(2).hours(36).milliseconds(1100),
+);
 
 let expected = r#"{"span":"1y 2mo 36h 1100ms"}"#;
 assert_eq!(serde_json::to_string(&got).unwrap(), expected);
@@ -228,7 +235,7 @@ let expected =
         .milliseconds(123)
         .microseconds(456)
         .nanoseconds(789);
-assert_eq!(span, expected);
+assert_eq!(span, expected.fieldwise());
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -337,7 +344,7 @@ As the error message suggests, parsing into a [`Span`](crate::Span) works fine:
 ```
 use jiff::Span;
 
-assert_eq!("1 day".parse::<Span>().unwrap(), Span::new().days(1));
+assert_eq!("1 day".parse::<Span>().unwrap(), Span::new().days(1).fieldwise());
 ```
 
 Jiff has this behavior because it's not possible to determine, in general,

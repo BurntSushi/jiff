@@ -9,6 +9,9 @@ Deprecations:
 * [#28](https://github.com/BurntSushi/jiff/issues/28):
 The `intz` methods on `Zoned`, `Timestamp`, `civil::DateTime` and `civil::Date`
 have been deprecated in favor of `in_tz`.
+* [#32](https://github.com/BurntSushi/jiff/issues/32):
+The `Eq` and `PartialEq` trait implementations on `Span` have been deprecated
+in favor of using the new `SpanFieldwise` type.
 
 
 0.1.24 (2025-01-16)

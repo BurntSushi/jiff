@@ -106,7 +106,11 @@ let spans = [
 ];
 for (string, span) in spans {
     let parsed: Span = string.parse()?;
-    assert_eq!(span, parsed, "result of parsing {string:?}");
+    assert_eq!(
+        span.fieldwise(),
+        parsed.fieldwise(),
+        "result of parsing {string:?}",
+    );
 }
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1640,7 +1644,10 @@ impl DateTimePrinter {
 /// static PARSER: SpanParser = SpanParser::new();
 ///
 /// let span = PARSER.parse_span(b"P3y7m25dT7h36m")?;
-/// assert_eq!(span, 3.years().months(7).days(25).hours(7).minutes(36));
+/// assert_eq!(
+///     span,
+///     3.years().months(7).days(25).hours(7).minutes(36).fieldwise(),
+/// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -1673,7 +1680,7 @@ impl SpanParser {
     /// static PARSER: SpanParser = SpanParser::new();
     ///
     /// let span = PARSER.parse_span(b"PT48m")?;
-    /// assert_eq!(span, 48.minutes());
+    /// assert_eq!(span, 48.minutes().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1687,7 +1694,7 @@ impl SpanParser {
     /// use jiff::{Span, ToSpan};
     ///
     /// let span = "PT48m".parse::<Span>()?;
-    /// assert_eq!(span, 48.minutes());
+    /// assert_eq!(span, 48.minutes().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```

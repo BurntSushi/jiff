@@ -137,7 +137,7 @@ use crate::{
 /// let ts1: Timestamp = "2024-05-03 23:30:00.123Z".parse()?;
 /// let ts2: Timestamp = "2024-02-25 07Z".parse()?;
 /// // The default is to return spans with units no bigger than seconds.
-/// assert_eq!(ts1 - ts2, 5934600.seconds().milliseconds(123));
+/// assert_eq!(ts1 - ts2, 5934600.seconds().milliseconds(123).fieldwise());
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -156,7 +156,7 @@ use crate::{
 ///     // If you want to deal in units bigger than hours, then you'll have to
 ///     // convert your timestamp to a [`Zoned`] first.
 ///     ts1.since((Unit::Hour, ts2))?,
-///     1648.hours().minutes(30).milliseconds(123),
+///     1648.hours().minutes(30).milliseconds(123).fieldwise(),
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -175,7 +175,7 @@ use crate::{
 ///             .smallest(Unit::Minute)
 ///             .largest(Unit::Hour),
 ///     )?,
-///     40.hours().minutes(30),
+///     40.hours().minutes(30).fieldwise(),
 /// );
 /// // `TimestampDifference` uses truncation as a rounding mode by default,
 /// // but you can set the rounding mode to break ties away from zero:
@@ -187,7 +187,7 @@ use crate::{
 ///             .mode(RoundMode::HalfExpand),
 ///     )?,
 ///     // Rounds up to 31 minutes.
-///     40.hours().minutes(31),
+///     40.hours().minutes(31).fieldwise(),
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1503,10 +1503,10 @@ impl Timestamp {
     ///
     /// let earlier: Timestamp = "2006-08-24T22:30:00Z".parse()?;
     /// let later: Timestamp = "2019-01-31 21:00:00Z".parse()?;
-    /// assert_eq!(earlier.until(later)?, 392509800.seconds());
+    /// assert_eq!(earlier.until(later)?, 392509800.seconds().fieldwise());
     ///
     /// // Flipping the timestamps is fine, but you'll get a negative span.
-    /// assert_eq!(later.until(earlier)?, -392509800.seconds());
+    /// assert_eq!(later.until(earlier)?, -392509800.seconds().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1551,7 +1551,7 @@ impl Timestamp {
     /// let span = ts1.until(
     ///     TimestampDifference::from(ts2).smallest(Unit::Second),
     /// )?;
-    /// assert_eq!(span, 730641929.seconds());
+    /// assert_eq!(span.to_string(), "PT730641929S");
     ///
     /// // We can combine smallest and largest units too!
     /// let span = ts1.until(
@@ -1559,7 +1559,7 @@ impl Timestamp {
     ///         .smallest(Unit::Second)
     ///         .largest(Unit::Hour),
     /// )?;
-    /// assert_eq!(span, 202956.hours().minutes(5).seconds(29));
+    /// assert_eq!(span.to_string(), "PT202956H5M29S");
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
@@ -1594,7 +1594,7 @@ impl Timestamp {
     ///
     /// let earlier: Timestamp = "2006-08-24T22:30:00Z".parse()?;
     /// let later: Timestamp = "2019-01-31 21:00:00Z".parse()?;
-    /// assert_eq!(later - earlier, 392509800.seconds());
+    /// assert_eq!(later - earlier, 392509800.seconds().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1684,7 +1684,7 @@ impl Timestamp {
     /// // between two civil times never exceeds the limits
     /// // of a `Span`.
     /// let span = Span::try_from(dur).unwrap();
-    /// assert_eq!(span, Span::new().seconds(172_800));
+    /// assert_eq!(format!("{span:#}"), "172800s");
     /// // Guaranteed to succeed and always return the original
     /// // duration because the units are always hours or smaller,
     /// // and thus uniform. This means a relative datetime is
@@ -3049,7 +3049,7 @@ impl<'a> From<&'a UnsignedDuration> for TimestampArithmetic {
 ///         .mode(RoundMode::HalfExpand)
 ///         .increment(30),
 /// )?;
-/// assert_eq!(span, 175.hours());
+/// assert_eq!(format!("{span:#}"), "175h");
 ///
 /// // One less minute, and because of the HalfExpand mode, the span would
 /// // get rounded down.
@@ -3061,7 +3061,7 @@ impl<'a> From<&'a UnsignedDuration> for TimestampArithmetic {
 ///         .mode(RoundMode::HalfExpand)
 ///         .increment(30),
 /// )?;
-/// assert_eq!(span, 174.hours().minutes(30));
+/// assert_eq!(span, 174.hours().minutes(30).fieldwise());
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -3109,7 +3109,7 @@ impl TimestampDifference {
     ///         .smallest(Unit::Second)
     ///         .mode(RoundMode::HalfExpand),
     /// )?;
-    /// assert_eq!(span, 121.seconds());
+    /// assert_eq!(span, 121.seconds().fieldwise());
     ///
     /// // Because of the rounding mode, a small less-than-1-second increase in
     /// // the first timestamp can change the result of rounding.
@@ -3119,7 +3119,7 @@ impl TimestampDifference {
     ///         .smallest(Unit::Second)
     ///         .mode(RoundMode::HalfExpand),
     /// )?;
-    /// assert_eq!(span, 120.seconds());
+    /// assert_eq!(span, 120.seconds().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -3154,7 +3154,7 @@ impl TimestampDifference {
     /// let span = ts1.until(
     ///     TimestampDifference::new(ts2).largest(Unit::Second),
     /// )?;
-    /// assert_eq!(span, 211076160.seconds());
+    /// assert_eq!(format!("{span:#}"), "211076160s");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -3187,7 +3187,7 @@ impl TimestampDifference {
     ///         .mode(RoundMode::Ceil),
     /// )?;
     /// // Only one minute elapsed, but we asked to always round up!
-    /// assert_eq!(span, 1.hour());
+    /// assert_eq!(span, 1.hour().fieldwise());
     ///
     /// // Since `Ceil` always rounds toward positive infinity, the behavior
     /// // flips for a negative span.
@@ -3196,7 +3196,7 @@ impl TimestampDifference {
     ///         .smallest(Unit::Hour)
     ///         .mode(RoundMode::Ceil),
     /// )?;
-    /// assert_eq!(span, 0.hour());
+    /// assert_eq!(span, 0.hour().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -3242,7 +3242,7 @@ impl TimestampDifference {
     ///         .increment(5)
     ///         .mode(RoundMode::HalfExpand),
     /// )?;
-    /// assert_eq!(span, 275.minutes());
+    /// assert_eq!(span.to_string(), "PT275M");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```

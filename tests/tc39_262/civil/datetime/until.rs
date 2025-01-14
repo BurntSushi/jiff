@@ -10,11 +10,11 @@ use crate::tc39_262::Result;
 fn balance_negative_duration() -> Result {
     let dt1 = date(2000, 5, 2).at(9, 0, 0, 0);
     let dt2 = date(2000, 5, 5).at(10, 0, 0, 0);
-    assert_eq!(dt2.until((Unit::Day, dt1))?, -3.days().hours(1));
+    span_eq!(dt2.until((Unit::Day, dt1))?, -3.days().hours(1));
 
     let dt1 = date(2000, 5, 2).at(10, 0, 0, 0);
     let dt2 = date(2000, 5, 5).at(9, 0, 0, 0);
-    assert_eq!(dt2.until((Unit::Day, dt1))?, -2.days().hours(23));
+    span_eq!(dt2.until((Unit::Day, dt1))?, -2.days().hours(23));
 
     Ok(())
 }
@@ -24,7 +24,7 @@ fn balance_negative_duration() -> Result {
 fn balance_negative_time_units() {
     let dt = date(1996, 5, 2).at(1, 1, 1, 001_001_001);
 
-    assert_eq!(
+    span_eq!(
         dt - date(1996, 5, 2).at(0, 0, 0, 000_000_002),
         1.hour()
             .minutes(1)
@@ -33,7 +33,7 @@ fn balance_negative_time_units() {
             .microseconds(0)
             .nanoseconds(999),
     );
-    assert_eq!(
+    span_eq!(
         dt - date(1996, 5, 2).at(0, 0, 0, 000_002_000),
         1.hour()
             .minutes(1)
@@ -42,7 +42,7 @@ fn balance_negative_time_units() {
             .microseconds(999)
             .nanoseconds(1),
     );
-    assert_eq!(
+    span_eq!(
         dt - date(1996, 5, 2).at(0, 0, 0, 002_000_000),
         1.hour()
             .minutes(1)
@@ -51,7 +51,7 @@ fn balance_negative_time_units() {
             .microseconds(1)
             .nanoseconds(1),
     );
-    assert_eq!(
+    span_eq!(
         dt - date(1996, 5, 2).at(0, 0, 2, 0),
         1.hour()
             .minutes(0)
@@ -60,7 +60,7 @@ fn balance_negative_time_units() {
             .microseconds(1)
             .nanoseconds(1),
     );
-    assert_eq!(
+    span_eq!(
         dt - date(1996, 5, 2).at(0, 2, 0, 0),
         0.hour()
             .minutes(59)
@@ -69,7 +69,7 @@ fn balance_negative_time_units() {
             .microseconds(1)
             .nanoseconds(1),
     );
-    assert_eq!(
+    span_eq!(
         dt - date(1996, 5, 2).at(2, 0, 0, 0),
         -0.hour()
             .minutes(58)
@@ -107,7 +107,7 @@ fn balance() -> Result {
 fn inverse() -> Result {
     let dt1 = date(1976, 11, 18).at(15, 23, 30, 123_456_789);
     let dt2 = date(2016, 3, 3).at(18, 0, 0, 0);
-    assert_eq!(dt1.until(dt2)?, dt2.since(dt1)?);
+    span_eq!(dt1.until(dt2)?, dt2.since(dt1)?);
     Ok(())
 }
 
@@ -150,8 +150,8 @@ fn no_unncessary_units() -> Result {
     let dt1 = DateTime::from(date(2021, 2, 28));
     let dt2 = DateTime::from(date(2022, 2, 28));
 
-    assert_eq!(dt1.until((Unit::Month, dt2))?, 12.months());
-    assert_eq!(dt1.until((Unit::Year, dt2))?, 1.year());
+    span_eq!(dt1.until((Unit::Month, dt2))?, 12.months());
+    span_eq!(dt1.until((Unit::Year, dt2))?, 1.year());
 
     Ok(())
 }
@@ -166,7 +166,7 @@ fn round_cross_unit_boundary() -> Result {
         .largest(Unit::Year)
         .smallest(Unit::Month)
         .mode(RoundMode::Expand);
-    assert_eq!(dt1.until(args)?, 2.years());
+    span_eq!(dt1.until(args)?, 2.years());
 
     // Time units.
     let dt1 = date(2000, 5, 2).at(0, 0, 0, 0);
@@ -175,7 +175,7 @@ fn round_cross_unit_boundary() -> Result {
         .largest(Unit::Hour)
         .smallest(Unit::Minute)
         .mode(RoundMode::Expand);
-    assert_eq!(dt1.until(args)?, 2.hours());
+    span_eq!(dt1.until(args)?, 2.hours());
 
     // Both.
     let dt1 = date(1970, 1, 1).at(0, 0, 0, 0);
@@ -184,7 +184,7 @@ fn round_cross_unit_boundary() -> Result {
         .largest(Unit::Year)
         .smallest(Unit::Microsecond)
         .mode(RoundMode::Expand);
-    assert_eq!(dt1.until(args)?, 2.years());
+    span_eq!(dt1.until(args)?, 2.years());
 
     Ok(())
 }
@@ -195,7 +195,7 @@ fn round_negative_duration() -> Result {
     let dt1 = date(2000, 5, 2).at(12, 0, 0, 0);
     let dt2 = date(2000, 5, 5).at(0, 0, 0, 0);
     let args = DateTimeDifference::new(dt1).smallest(Unit::Day).increment(2);
-    assert_eq!(dt2.until(args)?, -2.days());
+    span_eq!(dt2.until(args)?, -2.days());
     Ok(())
 }
 
@@ -208,12 +208,12 @@ fn round_relative_to_receiver() -> Result {
     let args = DateTimeDifference::new(dt2)
         .smallest(Unit::Year)
         .mode(RoundMode::HalfExpand);
-    assert_eq!(dt1.until(args)?, 2.years());
+    span_eq!(dt1.until(args)?, 2.years());
 
     let args = DateTimeDifference::new(dt1)
         .smallest(Unit::Year)
         .mode(RoundMode::HalfExpand);
-    assert_eq!(dt2.until(args)?, -1.years());
+    span_eq!(dt2.until(args)?, -1.years());
 
     Ok(())
 }
@@ -228,25 +228,25 @@ fn roundingincrement_basic() -> Result {
         .smallest(Unit::Hour)
         .mode(RoundMode::HalfExpand)
         .increment(3);
-    assert_eq!(dt1.until(args)?, 973.days().hours(3));
+    span_eq!(dt1.until(args)?, 973.days().hours(3));
 
     let args = DateTimeDifference::new(dt2)
         .smallest(Unit::Minute)
         .mode(RoundMode::HalfExpand)
         .increment(30);
-    assert_eq!(dt1.until(args)?, 973.days().hours(4).minutes(30));
+    span_eq!(dt1.until(args)?, 973.days().hours(4).minutes(30));
 
     let args = DateTimeDifference::new(dt2)
         .smallest(Unit::Second)
         .mode(RoundMode::HalfExpand)
         .increment(15);
-    assert_eq!(dt1.until(args)?, 973.days().hours(4).minutes(17).seconds(0));
+    span_eq!(dt1.until(args)?, 973.days().hours(4).minutes(17).seconds(0));
 
     let args = DateTimeDifference::new(dt2)
         .smallest(Unit::Millisecond)
         .mode(RoundMode::HalfExpand)
         .increment(10);
-    assert_eq!(
+    span_eq!(
         dt1.until(args)?,
         973.days().hours(4).minutes(17).seconds(4).milliseconds(860)
     );
@@ -255,7 +255,7 @@ fn roundingincrement_basic() -> Result {
         .smallest(Unit::Microsecond)
         .mode(RoundMode::HalfExpand)
         .increment(10);
-    assert_eq!(
+    span_eq!(
         dt1.until(args)?,
         973.days()
             .hours(4)
@@ -269,7 +269,7 @@ fn roundingincrement_basic() -> Result {
         .smallest(Unit::Nanosecond)
         .mode(RoundMode::HalfExpand)
         .increment(10);
-    assert_eq!(
+    span_eq!(
         dt1.until(args)?,
         973.days()
             .hours(4)
@@ -362,57 +362,51 @@ fn roundingmode_ceil() -> Result {
         DateTimeDifference::new(dt).smallest(smallest).mode(RoundMode::Ceil)
     };
 
-    assert_eq!(dt1.until(mkargs(Unit::Year, dt2))?, 3.years());
-    assert_eq!(dt1.until(mkargs(Unit::Month, dt2))?, 32.months());
-    assert_eq!(dt1.until(mkargs(Unit::Week, dt2))?, 140.weeks());
-    assert_eq!(dt1.until(mkargs(Unit::Day, dt2))?, 974.days());
+    span_eq!(dt1.until(mkargs(Unit::Year, dt2))?, 3.years());
+    span_eq!(dt1.until(mkargs(Unit::Month, dt2))?, 32.months());
+    span_eq!(dt1.until(mkargs(Unit::Week, dt2))?, 140.weeks());
+    span_eq!(dt1.until(mkargs(Unit::Day, dt2))?, 974.days());
     let mut span = 973.days();
-    assert_eq!(dt1.until(mkargs(Unit::Hour, dt2))?, span.hours(5));
+    span_eq!(dt1.until(mkargs(Unit::Hour, dt2))?, span.hours(5));
     span = span.hours(4);
-    assert_eq!(dt1.until(mkargs(Unit::Minute, dt2))?, span.minutes(18));
+    span_eq!(dt1.until(mkargs(Unit::Minute, dt2))?, span.minutes(18));
     span = span.minutes(17);
-    assert_eq!(dt1.until(mkargs(Unit::Second, dt2))?, span.seconds(5));
+    span_eq!(dt1.until(mkargs(Unit::Second, dt2))?, span.seconds(5));
     span = span.seconds(4);
-    assert_eq!(
+    span_eq!(
         dt1.until(mkargs(Unit::Millisecond, dt2))?,
         span.milliseconds(865)
     );
     span = span.milliseconds(864);
-    assert_eq!(
+    span_eq!(
         dt1.until(mkargs(Unit::Microsecond, dt2))?,
         span.microseconds(198)
     );
     span = span.microseconds(197);
-    assert_eq!(
-        dt1.until(mkargs(Unit::Nanosecond, dt2))?,
-        span.nanoseconds(500)
-    );
+    span_eq!(dt1.until(mkargs(Unit::Nanosecond, dt2))?, span.nanoseconds(500));
 
-    assert_eq!(dt2.until(mkargs(Unit::Year, dt1))?, -2.years());
-    assert_eq!(dt2.until(mkargs(Unit::Month, dt1))?, -31.months());
-    assert_eq!(dt2.until(mkargs(Unit::Week, dt1))?, -139.weeks());
-    assert_eq!(dt2.until(mkargs(Unit::Day, dt1))?, -973.days());
+    span_eq!(dt2.until(mkargs(Unit::Year, dt1))?, -2.years());
+    span_eq!(dt2.until(mkargs(Unit::Month, dt1))?, -31.months());
+    span_eq!(dt2.until(mkargs(Unit::Week, dt1))?, -139.weeks());
+    span_eq!(dt2.until(mkargs(Unit::Day, dt1))?, -973.days());
     let mut span = -973.days();
-    assert_eq!(dt2.until(mkargs(Unit::Hour, dt1))?, span.hours(4));
+    span_eq!(dt2.until(mkargs(Unit::Hour, dt1))?, span.hours(4));
     span = span.hours(4);
-    assert_eq!(dt2.until(mkargs(Unit::Minute, dt1))?, span.minutes(17));
+    span_eq!(dt2.until(mkargs(Unit::Minute, dt1))?, span.minutes(17));
     span = span.minutes(17);
-    assert_eq!(dt2.until(mkargs(Unit::Second, dt1))?, span.seconds(4));
+    span_eq!(dt2.until(mkargs(Unit::Second, dt1))?, span.seconds(4));
     span = span.seconds(4);
-    assert_eq!(
+    span_eq!(
         dt2.until(mkargs(Unit::Millisecond, dt1))?,
         span.milliseconds(864)
     );
     span = span.milliseconds(864);
-    assert_eq!(
+    span_eq!(
         dt2.until(mkargs(Unit::Microsecond, dt1))?,
         span.microseconds(197)
     );
     span = span.microseconds(197);
-    assert_eq!(
-        dt2.until(mkargs(Unit::Nanosecond, dt1))?,
-        span.nanoseconds(500)
-    );
+    span_eq!(dt2.until(mkargs(Unit::Nanosecond, dt1))?, span.nanoseconds(500));
 
     Ok(())
 }
@@ -423,15 +417,15 @@ fn subseconds() -> Result {
     let dt1 = date(2020, 2, 1).at(0, 0, 0, 0);
     let dt2 = date(2020, 2, 2).at(0, 0, 0, 250_250_250);
 
-    assert_eq!(
+    span_eq!(
         dt1.until((Unit::Millisecond, dt2))?,
         86400_250.milliseconds().microseconds(250).nanoseconds(250)
     );
-    assert_eq!(
+    span_eq!(
         dt1.until((Unit::Microsecond, dt2))?,
         86400_250_250i64.microseconds().nanoseconds(250)
     );
-    assert_eq!(
+    span_eq!(
         dt1.until((Unit::Nanosecond, dt2))?,
         86400_250_250_250i64.nanoseconds()
     );
@@ -445,22 +439,22 @@ fn units_changed() -> Result {
     let dt1 = date(2020, 2, 1).at(0, 0, 0, 0);
     let dt2 = date(2021, 2, 1).at(0, 0, 0, 0);
 
-    assert_eq!(dt1.until((Unit::Year, dt2))?, 1.year());
-    assert_eq!(dt1.until((Unit::Month, dt2))?, 12.months());
-    assert_eq!(dt1.until((Unit::Week, dt2))?, 52.weeks().days(2));
-    assert_eq!(dt1.until((Unit::Day, dt2))?, 366.days());
-    assert_eq!(dt1.until((Unit::Hour, dt2))?, 8784.hours());
-    assert_eq!(dt1.until((Unit::Minute, dt2))?, 527040.minutes());
-    assert_eq!(dt1.until((Unit::Second, dt2))?, 31_622_400.seconds());
-    assert_eq!(
+    span_eq!(dt1.until((Unit::Year, dt2))?, 1.year());
+    span_eq!(dt1.until((Unit::Month, dt2))?, 12.months());
+    span_eq!(dt1.until((Unit::Week, dt2))?, 52.weeks().days(2));
+    span_eq!(dt1.until((Unit::Day, dt2))?, 366.days());
+    span_eq!(dt1.until((Unit::Hour, dt2))?, 8784.hours());
+    span_eq!(dt1.until((Unit::Minute, dt2))?, 527040.minutes());
+    span_eq!(dt1.until((Unit::Second, dt2))?, 31_622_400.seconds());
+    span_eq!(
         dt1.until((Unit::Millisecond, dt2))?,
         31_622_400_000i64.milliseconds()
     );
-    assert_eq!(
+    span_eq!(
         dt1.until((Unit::Microsecond, dt2))?,
         31_622_400_000_000i64.microseconds()
     );
-    assert_eq!(
+    span_eq!(
         dt1.until((Unit::Nanosecond, dt2))?,
         31_622_400_000_000_000i64.nanoseconds()
     );
@@ -487,26 +481,26 @@ fn wrapping_at_end_of_month() -> Result {
     // Span between end of longer month to end of following shorter month.
     let end = mkdt(1970, 2, 28);
     for largest in [Unit::Year, Unit::Month] {
-        assert_eq!(mkdt(1970, 1, 28).until((largest, end))?, 1.month());
-        assert_eq!(mkdt(1970, 1, 29).until((largest, end))?, 30.days());
-        assert_eq!(mkdt(1970, 1, 30).until((largest, end))?, 29.days());
-        assert_eq!(mkdt(1970, 1, 31).until((largest, end))?, 28.days());
+        span_eq!(mkdt(1970, 1, 28).until((largest, end))?, 1.month());
+        span_eq!(mkdt(1970, 1, 29).until((largest, end))?, 30.days());
+        span_eq!(mkdt(1970, 1, 30).until((largest, end))?, 29.days());
+        span_eq!(mkdt(1970, 1, 31).until((largest, end))?, 28.days());
     }
 
     // Span between end of leap-year January to end of leap-year February.
     let end = mkdt(1972, 2, 29);
     for largest in [Unit::Year, Unit::Month] {
-        assert_eq!(mkdt(1972, 1, 29).until((largest, end))?, 1.month());
-        assert_eq!(mkdt(1972, 1, 30).until((largest, end))?, 30.days());
-        assert_eq!(mkdt(1972, 1, 31).until((largest, end))?, 29.days());
+        span_eq!(mkdt(1972, 1, 29).until((largest, end))?, 1.month());
+        span_eq!(mkdt(1972, 1, 30).until((largest, end))?, 30.days());
+        span_eq!(mkdt(1972, 1, 31).until((largest, end))?, 29.days());
     }
 
     // Span between end of longer month to end of not-immediately-following
     // shorter month.
     let end = mkdt(1970, 11, 30);
     for largest in [Unit::Year, Unit::Month] {
-        assert_eq!(mkdt(1970, 8, 30).until((largest, end))?, 3.months());
-        assert_eq!(
+        span_eq!(mkdt(1970, 8, 30).until((largest, end))?, 3.months());
+        span_eq!(
             mkdt(1970, 8, 31).until((largest, end))?,
             2.months().days(30)
         );
@@ -515,27 +509,27 @@ fn wrapping_at_end_of_month() -> Result {
     // Span between end of longer month in one year to shorter month in
     // later year.
     let end = mkdt(1973, 4, 30);
-    assert_eq!(mkdt(1970, 12, 30).until((Unit::Month, end))?, 28.months());
-    assert_eq!(
+    span_eq!(mkdt(1970, 12, 30).until((Unit::Month, end))?, 28.months());
+    span_eq!(
         mkdt(1970, 12, 30).until((Unit::Year, end))?,
         2.years().months(4)
     );
-    assert_eq!(
+    span_eq!(
         mkdt(1970, 12, 31).until((Unit::Month, end))?,
         27.months().days(30),
     );
-    assert_eq!(
+    span_eq!(
         mkdt(1970, 12, 31).until((Unit::Year, end))?,
         2.years().months(3).days(30),
     );
 
     // Span where months passes through a month that's the same length or
     // shorter than either the start or end month.
-    assert_eq!(
+    span_eq!(
         mkdt(1970, 1, 29).until((Unit::Month, mkdt(1970, 3, 28)))?,
         1.month().days(28)
     );
-    assert_eq!(
+    span_eq!(
         mkdt(1970, 1, 31).until((Unit::Year, mkdt(1971, 5, 30)))?,
         1.year().months(3).days(30)
     );
@@ -547,7 +541,7 @@ fn wrapping_at_end_of_month() -> Result {
     // See: https://github.com/tc39/proposal-temporal/issues/2820
     let dt1 = date(2023, 2, 28).at(3, 0, 0, 0);
     let dt2 = date(2023, 4, 1).at(2, 0, 0, 0);
-    assert_eq!(dt1.until((Unit::Year, dt2))?, 1.month().days(3).hours(23));
+    span_eq!(dt1.until((Unit::Year, dt2))?, 1.month().days(3).hours(23));
 
     // Test that 1-day backoff to maintain date/time sign compatibility
     // backs-off from correct end while moving *forwards* in time and does not
@@ -556,7 +550,7 @@ fn wrapping_at_end_of_month() -> Result {
     // See: https://github.com/tc39/proposal-temporal/issues/2820
     let dt1 = date(2023, 3, 1).at(2, 0, 0, 0);
     let dt2 = date(2023, 1, 1).at(3, 0, 0, 0);
-    assert_eq!(dt1.until((Unit::Year, dt2))?, -1.month().days(30).hours(23));
+    span_eq!(dt1.until((Unit::Year, dt2))?, -1.month().days(30).hours(23));
 
     Ok(())
 }
