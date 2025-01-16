@@ -1,6 +1,6 @@
 [package]
 name = "jiff-tzdb-platform"
-version = "0.1.1"  #:version
+version = "0.1.2"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 license = "Unlicense OR MIT"
 homepage = "https://github.com/BurntSushi/jiff/tree/master/jiff-tzdb-platform"
