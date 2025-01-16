@@ -100,7 +100,7 @@ tzdb-concatenated = ["std"]
 js = ["dep:wasm-bindgen", "dep:js-sys"]
 
 [dependencies]
-jiff-tzdb = { version = "0.1.1", path = "jiff-tzdb", optional = true }
+jiff-tzdb = { version = "0.1.2", path = "jiff-tzdb", optional = true }
 log = { version = "0.4.21", optional = true, default-features = false }
 serde = { version = "1.0.203", optional = true, default-features = false }
 
