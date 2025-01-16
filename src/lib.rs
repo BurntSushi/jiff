@@ -669,7 +669,15 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
     deny(rustdoc::broken_intra_doc_links)
 )]
 // These are just too annoying to squash otherwise.
-#![cfg_attr(not(feature = "std"), allow(dead_code, unused_imports))]
+#![cfg_attr(
+    not(all(
+        feature = "std",
+        feature = "tzdb-zoneinfo",
+        feature = "tzdb-concatenated",
+        feature = "tz-system",
+    )),
+    allow(dead_code, unused_imports)
+)]
 // No clue why this thing is still unstable because it's pretty amazing. This
 // adds Cargo feature annotations to items in the rustdoc output. Which is
 // sadly hugely beneficial for this crate due to the number of features.

@@ -100,7 +100,7 @@ pub use self::{
     offset::{Dst, Offset, OffsetArithmetic, OffsetConflict},
 };
 
-#[cfg(feature = "alloc")]
+#[cfg(feature = "tzdb-concatenated")]
 mod concatenated;
 mod db;
 mod offset;
