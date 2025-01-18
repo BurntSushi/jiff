@@ -12,6 +12,12 @@ have been deprecated in favor of `in_tz`.
 * [#32](https://github.com/BurntSushi/jiff/issues/32):
 The `Eq` and `PartialEq` trait implementations on `Span` have been deprecated
 in favor of using the new `SpanFieldwise` type.
+* [#48](https://github.com/BurntSushi/jiff/issues/48):
+Silently assuming days are always 24 hours in some `Span` APIs has now been
+deprecated. This will become an error in `jiff 0.2`. To continue assuming
+days are 24 hours without a relative reference date, you can use the new
+`SpanRelativeTo::days_are_24_hours` API. In `jiff 0.1`, you'll seen a
+WARN-level log message emitted if you're code will be broken by `jiff 0.2`.
 
 
 0.1.24 (2025-01-16)

@@ -162,29 +162,29 @@ fn no_calendar_units() -> Result {
     let blank = Span::new();
     insta::assert_snapshot!(
         1.year().checked_add(blank).unwrap_err(),
-        @"using largest unit (which is 'year') in given span requires that a relative reference time be given, but none was provided",
+        @"using unit 'year' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     insta::assert_snapshot!(
         1.month().checked_add(blank).unwrap_err(),
-        @"using largest unit (which is 'month') in given span requires that a relative reference time be given, but none was provided",
+        @"using unit 'month' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     insta::assert_snapshot!(
         1.week().checked_add(blank).unwrap_err(),
-        @"using largest unit (which is 'week') in given span requires that a relative reference time be given, but none was provided",
+        @"using unit 'week' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
 
     let ok = 1.day();
     insta::assert_snapshot!(
         ok.checked_add(1.year()).unwrap_err(),
-        @"using largest unit (which is 'year') in given span requires that a relative reference time be given, but none was provided",
+        @"using unit 'year' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     insta::assert_snapshot!(
         ok.checked_add(1.month()).unwrap_err(),
-        @"using largest unit (which is 'month') in given span requires that a relative reference time be given, but none was provided",
+        @"using unit 'month' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     insta::assert_snapshot!(
         ok.checked_add(1.month()).unwrap_err(),
-        @"using largest unit (which is 'month') in given span requires that a relative reference time be given, but none was provided",
+        @"using unit 'month' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
 
     Ok(())
