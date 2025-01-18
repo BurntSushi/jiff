@@ -18,6 +18,13 @@ deprecated. This will become an error in `jiff 0.2`. To continue assuming
 days are 24 hours without a relative reference date, you can use the new
 `SpanRelativeTo::days_are_24_hours` API. In `jiff 0.1`, you'll seen a
 WARN-level log message emitted if you're code will be broken by `jiff 0.2`.
+* [#147](https://github.com/BurntSushi/jiff/issues/147):
+Both `%V` and `%:V` have been deprecated in favor of `%Q` and `%:Q`. In
+`jiff 0.2`, `%V` will correspond to the ISO 8601 week number and `%:V` will
+result in an error. This change was made to improve compatibility with other
+`strtime` implementations. `%V` and `%:V` continue to correspond to IANA
+time zone identifiers in `jiff 0.1`, but using them for parsing or formatting
+will result in a WARN-level deprecation message.
 
 
 0.1.24 (2025-01-16)
