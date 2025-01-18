@@ -1461,7 +1461,7 @@ impl DateTime {
     /// strategy, use [`TimeZone::to_ambiguous_zoned`].
     ///
     /// In the common case of a time zone being represented as a name string,
-    /// like `Australia/Tasmania`, consider using [`DateTime::to_zoned`]
+    /// like `Australia/Tasmania`, consider using [`DateTime::intz`]
     /// instead.
     ///
     /// # Errors

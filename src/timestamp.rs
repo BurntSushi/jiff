@@ -1080,6 +1080,10 @@ impl Timestamp {
     /// time (i.e., a fold, typically DST ending) or no instants in time (i.e.,
     /// a gap, typically DST starting).
     ///
+    /// In the common case of a time zone being represented as a name string,
+    /// like `Australia/Tasmania`, consider using [`Timestamp::intz`]
+    /// instead.
+    ///
     /// # Example
     ///
     /// This example shows how to create a zoned value with a fixed time zone
