@@ -1236,6 +1236,10 @@ impl Date {
     /// for more details. Note that ambiguous datetimes are handled in the same
     /// way as `DateTime::to_zoned`.
     ///
+    /// In the common case of a time zone being represented as a name string,
+    /// like `Australia/Tasmania`, consider using [`Date::intz`]
+    /// instead.
+    ///
     /// # Errors
     ///
     /// This returns an error if this date could not be represented as a
