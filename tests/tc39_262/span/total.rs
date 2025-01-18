@@ -38,21 +38,21 @@ fn calendar_possibly_required() -> Result {
 
     insta::assert_snapshot!(
         year.total(Unit::Day).unwrap_err(),
-        @"using unit 'year' requires that a relative reference time be given, but none was provided",
+        @"using unit 'year' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     let result = year.total((Unit::Day, d))?;
     assert_eq!(result, 730_120.0);
 
     insta::assert_snapshot!(
         month.total(Unit::Day).unwrap_err(),
-        @"using unit 'month' requires that a relative reference time be given, but none was provided",
+        @"using unit 'month' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     let result = month.total((Unit::Day, d))?;
     assert_eq!(result, 1_492.0);
 
     insta::assert_snapshot!(
         week.total(Unit::Day).unwrap_err(),
-        @"using unit 'week' requires that a relative reference time be given, but none was provided",
+        @"using unit 'week' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     let result = week.total((Unit::Day, d))?;
     assert_eq!(result, 7.0);
