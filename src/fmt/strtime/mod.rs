@@ -52,7 +52,7 @@ Or parse a zoned datetime with an IANA time zone identifier:
 use jiff::{civil::date, Zoned};
 
 let zdt = Zoned::strptime(
-    "%A, %B %d, %Y at %-I:%M%P %:V",
+    "%A, %B %d, %Y at %-I:%M%P %:Q",
     "Monday, July 15, 2024 at 5:30pm Australia/Tasmania",
 )?;
 assert_eq!(
@@ -172,15 +172,26 @@ strings, the strings are matched without regard to ASCII case.
 | `%m` | `01` | The month. Zero padded. |
 | `%P` | `am` | Whether the time is in the AM or PM, lowercase. |
 | `%p` | `PM` | Whether the time is in the AM or PM, uppercase. |
+| `%Q` | `America/New_York`, `+0530` | An IANA time zone identifier, or `%z` if one doesn't exist. |
+| `%:Q` | `America/New_York`, `+05:30` | An IANA time zone identifier, or `%:z` if one doesn't exist. |
 | `%S` | `59` | The second. Zero padded. |
 | `%T` | `23:30:59` | Equivalent to `%H:%M:%S`. |
-| `%V` | `America/New_York`, `+0530` | An IANA time zone identifier, or `%z` if one doesn't exist. |
-| `%:V` | `America/New_York`, `+05:30` | An IANA time zone identifier, or `%:z` if one doesn't exist. |
 | `%Y` | `2024` | A full year, including century. Zero padded to 4 digits. |
 | `%y` | `24` | A two-digit year. Represents only 1969-2068. Zero padded. |
 | `%Z` | `EDT` | A time zone abbreviation. Supported when formatting only. |
 | `%z` | `+0530` | A time zone offset in the format `[+-]HHMM[SS]`. |
 | `%:z` | `+05:30` | A time zone offset in the format `[+-]HH:MM[:SS]`. |
+
+These specifiers are deprecated. Specifically, in `jiff 0.2`, `%V` will parse
+or print the ISO 8601 week number and `%:V` will no longer be recognized. To
+emit an IANA time zone identifier (which is what `%V` does in `jiff 0.1`) in
+a forward compatible way, please use the `%Q` or `%:Q` specifier (as listed
+above).
+
+| Specifier | Example | Description |
+| --------- | ------- | ----------- |
+| `%V` | `America/New_York`, `+0530` | An IANA time zone identifier, or `%z` if one doesn't exist. |
+| `%:V` | `America/New_York`, `+05:30` | An IANA time zone identifier, or `%:z` if one doesn't exist. |
 
 When formatting, the following flags can be inserted immediately after the `%`
 and before the directive:
@@ -222,7 +233,7 @@ higher level APIs like [`Timestamp::round`] or [`Zoned::round`].
 
 # Conditionally unsupported
 
-Jiff does not support `%V` or `%:V` (IANA time zone identifier) when the
+Jiff does not support `%Q` or `%:Q` (IANA time zone identifier) when the
 `alloc` crate feature is not enabled. This is because a time zone identifier
 is variable width data. If you have a use case for this, please
 [detail it in a new issue](https://github.com/BurntSushi/jiff/issues/new).
@@ -632,7 +643,7 @@ impl BrokenDownTime {
     /// strategy is used if the parsed datetime is ambiguous in the time zone.
     ///
     /// If you need to use a custom time zone database for doing IANA time
-    /// zone identifier lookups (via the `%V` directive), then use
+    /// zone identifier lookups (via the `%Q` directive), then use
     /// [`BrokenDownTime::to_zoned_with`].
     ///
     /// # Warning
@@ -644,7 +655,7 @@ impl BrokenDownTime {
     /// datetime. This in turn means it will not perform daylight saving time
     /// safe arithmetic.
     ///
-    /// However, the `%V` directive may be used to both format and parse an
+    /// However, the `%Q` directive may be used to both format and parse an
     /// IANA time zone identifier. It is strongly recommended to use this
     /// directive whenever one is formatting or parsing `Zoned` values.
     ///
@@ -664,7 +675,7 @@ impl BrokenDownTime {
     /// use jiff::fmt::strtime;
     ///
     /// let zdt = strtime::parse(
-    ///     "%F %H:%M %:z %:V",
+    ///     "%F %H:%M %:z %:Q",
     ///     "2024-07-14 21:14 -04:00 US/Eastern",
     /// )?.to_zoned()?;
     /// assert_eq!(zdt.to_string(), "2024-07-14T21:14:00-04:00[US/Eastern]");
@@ -680,7 +691,7 @@ impl BrokenDownTime {
     /// use jiff::fmt::strtime;
     ///
     /// let result = strtime::parse(
-    ///     "%F %H:%M %:z %:V",
+    ///     "%F %H:%M %:z %:Q",
     ///     "2024-07-14 21:14 -05:00 US/Eastern",
     /// )?.to_zoned();
     /// assert_eq!(
@@ -703,7 +714,7 @@ impl BrokenDownTime {
     ///
     /// An IANA time zone identifier lookup is only performed when this
     /// `BrokenDownTime` contains an IANA time zone identifier. An IANA time
-    /// zone identifier can be parsed with the `%V` directive.
+    /// zone identifier can be parsed with the `%Q` directive.
     ///
     /// When an IANA time zone identifier is
     /// present but an offset is not, then the
@@ -719,7 +730,7 @@ impl BrokenDownTime {
     /// datetime. This in turn means it will not perform daylight saving time
     /// safe arithmetic.
     ///
-    /// However, the `%V` directive may be used to both format and parse an
+    /// However, the `%Q` directive may be used to both format and parse an
     /// IANA time zone identifier. It is strongly recommended to use this
     /// directive whenever one is formatting or parsing `Zoned` values.
     ///
@@ -739,7 +750,7 @@ impl BrokenDownTime {
     /// use jiff::fmt::strtime;
     ///
     /// let zdt = strtime::parse(
-    ///     "%F %H:%M %:z %:V",
+    ///     "%F %H:%M %:z %:Q",
     ///     "2024-07-14 21:14 -04:00 US/Eastern",
     /// )?.to_zoned_with(jiff::tz::db())?;
     /// assert_eq!(zdt.to_string(), "2024-07-14T21:14:00-04:00[US/Eastern]");
@@ -757,7 +768,7 @@ impl BrokenDownTime {
         match (self.offset, self.iana_time_zone()) {
             (None, None) => Err(err!(
                 "either offset (from %z) or IANA time zone identifier \
-                 (from %V) is required for parsing zoned datetime",
+                 (from %Q) is required for parsing zoned datetime",
             )),
             (Some(offset), None) => {
                 let ts = offset.to_timestamp(dt).with_context(|| {
@@ -1331,14 +1342,14 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::{fmt::strtime::BrokenDownTime, tz};
     ///
-    /// let tm = BrokenDownTime::parse("%V", "US/Eastern")?;
+    /// let tm = BrokenDownTime::parse("%Q", "US/Eastern")?;
     /// assert_eq!(tm.iana_time_zone(), Some("US/Eastern"));
     /// assert_eq!(tm.offset(), None);
     ///
-    /// // Note that %V (and %:V) also support parsing an offset
+    /// // Note that %Q (and %:Q) also support parsing an offset
     /// // as a fallback. If that occurs, an IANA time zone
     /// // identifier is not available.
-    /// let tm = BrokenDownTime::parse("%V", "-0400")?;
+    /// let tm = BrokenDownTime::parse("%Q", "-0400")?;
     /// assert_eq!(tm.iana_time_zone(), None);
     /// assert_eq!(tm.offset(), Some(tz::offset(-4)));
     ///
@@ -1698,7 +1709,7 @@ impl BrokenDownTime {
     /// let mut tm = BrokenDownTime::from(&zdt);
     /// tm.set_offset(Some(tz::offset(12)));
     /// assert_eq!(
-    ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %V %:z")?,
+    ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %Q %:z")?,
     ///     "2024-08-28 at 14:56:00 in US/Eastern +12:00",
     /// );
     ///
@@ -1757,7 +1768,7 @@ impl BrokenDownTime {
     /// let mut tm = BrokenDownTime::from(&zdt);
     /// tm.set_iana_time_zone(Some(String::from("Australia/Tasmania")));
     /// assert_eq!(
-    ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %V %:z")?,
+    ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %Q %:z")?,
     ///     "2024-08-28 at 14:56:00 in Australia/Tasmania -04:00",
     /// );
     ///
@@ -1766,7 +1777,7 @@ impl BrokenDownTime {
     /// let mut tm = BrokenDownTime::from(&zdt);
     /// tm.set_iana_time_zone(Some(String::from("Clearly/Invalid")));
     /// assert_eq!(
-    ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %V %:z")?,
+    ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %Q %:z")?,
     ///     "2024-08-28 at 14:56:00 in Clearly/Invalid -04:00",
     /// );
     ///

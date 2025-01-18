@@ -68,9 +68,10 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                 b'm' => self.parse_month(ext).context("%m failed")?,
                 b'P' => self.parse_ampm().context("%P failed")?,
                 b'p' => self.parse_ampm().context("%p failed")?,
+                b'Q' => self.parse_iana_nocolon(b'Q').context("%Q failed")?,
                 b'S' => self.parse_second(ext).context("%S failed")?,
                 b'T' => self.parse_clock().context("%T failed")?,
-                b'V' => self.parse_iana_nocolon().context("%V failed")?,
+                b'V' => self.parse_iana_nocolon(b'V').context("%V failed")?,
                 b'Y' => self.parse_year(ext).context("%Y failed")?,
                 b'y' => self.parse_year_2digit(ext).context("%y failed")?,
                 b'z' => self.parse_offset_nocolon().context("%z failed")?,
@@ -82,9 +83,12 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                         ));
                     }
                     match self.f() {
-                        b'V' => {
-                            self.parse_iana_colon().context("%:V failed")?
-                        }
+                        b'Q' => self
+                            .parse_iana_colon(b'Q')
+                            .context("%:Q failed")?,
+                        b'V' => self
+                            .parse_iana_colon(b'V')
+                            .context("%:V failed")?,
                         b'z' => {
                             self.parse_offset_colon().context("%:z failed")?
                         }
@@ -339,19 +343,25 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         Ok(())
     }
 
-    /// Parse `%V`, which is the IANA time zone identifier or an offset without
+    /// Parse `%Q`, which is the IANA time zone identifier or an offset without
     /// colons.
-    fn parse_iana_nocolon(&mut self) -> Result<(), Error> {
+    fn parse_iana_nocolon(&mut self, which: u8) -> Result<(), Error> {
         #[cfg(not(feature = "alloc"))]
         {
             Err(err!(
-                "cannot parse `%V` without Jiff's `alloc` feature enabled"
+                "cannot parse `%Q` without Jiff's `alloc` feature enabled"
             ))
         }
         #[cfg(feature = "alloc")]
         {
             use alloc::string::ToString;
 
+            if which == b'V' {
+                warn!(
+                    "`%V` is DEPRECATED and will parse an ISO 8601 week \
+                     number in `jiff 0.2`, use `%Q` instead",
+                );
+            }
             if !self.inp.is_empty() && matches!(self.inp[0], b'+' | b'-') {
                 return self.parse_offset_nocolon();
             }
@@ -363,18 +373,25 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         }
     }
 
-    /// Parse `%:V`, which is the IANA time zone identifier or an offset with
+    /// Parse `%:Q`, which is the IANA time zone identifier or an offset with
     /// colons.
-    fn parse_iana_colon(&mut self) -> Result<(), Error> {
+    fn parse_iana_colon(&mut self, which: u8) -> Result<(), Error> {
         #[cfg(not(feature = "alloc"))]
         {
             Err(err!(
-                "cannot parse `%:V` without Jiff's `alloc` feature enabled"
+                "cannot parse `%:Q` without Jiff's `alloc` feature enabled"
             ))
         }
         #[cfg(feature = "alloc")]
         {
             use alloc::string::ToString;
+
+            if which == b'V' {
+                warn!(
+                    "`%:V` is DEPRECATED and will result in an error \
+                     in `jiff 0.2`, use `%:Q` instead",
+                );
+            }
             if !self.inp.is_empty() && matches!(self.inp[0], b'+' | b'-') {
                 return self.parse_offset_colon();
             }
@@ -1079,19 +1096,19 @@ mod tests {
             @"2022-04-01T20:46:15-04:00[-04:00]",
         );
         insta::assert_debug_snapshot!(
-            p("%h %d, %Y %H:%M:%S %V", "Apr 1, 2022 20:46:15 -0400"),
+            p("%h %d, %Y %H:%M:%S %Q", "Apr 1, 2022 20:46:15 -0400"),
             @"2022-04-01T20:46:15-04:00[-04:00]",
         );
         insta::assert_debug_snapshot!(
-            p("%h %d, %Y %H:%M:%S [%V]", "Apr 1, 2022 20:46:15 [America/New_York]"),
+            p("%h %d, %Y %H:%M:%S [%Q]", "Apr 1, 2022 20:46:15 [America/New_York]"),
             @"2022-04-01T20:46:15-04:00[America/New_York]",
         );
         insta::assert_debug_snapshot!(
-            p("%h %d, %Y %H:%M:%S %V", "Apr 1, 2022 20:46:15 America/New_York"),
+            p("%h %d, %Y %H:%M:%S %Q", "Apr 1, 2022 20:46:15 America/New_York"),
             @"2022-04-01T20:46:15-04:00[America/New_York]",
         );
         insta::assert_debug_snapshot!(
-            p("%h %d, %Y %H:%M:%S %:z %:V", "Apr 1, 2022 20:46:15 -08:00 -04:00"),
+            p("%h %d, %Y %H:%M:%S %:z %:Q", "Apr 1, 2022 20:46:15 -08:00 -04:00"),
             @"2022-04-01T20:46:15-04:00[-04:00]",
         );
     }
@@ -1470,28 +1487,28 @@ mod tests {
         );
 
         insta::assert_snapshot!(
-            p("%V", "+America/New_York"),
-            @"strptime parsing failed: %V failed: failed to parse hours from time zone offset Amer: invalid digit, expected 0-9 but got A",
+            p("%Q", "+America/New_York"),
+            @"strptime parsing failed: %Q failed: failed to parse hours from time zone offset Amer: invalid digit, expected 0-9 but got A",
         );
         insta::assert_snapshot!(
-            p("%V", "-America/New_York"),
-            @"strptime parsing failed: %V failed: failed to parse hours from time zone offset Amer: invalid digit, expected 0-9 but got A",
+            p("%Q", "-America/New_York"),
+            @"strptime parsing failed: %Q failed: failed to parse hours from time zone offset Amer: invalid digit, expected 0-9 but got A",
         );
         insta::assert_snapshot!(
-            p("%:V", "+0400"),
-            @"strptime parsing failed: %:V failed: expected at least HH:MM digits for time zone offset after sign, but found only 4 bytes remaining",
+            p("%:Q", "+0400"),
+            @"strptime parsing failed: %:Q failed: expected at least HH:MM digits for time zone offset after sign, but found only 4 bytes remaining",
         );
         insta::assert_snapshot!(
-            p("%V", "+04:00"),
-            @"strptime parsing failed: %V failed: failed to parse minutes from time zone offset 04:0: invalid digit, expected 0-9 but got :",
+            p("%Q", "+04:00"),
+            @"strptime parsing failed: %Q failed: failed to parse minutes from time zone offset 04:0: invalid digit, expected 0-9 but got :",
         );
         insta::assert_snapshot!(
-            p("%V", "America/"),
-            @"strptime parsing failed: %V failed: expected the start of an IANA time zone identifier name or component, but found end of input instead",
+            p("%Q", "America/"),
+            @"strptime parsing failed: %Q failed: expected the start of an IANA time zone identifier name or component, but found end of input instead",
         );
         insta::assert_snapshot!(
-            p("%V", "America/+"),
-            @r###"strptime parsing failed: %V failed: expected the start of an IANA time zone identifier name or component, but found "+" instead"###,
+            p("%Q", "America/+"),
+            @r###"strptime parsing failed: %Q failed: expected the start of an IANA time zone identifier name or component, but found "+" instead"###,
         );
     }
 

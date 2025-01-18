@@ -2972,7 +2972,7 @@ impl Zoned {
     /// datetime. This in turn means it will not perform daylight saving time
     /// safe arithmetic.
     ///
-    /// However, the `%V` directive may be used to both format and parse an
+    /// However, the `%Q` directive may be used to both format and parse an
     /// IANA time zone identifier. It is strongly recommended to use this
     /// directive whenever one is formatting or parsing `Zoned` values.
     ///
@@ -2992,7 +2992,7 @@ impl Zoned {
     /// ```
     /// use jiff::Zoned;
     ///
-    /// let zdt = Zoned::strptime("%F %H:%M %:V", "2024-07-14 21:14 US/Eastern")?;
+    /// let zdt = Zoned::strptime("%F %H:%M %:Q", "2024-07-14 21:14 US/Eastern")?;
     /// assert_eq!(zdt.to_string(), "2024-07-14T21:14:00-04:00[US/Eastern]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())

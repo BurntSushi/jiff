@@ -58,9 +58,10 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
                 b'm' => self.fmt_month(ext).context("%m failed")?,
                 b'P' => self.fmt_ampm_lower(ext).context("%P failed")?,
                 b'p' => self.fmt_ampm_upper(ext).context("%p failed")?,
+                b'Q' => self.fmt_iana_nocolon(b'Q').context("%Q failed")?,
                 b'S' => self.fmt_second(ext).context("%S failed")?,
                 b'T' => self.fmt_clock(ext).context("%T failed")?,
-                b'V' => self.fmt_iana_nocolon().context("%V failed")?,
+                b'V' => self.fmt_iana_nocolon(b'V').context("%V failed")?,
                 b'Y' => self.fmt_year(ext).context("%Y failed")?,
                 b'y' => self.fmt_year_2digit(ext).context("%y failed")?,
                 b'Z' => self.fmt_tzabbrev(ext).context("%Z failed")?,
@@ -73,7 +74,12 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
                         ));
                     }
                     match self.f() {
-                        b'V' => self.fmt_iana_colon().context("%:V failed")?,
+                        b'Q' => {
+                            self.fmt_iana_colon(b'Q').context("%:Q failed")?
+                        }
+                        b'V' => {
+                            self.fmt_iana_colon(b'V').context("%:V failed")?
+                        }
                         b'z' => {
                             self.fmt_offset_colon().context("%:z failed")?
                         }
@@ -346,8 +352,14 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         ext.write_str(Case::AsIs, month_name_abbrev(month), self.wtr)
     }
 
-    /// %V
-    fn fmt_iana_nocolon(&mut self) -> Result<(), Error> {
+    /// %Q
+    fn fmt_iana_nocolon(&mut self, which: u8) -> Result<(), Error> {
+        if which == b'V' {
+            warn!(
+                "`%V` is DEPRECATED and will emit an ISO 8601 week \
+                 number in `jiff 0.2`, use `%Q` instead",
+            );
+        }
         let Some(iana) = self.tm.iana_time_zone() else {
             let offset = self.tm.offset.ok_or_else(|| {
                 err!(
@@ -361,8 +373,14 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         Ok(())
     }
 
-    /// %:V
-    fn fmt_iana_colon(&mut self) -> Result<(), Error> {
+    /// %:Q
+    fn fmt_iana_colon(&mut self, which: u8) -> Result<(), Error> {
+        if which == b'V' {
+            warn!(
+                "`%:V` is DEPRECATED and will result in an error \
+                 in `jiff 0.2`, use `%:Q` instead",
+            );
+        }
         let Some(iana) = self.tm.iana_time_zone() else {
             let offset = self.tm.offset.ok_or_else(|| {
                 err!(
@@ -830,22 +848,22 @@ mod tests {
             .at(22, 24, 0, 0)
             .in_tz("America/New_York")
             .unwrap();
-        insta::assert_snapshot!(f("%V", &zdt), @"America/New_York");
-        insta::assert_snapshot!(f("%:V", &zdt), @"America/New_York");
+        insta::assert_snapshot!(f("%Q", &zdt), @"America/New_York");
+        insta::assert_snapshot!(f("%:Q", &zdt), @"America/New_York");
 
         let zdt = date(2024, 7, 14)
             .at(22, 24, 0, 0)
             .to_zoned(crate::tz::offset(-4).to_time_zone())
             .unwrap();
-        insta::assert_snapshot!(f("%V", &zdt), @"-0400");
-        insta::assert_snapshot!(f("%:V", &zdt), @"-04:00");
+        insta::assert_snapshot!(f("%Q", &zdt), @"-0400");
+        insta::assert_snapshot!(f("%:Q", &zdt), @"-04:00");
 
         let zdt = date(2024, 7, 14)
             .at(22, 24, 0, 0)
             .to_zoned(crate::tz::TimeZone::UTC)
             .unwrap();
-        insta::assert_snapshot!(f("%V", &zdt), @"UTC");
-        insta::assert_snapshot!(f("%:V", &zdt), @"UTC");
+        insta::assert_snapshot!(f("%Q", &zdt), @"UTC");
+        insta::assert_snapshot!(f("%:Q", &zdt), @"UTC");
     }
 
     #[test]
