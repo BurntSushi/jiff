@@ -146,9 +146,13 @@ pub(crate) type WeekdayOne = ri8<1, 7>;
 /// is being used.
 pub(crate) type Day = ri8<1, 31>;
 
+pub(crate) type DayOfYear = ri16<1, 366>;
+
 pub(crate) type ISOYear = ri16<-9999, 9999>;
 
 pub(crate) type ISOWeek = ri8<1, 53>;
+
+pub(crate) type WeekNum = ri8<0, 53>;
 
 /// The range of possible hour values.
 pub(crate) type Hour = ri8<0, 23>;

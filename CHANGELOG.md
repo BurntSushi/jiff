@@ -26,6 +26,14 @@ result in an error. This change was made to improve compatibility with other
 time zone identifiers in `jiff 0.1`, but using them for parsing or formatting
 will result in a WARN-level deprecation message.
 
+Enhancements:
+
+* [#147](https://github.com/BurntSushi/jiff/issues/147):
+Adds a number of new conversion specifiers to Jiff's `strftime` and
+`strptime` APIs. Specifically, `%C`, `%G`, `%g`, `%j`, `%k`, `%l`, `%n`, `%R`,
+`%s`, `%t`, `%U`, `%u`, `%W`, `%w`. Their behavior should match the
+corresponding specifiers in GNU libc.
+
 
 0.1.24 (2025-01-16)
 ===================
