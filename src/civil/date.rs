@@ -563,10 +563,8 @@ impl Date {
     /// ```
     #[inline]
     pub fn day_of_year(self) -> i16 {
-        type DayOfYear = ri16<1, 366>;
-
         let days = C(1) + self.since_days_ranged(self.first_of_year());
-        DayOfYear::rfrom(days).get()
+        t::DayOfYear::rfrom(days).get()
     }
 
     /// Returns the ordinal day of the year that this date resides in, but
@@ -3669,9 +3667,7 @@ fn month_add_overflowing(
 }
 
 fn day_of_year(year: Year, day: i16) -> Result<Date, Error> {
-    type DayOfYear = ri16<1, 366>;
-
-    let day = DayOfYear::try_new("day-of-year", day)?;
+    let day = t::DayOfYear::try_new("day-of-year", day)?;
     let span = Span::new().days_ranged(day - C(1));
     let start = Date::new_ranged(year, C(1), C(1))?;
     let end = start.checked_add(span)?;
