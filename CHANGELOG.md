@@ -1,8 +1,15 @@
 # CHANGELOG
 
-0.1.25 (TBD)
-============
-TODO
+0.1.25 (2025-01-21)
+===================
+This release contains a number of deprecations in preparation for a `jiff 0.2`
+release. The deprecations are meant to facilitate a smoother transition. The
+deprecations, when possible, come with new APIs that will permit users to write
+forward compatible code that will work in both `jiff 0.1` and `jiff 0.2`.
+
+This release also includes a handful of new conversion specifiers in Jiff's
+`strftime` and `strptime` APIs. This improves compatibility with the analogous
+implementation with GNU libc.
 
 Deprecations:
 
