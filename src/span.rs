@@ -4331,7 +4331,7 @@ impl Unit {
     /// can vary in time depending on its reference point. A 'day' can as well,
     /// but we sorta special case 'day' to mean '24 hours' for cases where
     /// the user is dealing with civil time.
-    pub(crate) fn is_definitively_variable(self) -> bool {
+    fn is_definitively_variable(self) -> bool {
         // TODO(0.2): Add `Unit::Day` to this, effectively forcing folks to use
         // either a relative datetime or `SpanRelativeTo::days_are_24_hours` in
         // order to avoid to do arithmetic with spans containing non-zero units
