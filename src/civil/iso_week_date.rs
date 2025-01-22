@@ -305,6 +305,19 @@ impl ISOWeekDate {
     /// assert_eq!(weekdate.to_date(), date(1948, 2, 10));
     /// ```
     #[inline]
+    pub fn date(self) -> Date {
+        Date::from_iso_week_date(self)
+    }
+}
+
+/// Deprecated APIs.
+impl ISOWeekDate {
+    /// A deprecated equivalent to [`ISOWeekDate::date`].
+    ///
+    /// This method will be removed in `jiff 0.2`. This was done to make naming
+    /// more consistent throughout the crate.
+    #[deprecated(since = "0.1.26", note = "use ISOWeekDate::date instead")]
+    #[inline]
     pub fn to_date(self) -> Date {
         Date::from_iso_week_date(self)
     }

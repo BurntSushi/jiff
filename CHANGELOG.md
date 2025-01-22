@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.1.26 (TBD)
+============
+TODO
+
+Deprecations:
+
+* [#210](https://github.com/BurntSushi/jiff/pull/210):
+  Deprecate `ISOWeekDate::to_date` in favor of `ISOWeekDate::date`.
+
+
 0.1.25 (2025-01-21)
 ===================
 This release contains a number of deprecations in preparation for a `jiff 0.2`
