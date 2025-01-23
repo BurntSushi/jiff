@@ -3766,7 +3766,7 @@ mod tests {
                 for day in 20..=days_in_month(year, month).get() {
                     let date = date(year.get(), month.get(), day);
                     let wd = date.iso_week_date();
-                    let got = wd.to_date();
+                    let got = wd.date();
                     assert_eq!(
                         date, got,
                         "for date {date:?}, and ISO week date {wd:?}"

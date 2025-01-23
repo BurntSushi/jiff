@@ -118,7 +118,7 @@ impl ISOWeekDate {
     /// assert_eq!(ISOWeekDate::ZERO, ISOWeekDate::default());
     /// // The first day of the 0th year in the ISO week calendar is actually
     /// // the third day of the 0th year in the proleptic Gregorian calendar!
-    /// assert_eq!(ISOWeekDate::default().to_date(), date(0, 1, 3));
+    /// assert_eq!(ISOWeekDate::default().date(), date(0, 1, 3));
     /// ```
     pub const ZERO: ISOWeekDate = ISOWeekDate {
         year: ISOYear::new_unchecked(0),
@@ -147,14 +147,14 @@ impl ISOWeekDate {
     /// // Examples of dates at or exceeding the maximum.
     /// let max = ISOWeekDate::new(9999, 52, Weekday::Friday).unwrap();
     /// assert_eq!(max, ISOWeekDate::MAX);
-    /// assert_eq!(max.to_date(), date(9999, 12, 31));
+    /// assert_eq!(max.date(), date(9999, 12, 31));
     /// assert!(ISOWeekDate::new(9999, 52, Weekday::Saturday).is_err());
     /// assert!(ISOWeekDate::new(9999, 53, Weekday::Monday).is_err());
     ///
     /// // Examples of dates at or exceeding the minimum.
     /// let min = ISOWeekDate::new(-9999, 1, Weekday::Monday).unwrap();
     /// assert_eq!(min, ISOWeekDate::MIN);
-    /// assert_eq!(min.to_date(), date(-9999, 1, 1));
+    /// assert_eq!(min.date(), date(-9999, 1, 1));
     /// assert!(ISOWeekDate::new(-10000, 52, Weekday::Sunday).is_err());
     /// ```
     #[inline]
@@ -302,7 +302,7 @@ impl ISOWeekDate {
     /// use jiff::civil::{ISOWeekDate, Weekday, date};
     ///
     /// let weekdate = ISOWeekDate::new(1948, 7, Weekday::Tuesday).unwrap();
-    /// assert_eq!(weekdate.to_date(), date(1948, 2, 10));
+    /// assert_eq!(weekdate.date(), date(1948, 2, 10));
     /// ```
     #[inline]
     pub fn date(self) -> Date {
@@ -312,6 +312,7 @@ impl ISOWeekDate {
 
 /// Deprecated APIs.
 impl ISOWeekDate {
+    /*
     /// A deprecated equivalent to [`ISOWeekDate::date`].
     ///
     /// This method will be removed in `jiff 0.2`. This was done to make naming
@@ -321,6 +322,7 @@ impl ISOWeekDate {
     pub fn to_date(self) -> Date {
         Date::from_iso_week_date(self)
     }
+    */
 }
 
 impl ISOWeekDate {
@@ -542,7 +544,7 @@ mod tests {
             if wd == ISOWeekDate::MIN {
                 return quickcheck::TestResult::discard();
             }
-            let prev_date = wd.to_date().checked_add(-1.days()).unwrap();
+            let prev_date = wd.date().checked_add(-1.days()).unwrap();
             quickcheck::TestResult::from_bool(prev_date.iso_week_date() < wd)
         }
 
@@ -552,7 +554,7 @@ mod tests {
             if wd == ISOWeekDate::MAX {
                 return quickcheck::TestResult::discard();
             }
-            let next_date = wd.to_date().checked_add(1.days()).unwrap();
+            let next_date = wd.date().checked_add(1.days()).unwrap();
             quickcheck::TestResult::from_bool(wd < next_date.iso_week_date())
         }
     }
