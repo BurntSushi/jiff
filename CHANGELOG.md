@@ -1,8 +1,10 @@
 # CHANGELOG
 
-0.1.26 (TBD)
-============
-TODO
+0.1.26 (2025-01-23)
+===================
+This is a small release with another deprecation and a new API for doing
+prefix parsing via `strptime`. There's also a bug fix for a corner case
+when dealing with daylight saving time gaps with the `Zoned::with` API.
 
 Deprecations:
 
