@@ -5088,7 +5088,7 @@ impl ZonedWith {
     /// # Example
     ///
     /// ```
-    /// use jiff::{civil::date, tz, Zoned};
+    /// use jiff::Zoned;
     ///
     /// // Set to the "second" time 1:30 is on the clocks in New York on
     /// // 2024-11-03. The offset in the datetime string makes this
@@ -5144,29 +5144,6 @@ impl ZonedWith {
     /// because of a change in the offset of the time zone itself. (See the
     /// examples below.)
     ///
-    /// # Example
-    ///
-    /// This example shows how to set the disambiguation configuration while
-    /// creating a [`Zoned`] datetime. In this example, we always prefer the
-    /// earlier time.
-    ///
-    /// ```
-    /// use jiff::{civil::date, tz, Zoned};
-    ///
-    /// // This datetime is unambiguous.
-    /// let zdt1 = "2024-03-11T02:05[America/New_York]".parse::<Zoned>()?;
-    /// // But the same time on March 10 is ambiguous because there is a gap!
-    /// let zdt2 = zdt1
-    ///     .with()
-    ///     .disambiguation(tz::Disambiguation::Earlier)
-    ///     .day(10)
-    ///     .build()?;
-    /// assert_eq!(zdt2.datetime(), date(2024, 3, 10).at(1, 5, 0, 0));
-    /// assert_eq!(zdt2.offset(), tz::offset(-5));
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
     /// # Example: time zone offset change
     ///
     /// In this example, we explore a time zone offset change in Hawaii that
@@ -5197,6 +5174,59 @@ impl ZonedWith {
     /// let zdt3 = zdt2.checked_sub(10.minutes())?;
     /// assert_eq!(zdt3.datetime(), date(1947, 6, 8).at(1, 55, 0, 0));
     /// assert_eq!(zdt3.offset(), tz::offset(-10).saturating_sub(30.minutes()));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: offset conflict resolution and disambiguation
+    ///
+    /// This example shows how to set the disambiguation configuration can
+    /// interact with the default offset conflict resolution strategy in
+    /// unintuitive ways. For example, here, we request the "earlier" datetime
+    /// whenever there's an ambiguity:
+    ///
+    /// ```
+    /// use jiff::{civil::date, tz, Zoned};
+    ///
+    /// // This datetime is unambiguous.
+    /// let zdt1 = "2024-03-11T02:05[America/New_York]".parse::<Zoned>()?;
+    /// assert_eq!(zdt1.offset(), tz::offset(-4));
+    /// // But the same time on March 10 is ambiguous because there is a gap!
+    /// let zdt2 = zdt1
+    ///     .with()
+    ///     .disambiguation(tz::Disambiguation::Earlier)
+    ///     .day(10)
+    ///     .build()?;
+    /// assert_eq!(zdt2.datetime(), date(2024, 3, 10).at(3, 5, 0, 0));
+    /// assert_eq!(zdt2.offset(), tz::offset(-4));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Yet instead, we get the later time, after the gap. This is because
+    /// the default offset conflict resolution strategy is
+    /// [`OffsetConflict::PreferOffset`], and therefore, the offset in the
+    /// current zoned datetime is prioritized. In the example above, the
+    /// offset of `zdt1` is `-04`, since it comes after DST takes effect in
+    /// `America/New_York`. One can override the offset conflict resolution
+    /// to force disambiguation in cases like this:
+    ///
+    /// ```
+    /// use jiff::{civil::date, tz, Zoned};
+    ///
+    /// // This datetime is unambiguous.
+    /// let zdt1 = "2024-03-11T02:05[America/New_York]".parse::<Zoned>()?;
+    /// assert_eq!(zdt1.offset(), tz::offset(-4));
+    /// // But the same time on March 10 is ambiguous because there is a gap!
+    /// let zdt2 = zdt1
+    ///     .with()
+    ///     .disambiguation(tz::Disambiguation::Earlier)
+    ///     // ignore any offset given
+    ///     .offset_conflict(tz::OffsetConflict::AlwaysTimeZone)
+    ///     .day(10)
+    ///     .build()?;
+    /// assert_eq!(zdt2.datetime(), date(2024, 3, 10).at(1, 5, 0, 0));
+    /// assert_eq!(zdt2.offset(), tz::offset(-5));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -5245,10 +5275,12 @@ fn day_length(
 mod tests {
     use std::io::Cursor;
 
+    use alloc::string::ToString;
+
     use crate::{
         civil::{date, datetime},
         span::span_eq,
-        ToSpan,
+        tz, ToSpan,
     };
 
     use super::*;
@@ -5390,5 +5422,65 @@ mod tests {
         let deserialized: Zoned = serde_yml::from_reader(cursor).unwrap();
 
         assert_eq!(deserialized, expected);
+    }
+
+    /// This is a regression test for a case where changing a zoned datetime
+    /// to have a time of midnight ends up producing a counter-intuitive
+    /// result.
+    ///
+    /// See: <https://github.com/BurntSushi/jiff/issues/211>
+    #[test]
+    fn zoned_with_time_dst_after_gap() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let zdt1: Zoned = "2024-03-31T12:00[Atlantic/Azores]".parse().unwrap();
+        assert_eq!(
+            zdt1.to_string(),
+            "2024-03-31T12:00:00+00:00[Atlantic/Azores]"
+        );
+
+        let zdt2 = zdt1.with().time(Time::midnight()).build().unwrap();
+        assert_eq!(
+            zdt2.to_string(),
+            "2024-03-31T01:00:00+00:00[Atlantic/Azores]"
+        );
+    }
+
+    /// Similar to `zoned_with_time_dst_after_gap`, but tests what happens
+    /// when moving from/to both sides of the gap.
+    ///
+    /// See: <https://github.com/BurntSushi/jiff/issues/211>
+    #[test]
+    fn zoned_with_time_dst_us_eastern() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let zdt1: Zoned = "2024-03-10T01:30[US/Eastern]".parse().unwrap();
+        assert_eq!(zdt1.to_string(), "2024-03-10T01:30:00-05:00[US/Eastern]");
+        let zdt2 = zdt1.with().hour(2).build().unwrap();
+        assert_eq!(zdt2.to_string(), "2024-03-10T03:30:00-04:00[US/Eastern]");
+
+        let zdt1: Zoned = "2024-03-10T03:30[US/Eastern]".parse().unwrap();
+        assert_eq!(zdt1.to_string(), "2024-03-10T03:30:00-04:00[US/Eastern]");
+        let zdt2 = zdt1.with().hour(2).build().unwrap();
+        assert_eq!(zdt2.to_string(), "2024-03-10T03:30:00-04:00[US/Eastern]");
+
+        // This is a current difference from Temporal. Temporal ignores the
+        // disambiguation setting (and the bad offset).
+        //
+        // See: https://github.com/tc39/proposal-temporal/issues/3078
+        let zdt1: Zoned = "2024-03-10T01:30[US/Eastern]".parse().unwrap();
+        assert_eq!(zdt1.to_string(), "2024-03-10T01:30:00-05:00[US/Eastern]");
+        let zdt2 = zdt1
+            .with()
+            .offset(tz::offset(10))
+            .hour(2)
+            .disambiguation(Disambiguation::Earlier)
+            .build()
+            .unwrap();
+        assert_eq!(zdt2.to_string(), "2024-03-10T01:30:00-05:00[US/Eastern]");
     }
 }
