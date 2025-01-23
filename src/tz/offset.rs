@@ -1519,9 +1519,39 @@ impl OffsetConflict {
             // yields an unambiguous result. But in every other case, the
             // offset parsed is completely ignored. (And this may result in
             // returning an ambiguous instant.)
-            Gap { before, after } | Fold { before, after }
-                if given == before || given == after =>
-            {
+            //
+            // Note that gaps are a little weird here. We always pick the
+            // "before" offset even when it doesn't match what's `given`.
+            // This matches what Temporal does, and I think makes more
+            // intuitive sense. For example, if we have
+            //
+            //   2024-03-10T01:30:00-05:00[US/Eastern]
+            //
+            // And set the hour to `2`, then it makes sense to result in a
+            // clock time of `03:30` in offset `-04`. Moreover, if we always
+            // took what was given, then starting with
+            //
+            //   2024-03-31T12:00:00+00:00[Atlantic/Azores]
+            //
+            // And setting the hour to `0` would result in
+            //
+            //   2024-03-30T23:00:00-01:00[Atlantic/Azores]
+            //
+            // which is highly unintuitive. In the other direction, we might
+            // start with
+            //
+            //   2024-03-10T03:30:00-04:00[US/Eastern]
+            //
+            // And setting the hour to `2` still results in the clock time
+            // being set to `03:30`, i.e., not changing in this instance.
+            //
+            // See also: https://github.com/tc39/proposal-temporal/issues/3078
+            // See also: https://github.com/BurntSushi/jiff/issues/211
+            Gap { before, after } if given == before || given == after => {
+                let kind = Unambiguous { offset: before };
+                AmbiguousTimestamp::new(dt, kind)
+            }
+            Fold { before, after } if given == before || given == after => {
                 let kind = Unambiguous { offset: given };
                 AmbiguousTimestamp::new(dt, kind)
             }

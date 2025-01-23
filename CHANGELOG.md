@@ -8,6 +8,8 @@ Deprecations:
 
 * [#210](https://github.com/BurntSushi/jiff/pull/210):
   Deprecate `ISOWeekDate::to_date` in favor of `ISOWeekDate::date`.
+* [#211](https://github.com/BurntSushi/jiff/issues/211):
+  Fix unintuitive behavior of `Zoned::with` when time falls in a DST gap.
 
 
 0.1.25 (2025-01-21)
