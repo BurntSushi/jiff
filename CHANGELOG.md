@@ -8,6 +8,14 @@ Deprecations:
 
 * [#210](https://github.com/BurntSushi/jiff/pull/210):
   Deprecate `ISOWeekDate::to_date` in favor of `ISOWeekDate::date`.
+
+Enhancements:
+
+* [#209](https://github.com/BurntSushi/jiff/issues/209):
+  Add `fmt::strtime::BrokenDownTime::parse_prefix` for parsing only a prefix.
+
+Bug fixes:
+
 * [#211](https://github.com/BurntSushi/jiff/issues/211):
   Fix unintuitive behavior of `Zoned::with` when time falls in a DST gap.
 

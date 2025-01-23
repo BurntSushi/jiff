@@ -561,6 +561,109 @@ impl BrokenDownTime {
         Ok(pieces)
     }
 
+    /// Parse a prefix of the given `input` according to the given `format`
+    /// string. The offset returned corresponds to the number of bytes parsed.
+    /// That is, the length of the prefix (which may be the length of the
+    /// entire input if there are no unparsed bytes remaining).
+    ///
+    /// See the [module documentation](self) for details on what's supported.
+    ///
+    /// This is like [`BrokenDownTime::parse`], but it won't return an error
+    /// if there is input remaining after parsing the format directives.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error when parsing failed. This might happen because
+    /// the format string itself was invalid, or because the input didn't match
+    /// the format string.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil, fmt::strtime::BrokenDownTime};
+    ///
+    /// // %y only parses two-digit years, so the 99 following
+    /// // 24 is unparsed!
+    /// let input = "7/14/2499";
+    /// let (tm, offset) = BrokenDownTime::parse_prefix("%m/%d/%y", input)?;
+    /// let date = tm.to_date()?;
+    /// assert_eq!(date, civil::date(2024, 7, 14));
+    /// assert_eq!(offset, 7);
+    /// assert_eq!(&input[offset..], "99");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// If the entire input is parsed, then the offset is the length of the
+    /// input:
+    ///
+    /// ```
+    /// use jiff::{civil, fmt::strtime::BrokenDownTime};
+    ///
+    /// let (tm, offset) = BrokenDownTime::parse_prefix(
+    ///     "%m/%d/%y", "7/14/24",
+    /// )?;
+    /// let date = tm.to_date()?;
+    /// assert_eq!(date, civil::date(2024, 7, 14));
+    /// assert_eq!(offset, 7);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: how to parse a only parse of a timestamp
+    ///
+    /// If you only need, for example, the date from a timestamp, then you
+    /// can parse it as a prefix:
+    ///
+    /// ```
+    /// use jiff::{civil, fmt::strtime::BrokenDownTime};
+    ///
+    /// let input = "2024-01-20T17:55Z";
+    /// let (tm, offset) = BrokenDownTime::parse_prefix("%Y-%m-%d", input)?;
+    /// let date = tm.to_date()?;
+    /// assert_eq!(date, civil::date(2024, 1, 20));
+    /// assert_eq!(offset, 10);
+    /// assert_eq!(&input[offset..], "T17:55Z");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Note though that Jiff's default parsing functions are already quite
+    /// flexible, and one can just parse a civil date directly from a timestamp
+    /// automatically:
+    ///
+    /// ```
+    /// use jiff::civil;
+    ///
+    /// let input = "2024-01-20T17:55-05";
+    /// let date: civil::Date = input.parse()?;
+    /// assert_eq!(date, civil::date(2024, 1, 20));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Although in this case, you don't get the length of the prefix parsed.
+    #[inline]
+    pub fn parse_prefix(
+        format: impl AsRef<[u8]>,
+        input: impl AsRef<[u8]>,
+    ) -> Result<(BrokenDownTime, usize), Error> {
+        BrokenDownTime::parse_prefix_mono(format.as_ref(), input.as_ref())
+    }
+
+    #[inline]
+    fn parse_prefix_mono(
+        fmt: &[u8],
+        inp: &[u8],
+    ) -> Result<(BrokenDownTime, usize), Error> {
+        let mkoffset = util::parse::offseter(inp);
+        let mut pieces = BrokenDownTime::default();
+        let mut p = Parser { fmt, inp, tm: &mut pieces };
+        p.parse().context("strptime parsing failed")?;
+        let remainder = mkoffset(p.inp);
+        Ok((pieces, remainder))
+    }
+
     /// Format this broken down time using the format string given.
     ///
     /// See the [module documentation](self) for details on what's supported.
