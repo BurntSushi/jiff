@@ -312,7 +312,6 @@ impl ISOWeekDate {
 
 /// Deprecated APIs.
 impl ISOWeekDate {
-    /*
     /// A deprecated equivalent to [`ISOWeekDate::date`].
     ///
     /// This method will be removed in `jiff 0.2`. This was done to make naming
@@ -322,7 +321,6 @@ impl ISOWeekDate {
     pub fn to_date(self) -> Date {
         Date::from_iso_week_date(self)
     }
-    */
 }
 
 impl ISOWeekDate {
