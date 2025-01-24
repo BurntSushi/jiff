@@ -1,5 +1,16 @@
 # CHANGELOG
 
+0.2.0 (TBD)
+===========
+
+**BREAKING CHANGES**:
+
+* [#36](https://github.com/BurntSushi/jiff/issues/36):
+Turn panics during `Timestamp::saturing_add` into errors. Callers adding
+spans that are known to contain units of hours or smaller are guaranteed that
+this will not panic.
+
+
 0.1.29 (2025-02-02)
 ===================
 This release includes a few small enhancements and a bug fix. In particular,
