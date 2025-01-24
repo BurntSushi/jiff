@@ -1352,12 +1352,10 @@ impl Timestamp {
     /// result saturates on overflow. That is, instead of overflow, either
     /// [`Timestamp::MIN`] or [`Timestamp::MAX`] is returned.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// This panics if the given `Span` contains any non-zero units greater
-    /// than hours. In `jiff 0.2`, this panic will be changed to an error. It
-    /// panics in `jiff 0.1` to avoid giving incorrect results. (It was an
-    /// oversight to make this method infallible.)
+    /// This returns an error if the given `Span` contains any non-zero units
+    /// greater than hours.
     ///
     /// # Example
     ///
@@ -1368,51 +1366,45 @@ impl Timestamp {
     ///
     /// assert_eq!(
     ///     Timestamp::MAX,
-    ///     Timestamp::MAX.saturating_add(1.nanosecond()),
+    ///     Timestamp::MAX.saturating_add(1.nanosecond())?,
     /// );
     /// assert_eq!(
     ///     Timestamp::MIN,
-    ///     Timestamp::MIN.saturating_add(-1.nanosecond()),
+    ///     Timestamp::MIN.saturating_add(-1.nanosecond())?,
     /// );
     /// assert_eq!(
     ///     Timestamp::MAX,
-    ///     Timestamp::UNIX_EPOCH.saturating_add(SignedDuration::MAX),
+    ///     Timestamp::UNIX_EPOCH.saturating_add(SignedDuration::MAX)?,
     /// );
     /// assert_eq!(
     ///     Timestamp::MIN,
-    ///     Timestamp::UNIX_EPOCH.saturating_add(SignedDuration::MIN),
+    ///     Timestamp::UNIX_EPOCH.saturating_add(SignedDuration::MIN)?,
     /// );
     /// assert_eq!(
     ///     Timestamp::MAX,
-    ///     Timestamp::UNIX_EPOCH.saturating_add(std::time::Duration::MAX),
+    ///     Timestamp::UNIX_EPOCH.saturating_add(std::time::Duration::MAX)?,
     /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
     pub fn saturating_add<A: Into<TimestampArithmetic>>(
         self,
         duration: A,
-    ) -> Timestamp {
+    ) -> Result<Timestamp, Error> {
         let duration: TimestampArithmetic = duration.into();
-        match duration.saturating_add(self) {
-            Ok(ts) => ts,
-            Err(err) => {
-                // FIXME: This should be an actual error.
-                // We'll do that in jiff 0.2.
-                panic!(
-                    "saturating Timestamp arithmetic \
-                     requires only time units: {err}"
-                )
-            }
-        }
+        duration.saturating_add(self).context(
+            "saturating `Timestamp` arithmetic requires only time units",
+        )
     }
 
     /// This routine is identical to [`Timestamp::saturating_add`] with the
     /// span parameter negated.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// This routine panics under the same conditions as
-    /// [`Timestamp::saturating_add`].
+    /// This returns an error if the given `Span` contains any non-zero units
+    /// greater than hours.
     ///
     /// # Example
     ///
@@ -1423,33 +1415,35 @@ impl Timestamp {
     ///
     /// assert_eq!(
     ///     Timestamp::MIN,
-    ///     Timestamp::MIN.saturating_sub(1.nanosecond()),
+    ///     Timestamp::MIN.saturating_sub(1.nanosecond())?,
     /// );
     /// assert_eq!(
     ///     Timestamp::MAX,
-    ///     Timestamp::MAX.saturating_sub(-1.nanosecond()),
+    ///     Timestamp::MAX.saturating_sub(-1.nanosecond())?,
     /// );
     /// assert_eq!(
     ///     Timestamp::MIN,
-    ///     Timestamp::UNIX_EPOCH.saturating_sub(SignedDuration::MAX),
+    ///     Timestamp::UNIX_EPOCH.saturating_sub(SignedDuration::MAX)?,
     /// );
     /// assert_eq!(
     ///     Timestamp::MAX,
-    ///     Timestamp::UNIX_EPOCH.saturating_sub(SignedDuration::MIN),
+    ///     Timestamp::UNIX_EPOCH.saturating_sub(SignedDuration::MIN)?,
     /// );
     /// assert_eq!(
     ///     Timestamp::MIN,
-    ///     Timestamp::UNIX_EPOCH.saturating_sub(std::time::Duration::MAX),
+    ///     Timestamp::UNIX_EPOCH.saturating_sub(std::time::Duration::MAX)?,
     /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
     pub fn saturating_sub<A: Into<TimestampArithmetic>>(
         self,
         duration: A,
-    ) -> Timestamp {
+    ) -> Result<Timestamp, Error> {
         let duration: TimestampArithmetic = duration.into();
         let Ok(duration) = duration.checked_neg() else {
-            return Timestamp::MIN;
+            return Ok(Timestamp::MIN);
         };
         self.saturating_add(duration)
     }
@@ -3701,15 +3695,19 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn timestamp_saturating_add() {
-        Timestamp::MIN.saturating_add(Span::new().days(1));
+        insta::assert_snapshot!(
+            Timestamp::MIN.saturating_add(Span::new().days(1)).unwrap_err(),
+            @"saturating `Timestamp` arithmetic requires only time units: operation can only be performed with units of hours or smaller, but found non-zero day units (operations on `Timestamp`, `tz::Offset` and `civil::Time` don't support calendar units in a `Span`)",
+        )
     }
 
     #[test]
-    #[should_panic]
     fn timestamp_saturating_sub() {
-        Timestamp::MAX.saturating_sub(Span::new().days(1));
+        insta::assert_snapshot!(
+            Timestamp::MAX.saturating_sub(Span::new().days(1)).unwrap_err(),
+            @"saturating `Timestamp` arithmetic requires only time units: operation can only be performed with units of hours or smaller, but found non-zero day units (operations on `Timestamp`, `tz::Offset` and `civil::Time` don't support calendar units in a `Span`)",
+        )
     }
 
     quickcheck::quickcheck! {
