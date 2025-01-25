@@ -34,6 +34,14 @@ the future is serialized before a change in the daylight saving time rules.
 For more examples, see `jiff::fmt::temporal::DateTimeParser::offset_conflict`
 for details on how to change Jiff's default behavior. This behavior change also
 applies to `tz::OffsetConflict::PreferOffset`.
+* [#213](https://github.com/BurntSushi/jiff/issues/213):
+Tweak the semantics of `tz::TimeZoneDatabase` so that it only initializes one
+internal tzdb instead of trying to find as many as possible. It is unlikely
+that you'll be impacted by this change, but it's meant to make the semantics
+be a bit more sensible. (In `jiff 0.1`, it was in theory possible for one tz
+lookup to succeed in the system zoneinfo and then another tz lookup to fail
+in zoneinfo but succeed automatically via the bundled copy. But this seems
+confusing and possibly not desirable. Hence the change.)
 * [#218](https://github.com/BurntSushi/jiff/issues/218):
 In order to make naming a little more consistent between `Zoned`
 and `civil::Date`, the `civil::Date::to_iso_week_date` and
