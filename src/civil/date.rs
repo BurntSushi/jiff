@@ -307,7 +307,7 @@ impl Date {
     /// precisely to the minimum and maximum values of a `Date`. Therefore,
     /// converting between them is lossless and infallible.
     ///
-    /// This routine is equivalent to [`ISOWeekDate::to_date`]. It is also
+    /// This routine is equivalent to [`ISOWeekDate::date`]. It is also
     /// available via a `From<ISOWeekDate>` trait implementation for `Date`.
     ///
     /// [ISO 8601 week date]: https://en.wikipedia.org/wiki/ISO_week_date
@@ -2052,19 +2052,6 @@ impl Date {
         format: &'f F,
     ) -> fmt::strtime::Display<'f> {
         fmt::strtime::Display { fmt: format.as_ref(), tm: (*self).into() }
-    }
-}
-
-/// Deprecated APIs.
-impl Date {
-    /// A deprecated equivalent to [`Date::iso_week_date`].
-    ///
-    /// This method will be removed in `jiff 0.2`. This was done to make naming
-    /// more consistent throughout the crate.
-    #[deprecated(since = "0.1.23", note = "use Date::iso_week_date instead")]
-    #[inline]
-    pub fn to_iso_week_date(self) -> ISOWeekDate {
-        self.iso_week_date()
     }
 }
 
