@@ -1,5 +1,16 @@
 # CHANGELOG
 
+0.1.27 (2025-01-25)
+===================
+This is a small release with a bug fix for precision loss in some cases when
+doing arithmetic on `Timestamp` or `Zoned`.
+
+Bug fixes:
+
+* [#223](https://github.com/BurntSushi/jiff/issues/223):
+Fix the check for fractional seconds before taking the fast path.
+
+
 0.1.26 (2025-01-23)
 ===================
 This is a small release with another deprecation and a new API for doing
