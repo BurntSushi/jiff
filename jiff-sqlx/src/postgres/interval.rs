@@ -3,7 +3,7 @@ use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::postgres::types::{Oid, PgInterval};
 use sqlx::postgres::{PgArgumentBuffer, PgHasArrayType, PgTypeInfo};
-use sqlx::{Encode, Postgres, Type};
+use sqlx::{Database, Decode, Encode, Postgres, Type};
 
 impl Type<Postgres> for SignedDuration {
     fn type_info() -> PgTypeInfo {
@@ -56,6 +56,29 @@ impl Encode<'_, Postgres> for SignedDuration {
 
     fn size_hint(&self) -> usize {
         2 * size_of::<i64>()
+    }
+}
+
+impl<'r> Decode<'r, Postgres> for SignedDuration {
+    fn decode(
+        value: <Postgres as Database>::ValueRef<'r>,
+    ) -> Result<Self, BoxDynError> {
+        let pg_interval = PgInterval::decode(value)?;
+
+        if pg_interval.months != 0 {
+            return Err(
+                "Cannot convert months in `INTERVAL` to SignedDuration".into(),
+            );
+        }
+
+        if pg_interval.days != 0 {
+            return Err(
+                "Cannot convert days in `INTERVAL` to SignedDuration".into()
+            );
+        }
+
+        let micros = pg_interval.microseconds;
+        Ok(SignedDuration(jiff::SignedDuration::from_micros(micros)))
     }
 }
 
