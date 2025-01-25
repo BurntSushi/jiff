@@ -1934,45 +1934,10 @@ impl OffsetConflict {
 
         let amb = tz.to_ambiguous_timestamp(dt);
         match amb.offset() {
-            // Basically, if the offset parsed matches one of our ambiguous
-            // offsets, then the offset is used to resolve the ambiguity and
-            // yields an unambiguous result. But in every other case, the
-            // offset parsed is completely ignored. (And this may result in
-            // returning an ambiguous instant.)
-            //
-            // Note that gaps are a little weird here. We always pick the
-            // "before" offset even when it doesn't match what's `given`.
-            // This matches what Temporal does, and I think makes more
-            // intuitive sense. For example, if we have
-            //
-            //   2024-03-10T01:30:00-05:00[US/Eastern]
-            //
-            // And set the hour to `2`, then it makes sense to result in a
-            // clock time of `03:30` in offset `-04`. Moreover, if we always
-            // took what was given, then starting with
-            //
-            //   2024-03-31T12:00:00+00:00[Atlantic/Azores]
-            //
-            // And setting the hour to `0` would result in
-            //
-            //   2024-03-30T23:00:00-01:00[Atlantic/Azores]
-            //
-            // which is highly unintuitive. In the other direction, we might
-            // start with
-            //
-            //   2024-03-10T03:30:00-04:00[US/Eastern]
-            //
-            // And setting the hour to `2` still results in the clock time
-            // being set to `03:30`, i.e., not changing in this instance.
-            //
-            // See also: https://github.com/tc39/proposal-temporal/issues/3078
-            // See also: https://github.com/BurntSushi/jiff/issues/211
-            Gap { before, after }
-                if is_equal(given, before) || is_equal(given, after) =>
-            {
-                let kind = Unambiguous { offset: before };
-                AmbiguousTimestamp::new(dt, kind)
-            }
+            // We only look for folds because we consider all offsets for gaps
+            // to be invalid. Which is consistent with how they're treated as
+            // `OffsetConflict::Reject`. Thus, like any other invalid offset,
+            // we fallback to disambiguation (which is handled by the caller).
             Fold { before, after }
                 if is_equal(given, before) || is_equal(given, after) =>
             {
@@ -2014,34 +1979,15 @@ impl OffsetConflict {
                 tzname = tz.diagnostic_name(),
             )),
             Unambiguous { .. } => Ok(amb.into_ambiguous_zoned(tz)),
-            Gap { before, after }
-                if !is_equal(given, before) && !is_equal(given, after) =>
-            {
-                // Temporal actually seems to report an error whenever a gap
-                // is found, even if the parsed offset matches one of the two
-                // offsets in the gap. I think the reasoning is because the
-                // parsed offset and offsets from the gap will flip-flop, thus
-                // resulting in a datetime with an offset distinct from the one
-                // given. Here's an example. Consider this datetime:
-                //
-                //     2024-03-10T02:30-04:00[America/New_York]
-                //
-                // This occurs in the EST->EDT transition gap, such that
-                // `02:30` never actually appears on a clock for folks in
-                // `America/New_York`. The `-04` offset means that the
-                // timestamp this corresponds to is unambiguous. Namely, it is:
-                //
-                //     2024-03-10T06:30Z
-                //
-                // This instant, when converted to `America/New_York`, is:
-                //
-                //     2024-03-10T01:30-05:00[America/New_York]
-                //
-                // As you can see, the offset flip-flopped. The same flip-flop
-                // happens the other way if you use `02:30-05:00`. Presumably,
-                // Temporal errors here because the offset changes. But the
-                // instant in time is the same *and* it is unambiguous. So it's
-                // not clear to me why we ought to error in this case.
+            Gap { before, after } => {
+                // In `jiff 0.1`, we reported an error when we found a gap
+                // where neither offset matched what was given. But now we
+                // report an error whenever we find a gap, as we consider
+                // all offsets to be invalid for the gap. This now matches
+                // Temporal's behavior which I think is more consistent. And in
+                // particular, this makes it more consistent with the behavior
+                // of `PreferOffset` when a gap is found (which was also
+                // changed to treat all offsets in a gap as invalid).
                 //
                 // Ref: https://github.com/tc39/proposal-temporal/issues/2892
                 Err(err!(
@@ -2049,8 +1995,8 @@ impl OffsetConflict {
                      since 'reject' conflict resolution was chosen, and \
                      because datetime has offset {given}, but the time \
                      zone {tzname} for the given datetime falls in a gap \
-                     between offsets {before} and {after}, neither of which \
-                     match the offset",
+                     (between offsets {before} and {after}), and all \
+                     offsets for a gap are regarded as invalid",
                     tzname = tz.diagnostic_name(),
                 ))
             }
@@ -2067,7 +2013,7 @@ impl OffsetConflict {
                     tzname = tz.diagnostic_name(),
                 ))
             }
-            Gap { .. } | Fold { .. } => {
+            Fold { .. } => {
                 let kind = Unambiguous { offset: given };
                 Ok(AmbiguousTimestamp::new(dt, kind).into_ambiguous_zoned(tz))
             }

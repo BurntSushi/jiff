@@ -24,6 +24,16 @@ Change the behavior of the deprecated `%V` conversion specifier in
 `jiff::fmt::strtime` from formatting an IANA time zone identifier to formatting
 an ISO 8601 week number. To format an IANA time zone identifier, use `%Q` or
 `%:Q` (which were introduced in `jiff 0.1`).
+* [#212](https://github.com/BurntSushi/jiff/issues/212):
+When parsing into a `Zoned` with a civil time corresponding to a gap, we treat
+all offsets as invalid and return an error. Previously, we would accept the
+offset as given. This brings us into line with Temporal's behavior. For
+example, previously Jiff accepted `2006-04-02T02:30-05[America/Indiana/Vevay]`
+but will now return an error. This is desirable for cases where a datetime in
+the future is serialized before a change in the daylight saving time rules.
+For more examples, see `jiff::fmt::temporal::DateTimeParser::offset_conflict`
+for details on how to change Jiff's default behavior. This behavior change also
+applies to `tz::OffsetConflict::PreferOffset`.
 * [#218](https://github.com/BurntSushi/jiff/issues/218):
 In order to make naming a little more consistent between `Zoned`
 and `civil::Date`, the `civil::Date::to_iso_week_date` and
