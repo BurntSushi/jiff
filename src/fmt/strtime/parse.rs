@@ -75,7 +75,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                 b'n' => self.parse_whitespace().context("%n failed")?,
                 b'P' => self.parse_ampm().context("%P failed")?,
                 b'p' => self.parse_ampm().context("%p failed")?,
-                b'Q' => self.parse_iana_nocolon(b'Q').context("%Q failed")?,
+                b'Q' => self.parse_iana_nocolon().context("%Q failed")?,
                 b'R' => self.parse_clock_nosecs().context("%R failed")?,
                 b'S' => self.parse_second(ext).context("%S failed")?,
                 b's' => self.parse_timestamp(ext).context("%s failed")?,
@@ -83,7 +83,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                 b't' => self.parse_whitespace().context("%t failed")?,
                 b'U' => self.parse_week_sun(ext).context("%U failed")?,
                 b'u' => self.parse_weekday_mon(ext).context("%u failed")?,
-                b'V' => self.parse_iana_nocolon(b'V').context("%V failed")?,
+                b'V' => self.parse_week_iso(ext).context("%V failed")?,
                 b'W' => self.parse_week_mon(ext).context("%W failed")?,
                 b'w' => self.parse_weekday_sun(ext).context("%w failed")?,
                 b'Y' => self.parse_year(ext).context("%Y failed")?,
@@ -97,12 +97,9 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                         ));
                     }
                     match self.f() {
-                        b'Q' => self
-                            .parse_iana_colon(b'Q')
-                            .context("%:Q failed")?,
-                        b'V' => self
-                            .parse_iana_colon(b'V')
-                            .context("%:V failed")?,
+                        b'Q' => {
+                            self.parse_iana_colon().context("%:Q failed")?
+                        }
                         b'z' => {
                             self.parse_offset_colon().context("%:z failed")?
                         }
@@ -394,7 +391,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
 
     /// Parse `%Q`, which is the IANA time zone identifier or an offset without
     /// colons.
-    fn parse_iana_nocolon(&mut self, which: u8) -> Result<(), Error> {
+    fn parse_iana_nocolon(&mut self) -> Result<(), Error> {
         #[cfg(not(feature = "alloc"))]
         {
             Err(err!(
@@ -405,12 +402,6 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         {
             use alloc::string::ToString;
 
-            if which == b'V' {
-                warn!(
-                    "`%V` is DEPRECATED and will parse an ISO 8601 week \
-                     number in `jiff 0.2`, use `%Q` instead",
-                );
-            }
             if !self.inp.is_empty() && matches!(self.inp[0], b'+' | b'-') {
                 return self.parse_offset_nocolon();
             }
@@ -424,7 +415,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
 
     /// Parse `%:Q`, which is the IANA time zone identifier or an offset with
     /// colons.
-    fn parse_iana_colon(&mut self, which: u8) -> Result<(), Error> {
+    fn parse_iana_colon(&mut self) -> Result<(), Error> {
         #[cfg(not(feature = "alloc"))]
         {
             Err(err!(
@@ -435,12 +426,6 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         {
             use alloc::string::ToString;
 
-            if which == b'V' {
-                warn!(
-                    "`%:V` is DEPRECATED and will result in an error \
-                     in `jiff 0.2`, use `%:Q` instead",
-                );
-            }
             if !self.inp.is_empty() && matches!(self.inp[0], b'+' | b'-') {
                 return self.parse_offset_colon();
             }
@@ -853,6 +838,20 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         let week = t::WeekNum::try_new("week", week)
             .context("Sunday-based week number is invalid")?;
         self.tm.week_sun = Some(week);
+        self.bump_fmt();
+        Ok(())
+    }
+
+    /// Parse `%V`, which is an ISO 8601 week number.
+    fn parse_week_iso(&mut self, ext: Extension) -> Result<(), Error> {
+        let (week, inp) = ext
+            .parse_number(2, Flag::PadZero, self.inp)
+            .context("failed to parse ISO 8601 week number")?;
+        self.inp = inp;
+
+        let week = t::ISOWeek::try_new("week", week)
+            .context("ISO 8601 week number is invalid")?;
+        self.tm.iso_week = Some(week);
         self.bump_fmt();
         Ok(())
     }
