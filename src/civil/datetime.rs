@@ -2371,20 +2371,6 @@ impl DateTime {
     }
 }
 
-/// Deprecated APIs.
-impl DateTime {
-    /// A deprecated equivalent to [`DateTime::in_tz`].
-    ///
-    /// This will be removed in `jiff 0.2`. The method was renamed to make
-    /// it clearer that the name stood for "in time zone."
-    #[deprecated(since = "0.1.25", note = "use DateTime::in_tz instead")]
-    #[inline]
-    pub fn intz(self, time_zone_name: &str) -> Result<Zoned, Error> {
-        let tz = crate::tz::db().get(time_zone_name)?;
-        self.to_zoned(tz)
-    }
-}
-
 impl Default for DateTime {
     #[inline]
     fn default() -> DateTime {
