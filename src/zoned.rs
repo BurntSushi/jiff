@@ -3058,20 +3058,6 @@ impl Zoned {
     }
 }
 
-/// Deprecated APIs.
-impl Zoned {
-    /// A deprecated equivalent to [`Zoned::in_tz`].
-    ///
-    /// This will be removed in `jiff 0.2`. The method was renamed to make
-    /// it clearer that the name stood for "in time zone."
-    #[deprecated(since = "0.1.25", note = "use Zoned::in_tz instead")]
-    #[inline]
-    pub fn intz(&self, name: &str) -> Result<Zoned, Error> {
-        let tz = crate::tz::db().get(name)?;
-        Ok(self.with_time_zone(tz))
-    }
-}
-
 impl Default for Zoned {
     #[inline]
     fn default() -> Zoned {
