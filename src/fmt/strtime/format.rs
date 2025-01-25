@@ -65,7 +65,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
                 b'n' => self.fmt_literal("\n").context("%n failed")?,
                 b'P' => self.fmt_ampm_lower(ext).context("%P failed")?,
                 b'p' => self.fmt_ampm_upper(ext).context("%p failed")?,
-                b'Q' => self.fmt_iana_nocolon(b'Q').context("%Q failed")?,
+                b'Q' => self.fmt_iana_nocolon().context("%Q failed")?,
                 b'R' => self.fmt_clock_nosecs(ext).context("%R failed")?,
                 b'S' => self.fmt_second(ext).context("%S failed")?,
                 b's' => self.fmt_timestamp(ext).context("%s failed")?,
@@ -73,7 +73,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
                 b't' => self.fmt_literal("\t").context("%t failed")?,
                 b'U' => self.fmt_week_sun(ext).context("%U failed")?,
                 b'u' => self.fmt_weekday_mon(ext).context("%u failed")?,
-                b'V' => self.fmt_iana_nocolon(b'V').context("%V failed")?,
+                b'V' => self.fmt_week_iso(ext).context("%V failed")?,
                 b'W' => self.fmt_week_mon(ext).context("%W failed")?,
                 b'w' => self.fmt_weekday_sun(ext).context("%w failed")?,
                 b'Y' => self.fmt_year(ext).context("%Y failed")?,
@@ -88,12 +88,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
                         ));
                     }
                     match self.f() {
-                        b'Q' => {
-                            self.fmt_iana_colon(b'Q').context("%:Q failed")?
-                        }
-                        b'V' => {
-                            self.fmt_iana_colon(b'V').context("%:V failed")?
-                        }
+                        b'Q' => self.fmt_iana_colon().context("%:Q failed")?,
                         b'z' => {
                             self.fmt_offset_colon().context("%:z failed")?
                         }
@@ -286,6 +281,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         let day = self
             .tm
             .day
+            .or_else(|| self.tm.to_date().ok().map(|d| d.day_ranged()))
             .ok_or_else(|| err!("requires date to format day"))?
             .get();
         ext.write_int(b'0', Some(2), day, self.wtr)
@@ -296,6 +292,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         let day = self
             .tm
             .day
+            .or_else(|| self.tm.to_date().ok().map(|d| d.day_ranged()))
             .ok_or_else(|| err!("requires date to format day"))?
             .get();
         ext.write_int(b' ', Some(2), day, self.wtr)
@@ -376,6 +373,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         let month = self
             .tm
             .month
+            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
             .ok_or_else(|| err!("requires date to format month"))?
             .get();
         ext.write_int(b'0', Some(2), month, self.wtr)
@@ -386,6 +384,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         let month = self
             .tm
             .month
+            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
             .ok_or_else(|| err!("requires date to format month"))?;
         ext.write_str(Case::AsIs, month_name_full(month), self.wtr)
     }
@@ -395,18 +394,13 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         let month = self
             .tm
             .month
+            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
             .ok_or_else(|| err!("requires date to format month"))?;
         ext.write_str(Case::AsIs, month_name_abbrev(month), self.wtr)
     }
 
     /// %Q
-    fn fmt_iana_nocolon(&mut self, which: u8) -> Result<(), Error> {
-        if which == b'V' {
-            warn!(
-                "`%V` is DEPRECATED and will emit an ISO 8601 week \
-                 number in `jiff 0.2`, use `%Q` instead",
-            );
-        }
+    fn fmt_iana_nocolon(&mut self) -> Result<(), Error> {
         let Some(iana) = self.tm.iana_time_zone() else {
             let offset = self.tm.offset.ok_or_else(|| {
                 err!(
@@ -421,13 +415,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %:Q
-    fn fmt_iana_colon(&mut self, which: u8) -> Result<(), Error> {
-        if which == b'V' {
-            warn!(
-                "`%:V` is DEPRECATED and will result in an error \
-                 in `jiff 0.2`, use `%:Q` instead",
-            );
-        }
+    fn fmt_iana_colon(&mut self) -> Result<(), Error> {
         let Some(iana) = self.tm.iana_time_zone() else {
             let offset = self.tm.offset.ok_or_else(|| {
                 err!(
@@ -590,6 +578,20 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         ext.write_int(b'0', Some(2), weeknum, self.wtr)
     }
 
+    /// %V
+    fn fmt_week_iso(&mut self, ext: Extension) -> Result<(), Error> {
+        let weeknum = self
+            .tm
+            .iso_week
+            .or_else(|| {
+                self.tm.to_date().ok().map(|d| d.iso_week_date().week_ranged())
+            })
+            .ok_or_else(|| {
+                err!("requires date to format ISO 8601 week number")
+            })?;
+        ext.write_int(b'0', Some(2), weeknum, self.wtr)
+    }
+
     /// %W
     fn fmt_week_mon(&mut self, ext: Extension) -> Result<(), Error> {
         // Short circuit if the week number was explicitly set.
@@ -626,6 +628,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         let year = self
             .tm
             .year
+            .or_else(|| self.tm.to_date().ok().map(|d| d.year_ranged()))
             .ok_or_else(|| err!("requires date to format year"))?
             .get();
         ext.write_int(b'0', Some(4), year, self.wtr)
@@ -636,6 +639,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         let year = self
             .tm
             .year
+            .or_else(|| self.tm.to_date().ok().map(|d| d.year_ranged()))
             .ok_or_else(|| err!("requires date to format year (2-digit)"))?
             .get();
         if !(1969 <= year && year <= 2068) {
@@ -653,6 +657,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         let year = self
             .tm
             .year
+            .or_else(|| self.tm.to_date().ok().map(|d| d.year_ranged()))
             .ok_or_else(|| err!("requires date to format century (2-digit)"))?
             .get();
         let century = year / 100;
