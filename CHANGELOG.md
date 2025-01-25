@@ -39,6 +39,17 @@ In order to make naming a little more consistent between `Zoned`
 and `civil::Date`, the `civil::Date::to_iso_week_date` and
 `civil::ISOWeekDate::to_date` APIs were renamed to `civil::Date::iso_week_date`
 and `civil::ISOWeekDate::date`.
+* [#220](https://github.com/BurntSushi/jiff/issues/220):
+Remove `Span::to_duration` for converting a `Span` to a `std::time::Duration`
+and rename `Span::to_jiff_duration` to `Span::to_duration`. This prioritizes
+`SignedDuration` as the "primary" non-calendar duration type in Jiff. And makes
+it more consistent with APIs like `Zoned::duration_since`. For non-calendar
+spans, the `TryFrom<Span> for std::time::Duration` still exists. For calendar
+durations, use `Span::to_duration` and then convert the `SignedDuration` to
+`std::time::Duration`. Additionally, `Timestamp::from_jiff_duration` and
+`Timestamp::as_jiff_duration` were renamed to `Timestamp::from_duration` and
+`Timestamp::as_duration`, respectively. The old deprecated routines on the
+unsigned `std::time::Duration` have been removed.
 
 
 0.1.29 (2025-02-02)
