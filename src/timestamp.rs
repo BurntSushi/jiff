@@ -2148,17 +2148,6 @@ impl Timestamp {
             .expect("nanosecond always fit in a u32");
         (self.signum(), core::time::Duration::new(second, nanosecond))
     }
-
-    /// A deprecated equivalent to [`Timestamp::in_tz`].
-    ///
-    /// This will be removed in `jiff 0.2`. The method was renamed to make
-    /// it clearer that the name stood for "in time zone."
-    #[deprecated(since = "0.1.25", note = "use Timestamp::in_tz instead")]
-    #[inline]
-    pub fn intz(self, time_zone_name: &str) -> Result<Zoned, Error> {
-        let tz = crate::tz::db().get(time_zone_name)?;
-        Ok(self.to_zoned(tz))
-    }
 }
 
 /// Internal APIs using Jiff ranged integers.

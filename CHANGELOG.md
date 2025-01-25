@@ -5,6 +5,10 @@
 
 **BREAKING CHANGES**:
 
+* [#28](https://github.com/BurntSushi/jiff/issues/28):
+The deprecated `intz` routines on `Zoned`, `Timestamp`, `civil::DateTime` and
+`civil::Date` have been removed. You can use `in_tz` instead. This change was
+made because many found the name `intz` to be unclear.
 * [#36](https://github.com/BurntSushi/jiff/issues/36):
 Turn panics during `Timestamp::saturing_add` into errors. Callers adding
 spans that are known to contain units of hours or smaller are guaranteed that

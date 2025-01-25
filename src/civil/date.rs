@@ -2066,17 +2066,6 @@ impl Date {
     pub fn to_iso_week_date(self) -> ISOWeekDate {
         self.iso_week_date()
     }
-
-    /// A deprecated equivalent to [`Date::in_tz`].
-    ///
-    /// This will be removed in `jiff 0.2`. The method was renamed to make
-    /// it clearer that the name stood for "in time zone."
-    #[deprecated(since = "0.1.25", note = "use Date::in_tz instead")]
-    #[inline]
-    pub fn intz(self, time_zone_name: &str) -> Result<Zoned, Error> {
-        let tz = crate::tz::db().get(time_zone_name)?;
-        self.to_zoned(tz)
-    }
 }
 
 // Constants used for converting between Gregorian calendar dates and Unix
