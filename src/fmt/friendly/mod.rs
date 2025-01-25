@@ -427,7 +427,7 @@ use jiff::{civil, Span};
 
 let span: Span = "1 month".parse()?;
 // converts to signed duration
-let sdur = span.to_jiff_duration(civil::date(2024, 5, 1))?;
+let sdur = span.to_duration(civil::date(2024, 5, 1))?;
 // converts to standard library unsigned duration
 let dur = Duration::try_from(sdur)?;
 // exactly 31 days where each day is 24 hours long.
@@ -435,7 +435,7 @@ assert_eq!(dur, Duration::from_secs(31 * 24 * 60 * 60));
 
 // Now change the reference date and notice that the
 // resulting duration is changed but still correct.
-let sdur = span.to_jiff_duration(civil::date(2024, 6, 1))?;
+let sdur = span.to_duration(civil::date(2024, 6, 1))?;
 let dur = Duration::try_from(sdur)?;
 // exactly 30 days where each day is 24 hours long.
 assert_eq!(dur, Duration::from_secs(30 * 24 * 60 * 60));
