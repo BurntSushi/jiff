@@ -18,6 +18,11 @@ Change the behavior of the deprecated `%V` conversion specifier in
 `jiff::fmt::strtime` from formatting an IANA time zone identifier to formatting
 an ISO 8601 week number. To format an IANA time zone identifier, use `%Q` or
 `%:Q` (which were introduced in `jiff 0.1`).
+* [#218](https://github.com/BurntSushi/jiff/issues/218):
+In order to make naming a little more consistent between `Zoned`
+and `civil::Date`, the `civil::Date::to_iso_week_date` and
+`civil::ISOWeekDate::to_date` APIs were renamed to `civil::Date::iso_week_date`
+and `civil::ISOWeekDate::date`.
 
 
 0.1.29 (2025-02-02)

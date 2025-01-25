@@ -50,11 +50,11 @@ use crate::{
 ///
 /// let d = date(2019, 12, 30);
 /// let weekdate = ISOWeekDate::new(2020, 1, Weekday::Monday).unwrap();
-/// assert_eq!(d.to_iso_week_date(), weekdate);
+/// assert_eq!(d.iso_week_date(), weekdate);
 ///
 /// let d = date(2024, 3, 9);
 /// let weekdate = ISOWeekDate::new(2024, 10, Weekday::Saturday).unwrap();
-/// assert_eq!(d.to_iso_week_date(), weekdate);
+/// assert_eq!(d.iso_week_date(), weekdate);
 /// ```
 ///
 /// # Example: overlapping leap and long years
@@ -69,7 +69,7 @@ use crate::{
 /// let mut overlapping = vec![];
 /// for year in 1900..=1999 {
 ///     let date = date(year, 1, 1);
-///     if date.in_leap_year() && date.to_iso_week_date().in_long_year() {
+///     if date.in_leap_year() && date.iso_week_date().in_long_year() {
 ///         overlapping.push(year);
 ///     }
 /// }
@@ -206,8 +206,8 @@ impl ISOWeekDate {
     /// set based on the minimum and maximum values of a `Date`. Therefore,
     /// converting to and from `Date` values is non-lossy and infallible.
     ///
-    /// This routine is equivalent to [`Date::to_iso_week_date`]. This
-    /// routine is also available via a `From<Date>` trait implementation for
+    /// This routine is equivalent to [`Date::iso_week_date`]. This routine
+    /// is also available via a `From<Date>` trait implementation for
     /// `ISOWeekDate`.
     ///
     /// # Example
@@ -239,7 +239,7 @@ impl ISOWeekDate {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let weekdate = date(2019, 12, 30).to_iso_week_date();
+    /// let weekdate = date(2019, 12, 30).iso_week_date();
     /// assert_eq!(weekdate.year(), 2020);
     /// ```
     #[inline]
@@ -259,11 +259,11 @@ impl ISOWeekDate {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let weekdate = date(2019, 12, 30).to_iso_week_date();
+    /// let weekdate = date(2019, 12, 30).iso_week_date();
     /// assert_eq!(weekdate.year(), 2020);
     /// assert_eq!(weekdate.week(), 1);
     ///
-    /// let weekdate = date(1948, 12, 31).to_iso_week_date();
+    /// let weekdate = date(1948, 12, 31).iso_week_date();
     /// assert_eq!(weekdate.year(), 1948);
     /// assert_eq!(weekdate.week(), 53);
     /// ```
@@ -285,7 +285,7 @@ impl ISOWeekDate {
     /// ```
     /// use jiff::civil::{date, Weekday};
     ///
-    /// let weekdate = date(1948, 12, 31).to_iso_week_date();
+    /// let weekdate = date(1948, 12, 31).iso_week_date();
     /// assert_eq!(weekdate.year(), 1948);
     /// assert_eq!(weekdate.week(), 53);
     /// assert_eq!(weekdate.weekday(), Weekday::Friday);
@@ -634,19 +634,6 @@ impl ISOWeekDate {
     /// ```
     #[inline]
     pub fn date(self) -> Date {
-        Date::from_iso_week_date(self)
-    }
-}
-
-/// Deprecated APIs.
-impl ISOWeekDate {
-    /// A deprecated equivalent to [`ISOWeekDate::date`].
-    ///
-    /// This method will be removed in `jiff 0.2`. This was done to make naming
-    /// more consistent throughout the crate.
-    #[deprecated(since = "0.1.26", note = "use ISOWeekDate::date instead")]
-    #[inline]
-    pub fn to_date(self) -> Date {
         Date::from_iso_week_date(self)
     }
 }
