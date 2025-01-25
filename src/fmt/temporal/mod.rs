@@ -278,7 +278,7 @@ impl DateTimeParser {
     /// whenever parsing a datetime with an offset that is inconsistent with
     /// the time zone.
     ///
-    /// # Example
+    /// # Example: respecting offsets even when they're invalid
     ///
     /// ```
     /// use jiff::{civil::date, fmt::temporal::DateTimeParser, tz};
@@ -294,6 +294,79 @@ impl DateTimeParser {
     /// // correct in the `America/New_York` time zone.
     /// assert_eq!(zdt.datetime(), date(2024, 6, 9).at(8, 0, 0, 0));
     /// assert_eq!(zdt.offset(), tz::offset(-4));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: all offsets are invalid for gaps in civil time by default
+    ///
+    /// When parsing a datetime with an offset for a gap in civil time, the
+    /// offset is treated as invalid. This results in parsing failing. For
+    /// example, some parts of Indiana in the US didn't start using daylight
+    /// saving time until 2006. If a datetime for 2006 were serialized before
+    /// the updated daylight saving time rules were known, then this parse
+    /// error will prevent you from silently changing the originally intended
+    /// time:
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::DateTimeParser};
+    ///
+    /// static PARSER: DateTimeParser = DateTimeParser::new();
+    ///
+    /// // DST in Indiana/Vevay began at 2006-04-02T02:00 local time.
+    /// // The last time Indiana/Vevay observed DST was in 1972.
+    /// let result = PARSER.parse_zoned(
+    ///     "2006-04-02T02:30-05[America/Indiana/Vevay]",
+    /// );
+    /// assert_eq!(
+    ///     result.unwrap_err().to_string(),
+    ///     "parsing \"2006-04-02T02:30-05[America/Indiana/Vevay]\" failed: \
+    ///      datetime 2006-04-02T02:30:00 could not resolve to timestamp \
+    ///      since 'reject' conflict resolution was chosen, and because \
+    ///      datetime has offset -05, but the time zone America/Indiana/Vevay \
+    ///      for the given datetime falls in a gap \
+    ///      (between offsets -05 and -04), \
+    ///      and all offsets for a gap are regarded as invalid",
+    /// );
+    /// ```
+    ///
+    /// If one doesn't want an error here, then you can either prioritize the
+    /// instant in time by respecting the offset:
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::DateTimeParser, tz};
+    ///
+    /// static PARSER: DateTimeParser = DateTimeParser::new()
+    ///     .offset_conflict(tz::OffsetConflict::AlwaysOffset);
+    ///
+    /// let zdt = PARSER.parse_zoned(
+    ///     "2006-04-02T02:30-05[America/Indiana/Vevay]",
+    /// )?;
+    /// assert_eq!(
+    ///     zdt.to_string(),
+    ///     "2006-04-02T03:30:00-04:00[America/Indiana/Vevay]",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// or you can force your own disambiguation rules, e.g., by taking the
+    /// earlier time:
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::DateTimeParser, tz};
+    ///
+    /// static PARSER: DateTimeParser = DateTimeParser::new()
+    ///     .disambiguation(tz::Disambiguation::Earlier)
+    ///     .offset_conflict(tz::OffsetConflict::AlwaysTimeZone);
+    ///
+    /// let zdt = PARSER.parse_zoned(
+    ///     "2006-04-02T02:30-05[America/Indiana/Vevay]",
+    /// )?;
+    /// assert_eq!(
+    ///     zdt.to_string(),
+    ///     "2006-04-02T01:30:00-05:00[America/Indiana/Vevay]",
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
