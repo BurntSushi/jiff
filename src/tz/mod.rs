@@ -210,6 +210,14 @@ mod zic;
 /// `TimeZone` from a `TimeZoneDatabase`. (Or, in the case of the system time
 /// zone, by calling `TimeZone::system`.)
 ///
+/// # A `TimeZone` is cheap to clone
+///
+/// A `TimeZone` can be cheaply cloned. It uses automic reference counting
+/// internally. When `alloc` is disabled, cloning a `TimeZone` is still cheap
+/// because POSIX time zones and TZif time zones are unsupported. Therefore,
+/// cloning a time zone does a deep copy (since automic reference counting is
+/// not available), but the data being copied is small.
+///
 /// # Time zone equality
 ///
 /// `TimeZone` provides an imperfect notion of equality. That is, when two time
