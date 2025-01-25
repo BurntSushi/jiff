@@ -58,6 +58,11 @@ durations, use `Span::to_duration` and then convert the `SignedDuration` to
 `Timestamp::as_jiff_duration` were renamed to `Timestamp::from_duration` and
 `Timestamp::as_duration`, respectively. The old deprecated routines on the
 unsigned `std::time::Duration` have been removed.
+* [#221](https://github.com/BurntSushi/jiff/issues/221):
+Change the type of the value yielded by the `jiff::tz::TimeZoneNameIter`
+iterator from `String` to `jiff::tz::TimeZoneName`. This opaque type is more
+API evolution friendly. To access the string, either use `TimeZoneName`'s
+`Display` trait implementation, or its `as_str` method.
 
 
 0.1.29 (2025-02-02)

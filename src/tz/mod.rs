@@ -93,10 +93,8 @@ use crate::{
 #[cfg(feature = "alloc")]
 use self::posix::ReasonablePosixTimeZone;
 
-#[cfg(feature = "alloc")]
-pub use self::db::TimeZoneNameIter;
 pub use self::{
-    db::{db, TimeZoneDatabase},
+    db::{db, TimeZoneDatabase, TimeZoneName, TimeZoneNameIter},
     offset::{Dst, Offset, OffsetArithmetic, OffsetConflict, OffsetRound},
 };
 
