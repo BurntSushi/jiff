@@ -4,10 +4,6 @@ use crate::{
     util::sync::Arc,
 };
 
-use self::{
-    bundled::BundledZoneInfo, concatenated::Concatenated, zoneinfo::ZoneInfo,
-};
-
 mod bundled;
 mod concatenated;
 mod zoneinfo;
@@ -197,9 +193,9 @@ pub struct TimeZoneDatabase {
 // Needed for core-only "dumb" `Arc`.
 #[cfg_attr(not(feature = "alloc"), derive(Clone))]
 enum Kind {
-    ZoneInfo(ZoneInfo),
-    Concatenated(Concatenated),
-    Bundled(BundledZoneInfo),
+    ZoneInfo(zoneinfo::Database),
+    Concatenated(concatenated::Database),
+    Bundled(bundled::Database),
 }
 
 impl TimeZoneDatabase {
@@ -259,28 +255,28 @@ impl TimeZoneDatabase {
         // executed ~once generally, so it doesn't seem like a big deal to try.
         // And trying makes things a little more flexible I think.
         if cfg!(target_os = "android") {
-            let db = Concatenated::from_env();
+            let db = concatenated::Database::from_env();
             if !db.is_definitively_empty() {
                 return TimeZoneDatabase::new(Kind::Concatenated(db));
             }
 
-            let db = ZoneInfo::from_env();
+            let db = zoneinfo::Database::from_env();
             if !db.is_definitively_empty() {
                 return TimeZoneDatabase::new(Kind::ZoneInfo(db));
             }
         } else {
-            let db = ZoneInfo::from_env();
+            let db = zoneinfo::Database::from_env();
             if !db.is_definitively_empty() {
                 return TimeZoneDatabase::new(Kind::ZoneInfo(db));
             }
 
-            let db = Concatenated::from_env();
+            let db = concatenated::Database::from_env();
             if !db.is_definitively_empty() {
                 return TimeZoneDatabase::new(Kind::Concatenated(db));
             }
         }
 
-        let db = BundledZoneInfo::new();
+        let db = bundled::Database::new();
         if !db.is_definitively_empty() {
             return TimeZoneDatabase::new(Kind::Bundled(db));
         }
@@ -312,7 +308,7 @@ impl TimeZoneDatabase {
         path: P,
     ) -> Result<TimeZoneDatabase, Error> {
         let path = path.as_ref();
-        let db = ZoneInfo::from_dir(path)?;
+        let db = zoneinfo::Database::from_dir(path)?;
         if db.is_definitively_empty() {
             warn!(
                 "could not find zoneinfo data at directory {path}",
@@ -350,7 +346,7 @@ impl TimeZoneDatabase {
         path: P,
     ) -> Result<TimeZoneDatabase, Error> {
         let path = path.as_ref();
-        let db = Concatenated::from_path(path)?;
+        let db = concatenated::Database::from_path(path)?;
         if db.is_definitively_empty() {
             warn!(
                 "could not find concatenated tzdata in file {path}",
@@ -377,7 +373,7 @@ impl TimeZoneDatabase {
     ///
     /// [IANA Time Zone Database]: https://en.wikipedia.org/wiki/Tz_database
     pub fn bundled() -> TimeZoneDatabase {
-        let db = BundledZoneInfo::new();
+        let db = bundled::Database::new();
         if db.is_definitively_empty() {
             warn!("could not find embedded/bundled zoneinfo");
         }
@@ -465,19 +461,15 @@ impl TimeZoneDatabase {
     ///     println!("{tzid}");
     /// }
     /// ```
-    #[cfg(feature = "alloc")]
-    pub fn available(&self) -> TimeZoneNameIter {
+    pub fn available<'d>(&'d self) -> TimeZoneNameIter<'d> {
         let Some(inner) = self.inner.as_deref() else {
-            return TimeZoneNameIter {
-                it: alloc::vec::Vec::new().into_iter(),
-            };
+            return TimeZoneNameIter::empty();
         };
-        let all = match *inner {
+        match *inner {
             Kind::ZoneInfo(ref db) => db.available(),
             Kind::Concatenated(ref db) => db.available(),
             Kind::Bundled(ref db) => db.available(),
-        };
-        TimeZoneNameIter { it: all.into_iter() }
+        }
     }
 
     /// Resets the internal cache of this database.
@@ -546,18 +538,103 @@ impl core::fmt::Debug for TimeZoneDatabase {
 ///
 /// There are no guarantees about the order in which this iterator yields
 /// time zone identifiers.
-#[cfg(feature = "alloc")]
+///
+/// The lifetime parameter corresponds to the lifetime of the
+/// `TimeZoneDatabase` from which this iterator was created.
 #[derive(Clone, Debug)]
-pub struct TimeZoneNameIter {
-    it: alloc::vec::IntoIter<alloc::string::String>,
+pub struct TimeZoneNameIter<'d> {
+    #[cfg(feature = "alloc")]
+    it: alloc::vec::IntoIter<TimeZoneName<'d>>,
+    #[cfg(not(feature = "alloc"))]
+    it: core::iter::Empty<TimeZoneName<'d>>,
 }
 
-#[cfg(feature = "alloc")]
-impl Iterator for TimeZoneNameIter {
-    type Item = alloc::string::String;
+impl<'d> TimeZoneNameIter<'d> {
+    /// Creates a time zone name iterator that never yields any elements.
+    fn empty() -> TimeZoneNameIter<'d> {
+        #[cfg(feature = "alloc")]
+        {
+            TimeZoneNameIter { it: alloc::vec::Vec::new().into_iter() }
+        }
+        #[cfg(not(feature = "alloc"))]
+        {
+            TimeZoneNameIter { it: core::iter::empty() }
+        }
+    }
 
-    fn next(&mut self) -> Option<alloc::string::String> {
+    /// Creates a time zone name iterator that yields the elements from the
+    /// iterator given. (They are collected into a `Vec`.)
+    #[cfg(feature = "alloc")]
+    fn from_iter(
+        it: impl Iterator<Item = impl Into<alloc::string::String>>,
+    ) -> TimeZoneNameIter<'d> {
+        let names: alloc::vec::Vec<TimeZoneName<'d>> =
+            it.map(|name| TimeZoneName::new(name.into())).collect();
+        TimeZoneNameIter { it: names.into_iter() }
+    }
+}
+
+impl<'d> Iterator for TimeZoneNameIter<'d> {
+    type Item = TimeZoneName<'d>;
+
+    fn next(&mut self) -> Option<TimeZoneName<'d>> {
         self.it.next()
+    }
+}
+
+/// A name for a time zone yield by the [`TimeZoneNameIter`] iterator.
+///
+/// The iterator is created by [`TimeZoneDatabase::available`].
+///
+/// The lifetime parameter corresponds to the lifetime of the
+/// `TimeZoneDatabase` from which this name was created.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub struct TimeZoneName<'d> {
+    /// The lifetime of the tzdb.
+    ///
+    /// We don't currently use this, but it could be quite useful if we ever
+    /// adopt a "compile time" tzdb like what `chrono-tz` has. Then we could
+    /// return strings directly from the embedded data. Or perhaps a "compile
+    /// time" TZif or some such.
+    lifetime: core::marker::PhantomData<&'d str>,
+    #[cfg(feature = "alloc")]
+    name: alloc::string::String,
+    #[cfg(not(feature = "alloc"))]
+    name: core::convert::Infallible,
+}
+
+impl<'d> TimeZoneName<'d> {
+    /// Returns a new time zone name from the string given.
+    ///
+    /// The lifetime returned is inferred according to the caller's context.
+    #[cfg(feature = "alloc")]
+    fn new(name: alloc::string::String) -> TimeZoneName<'d> {
+        TimeZoneName { lifetime: core::marker::PhantomData, name }
+    }
+
+    /// Returns this time zone name as a borrowed string.
+    ///
+    /// Note that the lifetime of the string returned is tied to `self`,
+    /// which may be shorter than the lifetime `'d` of the originating
+    /// `TimeZoneDatabase`.
+    #[inline]
+    pub fn as_str<'a>(&'a self) -> &'a str {
+        #[cfg(feature = "alloc")]
+        {
+            self.name.as_str()
+        }
+        #[cfg(not(feature = "alloc"))]
+        {
+            // Can never be reached because `TimeZoneName` cannot currently
+            // be constructed in core-only environments.
+            unreachable!()
+        }
+    }
+}
+
+impl<'d> core::fmt::Display for TimeZoneName<'d> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 
