@@ -5483,4 +5483,22 @@ mod tests {
             .unwrap();
         assert_eq!(zdt2.to_string(), "2024-03-10T01:30:00-05:00[US/Eastern]");
     }
+
+    #[test]
+    fn zoned_precision_loss() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let zdt1: Zoned = "2025-01-25T19:32:21.783444592+01:00[Europe/Paris]"
+            .parse()
+            .unwrap();
+        let span = 1.second();
+        let zdt2 = &zdt1 + span;
+        assert_eq!(
+            zdt2.to_string(),
+            "2025-01-25T19:32:22.783444592+01:00[Europe/Paris]"
+        );
+        assert_eq!(zdt1, &zdt2 - span, "should be reversible");
+    }
 }

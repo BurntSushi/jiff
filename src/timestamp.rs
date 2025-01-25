@@ -1257,12 +1257,19 @@ impl Timestamp {
         }
         // The common case is probably a span without fractional seconds, so
         // we specialize for that since it requires a fair bit less math.
-        if let Some(span_seconds) = span.to_invariant_seconds() {
-            let time_seconds = self.as_second_ranged();
-            let sum = time_seconds
-                .try_checked_add("span", span_seconds)
-                .with_context(|| err!("adding {span} to {self} overflowed"))?;
-            return Ok(Timestamp::from_second_ranged(sum));
+        //
+        // Note that this only works when *both* the span and timestamp lack
+        // fractional seconds.
+        if self.subsec_nanosecond_ranged() == 0 {
+            if let Some(span_seconds) = span.to_invariant_seconds() {
+                let time_seconds = self.as_second_ranged();
+                let sum = time_seconds
+                    .try_checked_add("span", span_seconds)
+                    .with_context(|| {
+                    err!("adding {span} to {self} overflowed")
+                })?;
+                return Ok(Timestamp::from_second_ranged(sum));
+            }
         }
         let time_nanos = self.as_nanosecond_ranged();
         let span_nanos = span.to_invariant_nanoseconds();
@@ -3544,11 +3551,14 @@ impl From<(Unit, i64)> for TimestampRound {
 
 #[cfg(test)]
 mod tests {
+    use alloc::string::ToString;
+
     use std::io::Cursor;
 
     use crate::{
         civil::{self, datetime},
         tz::Offset,
+        ToSpan,
     };
 
     use super::*;
@@ -3755,5 +3765,15 @@ mod tests {
         let deserialized: Timestamp = serde_yml::from_reader(cursor).unwrap();
 
         assert_eq!(deserialized, expected);
+    }
+
+    #[test]
+    fn timestamp_precision_loss() {
+        let ts1: Timestamp =
+            "2025-01-25T19:32:21.783444592+01:00".parse().unwrap();
+        let span = 1.second();
+        let ts2 = ts1 + span;
+        assert_eq!(ts2.to_string(), "2025-01-25T18:32:22.783444592Z");
+        assert_eq!(ts1, ts2 - span, "should be reversible");
     }
 }
