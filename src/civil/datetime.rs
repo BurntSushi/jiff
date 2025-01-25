@@ -1,7 +1,9 @@
 use core::time::Duration as UnsignedDuration;
 
 use crate::{
-    civil::{datetime, Date, DateWith, Era, Time, TimeWith, Weekday},
+    civil::{
+        datetime, Date, DateWith, Era, ISOWeekDate, Time, TimeWith, Weekday,
+    },
     duration::{Duration, SDuration},
     error::{err, Error, ErrorContext},
     fmt::{
@@ -134,7 +136,10 @@ use crate::{
 ///
 /// let datetime1 = date(2024, 5, 3).at(23, 30, 0, 0);
 /// let datetime2 = date(2024, 2, 25).at(7, 0, 0, 0);
-/// assert_eq!(datetime1 - datetime2, 68.days().hours(16).minutes(30));
+/// assert_eq!(
+///     datetime1 - datetime2,
+///     68.days().hours(16).minutes(30).fieldwise(),
+/// );
 /// ```
 ///
 /// The `until` and `since` APIs are polymorphic and allow re-balancing and
@@ -148,7 +153,7 @@ use crate::{
 /// let datetime2 = date(2024, 2, 25).at(7, 0, 0, 0);
 /// assert_eq!(
 ///     datetime1.since((Unit::Year, datetime2))?,
-///     2.months().days(7).hours(16).minutes(30),
+///     2.months().days(7).hours(16).minutes(30).fieldwise(),
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -167,7 +172,7 @@ use crate::{
 ///             .smallest(Unit::Day)
 ///             .largest(Unit::Year),
 ///     )?,
-///     2.months().days(7),
+///     2.months().days(7).fieldwise(),
 /// );
 /// // `DateTimeDifference` uses truncation as a rounding mode by default,
 /// // but you can set the rounding mode to break ties away from zero:
@@ -179,7 +184,7 @@ use crate::{
 ///             .mode(RoundMode::HalfExpand),
 ///     )?,
 ///     // Rounds up to 8 days.
-///     2.months().days(8),
+///     2.months().days(8).fieldwise(),
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -671,12 +676,12 @@ impl DateTime {
     /// use jiff::{civil, Timestamp};
     ///
     /// // 1,234 nanoseconds after the Unix epoch.
-    /// let zdt = Timestamp::new(0, 1_234)?.intz("UTC")?;
+    /// let zdt = Timestamp::new(0, 1_234)?.in_tz("UTC")?;
     /// let dt = zdt.datetime();
     /// assert_eq!(dt.subsec_nanosecond(), 1_234);
     ///
     /// // 1,234 nanoseconds before the Unix epoch.
-    /// let zdt = Timestamp::new(0, -1_234)?.intz("UTC")?;
+    /// let zdt = Timestamp::new(0, -1_234)?.in_tz("UTC")?;
     /// let dt = zdt.datetime();
     /// // The nanosecond is equal to `1_000_000_000 - 1_234`.
     /// assert_eq!(dt.subsec_nanosecond(), 999998766);
@@ -1252,6 +1257,66 @@ impl DateTime {
         self.time
     }
 
+    /// Construct an [ISO 8601 week date] from this datetime.
+    ///
+    /// The [`ISOWeekDate`] type describes itself in more detail, but in
+    /// brief, the ISO week date calendar system eschews months in favor of
+    /// weeks.
+    ///
+    /// This routine is equivalent to
+    /// [`ISOWeekDate::from_date(dt.date())`](ISOWeekDate::from_date).
+    ///
+    /// [ISO 8601 week date]: https://en.wikipedia.org/wiki/ISO_week_date
+    ///
+    /// # Example
+    ///
+    /// This shows a number of examples demonstrating the conversion from a
+    /// Gregorian date to an ISO 8601 week date:
+    ///
+    /// ```
+    /// use jiff::civil::{Date, Time, Weekday, date};
+    ///
+    /// let dt = date(1995, 1, 1).at(18, 45, 0, 0);
+    /// let weekdate = dt.iso_week_date();
+    /// assert_eq!(weekdate.year(), 1994);
+    /// assert_eq!(weekdate.week(), 52);
+    /// assert_eq!(weekdate.weekday(), Weekday::Sunday);
+    ///
+    /// let dt = date(1996, 12, 31).at(18, 45, 0, 0);
+    /// let weekdate = dt.iso_week_date();
+    /// assert_eq!(weekdate.year(), 1997);
+    /// assert_eq!(weekdate.week(), 1);
+    /// assert_eq!(weekdate.weekday(), Weekday::Tuesday);
+    ///
+    /// let dt = date(2019, 12, 30).at(18, 45, 0, 0);
+    /// let weekdate = dt.iso_week_date();
+    /// assert_eq!(weekdate.year(), 2020);
+    /// assert_eq!(weekdate.week(), 1);
+    /// assert_eq!(weekdate.weekday(), Weekday::Monday);
+    ///
+    /// let dt = date(2024, 3, 9).at(18, 45, 0, 0);
+    /// let weekdate = dt.iso_week_date();
+    /// assert_eq!(weekdate.year(), 2024);
+    /// assert_eq!(weekdate.week(), 10);
+    /// assert_eq!(weekdate.weekday(), Weekday::Saturday);
+    ///
+    /// let dt = Date::MIN.to_datetime(Time::MIN);
+    /// let weekdate = dt.iso_week_date();
+    /// assert_eq!(weekdate.year(), -9999);
+    /// assert_eq!(weekdate.week(), 1);
+    /// assert_eq!(weekdate.weekday(), Weekday::Monday);
+    ///
+    /// let dt = Date::MAX.to_datetime(Time::MAX);
+    /// let weekdate = dt.iso_week_date();
+    /// assert_eq!(weekdate.year(), 9999);
+    /// assert_eq!(weekdate.week(), 52);
+    /// assert_eq!(weekdate.weekday(), Weekday::Friday);
+    /// ```
+    #[inline]
+    pub fn iso_week_date(self) -> ISOWeekDate {
+        self.date().iso_week_date()
+    }
+
     /// Converts a civil datetime to a [`Zoned`] datetime by adding the given
     /// time zone.
     ///
@@ -1291,7 +1356,7 @@ impl DateTime {
     /// use jiff::civil::DateTime;
     ///
     /// let dt: DateTime = "2024-06-20 15:06".parse()?;
-    /// let zdt = dt.intz("America/New_York")?;
+    /// let zdt = dt.in_tz("America/New_York")?;
     /// assert_eq!(zdt.to_string(), "2024-06-20T15:06:00-04:00[America/New_York]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1316,12 +1381,12 @@ impl DateTime {
     ///
     /// // This is the gap, where by default we select the later time.
     /// let dt: DateTime = "2024-03-10 02:30".parse()?;
-    /// let zdt = dt.intz("America/New_York")?;
+    /// let zdt = dt.in_tz("America/New_York")?;
     /// assert_eq!(zdt.to_string(), "2024-03-10T03:30:00-04:00[America/New_York]");
     ///
     /// // This is the fold, where by default we select the earlier time.
     /// let dt: DateTime = "2024-11-03 01:30".parse()?;
-    /// let zdt = dt.intz("America/New_York")?;
+    /// let zdt = dt.in_tz("America/New_York")?;
     /// // Since this is a fold, the wall clock time is repeated. It might be
     /// // hard to see that this is the earlier time, but notice the offset:
     /// // it is the offset for DST time in New York. The later time, or the
@@ -1340,7 +1405,7 @@ impl DateTime {
     /// use jiff::civil::date;
     ///
     /// let dt = date(2024, 6, 20).at(15, 6, 0, 0);
-    /// assert!(dt.intz("does not exist").is_err());
+    /// assert!(dt.in_tz("does not exist").is_err());
     /// ```
     ///
     /// Note that even if a time zone exists in, say, the IANA database, there
@@ -1358,9 +1423,9 @@ impl DateTime {
     /// let dt = DateTime::MAX;
     /// // All errors because the combination of the offset and the datetime
     /// // isn't enough to fit into timestamp limits.
-    /// assert!(dt.intz("UTC").is_err());
-    /// assert!(dt.intz("America/New_York").is_err());
-    /// assert!(dt.intz("Australia/Tasmania").is_err());
+    /// assert!(dt.in_tz("UTC").is_err());
+    /// assert!(dt.in_tz("America/New_York").is_err());
+    /// assert!(dt.in_tz("Australia/Tasmania").is_err());
     /// // In fact, the only valid offset one can use to turn the maximum civil
     /// // datetime into a Zoned value is the maximum offset:
     /// let tz = Offset::from_seconds(93_599).unwrap().to_time_zone();
@@ -1379,7 +1444,7 @@ impl DateTime {
     /// always a way to convert a `Zoned` instant to a human readable wall
     /// clock time.
     #[inline]
-    pub fn intz(self, time_zone_name: &str) -> Result<Zoned, Error> {
+    pub fn in_tz(self, time_zone_name: &str) -> Result<Zoned, Error> {
         let tz = crate::tz::db().get(time_zone_name)?;
         self.to_zoned(tz)
     }
@@ -1399,7 +1464,7 @@ impl DateTime {
     /// strategy, use [`TimeZone::to_ambiguous_zoned`].
     ///
     /// In the common case of a time zone being represented as a name string,
-    /// like `Australia/Tasmania`, consider using [`DateTime::to_zoned`]
+    /// like `Australia/Tasmania`, consider using [`DateTime::in_tz`]
     /// instead.
     ///
     /// # Errors
@@ -1753,10 +1818,16 @@ impl DateTime {
     ///
     /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0);
     /// let later = date(2019, 1, 31).at(21, 0, 0, 0);
-    /// assert_eq!(earlier.until(later)?, 4542.days().hours(22).minutes(30));
+    /// assert_eq!(
+    ///     earlier.until(later)?,
+    ///     4542.days().hours(22).minutes(30).fieldwise(),
+    /// );
     ///
     /// // Flipping the dates is fine, but you'll get a negative span.
-    /// assert_eq!(later.until(earlier)?, -4542.days().hours(22).minutes(30));
+    /// assert_eq!(
+    ///     later.until(earlier)?,
+    ///     -4542.days().hours(22).minutes(30).fieldwise(),
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1800,7 +1871,7 @@ impl DateTime {
     /// let span = dt1.until(
     ///     DateTimeDifference::from(dt2).smallest(Unit::Second),
     /// )?;
-    /// assert_eq!(span, 8456.days().hours(12).minutes(5).seconds(29));
+    /// assert_eq!(format!("{span:#}"), "8456d 12h 5m 29s");
     ///
     /// // We can combine smallest and largest units too!
     /// let span = dt1.until(
@@ -1808,7 +1879,7 @@ impl DateTime {
     ///         .smallest(Unit::Second)
     ///         .largest(Unit::Year),
     /// )?;
-    /// assert_eq!(span, 23.years().months(1).days(24).hours(12).minutes(5).seconds(29));
+    /// assert_eq!(span.to_string(), "P23Y1M24DT12H5M29S");
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
@@ -1825,7 +1896,7 @@ impl DateTime {
     /// let dt2 = date(2024, 5, 1).at(0, 0, 0, 0);
     ///
     /// let span = dt1.until((Unit::Month, dt2))?;
-    /// assert_eq!(span, 1.month().days(29));
+    /// assert_eq!(span, 1.month().days(29).fieldwise());
     /// let maybe_original = dt2.checked_sub(span)?;
     /// // Not the same as the original datetime!
     /// assert_eq!(maybe_original, date(2024, 3, 3).at(0, 0, 0, 0));
@@ -1833,7 +1904,7 @@ impl DateTime {
     /// // But in the default configuration, days are always the biggest unit
     /// // and reversibility is guaranteed.
     /// let span = dt1.until(dt2)?;
-    /// assert_eq!(span, 60.days());
+    /// assert_eq!(span, 60.days().fieldwise());
     /// let is_original = dt2.checked_sub(span)?;
     /// assert_eq!(is_original, dt1);
     ///
@@ -1877,7 +1948,10 @@ impl DateTime {
     ///
     /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0);
     /// let later = date(2019, 1, 31).at(21, 0, 0, 0);
-    /// assert_eq!(later - earlier, 4542.days().hours(22).minutes(30));
+    /// assert_eq!(
+    ///     later - earlier,
+    ///     4542.days().hours(22).minutes(30).fieldwise(),
+    /// );
     /// ```
     #[inline]
     pub fn since<A: Into<DateTimeDifference>>(
@@ -1957,7 +2031,7 @@ impl DateTime {
     /// let dt2 = date(2025, 4, 1).at(0, 0, 0, 0);
     ///
     /// let span = dt1.until((Unit::Year, dt2))?;
-    /// assert_eq!(span, 1.year().months(3));
+    /// assert_eq!(span, 1.year().months(3).fieldwise());
     ///
     /// let duration = dt1.duration_until(dt2);
     /// assert_eq!(duration, SignedDuration::from_hours(456 * 24));
@@ -1967,7 +2041,7 @@ impl DateTime {
     /// // it to a span and then balance it by providing a relative date!
     /// let options = SpanRound::new().largest(Unit::Year).relative(dt1);
     /// let span = Span::try_from(duration)?.round(options)?;
-    /// assert_eq!(span, 1.year().months(3));
+    /// assert_eq!(span, 1.year().months(3).fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2294,6 +2368,20 @@ impl DateTime {
         format: &'f F,
     ) -> fmt::strtime::Display<'f> {
         fmt::strtime::Display { fmt: format.as_ref(), tm: (*self).into() }
+    }
+}
+
+/// Deprecated APIs.
+impl DateTime {
+    /// A deprecated equivalent to [`DateTime::in_tz`].
+    ///
+    /// This will be removed in `jiff 0.2`. The method was renamed to make
+    /// it clearer that the name stood for "in time zone."
+    #[deprecated(since = "0.1.25", note = "use DateTime::in_tz instead")]
+    #[inline]
+    pub fn intz(self, time_zone_name: &str) -> Result<Zoned, Error> {
+        let tz = crate::tz::db().get(time_zone_name)?;
+        self.to_zoned(tz)
     }
 }
 
@@ -2824,7 +2912,7 @@ impl<'a> From<&'a UnsignedDuration> for DateTimeArithmetic {
 ///         .mode(RoundMode::HalfExpand)
 ///         .increment(30),
 /// )?;
-/// assert_eq!(span, 6.years().days(7).hours(7));
+/// assert_eq!(span, 6.years().days(7).hours(7).fieldwise());
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -2880,7 +2968,7 @@ impl DateTimeDifference {
     ///         .largest(Unit::Week)
     ///         .mode(RoundMode::HalfExpand),
     /// )?;
-    /// assert_eq!(span, 349.weeks());
+    /// assert_eq!(span, 349.weeks().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2919,7 +3007,7 @@ impl DateTimeDifference {
     /// let span = dt1.until(
     ///     DateTimeDifference::new(dt2).largest(Unit::Second),
     /// )?;
-    /// assert_eq!(span, 211076160.seconds());
+    /// assert_eq!(span, 211076160.seconds().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2955,7 +3043,7 @@ impl DateTimeDifference {
     ///         .mode(RoundMode::Ceil),
     /// )?;
     /// // Only one minute elapsed, but we asked to always round up!
-    /// assert_eq!(span, 1.hour());
+    /// assert_eq!(span, 1.hour().fieldwise());
     ///
     /// // Since `Ceil` always rounds toward positive infinity, the behavior
     /// // flips for a negative span.
@@ -2964,7 +3052,7 @@ impl DateTimeDifference {
     ///         .smallest(Unit::Hour)
     ///         .mode(RoundMode::Ceil),
     /// )?;
-    /// assert_eq!(span, 0.hour());
+    /// assert_eq!(span, 0.hour().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -3013,7 +3101,7 @@ impl DateTimeDifference {
     ///         .increment(5)
     ///         .mode(RoundMode::HalfExpand),
     /// )?;
-    /// assert_eq!(span, 4.hour().minutes(35));
+    /// assert_eq!(span, 4.hour().minutes(35).fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -4160,6 +4248,7 @@ mod tests {
 
     use crate::{
         civil::{date, time},
+        span::span_eq,
         RoundMode, ToSpan, Unit,
     };
 
@@ -4199,34 +4288,34 @@ mod tests {
     fn since() {
         let later = date(2024, 5, 9).at(2, 0, 0, 0);
         let earlier = date(2024, 5, 8).at(3, 0, 0, 0);
-        assert_eq!(later.since(earlier).unwrap(), 23.hours());
+        span_eq!(later.since(earlier).unwrap(), 23.hours());
 
         let later = date(2024, 5, 9).at(3, 0, 0, 0);
         let earlier = date(2024, 5, 8).at(2, 0, 0, 0);
-        assert_eq!(later.since(earlier).unwrap(), 1.days().hours(1));
+        span_eq!(later.since(earlier).unwrap(), 1.days().hours(1));
 
         let later = date(2024, 5, 9).at(2, 0, 0, 0);
         let earlier = date(2024, 5, 10).at(3, 0, 0, 0);
-        assert_eq!(later.since(earlier).unwrap(), -1.days().hours(1));
+        span_eq!(later.since(earlier).unwrap(), -1.days().hours(1));
 
         let later = date(2024, 5, 9).at(3, 0, 0, 0);
         let earlier = date(2024, 5, 10).at(2, 0, 0, 0);
-        assert_eq!(later.since(earlier).unwrap(), -23.hours());
+        span_eq!(later.since(earlier).unwrap(), -23.hours());
     }
 
     #[test]
     fn until() {
         let a = date(9999, 12, 30).at(3, 0, 0, 0);
         let b = date(9999, 12, 31).at(2, 0, 0, 0);
-        assert_eq!(a.until(b).unwrap(), 23.hours());
+        span_eq!(a.until(b).unwrap(), 23.hours());
 
         let a = date(-9999, 1, 2).at(2, 0, 0, 0);
         let b = date(-9999, 1, 1).at(3, 0, 0, 0);
-        assert_eq!(a.until(b).unwrap(), -23.hours());
+        span_eq!(a.until(b).unwrap(), -23.hours());
 
         let a = date(1995, 12, 7).at(3, 24, 30, 3500);
         let b = date(2019, 1, 31).at(15, 30, 0, 0);
-        assert_eq!(
+        span_eq!(
             a.until(b).unwrap(),
             8456.days()
                 .hours(12)
@@ -4236,7 +4325,7 @@ mod tests {
                 .microseconds(996)
                 .nanoseconds(500)
         );
-        assert_eq!(
+        span_eq!(
             a.until((Unit::Year, b)).unwrap(),
             23.years()
                 .months(1)
@@ -4248,7 +4337,7 @@ mod tests {
                 .microseconds(996)
                 .nanoseconds(500)
         );
-        assert_eq!(
+        span_eq!(
             b.until((Unit::Year, a)).unwrap(),
             -23.years()
                 .months(1)
@@ -4260,7 +4349,7 @@ mod tests {
                 .microseconds(996)
                 .nanoseconds(500)
         );
-        assert_eq!(
+        span_eq!(
             a.until((Unit::Nanosecond, b)).unwrap(),
             730641929999996500i64.nanoseconds(),
         );
@@ -4268,7 +4357,7 @@ mod tests {
         let a = date(-9999, 1, 1).at(0, 0, 0, 0);
         let b = date(9999, 12, 31).at(23, 59, 59, 999_999_999);
         assert!(a.until((Unit::Nanosecond, b)).is_err());
-        assert_eq!(
+        span_eq!(
             a.until((Unit::Microsecond, b)).unwrap(),
             Span::new()
                 .microseconds(631_107_417_600_000_000i64 - 1)
@@ -4282,12 +4371,12 @@ mod tests {
         let feb1 = date(2020, 2, 1).at(0, 0, 0, 0);
         let mar1 = date(2020, 3, 1).at(0, 0, 0, 0);
 
-        assert_eq!(jan1.until(feb1).unwrap(), 31.days());
-        assert_eq!(jan1.until((Unit::Month, feb1)).unwrap(), 1.month());
-        assert_eq!(feb1.until(mar1).unwrap(), 29.days());
-        assert_eq!(feb1.until((Unit::Month, mar1)).unwrap(), 1.month());
-        assert_eq!(jan1.until(mar1).unwrap(), 60.days());
-        assert_eq!(jan1.until((Unit::Month, mar1)).unwrap(), 2.months());
+        span_eq!(jan1.until(feb1).unwrap(), 31.days());
+        span_eq!(jan1.until((Unit::Month, feb1)).unwrap(), 1.month());
+        span_eq!(feb1.until(mar1).unwrap(), 29.days());
+        span_eq!(feb1.until((Unit::Month, mar1)).unwrap(), 1.month());
+        span_eq!(jan1.until(mar1).unwrap(), 60.days());
+        span_eq!(jan1.until((Unit::Month, mar1)).unwrap(), 2.months());
     }
 
     #[test]

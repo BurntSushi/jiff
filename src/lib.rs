@@ -14,7 +14,7 @@ it:
 use jiff::{Timestamp, ToSpan};
 
 let time: Timestamp = "2024-07-11T01:14:00Z".parse()?;
-let zoned = time.intz("America/New_York")?.checked_add(1.month().hours(2))?;
+let zoned = time.in_tz("America/New_York")?.checked_add(1.month().hours(2))?;
 assert_eq!(zoned.to_string(), "2024-08-10T23:14:00-04:00[America/New_York]");
 // Or, if you want an RFC3339 formatted string:
 assert_eq!(zoned.timestamp().to_string(), "2024-08-11T03:14:00Z");
@@ -324,13 +324,13 @@ assert_eq!(ts.to_string(), "2024-07-10T21:19:25.567Z");
 This example demonstrates the convenience constructor, [`civil::date`],
 for a [`civil::Date`]. And use the [`civil::Date::at`] method to create
 a [`civil::DateTime`]. Once we have a civil datetime, we can use
-[`civil::DateTime::intz`] to do a time zone lookup and convert it to a precise
+[`civil::DateTime::in_tz`] to do a time zone lookup and convert it to a precise
 instant in time:
 
 ```
 use jiff::civil::date;
 
-let zdt = date(2023, 12, 31).at(18, 30, 0, 0).intz("America/New_York")?;
+let zdt = date(2023, 12, 31).at(18, 30, 0, 0).in_tz("America/New_York")?;
 assert_eq!(zdt.to_string(), "2023-12-31T18:30:00-05:00[America/New_York]");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -347,8 +347,8 @@ This shows how to find the civil time, in New York, when World War 1 ended:
 ```
 use jiff::civil::date;
 
-let zdt1 = date(1918, 11, 11).at(11, 0, 0, 0).intz("Europe/Paris")?;
-let zdt2 = zdt1.intz("America/New_York")?;
+let zdt1 = date(1918, 11, 11).at(11, 0, 0, 0).in_tz("Europe/Paris")?;
+let zdt2 = zdt1.in_tz("America/New_York")?;
 assert_eq!(
     zdt2.to_string(),
     "1918-11-11T06:00:00-05:00[America/New_York]",
@@ -366,8 +366,8 @@ datetimes via the `-` operator:
 ```
 use jiff::civil::date;
 
-let zdt1 = date(2020, 8, 26).at(6, 27, 0, 0).intz("America/New_York")?;
-let zdt2 = date(2023, 12, 31).at(18, 30, 0, 0).intz("America/New_York")?;
+let zdt1 = date(2020, 8, 26).at(6, 27, 0, 0).in_tz("America/New_York")?;
+let zdt2 = date(2023, 12, 31).at(18, 30, 0, 0).in_tz("America/New_York")?;
 let span = &zdt2 - &zdt1;
 assert_eq!(format!("{span:#}"), "29341h 3m");
 
@@ -382,8 +382,8 @@ via [`Zoned::until`] to make the span more comprehensible:
 ```
 use jiff::{civil::date, Unit};
 
-let zdt1 = date(2020, 8, 26).at(6, 27, 0, 0).intz("America/New_York")?;
-let zdt2 = date(2023, 12, 31).at(18, 30, 0, 0).intz("America/New_York")?;
+let zdt1 = date(2020, 8, 26).at(6, 27, 0, 0).in_tz("America/New_York")?;
+let zdt2 = date(2023, 12, 31).at(18, 30, 0, 0).in_tz("America/New_York")?;
 let span = zdt1.until((Unit::Year, &zdt2))?;
 assert_eq!(format!("{span:#}"), "3y 4mo 5d 12h 3m");
 
@@ -399,7 +399,7 @@ trait for convenience construction of `Span` values.
 ```
 use jiff::{civil::date, ToSpan};
 
-let zdt1 = date(2020, 8, 26).at(6, 27, 0, 0).intz("America/New_York")?;
+let zdt1 = date(2020, 8, 26).at(6, 27, 0, 0).in_tz("America/New_York")?;
 let span = 3.years().months(4).days(5).hours(12).minutes(3);
 let zdt2 = zdt1.checked_add(span)?;
 assert_eq!(zdt2.to_string(), "2023-12-31T18:30:00-05:00[America/New_York]");
@@ -423,12 +423,12 @@ use jiff::civil::date;
 
 // 2:30 on 2024-03-10 in New York didn't exist. It's a "gap."
 // The compatible strategy selects the datetime after the gap.
-let zdt = date(2024, 3, 10).at(2, 30, 0, 0).intz("America/New_York")?;
+let zdt = date(2024, 3, 10).at(2, 30, 0, 0).in_tz("America/New_York")?;
 assert_eq!(zdt.to_string(), "2024-03-10T03:30:00-04:00[America/New_York]");
 
 // 1:30 on 2024-11-03 in New York appeared twice. It's a "fold."
 // The compatible strategy selects the datetime before the fold.
-let zdt = date(2024, 11, 3).at(1, 30, 0, 0).intz("America/New_York")?;
+let zdt = date(2024, 11, 3).at(1, 30, 0, 0).in_tz("America/New_York")?;
 assert_eq!(zdt.to_string(), "2024-11-03T01:30:00-04:00[America/New_York]");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -448,7 +448,7 @@ use jiff::Span;
 
 let span: Span = "P5y1w10dT5h59m".parse()?;
 let expected = Span::new().years(5).weeks(1).days(10).hours(5).minutes(59);
-assert_eq!(span, expected);
+assert_eq!(span, expected.fieldwise());
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -464,11 +464,11 @@ use jiff::Span;
 
 let expected = Span::new().years(5).weeks(1).days(10).hours(5).minutes(59);
 let span: Span = "5 years, 1 week, 10 days, 5 hours, 59 minutes".parse()?;
-assert_eq!(span, expected);
+assert_eq!(span, expected.fieldwise());
 let span: Span = "5yrs 1wk 10d 5hrs 59mins".parse()?;
-assert_eq!(span, expected);
+assert_eq!(span, expected.fieldwise());
 let span: Span = "5y 1w 10d 5h 59m".parse()?;
-assert_eq!(span, expected);
+assert_eq!(span, expected.fieldwise());
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -484,9 +484,9 @@ or email). Parsing and printing of RFC 2822 datetimes is done via the
 use jiff::fmt::rfc2822;
 
 let zdt1 = rfc2822::parse("Thu, 29 Feb 2024 05:34 -0500")?;
-let zdt2 = zdt1.intz("Australia/Tasmania")?;
+let zdt2 = zdt1.in_tz("Australia/Tasmania")?;
 assert_eq!(rfc2822::to_string(&zdt2)?, "Thu, 29 Feb 2024 21:34:00 +1100");
-let zdt3 = zdt1.intz("Asia/Kolkata")?;
+let zdt3 = zdt1.in_tz("Asia/Kolkata")?;
 assert_eq!(rfc2822::to_string(&zdt3)?, "Thu, 29 Feb 2024 16:04:00 +0530");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -506,7 +506,7 @@ a "odd" custom format into a zoned datetime:
 use jiff::Zoned;
 
 let zdt = Zoned::strptime(
-    "%A, %B %d, %Y at %I:%M%p %V",
+    "%A, %B %d, %Y at %I:%M%p %Q",
     "Monday, July 15, 2024 at 5:30pm US/Eastern",
 )?;
 assert_eq!(zdt.to_string(), "2024-07-15T17:30:00-04:00[US/Eastern]");
@@ -521,7 +521,7 @@ available) instead of an offset (`%Z` can't be used for parsing):
 ```
 use jiff::civil::date;
 
-let zdt = date(2024, 7, 15).at(17, 30, 59, 0).intz("Australia/Tasmania")?;
+let zdt = date(2024, 7, 15).at(17, 30, 59, 0).in_tz("Australia/Tasmania")?;
 // %-I instead of %I means no padding.
 let string = zdt.strftime("%A, %B %d, %Y at %-I:%M%P %Z").to_string();
 assert_eq!(string, "Monday, July 15, 2024 at 5:30pm AEST");
@@ -531,15 +531,15 @@ assert_eq!(string, "Monday, July 15, 2024 at 5:30pm AEST");
 
 However, time zone abbreviations aren't parsable because they are ambiguous.
 For example, `CST` can stand for `Central Standard Time`, `Cuba Standard Time`
-or `China Standard Time`. Instead, it is recommended to use `%V` to format an
+or `China Standard Time`. Instead, it is recommended to use `%Q` to format an
 IANA time zone identifier (which can be parsed, as shown above):
 
 ```
 use jiff::civil::date;
 
-let zdt = date(2024, 7, 15).at(17, 30, 59, 0).intz("Australia/Tasmania")?;
+let zdt = date(2024, 7, 15).at(17, 30, 59, 0).in_tz("Australia/Tasmania")?;
 // %-I instead of %I means no padding.
-let string = zdt.strftime("%A, %B %d, %Y at %-I:%M%P %V").to_string();
+let string = zdt.strftime("%A, %B %d, %Y at %-I:%M%P %Q").to_string();
 assert_eq!(string, "Monday, July 15, 2024 at 5:30pm Australia/Tasmania");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -596,7 +596,7 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
   bundle the Time Zone Database), then Jiff has nearly full functionality
   without `std` enabled, excepting things like `std::error::Error` trait
   implementations and a global time zone database (which is required for
-  things like [`Timestamp::intz`] to work).
+  things like [`Timestamp::in_tz`] to work).
 * **alloc** (enabled by default) -
   When enabled, Jiff will depend on the `alloc` crate. In particular, this
   enables functionality that requires or greatly benefits from dynamic memory
@@ -650,7 +650,15 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
 * **tzdb-zoneinfo** (enabled by default) -
   When enabled, Jiff will attempt to look for your system's copy of the Time
   Zone Database.
+* **tzdb-concatenated** (enabled by default) -
+  When enabled, Jiff will attempt to look for a system copy of the
+  [Concatenated Time Zone Database]. This is primarily meant for reading time
+  zone information on Android platforms. The `ANDROID_ROOT` and `ANDROID_DATA`
+  environment variables (with sensible default fallbacks) are used to construct
+  candidate paths to look for this database. For more on this, see the
+  [Android section of the platform support documentation](crate::_documentation::platform#android).
 
+[Concatenated Time Zone Database]: https://android.googlesource.com/platform/libcore/+/jb-mr2-release/luni/src/main/java/libcore/util/ZoneInfoDB.java
 */
 
 #![no_std]
@@ -661,7 +669,15 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
     deny(rustdoc::broken_intra_doc_links)
 )]
 // These are just too annoying to squash otherwise.
-#![cfg_attr(not(feature = "std"), allow(dead_code, unused_imports))]
+#![cfg_attr(
+    not(all(
+        feature = "std",
+        feature = "tzdb-zoneinfo",
+        feature = "tzdb-concatenated",
+        feature = "tz-system",
+    )),
+    allow(dead_code, unused_imports)
+)]
 // No clue why this thing is still unstable because it's pretty amazing. This
 // adds Cargo feature annotations to items in the rustdoc output. Which is
 // sadly hugely beneficial for this crate due to the number of features.
@@ -694,8 +710,8 @@ pub use crate::{
     error::Error,
     signed_duration::{SignedDuration, SignedDurationRound},
     span::{
-        Span, SpanArithmetic, SpanCompare, SpanRelativeTo, SpanRound,
-        SpanTotal, ToSpan, Unit,
+        Span, SpanArithmetic, SpanCompare, SpanFieldwise, SpanRelativeTo,
+        SpanRound, SpanTotal, ToSpan, Unit,
     },
     timestamp::{
         Timestamp, TimestampArithmetic, TimestampDifference,

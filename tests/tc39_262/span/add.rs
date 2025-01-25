@@ -11,7 +11,7 @@ fn balance_negative_result() -> Result {
     let sp1 = -60.hours();
     let sp2 = -1.day();
     let result = sp1.checked_add(sp2)?;
-    assert_eq!(result, -3.days().hours(12));
+    span_eq!(result, -3.days().hours(12));
 
     Ok(())
 }
@@ -28,7 +28,7 @@ fn balance_negative_time_units() -> Result {
         .nanoseconds(1);
 
     let result = sp.checked_add(-2.nanoseconds())?;
-    assert_eq!(
+    span_eq!(
         result,
         1.hour()
             .minutes(1)
@@ -39,7 +39,7 @@ fn balance_negative_time_units() -> Result {
     );
 
     let result = sp.checked_add(-2.microseconds())?;
-    assert_eq!(
+    span_eq!(
         result,
         1.hour()
             .minutes(1)
@@ -50,7 +50,7 @@ fn balance_negative_time_units() -> Result {
     );
 
     let result = sp.checked_add(-2.milliseconds())?;
-    assert_eq!(
+    span_eq!(
         result,
         1.hour()
             .minutes(1)
@@ -61,7 +61,7 @@ fn balance_negative_time_units() -> Result {
     );
 
     let result = sp.checked_add(-2.seconds())?;
-    assert_eq!(
+    span_eq!(
         result,
         1.hour()
             .minutes(0)
@@ -72,7 +72,7 @@ fn balance_negative_time_units() -> Result {
     );
 
     let result = sp.checked_add(-2.minutes())?;
-    assert_eq!(
+    span_eq!(
         result,
         0.hours()
             .minutes(59)
@@ -83,7 +83,7 @@ fn balance_negative_time_units() -> Result {
     );
 
     let result = sp.checked_add(-2.hours())?;
-    assert_eq!(
+    span_eq!(
         result,
         -58.minutes()
             .seconds(58)
@@ -100,21 +100,21 @@ fn balance_negative_time_units() -> Result {
 fn basic() -> Result {
     let sp = 1.day().minutes(5);
     let result = sp.checked_add(2.days().minutes(5))?;
-    assert_eq!(result, 3.days().minutes(10));
+    span_eq!(result, 3.days().minutes(10));
     let result = sp.checked_add(12.hours().seconds(30))?;
-    assert_eq!(result, 1.day().hours(12).minutes(5).seconds(30));
+    span_eq!(result, 1.day().hours(12).minutes(5).seconds(30));
 
     let sp = 3.days().minutes(10);
     let result = sp.checked_add(-2.days().minutes(5))?;
-    assert_eq!(result, 1.day().minutes(5));
+    span_eq!(result, 1.day().minutes(5));
 
     let sp = 1.day().hours(12).minutes(5).seconds(30);
     let result = sp.checked_add(-12.hours().seconds(30))?;
-    assert_eq!(result, 1.day().minutes(5));
+    span_eq!(result, 1.day().minutes(5));
 
     let sp = "P50DT50H50M50.500500500S".parse::<Span>()?;
     let result = sp.checked_add(sp)?;
-    assert_eq!(
+    span_eq!(
         result,
         104.days()
             .hours(5)
@@ -126,11 +126,11 @@ fn basic() -> Result {
 
     let sp = -1.hour().seconds(60);
     let result = sp.checked_add(122.minutes())?;
-    assert_eq!(result, 1.hour().minutes(1));
+    span_eq!(result, 1.hour().minutes(1));
 
     let sp = -1.hour().seconds(3_721);
     let result = sp.checked_add(61.minutes().nanoseconds(3722000000001i64))?;
-    assert_eq!(result, 1.minute().seconds(1).nanoseconds(1));
+    span_eq!(result, 1.minute().seconds(1).nanoseconds(1));
 
     Ok(())
 }
@@ -151,7 +151,7 @@ fn nanoseconds_is_number_max_safe_integer() -> Result {
         .milliseconds(((nanos / 1_000_000) % 1_000) as i64)
         .microseconds(((nanos / 1_000) % 1_000) as i64)
         .nanoseconds((nanos % 1_000) as i64);
-    assert_eq!(result, expected);
+    span_eq!(result, expected);
 
     Ok(())
 }
@@ -162,29 +162,29 @@ fn no_calendar_units() -> Result {
     let blank = Span::new();
     insta::assert_snapshot!(
         1.year().checked_add(blank).unwrap_err(),
-        @"using largest unit (which is 'year') in given span requires that a relative reference time be given, but none was provided",
+        @"using unit 'year' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     insta::assert_snapshot!(
         1.month().checked_add(blank).unwrap_err(),
-        @"using largest unit (which is 'month') in given span requires that a relative reference time be given, but none was provided",
+        @"using unit 'month' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     insta::assert_snapshot!(
         1.week().checked_add(blank).unwrap_err(),
-        @"using largest unit (which is 'week') in given span requires that a relative reference time be given, but none was provided",
+        @"using unit 'week' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
 
     let ok = 1.day();
     insta::assert_snapshot!(
         ok.checked_add(1.year()).unwrap_err(),
-        @"using largest unit (which is 'year') in given span requires that a relative reference time be given, but none was provided",
+        @"using unit 'year' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     insta::assert_snapshot!(
         ok.checked_add(1.month()).unwrap_err(),
-        @"using largest unit (which is 'month') in given span requires that a relative reference time be given, but none was provided",
+        @"using unit 'month' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     insta::assert_snapshot!(
         ok.checked_add(1.month()).unwrap_err(),
-        @"using largest unit (which is 'month') in given span requires that a relative reference time be given, but none was provided",
+        @"using unit 'month' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
 
     Ok(())

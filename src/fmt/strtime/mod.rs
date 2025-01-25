@@ -38,7 +38,7 @@ And this shows how to format a zoned datetime with a time zone abbreviation:
 ```
 use jiff::civil::date;
 
-let zdt = date(2024, 7, 15).at(17, 30, 59, 0).intz("Australia/Tasmania")?;
+let zdt = date(2024, 7, 15).at(17, 30, 59, 0).in_tz("Australia/Tasmania")?;
 // %-I instead of %I means no padding.
 let string = zdt.strftime("%A, %B %d, %Y at %-I:%M%P %Z").to_string();
 assert_eq!(string, "Monday, July 15, 2024 at 5:30pm AEST");
@@ -52,12 +52,12 @@ Or parse a zoned datetime with an IANA time zone identifier:
 use jiff::{civil::date, Zoned};
 
 let zdt = Zoned::strptime(
-    "%A, %B %d, %Y at %-I:%M%P %:V",
+    "%A, %B %d, %Y at %-I:%M%P %:Q",
     "Monday, July 15, 2024 at 5:30pm Australia/Tasmania",
 )?;
 assert_eq!(
     zdt,
-    date(2024, 7, 15).at(17, 30, 0, 0).intz("Australia/Tasmania")?,
+    date(2024, 7, 15).at(17, 30, 0, 0).in_tz("Australia/Tasmania")?,
 );
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -161,26 +161,51 @@ strings, the strings are matched without regard to ASCII case.
 | `%%` | `%%` | A literal `%`. |
 | `%A`, `%a` | `Sunday`, `Sun` | The full and abbreviated weekday, respectively. |
 | `%B`, `%b`, `%h` | `June`, `Jun`, `Jun` | The full and abbreviated month name, respectively. |
+| `%C` | `20` | The century of the year. No padding. |
 | `%D` | `7/14/24` | Equivalent to `%m/%d/%y`. |
 | `%d`, `%e` | `25`, ` 5` | The day of the month. `%d` is zero-padded, `%e` is space padded. |
 | `%F` | `2024-07-14` | Equivalent to `%Y-%m-%d`. |
 | `%f` | `000456` | Fractional seconds, up to nanosecond precision. |
 | `%.f` | `.000456` | Optional fractional seconds, with dot, up to nanosecond precision. |
+| `%G` | `2024` | An [ISO 8601 week-based] year. Zero padded to 4 digits. |
+| `%g` | `24` | A two-digit [ISO 8601 week-based] year. Represents only 1969-2068. Zero padded. |
 | `%H` | `23` | The hour in a 24 hour clock. Zero padded. |
 | `%I` | `11` | The hour in a 12 hour clock. Zero padded. |
+| `%j` | `060` | The day of the year. Range is `1..=366`. Zero padded to 3 digits. |
+| `%k` | `15` | The hour in a 24 hour clock. Space padded. |
+| `%l` | ` 3` | The hour in a 12 hour clock. Space padded. |
 | `%M` | `04` | The minute. Zero padded. |
 | `%m` | `01` | The month. Zero padded. |
+| `%n` | `\n` | Formats as a newline character. Parses arbitrary whitespace. |
 | `%P` | `am` | Whether the time is in the AM or PM, lowercase. |
 | `%p` | `PM` | Whether the time is in the AM or PM, uppercase. |
+| `%Q` | `America/New_York`, `+0530` | An IANA time zone identifier, or `%z` if one doesn't exist. |
+| `%:Q` | `America/New_York`, `+05:30` | An IANA time zone identifier, or `%:z` if one doesn't exist. |
+| `%R` | `23:30` | Equivalent to `%H:%M`. |
 | `%S` | `59` | The second. Zero padded. |
+| `%s` | `1737396540` | A Unix timestamp, in seconds. |
 | `%T` | `23:30:59` | Equivalent to `%H:%M:%S`. |
-| `%V` | `America/New_York`, `+0530` | An IANA time zone identifier, or `%z` if one doesn't exist. |
-| `%:V` | `America/New_York`, `+05:30` | An IANA time zone identifier, or `%:z` if one doesn't exist. |
+| `%t` | `\t` | Formats as a tab character. Parses arbitrary whitespace. |
+| `%U` | `03` | Week number. Week 1 is the first week starting with a Sunday. Zero padded. |
+| `%u` | `7` | The day of the week beginning with Monday at `1`. |
+| `%W` | `03` | Week number. Week 1 is the first week starting with a Monday. Zero padded. |
+| `%w` | `0` | The day of the week beginning with Sunday at `0`. |
 | `%Y` | `2024` | A full year, including century. Zero padded to 4 digits. |
 | `%y` | `24` | A two-digit year. Represents only 1969-2068. Zero padded. |
 | `%Z` | `EDT` | A time zone abbreviation. Supported when formatting only. |
 | `%z` | `+0530` | A time zone offset in the format `[+-]HHMM[SS]`. |
 | `%:z` | `+05:30` | A time zone offset in the format `[+-]HH:MM[:SS]`. |
+
+The following specifiers are deprecated. Specifically, in `jiff 0.2`, `%V` will
+parse or print the ISO 8601 week number and `%:V` will no longer be recognized.
+To emit an IANA time zone identifier (which is what `%V` does in `jiff 0.1`)
+in a forward compatible way, please use the `%Q` or `%:Q` specifier (as listed
+above).
+
+| Specifier | Example | Description |
+| --------- | ------- | ----------- |
+| `%V` | `America/New_York`, `+0530` | An IANA time zone identifier, or `%z` if one doesn't exist. |
+| `%:V` | `America/New_York`, `+05:30` | An IANA time zone identifier, or `%:z` if one doesn't exist. |
 
 When formatting, the following flags can be inserted immediately after the `%`
 and before the directive:
@@ -204,7 +229,7 @@ than 256. The number formed by these digits will correspond to the minimum
 amount of padding (to the left).
 
 The flags and padding amount above may be used when parsing as well. Most
-settings are ignoring during parsing except for padding. For example, if one
+settings are ignored during parsing except for padding. For example, if one
 wanted to parse `003` as the day `3`, then one should use `%03d`. Otherwise, by
 default, `%d` will only try to consume at most 2 digits.
 
@@ -222,7 +247,7 @@ higher level APIs like [`Timestamp::round`] or [`Zoned::round`].
 
 # Conditionally unsupported
 
-Jiff does not support `%V` or `%:V` (IANA time zone identifier) when the
+Jiff does not support `%Q` or `%:Q` (IANA time zone identifier) when the
 `alloc` crate feature is not enabled. This is because a time zone identifier
 is variable width data. If you have a use case for this, please
 [detail it in a new issue](https://github.com/BurntSushi/jiff/issues/new).
@@ -232,12 +257,16 @@ is variable width data. If you have a use case for this, please
 The following things are currently unsupported:
 
 * Parsing or formatting fractional seconds in the time time zone offset.
-* Conversion specifiers related to week numbers.
-* Conversion specifiers related to day-of-year numbers, like the Julian day.
-* The `%s` conversion specifier, for Unix timestamps in seconds.
+* A conversion specifier for an ISO 8601 week number. It is planned to support
+  this, via `%V`, in `jiff 0.2`.
+* Locale oriented conversion specifiers, such as `%c`, `%r` and `%+`, are not
+  supported by Jiff. For locale oriented datetime formatting, please use the
+  [`icu`] crate.
 
 [`strftime`]: https://pubs.opengroup.org/onlinepubs/009695399/functions/strftime.html
 [`strptime`]: https://pubs.opengroup.org/onlinepubs/009695399/functions/strptime.html
+[ISO 8601 week-based]: https://en.wikipedia.org/wiki/ISO_week_date
+[`icu`]: https://docs.rs/icu
 */
 
 use crate::{
@@ -310,7 +339,7 @@ mod parse;
 /// )?.to_zoned()?;
 /// assert_eq!(
 ///     zdt,
-///     date(2024, 7, 15).at(16, 24, 59, 123_456_789).intz("America/New_York")?,
+///     date(2024, 7, 15).at(16, 24, 59, 123_456_789).in_tz("America/New_York")?,
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -351,7 +380,7 @@ pub fn parse(
 /// ```
 /// use jiff::{civil::date, fmt::strtime, tz};
 ///
-/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).intz("America/New_York")?;
+/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 /// let string = strtime::format("%a, %-d %b %Y %T %z", &zdt)?;
 /// assert_eq!(string, "Mon, 15 Jul 2024 16:24:59 -0400");
 ///
@@ -371,7 +400,7 @@ pub fn parse(
 /// ```
 /// use jiff::{civil::date, fmt::strtime, tz};
 ///
-/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).intz("America/New_York")?;
+/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 /// let string = strtime::format("%a %b %e %I:%M:%S %p %Z %Y", &zdt)?;
 /// assert_eq!(string, "Mon Jul 15 04:24:59 PM EDT 2024");
 ///
@@ -385,7 +414,7 @@ pub fn parse(
 ///
 /// let zdt = date(2024, 7, 15)
 ///     .at(16, 24, 59, 123_456_789)
-///     .intz("America/New_York")?;
+///     .in_tz("America/New_York")?;
 /// let string = strtime::format("%Y-%m-%dT%H:%M:%S%.f%:z", &zdt)?;
 /// assert_eq!(string, "2024-07-15T16:24:59.123456789-04:00");
 ///
@@ -444,7 +473,7 @@ pub fn format(
 // the rest of Jiff's API. e.g., If a `DateTime` is requested but the format
 // string has no directives for time, we'll happy default to midnight. The
 // only catch is that you can't omit time units bigger than any present time
-// unit. For example, `%M` doesn't fly. If you want to parse minutes, you
+// unit. For example, only `%M` doesn't fly. If you want to parse minutes, you
 // also have to parse hours.
 //
 // This design does also let us possibly do "incomplete" parsing by asking
@@ -457,14 +486,19 @@ pub struct BrokenDownTime {
     year: Option<t::Year>,
     month: Option<t::Month>,
     day: Option<t::Day>,
+    day_of_year: Option<t::DayOfYear>,
+    iso_week_year: Option<t::ISOYear>,
+    week_sun: Option<t::WeekNum>,
+    week_mon: Option<t::WeekNum>,
     hour: Option<t::Hour>,
     minute: Option<t::Minute>,
     second: Option<t::Second>,
     subsec: Option<t::SubsecNanosecond>,
     offset: Option<Offset>,
-    // Only used to confirm that it is consistent
-    // with the date given. But otherwise cannot
-    // pick a date on its own.
+    // Used to confirm that it is consistent
+    // with the date given. It usually isn't
+    // used to pick a date on its own, but can
+    // be for week dates.
     weekday: Option<Weekday>,
     // Only generally useful with %I. But can still
     // be used with, say, %H. In that case, AM will
@@ -527,6 +561,109 @@ impl BrokenDownTime {
         Ok(pieces)
     }
 
+    /// Parse a prefix of the given `input` according to the given `format`
+    /// string. The offset returned corresponds to the number of bytes parsed.
+    /// That is, the length of the prefix (which may be the length of the
+    /// entire input if there are no unparsed bytes remaining).
+    ///
+    /// See the [module documentation](self) for details on what's supported.
+    ///
+    /// This is like [`BrokenDownTime::parse`], but it won't return an error
+    /// if there is input remaining after parsing the format directives.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error when parsing failed. This might happen because
+    /// the format string itself was invalid, or because the input didn't match
+    /// the format string.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil, fmt::strtime::BrokenDownTime};
+    ///
+    /// // %y only parses two-digit years, so the 99 following
+    /// // 24 is unparsed!
+    /// let input = "7/14/2499";
+    /// let (tm, offset) = BrokenDownTime::parse_prefix("%m/%d/%y", input)?;
+    /// let date = tm.to_date()?;
+    /// assert_eq!(date, civil::date(2024, 7, 14));
+    /// assert_eq!(offset, 7);
+    /// assert_eq!(&input[offset..], "99");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// If the entire input is parsed, then the offset is the length of the
+    /// input:
+    ///
+    /// ```
+    /// use jiff::{civil, fmt::strtime::BrokenDownTime};
+    ///
+    /// let (tm, offset) = BrokenDownTime::parse_prefix(
+    ///     "%m/%d/%y", "7/14/24",
+    /// )?;
+    /// let date = tm.to_date()?;
+    /// assert_eq!(date, civil::date(2024, 7, 14));
+    /// assert_eq!(offset, 7);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: how to parse a only parse of a timestamp
+    ///
+    /// If you only need, for example, the date from a timestamp, then you
+    /// can parse it as a prefix:
+    ///
+    /// ```
+    /// use jiff::{civil, fmt::strtime::BrokenDownTime};
+    ///
+    /// let input = "2024-01-20T17:55Z";
+    /// let (tm, offset) = BrokenDownTime::parse_prefix("%Y-%m-%d", input)?;
+    /// let date = tm.to_date()?;
+    /// assert_eq!(date, civil::date(2024, 1, 20));
+    /// assert_eq!(offset, 10);
+    /// assert_eq!(&input[offset..], "T17:55Z");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Note though that Jiff's default parsing functions are already quite
+    /// flexible, and one can just parse a civil date directly from a timestamp
+    /// automatically:
+    ///
+    /// ```
+    /// use jiff::civil;
+    ///
+    /// let input = "2024-01-20T17:55-05";
+    /// let date: civil::Date = input.parse()?;
+    /// assert_eq!(date, civil::date(2024, 1, 20));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Although in this case, you don't get the length of the prefix parsed.
+    #[inline]
+    pub fn parse_prefix(
+        format: impl AsRef<[u8]>,
+        input: impl AsRef<[u8]>,
+    ) -> Result<(BrokenDownTime, usize), Error> {
+        BrokenDownTime::parse_prefix_mono(format.as_ref(), input.as_ref())
+    }
+
+    #[inline]
+    fn parse_prefix_mono(
+        fmt: &[u8],
+        inp: &[u8],
+    ) -> Result<(BrokenDownTime, usize), Error> {
+        let mkoffset = util::parse::offseter(inp);
+        let mut pieces = BrokenDownTime::default();
+        let mut p = Parser { fmt, inp, tm: &mut pieces };
+        p.parse().context("strptime parsing failed")?;
+        let remainder = mkoffset(p.inp);
+        Ok((pieces, remainder))
+    }
+
     /// Format this broken down time using the format string given.
     ///
     /// See the [module documentation](self) for details on what's supported.
@@ -556,7 +693,7 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::{civil::date, fmt::strtime::BrokenDownTime};
     ///
-    /// let zdt = date(2024, 7, 9).at(16, 24, 0, 0).intz("America/New_York")?;
+    /// let zdt = date(2024, 7, 9).at(16, 24, 0, 0).in_tz("America/New_York")?;
     /// let tm = BrokenDownTime::from(&zdt);
     ///
     /// let mut buf = String::new();
@@ -606,7 +743,7 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::{civil::date, fmt::strtime::BrokenDownTime};
     ///
-    /// let zdt = date(2024, 7, 9).at(16, 24, 0, 0).intz("America/New_York")?;
+    /// let zdt = date(2024, 7, 9).at(16, 24, 0, 0).in_tz("America/New_York")?;
     /// let tm = BrokenDownTime::from(&zdt);
     /// let string = tm.to_string("%a %b %e %I:%M:%S %p %Z %Y")?;
     /// assert_eq!(string, "Tue Jul  9 04:24:00 PM EDT 2024");
@@ -632,7 +769,7 @@ impl BrokenDownTime {
     /// strategy is used if the parsed datetime is ambiguous in the time zone.
     ///
     /// If you need to use a custom time zone database for doing IANA time
-    /// zone identifier lookups (via the `%V` directive), then use
+    /// zone identifier lookups (via the `%Q` directive), then use
     /// [`BrokenDownTime::to_zoned_with`].
     ///
     /// # Warning
@@ -644,7 +781,7 @@ impl BrokenDownTime {
     /// datetime. This in turn means it will not perform daylight saving time
     /// safe arithmetic.
     ///
-    /// However, the `%V` directive may be used to both format and parse an
+    /// However, the `%Q` directive may be used to both format and parse an
     /// IANA time zone identifier. It is strongly recommended to use this
     /// directive whenever one is formatting or parsing `Zoned` values.
     ///
@@ -664,7 +801,7 @@ impl BrokenDownTime {
     /// use jiff::fmt::strtime;
     ///
     /// let zdt = strtime::parse(
-    ///     "%F %H:%M %:z %:V",
+    ///     "%F %H:%M %:z %:Q",
     ///     "2024-07-14 21:14 -04:00 US/Eastern",
     /// )?.to_zoned()?;
     /// assert_eq!(zdt.to_string(), "2024-07-14T21:14:00-04:00[US/Eastern]");
@@ -680,7 +817,7 @@ impl BrokenDownTime {
     /// use jiff::fmt::strtime;
     ///
     /// let result = strtime::parse(
-    ///     "%F %H:%M %:z %:V",
+    ///     "%F %H:%M %:z %:Q",
     ///     "2024-07-14 21:14 -05:00 US/Eastern",
     /// )?.to_zoned();
     /// assert_eq!(
@@ -703,7 +840,7 @@ impl BrokenDownTime {
     ///
     /// An IANA time zone identifier lookup is only performed when this
     /// `BrokenDownTime` contains an IANA time zone identifier. An IANA time
-    /// zone identifier can be parsed with the `%V` directive.
+    /// zone identifier can be parsed with the `%Q` directive.
     ///
     /// When an IANA time zone identifier is
     /// present but an offset is not, then the
@@ -719,7 +856,7 @@ impl BrokenDownTime {
     /// datetime. This in turn means it will not perform daylight saving time
     /// safe arithmetic.
     ///
-    /// However, the `%V` directive may be used to both format and parse an
+    /// However, the `%Q` directive may be used to both format and parse an
     /// IANA time zone identifier. It is strongly recommended to use this
     /// directive whenever one is formatting or parsing `Zoned` values.
     ///
@@ -739,7 +876,7 @@ impl BrokenDownTime {
     /// use jiff::fmt::strtime;
     ///
     /// let zdt = strtime::parse(
-    ///     "%F %H:%M %:z %:V",
+    ///     "%F %H:%M %:z %:Q",
     ///     "2024-07-14 21:14 -04:00 US/Eastern",
     /// )?.to_zoned_with(jiff::tz::db())?;
     /// assert_eq!(zdt.to_string(), "2024-07-14T21:14:00-04:00[US/Eastern]");
@@ -757,7 +894,7 @@ impl BrokenDownTime {
         match (self.offset, self.iana_time_zone()) {
             (None, None) => Err(err!(
                 "either offset (from %z) or IANA time zone identifier \
-                 (from %V) is required for parsing zoned datetime",
+                 (from %Q) is required for parsing zoned datetime",
             )),
             (Some(offset), None) => {
                 let ts = offset.to_timestamp(dt).with_context(|| {
@@ -869,10 +1006,15 @@ impl BrokenDownTime {
 
     /// Extracts a civil date from this broken down time.
     ///
+    /// This requires that the year is set along with a way to identify the day
+    /// in the year. This can be done by either setting the month and the day
+    /// of the month (`%m` and `%d`), or by setting the day of the year (`%j`).
+    ///
     /// # Errors
     ///
-    /// This returns an error if there weren't enough components to construct a
-    /// civil date. This means there must be at least a year, month and day.
+    /// This returns an error if there weren't enough components to construct
+    /// a civil date. This means there must be at least a year and either the
+    /// month and day or the day of the year.
     ///
     /// It's okay if there are more units than are needed to construct a civil
     /// datetime. For example, if this broken down time contain a civil time,
@@ -893,25 +1035,24 @@ impl BrokenDownTime {
     #[inline]
     pub fn to_date(&self) -> Result<Date, Error> {
         let Some(year) = self.year else {
+            return Err(err!("missing year, date cannot be created"));
+        };
+        let mut date = self.to_date_from_gregorian(year)?;
+        if date.is_none() {
+            date = self.to_date_from_day_of_year(year)?;
+        }
+        if date.is_none() {
+            date = self.to_date_from_week_sun(year)?;
+        }
+        if date.is_none() {
+            date = self.to_date_from_week_mon(year)?;
+        }
+        let Some(date) = date else {
             return Err(err!(
-                "parsing format did not include year directive, \
-                 without it, a date cannot be created",
+                "a month/day, day-of-year or week date must be \
+                 present to create a date, but none were found",
             ));
         };
-        let Some(month) = self.month else {
-            return Err(err!(
-                "parsing format did not include month directive, \
-                 without it, a date cannot be created",
-            ));
-        };
-        let Some(day) = self.day else {
-            return Err(err!(
-                "parsing format did not include day directive, \
-                 without it, a date cannot be created",
-            ));
-        };
-        let date =
-            Date::new_ranged(year, month, day).context("invalid date")?;
         if let Some(weekday) = self.weekday {
             if weekday != date.weekday() {
                 return Err(err!(
@@ -923,6 +1064,129 @@ impl BrokenDownTime {
             }
         }
         Ok(date)
+    }
+
+    #[inline]
+    fn to_date_from_gregorian(
+        &self,
+        year: t::Year,
+    ) -> Result<Option<Date>, Error> {
+        let (Some(month), Some(day)) = (self.month, self.day) else {
+            return Ok(None);
+        };
+        Ok(Some(Date::new_ranged(year, month, day).context("invalid date")?))
+    }
+
+    #[inline]
+    fn to_date_from_day_of_year(
+        &self,
+        year: t::Year,
+    ) -> Result<Option<Date>, Error> {
+        let Some(doy) = self.day_of_year else { return Ok(None) };
+        Ok(Some({
+            let first = Date::new_ranged(year, C(1), C(1)).unwrap();
+            first
+                .with()
+                .day_of_year(doy.get())
+                .build()
+                .context("invalid date")?
+        }))
+    }
+
+    #[inline]
+    fn to_date_from_week_sun(
+        &self,
+        year: t::Year,
+    ) -> Result<Option<Date>, Error> {
+        let (Some(week), Some(weekday)) = (self.week_sun, self.weekday) else {
+            return Ok(None);
+        };
+        let week = i16::from(week);
+        let wday = i16::from(weekday.to_sunday_zero_offset());
+        let first_of_year =
+            Date::new_ranged(year, C(1), C(1)).context("invalid date")?;
+        let first_sunday = first_of_year
+            .nth_weekday_of_month(1, Weekday::Sunday)
+            .map(|d| d.day_of_year())
+            .context("invalid date")?;
+        let doy = if week == 0 {
+            let days_before_first_sunday = 7 - wday;
+            let doy = first_sunday
+                .checked_sub(days_before_first_sunday)
+                .ok_or_else(|| {
+                    err!(
+                        "weekday `{weekday:?}` is not valid for \
+                         Sunday based week number `{week}` \
+                         in year `{year}`",
+                    )
+                })?;
+            if doy == 0 {
+                return Err(err!(
+                    "weekday `{weekday:?}` is not valid for \
+                     Sunday based week number `{week}` \
+                     in year `{year}`",
+                ));
+            }
+            doy
+        } else {
+            let days_since_first_sunday = (week - 1) * 7 + wday;
+            let doy = first_sunday + days_since_first_sunday;
+            doy
+        };
+        let date = first_of_year
+            .with()
+            .day_of_year(doy)
+            .build()
+            .context("invalid date")?;
+        Ok(Some(date))
+    }
+
+    #[inline]
+    fn to_date_from_week_mon(
+        &self,
+        year: t::Year,
+    ) -> Result<Option<Date>, Error> {
+        let (Some(week), Some(weekday)) = (self.week_mon, self.weekday) else {
+            return Ok(None);
+        };
+        let week = i16::from(week);
+        let wday = i16::from(weekday.to_monday_zero_offset());
+        let first_of_year =
+            Date::new_ranged(year, C(1), C(1)).context("invalid date")?;
+        let first_monday = first_of_year
+            .nth_weekday_of_month(1, Weekday::Monday)
+            .map(|d| d.day_of_year())
+            .context("invalid date")?;
+        let doy = if week == 0 {
+            let days_before_first_monday = 7 - wday;
+            let doy = first_monday
+                .checked_sub(days_before_first_monday)
+                .ok_or_else(|| {
+                    err!(
+                        "weekday `{weekday:?}` is not valid for \
+                         Monday based week number `{week}` \
+                         in year `{year}`",
+                    )
+                })?;
+            if doy == 0 {
+                return Err(err!(
+                    "weekday `{weekday:?}` is not valid for \
+                     Monday based week number `{week}` \
+                     in year `{year}`",
+                ));
+            }
+            doy
+        } else {
+            let days_since_first_monday = (week - 1) * 7 + wday;
+            let doy = first_monday + days_since_first_monday;
+            doy
+        };
+        let date = first_of_year
+            .with()
+            .day_of_year(doy)
+            .build()
+            .context("invalid date")?;
+        Ok(Some(date))
     }
 
     /// Extracts a civil time from this broken down time.
@@ -1164,6 +1428,166 @@ impl BrokenDownTime {
         self.day.map(|x| x.get())
     }
 
+    /// Returns the parsed day of the year (1-366), if available.
+    ///
+    /// # Example
+    ///
+    /// This shows how to parse the day of the year:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let tm = BrokenDownTime::parse("%j", "5")?;
+    /// assert_eq!(tm.day_of_year(), Some(5));
+    /// assert_eq!(tm.to_string("%j")?, "005");
+    /// assert_eq!(tm.to_string("%-j")?, "5");
+    ///
+    /// // Parsing the day of the year works for all possible legal
+    /// // values, even if, e.g., 366 isn't valid for all possible
+    /// // year/month combinations.
+    /// let tm = BrokenDownTime::parse("%j", "366")?;
+    /// assert_eq!(tm.day_of_year(), Some(366));
+    /// // This is true even if you're parsing a year:
+    /// let tm = BrokenDownTime::parse("%Y/%j", "2023/366")?;
+    /// assert_eq!(tm.day_of_year(), Some(366));
+    /// // An error only occurs when you try to extract a date:
+    /// assert_eq!(
+    ///     tm.to_date().unwrap_err().to_string(),
+    ///     "invalid date: parameter 'day-of-year' with value 366 \
+    ///      is not in the required range of 1..=365",
+    /// );
+    /// // But parsing a value that is always illegal will
+    /// // result in an error:
+    /// assert!(BrokenDownTime::parse("%j", "0").is_err());
+    /// assert!(BrokenDownTime::parse("%j", "367").is_err());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: extract a [`Date`]
+    ///
+    /// This example shows how parsing a year and a day of the year enables
+    /// the extraction of a date:
+    ///
+    /// ```
+    /// use jiff::{civil::date, fmt::strtime::BrokenDownTime};
+    ///
+    /// let tm = BrokenDownTime::parse("%Y-%j", "2024-60")?;
+    /// assert_eq!(tm.to_date()?, date(2024, 2, 29));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// When all of `%m`, `%d` and `%j` are used, then `%m` and `%d` take
+    /// priority over `%j` when extracting a `Date` from a `BrokenDownTime`.
+    /// However, `%j` is still parsed and accessible:
+    ///
+    /// ```
+    /// use jiff::{civil::date, fmt::strtime::BrokenDownTime};
+    ///
+    /// let tm = BrokenDownTime::parse(
+    ///     "%Y-%m-%d (day of year: %j)",
+    ///     "2024-02-29 (day of year: 1)",
+    /// )?;
+    /// assert_eq!(tm.to_date()?, date(2024, 2, 29));
+    /// assert_eq!(tm.day_of_year(), Some(1));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn day_of_year(&self) -> Option<i16> {
+        self.day_of_year.map(|x| x.get())
+    }
+
+    /// Returns the parsed ISO 8601 week-based year, if available.
+    ///
+    /// This is also set when a 2 digit ISO 8601 week-based year is parsed.
+    /// (But that's limited to the years 1969 to 2068, inclusive.)
+    ///
+    /// # Example
+    ///
+    /// This shows how to parse just an ISO 8601 week-based year:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let tm = BrokenDownTime::parse("%G", "2024")?;
+    /// assert_eq!(tm.iso_week_year(), Some(2024));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// And 2-digit years are supported too:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let tm = BrokenDownTime::parse("%g", "24")?;
+    /// assert_eq!(tm.iso_week_year(), Some(2024));
+    /// let tm = BrokenDownTime::parse("%g", "00")?;
+    /// assert_eq!(tm.iso_week_year(), Some(2000));
+    /// let tm = BrokenDownTime::parse("%g", "69")?;
+    /// assert_eq!(tm.iso_week_year(), Some(1969));
+    ///
+    /// // 2-digit years have limited range. They must
+    /// // be in the range 0-99.
+    /// assert!(BrokenDownTime::parse("%g", "2024").is_err());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn iso_week_year(&self) -> Option<i16> {
+        self.iso_week_year.map(|x| x.get())
+    }
+
+    /// Returns the Sunday based week number.
+    ///
+    /// The week number returned is always in the range `0..=53`. Week `1`
+    /// begins on the first Sunday of the year. Any days in the year prior to
+    /// week `1` are in week `0`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::{Weekday, date}, fmt::strtime::BrokenDownTime};
+    ///
+    /// let tm = BrokenDownTime::parse("%Y-%U-%w", "2025-01-0")?;
+    /// assert_eq!(tm.year(), Some(2025));
+    /// assert_eq!(tm.sunday_based_week(), Some(1));
+    /// assert_eq!(tm.weekday(), Some(Weekday::Sunday));
+    /// assert_eq!(tm.to_date()?, date(2025, 1, 5));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn sunday_based_week(&self) -> Option<i8> {
+        self.week_sun.map(|x| x.get())
+    }
+
+    /// Returns the Monday based week number.
+    ///
+    /// The week number returned is always in the range `0..=53`. Week `1`
+    /// begins on the first Monday of the year. Any days in the year prior to
+    /// week `1` are in week `0`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::{Weekday, date}, fmt::strtime::BrokenDownTime};
+    ///
+    /// let tm = BrokenDownTime::parse("%Y-%U-%w", "2025-01-1")?;
+    /// assert_eq!(tm.year(), Some(2025));
+    /// assert_eq!(tm.sunday_based_week(), Some(1));
+    /// assert_eq!(tm.weekday(), Some(Weekday::Monday));
+    /// assert_eq!(tm.to_date()?, date(2025, 1, 6));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn monday_based_week(&self) -> Option<i8> {
+        self.week_mon.map(|x| x.get())
+    }
+
     /// Returns the parsed hour, if available.
     ///
     /// The hour returned incorporates [`BrokenDownTime::meridiem`] if it's
@@ -1331,14 +1755,14 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::{fmt::strtime::BrokenDownTime, tz};
     ///
-    /// let tm = BrokenDownTime::parse("%V", "US/Eastern")?;
+    /// let tm = BrokenDownTime::parse("%Q", "US/Eastern")?;
     /// assert_eq!(tm.iana_time_zone(), Some("US/Eastern"));
     /// assert_eq!(tm.offset(), None);
     ///
-    /// // Note that %V (and %:V) also support parsing an offset
+    /// // Note that %Q (and %:Q) also support parsing an offset
     /// // as a fallback. If that occurs, an IANA time zone
     /// // identifier is not available.
-    /// let tm = BrokenDownTime::parse("%V", "-0400")?;
+    /// let tm = BrokenDownTime::parse("%Q", "-0400")?;
     /// assert_eq!(tm.iana_time_zone(), None);
     /// assert_eq!(tm.offset(), Some(tz::offset(-4)));
     ///
@@ -1523,6 +1947,137 @@ impl BrokenDownTime {
         Ok(())
     }
 
+    /// Set the day of year on this broken down time.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given day is out of range.
+    ///
+    /// Note that setting a day to a value that is legal in any context
+    /// is always valid, even if it isn't valid for the year, month and
+    /// day-of-month components already set.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// // out of range
+    /// assert!(tm.set_day_of_year(Some(367)).is_err());
+    /// tm.set_day_of_year(Some(31))?;
+    /// assert_eq!(tm.to_string("%j")?, "031");
+    ///
+    /// // Works even if the resulting date is invalid.
+    /// let mut tm = BrokenDownTime::default();
+    /// tm.set_year(Some(2023))?;
+    /// tm.set_day_of_year(Some(366))?; // 2023 wasn't a leap year
+    /// assert_eq!(tm.to_string("%Y/%j")?, "2023/366");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_day_of_year(&mut self, day: Option<i16>) -> Result<(), Error> {
+        self.day_of_year = match day {
+            None => None,
+            Some(day) => Some(t::DayOfYear::try_new("day-of-year", day)?),
+        };
+        Ok(())
+    }
+
+    /// Set the ISO 8601 week-based year on this broken down time.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given year is out of range.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// // out of range
+    /// assert!(tm.set_iso_week_year(Some(10_000)).is_err());
+    /// tm.set_iso_week_year(Some(2024))?;
+    /// assert_eq!(tm.to_string("%G")?, "2024");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_iso_week_year(
+        &mut self,
+        year: Option<i16>,
+    ) -> Result<(), Error> {
+        self.iso_week_year = match year {
+            None => None,
+            Some(year) => Some(t::ISOYear::try_new("year", year)?),
+        };
+        Ok(())
+    }
+
+    /// Set the Sunday based week number.
+    ///
+    /// The week number returned is always in the range `0..=53`. Week `1`
+    /// begins on the first Sunday of the year. Any days in the year prior to
+    /// week `1` are in week `0`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// // out of range
+    /// assert!(tm.set_sunday_based_week(Some(56)).is_err());
+    /// tm.set_sunday_based_week(Some(9))?;
+    /// assert_eq!(tm.to_string("%U")?, "09");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_sunday_based_week(
+        &mut self,
+        week_number: Option<i8>,
+    ) -> Result<(), Error> {
+        self.week_sun = match week_number {
+            None => None,
+            Some(wk) => Some(t::WeekNum::try_new("week-number", wk)?),
+        };
+        Ok(())
+    }
+
+    /// Set the Monday based week number.
+    ///
+    /// The week number returned is always in the range `0..=53`. Week `1`
+    /// begins on the first Monday of the year. Any days in the year prior to
+    /// week `1` are in week `0`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::fmt::strtime::BrokenDownTime;
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// // out of range
+    /// assert!(tm.set_monday_based_week(Some(56)).is_err());
+    /// tm.set_monday_based_week(Some(9))?;
+    /// assert_eq!(tm.to_string("%W")?, "09");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_monday_based_week(
+        &mut self,
+        week_number: Option<i8>,
+    ) -> Result<(), Error> {
+        self.week_mon = match week_number {
+            None => None,
+            Some(wk) => Some(t::WeekNum::try_new("week-number", wk)?),
+        };
+        Ok(())
+    }
+
     /// Set the hour on this broken down time.
     ///
     /// # Errors
@@ -1694,11 +2249,11 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::{civil::date, fmt::strtime::BrokenDownTime, tz};
     ///
-    /// let zdt = date(2024, 8, 28).at(14, 56, 0, 0).intz("US/Eastern")?;
+    /// let zdt = date(2024, 8, 28).at(14, 56, 0, 0).in_tz("US/Eastern")?;
     /// let mut tm = BrokenDownTime::from(&zdt);
     /// tm.set_offset(Some(tz::offset(12)));
     /// assert_eq!(
-    ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %V %:z")?,
+    ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %Q %:z")?,
     ///     "2024-08-28 at 14:56:00 in US/Eastern +12:00",
     /// );
     ///
@@ -1753,11 +2308,11 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::{civil::date, fmt::strtime::BrokenDownTime, tz};
     ///
-    /// let zdt = date(2024, 8, 28).at(14, 56, 0, 0).intz("US/Eastern")?;
+    /// let zdt = date(2024, 8, 28).at(14, 56, 0, 0).in_tz("US/Eastern")?;
     /// let mut tm = BrokenDownTime::from(&zdt);
     /// tm.set_iana_time_zone(Some(String::from("Australia/Tasmania")));
     /// assert_eq!(
-    ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %V %:z")?,
+    ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %Q %:z")?,
     ///     "2024-08-28 at 14:56:00 in Australia/Tasmania -04:00",
     /// );
     ///
@@ -1766,7 +2321,7 @@ impl BrokenDownTime {
     /// let mut tm = BrokenDownTime::from(&zdt);
     /// tm.set_iana_time_zone(Some(String::from("Clearly/Invalid")));
     /// assert_eq!(
-    ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %V %:z")?,
+    ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %Q %:z")?,
     ///     "2024-08-28 at 14:56:00 in Clearly/Invalid -04:00",
     /// );
     ///
@@ -1845,7 +2400,7 @@ impl<'a> From<&'a Zoned> for BrokenDownTime {
 
 impl From<Timestamp> for BrokenDownTime {
     fn from(ts: Timestamp) -> BrokenDownTime {
-        let dt = TimeZone::UTC.to_datetime(ts);
+        let dt = Offset::UTC.to_datetime(ts);
         BrokenDownTime {
             offset: Some(Offset::UTC),
             ..BrokenDownTime::from(dt)
@@ -1864,7 +2419,6 @@ impl From<DateTime> for BrokenDownTime {
             minute: Some(t.minute_ranged()),
             second: Some(t.second_ranged()),
             subsec: Some(t.subsec_nanosecond_ranged()),
-            weekday: Some(d.weekday()),
             meridiem: Some(Meridiem::from(t)),
             ..BrokenDownTime::default()
         }
@@ -1877,7 +2431,6 @@ impl From<Date> for BrokenDownTime {
             year: Some(d.year_ranged()),
             month: Some(d.month_ranged()),
             day: Some(d.day_ranged()),
-            weekday: Some(d.weekday()),
             ..BrokenDownTime::default()
         }
     }
@@ -1937,7 +2490,7 @@ impl From<Time> for BrokenDownTime {
 /// ```
 /// use jiff::{civil::date, fmt::strtime, tz};
 ///
-/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).intz("America/New_York")?;
+/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 /// let string = zdt.strftime("%a, %-d %b %Y %T %z").to_string();
 /// assert_eq!(string, "Mon, 15 Jul 2024 16:24:59 -0400");
 ///
@@ -1949,7 +2502,7 @@ impl From<Time> for BrokenDownTime {
 /// ```
 /// use jiff::{civil::date, fmt::strtime, tz};
 ///
-/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).intz("America/New_York")?;
+/// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 ///
 /// let string = format!("the date is: {}", zdt.strftime("%-m/%-d/%-Y"));
 /// assert_eq!(string, "the date is: 7/15/2024");

@@ -27,7 +27,7 @@ fn mk<const N: usize>(units: [i64; N]) -> Span {
 fn balance_negative_result() -> Result {
     let span1 = -60.hours();
     let span2 = span1.round(SpanRound::new().largest(Unit::Day))?;
-    assert_eq!(span2, -2.days().hours(12));
+    span_eq!(span2, -2.days().hours(12));
     Ok(())
 }
 
@@ -37,7 +37,7 @@ fn balance_subseconds() -> Result {
     let span1 =
         999.milliseconds().microseconds(999_999).nanoseconds(999_999_999);
     let span2 = span1.round(SpanRound::new().largest(Unit::Second))?;
-    assert_eq!(
+    span_eq!(
         span2,
         2.seconds().milliseconds(998).microseconds(998).nanoseconds(999)
     );
@@ -45,7 +45,7 @@ fn balance_subseconds() -> Result {
     let span1 =
         -999.milliseconds().microseconds(999_999).nanoseconds(999_999_999);
     let span2 = span1.round(SpanRound::new().largest(Unit::Second))?;
-    assert_eq!(
+    span_eq!(
         span2,
         -2.seconds().milliseconds(998).microseconds(998).nanoseconds(999)
     );
@@ -67,39 +67,39 @@ fn calendar_possibly_required() -> Result {
         sp.round(Unit::Hour).unwrap_err(),
         @"using largest unit (which is 'year') in given span requires that a relative reference time be given, but none was provided",
     );
-    assert_eq!(sp.round(relative_years)?, 1.year());
-    assert_eq!(sp.round(relative_months)?, 12.months());
-    assert_eq!(sp.round(relative_weeks)?, 52.weeks().days(1));
-    assert_eq!(sp.round(relative_days)?, 365.days());
+    span_eq!(sp.round(relative_years)?, 1.year());
+    span_eq!(sp.round(relative_months)?, 12.months());
+    span_eq!(sp.round(relative_weeks)?, 52.weeks().days(1));
+    span_eq!(sp.round(relative_days)?, 365.days());
 
     let sp = 12.months();
     insta::assert_snapshot!(
         sp.round(Unit::Hour).unwrap_err(),
         @"using largest unit (which is 'month') in given span requires that a relative reference time be given, but none was provided",
     );
-    assert_eq!(sp.round(relative_years)?, 1.year());
-    assert_eq!(sp.round(relative_months)?, 12.months());
-    assert_eq!(sp.round(relative_weeks)?, 52.weeks().days(1));
-    assert_eq!(sp.round(relative_days)?, 365.days());
+    span_eq!(sp.round(relative_years)?, 1.year());
+    span_eq!(sp.round(relative_months)?, 12.months());
+    span_eq!(sp.round(relative_weeks)?, 52.weeks().days(1));
+    span_eq!(sp.round(relative_days)?, 365.days());
 
     let sp = 5.weeks();
     insta::assert_snapshot!(
         sp.round(Unit::Hour).unwrap_err(),
         @"using largest unit (which is 'week') in given span requires that a relative reference time be given, but none was provided",
     );
-    assert_eq!(sp.round(relative_years)?, 1.month().days(4));
-    assert_eq!(sp.round(relative_months)?, 1.month().days(4));
-    assert_eq!(sp.round(relative_weeks)?, 5.weeks());
-    assert_eq!(sp.round(relative_days)?, 35.days());
+    span_eq!(sp.round(relative_years)?, 1.month().days(4));
+    span_eq!(sp.round(relative_months)?, 1.month().days(4));
+    span_eq!(sp.round(relative_weeks)?, 5.weeks());
+    span_eq!(sp.round(relative_days)?, 35.days());
 
     let sp = 42.days();
-    assert_eq!(sp.round(relative_years)?, 1.month().days(11));
-    assert_eq!(sp.round(relative_months)?, 1.month().days(11));
-    assert_eq!(sp.round(relative_weeks)?, 6.weeks());
-    assert_eq!(sp.round(relative_days)?, 42.days());
+    span_eq!(sp.round(relative_years)?, 1.month().days(11));
+    span_eq!(sp.round(relative_months)?, 1.month().days(11));
+    span_eq!(sp.round(relative_weeks)?, 6.weeks());
+    span_eq!(sp.round(relative_days)?, 42.days());
     // We don't need a relative datetime for rounding days.
     // In this case, we assume civil day (always 24 hours).
-    assert_eq!(sp.round(Unit::Hour)?, 42.days());
+    span_eq!(sp.round(Unit::Hour)?, 42.days());
 
     Ok(())
 }
@@ -117,7 +117,7 @@ fn dst_balancing_result() -> Result {
         "1999-10-29T01-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result =
         sp.round(SpanRound::new().largest(Unit::Year).relative(&zdt))?;
-    assert_eq!(result, 1.year().hours(24));
+    span_eq!(result, 1.year().hours(24));
 
     // Added my own test here using a shorter duration since we use an
     // actual time zone for testing, where as Temporal uses a "dummy" time
@@ -129,7 +129,7 @@ fn dst_balancing_result() -> Result {
         "2000-09-29T01-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result =
         sp.round(SpanRound::new().largest(Unit::Year).relative(&zdt))?;
-    assert_eq!(result, 1.month().hours(24));
+    span_eq!(result, 1.month().hours(24));
 
     // Try one month earlier, and we balance up to 1 day.
     let sp = 1.month().hours(24);
@@ -137,7 +137,7 @@ fn dst_balancing_result() -> Result {
         "2000-08-29T01-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result =
         sp.round(SpanRound::new().largest(Unit::Year).relative(&zdt))?;
-    assert_eq!(result, 1.month().days(1));
+    span_eq!(result, 1.month().days(1));
 
     let sp = 24.hours().nanoseconds(5);
     let zdt =
@@ -150,7 +150,7 @@ fn dst_balancing_result() -> Result {
             .increment(30)
             .relative(&zdt),
     )?;
-    assert_eq!(result, 24.hours().minutes(30));
+    span_eq!(result, 24.hours().minutes(30));
 
     Ok(())
 }
@@ -168,35 +168,35 @@ fn dst_rounding_result() -> Result {
         "2000-02-18T02-08[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result =
         sp.round(SpanRound::new().smallest(Unit::Month).relative(&zdt))?;
-    assert_eq!(result, 2.months());
+    span_eq!(result, 2.months());
 
     let sp = 1.month().days(15).minutes(30);
     let zdt =
         "2000-03-02T02-08[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result =
         sp.round(SpanRound::new().smallest(Unit::Month).relative(&zdt))?;
-    assert_eq!(result, 2.months());
+    span_eq!(result, 2.months());
     let result = sp.round(
         SpanRound::new()
             .smallest(Unit::Month)
             .mode(RoundMode::HalfTrunc)
             .relative(&zdt),
     )?;
-    assert_eq!(result, 1.month());
+    span_eq!(result, 1.month());
 
     let sp = 11.hours().minutes(30);
     let zdt =
         "2000-04-02T00:00:00[America/Los_Angeles]".parse::<jiff::Zoned>()?;
     let result =
         sp.round(SpanRound::new().smallest(Unit::Day).relative(&zdt))?;
-    assert_eq!(result, 1.day());
+    span_eq!(result, 1.day());
     let result = sp.round(
         SpanRound::new()
             .smallest(Unit::Day)
             .mode(RoundMode::HalfTrunc)
             .relative(&zdt),
     )?;
-    assert_eq!(result, 0.days());
+    span_eq!(result, 0.days());
 
     Ok(())
 }
@@ -231,15 +231,15 @@ fn february_leap_year() -> Result {
 
     let sp = 3.years().months(11).days(27);
     let result = sp.round(options)?;
-    assert_eq!(result, 3.years().months(11).days(27));
+    span_eq!(result, 3.years().months(11).days(27));
 
     let sp = 3.years().months(11).days(28);
     let result = sp.round(options)?;
-    assert_eq!(result, 3.years().months(11).days(28));
+    span_eq!(result, 3.years().months(11).days(28));
 
     let sp = 3.years().months(11).days(29);
     let result = sp.round(options)?;
-    assert_eq!(result, 4.years());
+    span_eq!(result, 4.years());
 
     Ok(())
 }
@@ -252,25 +252,25 @@ fn largestunit_correct_rebalancing() -> Result {
     let options = SpanRound::new().largest(Unit::Month).relative(d);
 
     let sp = Span::new().days(days);
-    assert_eq!(sp.round(options)?, 3.months().days(11));
+    span_eq!(sp.round(options)?, 3.months().days(11));
 
     let sp = Span::new().hours(days * 24);
-    assert_eq!(sp.round(options)?, 3.months().days(11));
+    span_eq!(sp.round(options)?, 3.months().days(11));
 
     let sp = Span::new().minutes(days * 24 * 60);
-    assert_eq!(sp.round(options)?, 3.months().days(11));
+    span_eq!(sp.round(options)?, 3.months().days(11));
 
     let sp = Span::new().seconds(days * 24 * 60 * 60);
-    assert_eq!(sp.round(options)?, 3.months().days(11));
+    span_eq!(sp.round(options)?, 3.months().days(11));
 
     let sp = Span::new().milliseconds(days * 24 * 60 * 60 * 1_000);
-    assert_eq!(sp.round(options)?, 3.months().days(11));
+    span_eq!(sp.round(options)?, 3.months().days(11));
 
     let sp = Span::new().microseconds(days * 24 * 60 * 60 * 1_000_000);
-    assert_eq!(sp.round(options)?, 3.months().days(11));
+    span_eq!(sp.round(options)?, 3.months().days(11));
 
     let sp = Span::new().nanoseconds(days * 24 * 60 * 60 * 1_000_000_000);
-    assert_eq!(sp.round(options)?, 3.months().days(11));
+    span_eq!(sp.round(options)?, 3.months().days(11));
 
     Ok(())
 }
@@ -415,8 +415,9 @@ fn largestunit_smallestunit_combinations_relative() -> Result {
                         .smallest(smallest)
                         .relative(relative),
                 )?;
-                assert_eq!(
-                    result, expected,
+                span_eq!(
+                    result,
+                    expected,
                     "largest unit {largest:?}, \
                      smallest unit {smallest:?}, \
                      and relative to {relative:?}",
@@ -509,8 +510,9 @@ fn largestunit_smallestunit_combinations() -> Result {
         for &(smallest, expected) in entry.iter() {
             let result = sp
                 .round(SpanRound::new().largest(largest).smallest(smallest))?;
-            assert_eq!(
-                result, expected,
+            span_eq!(
+                result,
+                expected,
                 "largest unit {largest:?}, smallest unit {smallest:?}",
             );
         }
@@ -526,33 +528,33 @@ fn largestunit_smallestunit_default() -> Result {
 
     let almost_year = 364.days();
     let options = SpanRound::new().smallest(Unit::Year).relative(d);
-    assert_eq!(almost_year.round(options)?, 1.year());
+    span_eq!(almost_year.round(options)?, 1.year());
 
     let almost_month = 27.days();
     let options = SpanRound::new().smallest(Unit::Month).relative(d);
-    assert_eq!(almost_month.round(options)?, 1.month());
+    span_eq!(almost_month.round(options)?, 1.month());
 
     let almost_week = 6.days();
     let options = SpanRound::new().smallest(Unit::Week).relative(d);
-    assert_eq!(almost_week.round(options)?, 1.week());
+    span_eq!(almost_week.round(options)?, 1.week());
 
     let almost_day = 86_399.seconds();
-    assert_eq!(almost_day.round(Unit::Day)?, 1.day());
+    span_eq!(almost_day.round(Unit::Day)?, 1.day());
 
     let almost_hour = 3599.seconds();
-    assert_eq!(almost_hour.round(Unit::Hour)?, 1.hour());
+    span_eq!(almost_hour.round(Unit::Hour)?, 1.hour());
 
     let almost_minute = 59.seconds();
-    assert_eq!(almost_minute.round(Unit::Minute)?, 1.minute());
+    span_eq!(almost_minute.round(Unit::Minute)?, 1.minute());
 
     let almost_second = 999_999_999.nanoseconds();
-    assert_eq!(almost_second.round(Unit::Second)?, 1.second());
+    span_eq!(almost_second.round(Unit::Second)?, 1.second());
 
     let almost_millisecond = 999_999.nanoseconds();
-    assert_eq!(almost_millisecond.round(Unit::Millisecond)?, 1.millisecond());
+    span_eq!(almost_millisecond.round(Unit::Millisecond)?, 1.millisecond());
 
     let almost_microsecond = 999.nanoseconds();
-    assert_eq!(almost_microsecond.round(Unit::Microsecond)?, 1.microsecond());
+    span_eq!(almost_microsecond.round(Unit::Microsecond)?, 1.microsecond());
 
     Ok(())
 }
@@ -590,11 +592,11 @@ fn largestunit_smallestunit_mismatch() -> Result {
 fn largestunit_undefined() -> Result {
     let sp = "PT1h120m1.123456789s".parse::<Span>()?;
     let result = sp.round(Unit::Nanosecond)?;
-    assert_eq!(result, "PT3h1.123456789s".parse()?);
+    span_eq!(result, "PT3h1.123456789s".parse::<Span>()?);
 
     let sp = "PT120m1.123456789s".parse::<Span>()?;
     let result = sp.round(Unit::Nanosecond)?;
-    assert_eq!(result, "PT120m1.123456789s".parse()?);
+    span_eq!(result, "PT120m1.123456789s".parse::<Span>()?);
 
     Ok(())
 }
@@ -638,12 +640,12 @@ fn precision_exact_in_round_duration() -> Result {
     let sp = 100_000.hours().nanoseconds(5);
     let result =
         sp.round(SpanRound::new().smallest(Unit::Hour).mode(RoundMode::Ceil))?;
-    assert_eq!(result, 100_001.hours());
+    span_eq!(result, 100_001.hours());
 
     let sp = 1_000.days().nanoseconds(5);
     let result =
         sp.round(SpanRound::new().smallest(Unit::Day).mode(RoundMode::Ceil))?;
-    assert_eq!(result, 1001.days());
+    span_eq!(result, 1001.days());
 
     Ok(())
 }
@@ -651,7 +653,7 @@ fn precision_exact_in_round_duration() -> Result {
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/Duration/prototype/round/relativeto-undefined-throw-on-calendar-units.js
 #[test]
 fn relativeto_undefined_throw_on_calendar_units() -> Result {
-    assert_eq!(1.day().round(SpanRound::new().largest(Unit::Day))?, 1.day());
+    span_eq!(1.day().round(SpanRound::new().largest(Unit::Day))?, 1.day());
     insta::assert_snapshot!(
         1.week().round(SpanRound::new().largest(Unit::Day)).unwrap_err(),
         @"using largest unit (which is 'week') in given span requires that a relative reference time be given, but none was provided",
@@ -689,7 +691,7 @@ fn relativeto_zoneddatetime_negative_epochnanoseconds() -> Result {
     let sp = 1.day();
     let result =
         sp.round(SpanRound::new().largest(Unit::Day).relative(&zdt))?;
-    assert_eq!(result, 1.day());
+    span_eq!(result, 1.day());
     Ok(())
 }
 
@@ -715,37 +717,37 @@ fn round_cross_unit_bondary() -> Result {
     let result = sp.round(
         SpanRound::new().smallest(Unit::Month).mode(mode).relative(d),
     )?;
-    assert_eq!(result, 2.years());
+    span_eq!(result, 2.years());
 
     let sp = -1.year().months(11).days(24);
     let result = sp.round(
         SpanRound::new().smallest(Unit::Month).mode(mode).relative(d),
     )?;
-    assert_eq!(result, -2.years());
+    span_eq!(result, -2.years());
 
     let sp = 1.hour().minutes(59).seconds(59).milliseconds(900);
     let result = sp.round(
         SpanRound::new().smallest(Unit::Second).mode(mode).relative(d),
     )?;
-    assert_eq!(result, 2.hours());
+    span_eq!(result, 2.hours());
 
     let sp = -1.hour().minutes(59).seconds(59).milliseconds(900);
     let result = sp.round(
         SpanRound::new().smallest(Unit::Second).mode(mode).relative(d),
     )?;
-    assert_eq!(result, -2.hours());
+    span_eq!(result, -2.hours());
 
     let sp = 11.months().days(24);
     let result = sp.round(
         SpanRound::new().smallest(Unit::Month).mode(mode).relative(d),
     )?;
-    assert_eq!(result, 12.months());
+    span_eq!(result, 12.months());
 
     let sp = -11.months().days(24);
     let result = sp.round(
         SpanRound::new().smallest(Unit::Month).mode(mode).relative(d),
     )?;
-    assert_eq!(result, -12.months());
+    span_eq!(result, -12.months());
 
     Ok(())
 }
@@ -755,7 +757,7 @@ fn round_cross_unit_bondary() -> Result {
 fn round_negative_result() -> Result {
     let sp = -60.hours();
     let result = sp.round(Unit::Day)?;
-    assert_eq!(result, -3.days());
+    span_eq!(result, -3.days());
 
     Ok(())
 }
@@ -770,10 +772,10 @@ fn roundingincrement_non_integer() -> Result {
         .relative(date(2000, 1, 1));
 
     let result = sp.round(options.increment(2))?;
-    assert_eq!(result, 2.days());
+    span_eq!(result, 2.days());
 
     let result = sp.round(options.increment(1_000_000))?;
-    assert_eq!(result, 1_000_000.days());
+    span_eq!(result, 1_000_000.days());
 
     Ok(())
 }
@@ -818,12 +820,12 @@ fn roundingmode_ceil() -> Result {
     ];
     for &(smallest, positive, negative) in expected {
         let options = options.smallest(smallest);
-        assert_eq!(
+        span_eq!(
             sp.round(options.relative(fwd))?,
             positive,
             "{sp} rounds to {positive} for smallest unit {smallest:?}",
         );
-        assert_eq!(
+        span_eq!(
             sp.negate().round(options.relative(bck))?,
             negative,
             "-{sp} rounds to {negative} for smallest unit {smallest:?}",
@@ -873,12 +875,12 @@ fn roundingmode_expand() -> Result {
     ];
     for &(smallest, positive, negative) in expected {
         let options = options.smallest(smallest);
-        assert_eq!(
+        span_eq!(
             sp.round(options.relative(fwd))?,
             positive,
             "{sp} rounds to {positive} for smallest unit {smallest:?}",
         );
-        assert_eq!(
+        span_eq!(
             sp.negate().round(options.relative(bck))?,
             negative,
             "-{sp} rounds to {negative} for smallest unit {smallest:?}",
@@ -928,12 +930,12 @@ fn roundingmode_floor() -> Result {
     ];
     for &(smallest, positive, negative) in expected {
         let options = options.smallest(smallest);
-        assert_eq!(
+        span_eq!(
             sp.round(options.relative(fwd))?,
             positive,
             "{sp} rounds to {positive} for smallest unit {smallest:?}",
         );
-        assert_eq!(
+        span_eq!(
             sp.negate().round(options.relative(bck))?,
             negative,
             "-{sp} rounds to {negative} for smallest unit {smallest:?}",
@@ -983,12 +985,12 @@ fn roundingmode_halfceil() -> Result {
     ];
     for &(smallest, positive, negative) in expected {
         let options = options.smallest(smallest);
-        assert_eq!(
+        span_eq!(
             sp.round(options.relative(fwd))?,
             positive,
             "{sp} rounds to {positive} for smallest unit {smallest:?}",
         );
-        assert_eq!(
+        span_eq!(
             sp.negate().round(options.relative(bck))?,
             negative,
             "-{sp} rounds to {negative} for smallest unit {smallest:?}",
@@ -1038,12 +1040,12 @@ fn roundingmode_halfeven() -> Result {
     ];
     for &(smallest, positive, negative) in expected {
         let options = options.smallest(smallest);
-        assert_eq!(
+        span_eq!(
             sp.round(options.relative(fwd))?,
             positive,
             "{sp} rounds to {positive} for smallest unit {smallest:?}",
         );
-        assert_eq!(
+        span_eq!(
             sp.negate().round(options.relative(bck))?,
             negative,
             "-{sp} rounds to {negative} for smallest unit {smallest:?}",
@@ -1093,12 +1095,12 @@ fn roundingmode_halfexpand() -> Result {
     ];
     for &(smallest, positive, negative) in expected {
         let options = options.smallest(smallest);
-        assert_eq!(
+        span_eq!(
             sp.round(options.relative(fwd))?,
             positive,
             "{sp} rounds to {positive} for smallest unit {smallest:?}",
         );
-        assert_eq!(
+        span_eq!(
             sp.negate().round(options.relative(bck))?,
             negative,
             "-{sp} rounds to {negative} for smallest unit {smallest:?}",
@@ -1148,12 +1150,12 @@ fn roundingmode_halffloor() -> Result {
     ];
     for &(smallest, positive, negative) in expected {
         let options = options.smallest(smallest);
-        assert_eq!(
+        span_eq!(
             sp.round(options.relative(fwd))?,
             positive,
             "{sp} rounds to {positive} for smallest unit {smallest:?}",
         );
-        assert_eq!(
+        span_eq!(
             sp.negate().round(options.relative(bck))?,
             negative,
             "-{sp} rounds to {negative} for smallest unit {smallest:?}",
@@ -1203,12 +1205,12 @@ fn roundingmode_halftrunc() -> Result {
     ];
     for &(smallest, positive, negative) in expected {
         let options = options.smallest(smallest);
-        assert_eq!(
+        span_eq!(
             sp.round(options.relative(fwd))?,
             positive,
             "{sp} rounds to {positive} for smallest unit {smallest:?}",
         );
-        assert_eq!(
+        span_eq!(
             sp.negate().round(options.relative(bck))?,
             negative,
             "-{sp} rounds to {negative} for smallest unit {smallest:?}",
@@ -1258,12 +1260,12 @@ fn roundingmode_trunc() -> Result {
     ];
     for &(smallest, positive, negative) in expected {
         let options = options.smallest(smallest);
-        assert_eq!(
+        span_eq!(
             sp.round(options.relative(fwd))?,
             positive,
             "{sp} rounds to {positive} for smallest unit {smallest:?}",
         );
-        assert_eq!(
+        span_eq!(
             sp.negate().round(options.relative(bck))?,
             negative,
             "-{sp} rounds to {negative} for smallest unit {smallest:?}",
@@ -1313,7 +1315,7 @@ fn smallestunit() -> Result {
         ),
     ];
     for &(smallest, expected) in tests {
-        assert_eq!(
+        span_eq!(
             sp.round(smallest)?,
             expected,
             "rounding {sp} to {smallest:?}"

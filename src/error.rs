@@ -158,7 +158,7 @@ impl Error {
     /// kind of context to this error (like a file path).
     ///
     /// This is only available when the `std` feature is enabled.
-    #[cfg(any(feature = "tz-system", feature = "tzdb-zoneinfo"))]
+    #[cfg(feature = "std")]
     pub(crate) fn io(err: std::io::Error) -> Error {
         Error::from(ErrorKind::IO(IOError { err }))
     }

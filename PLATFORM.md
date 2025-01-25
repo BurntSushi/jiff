@@ -45,13 +45,16 @@ to losslessly roundtrip datetimes via an interchange format specified by
 
 ## Environment variables
 
-Jiff reads exactly two environment variables. These variables are read on
-all platforms that support environment variables. So for example, Jiff
-will respect `TZ` on Windows. Note though that some environments, like
+Jiff generally only reads two environment variables. These variables are
+read on all platforms that support environment variables. So for example,
+Jiff will respect `TZ` on Windows. Note though that some environments, like
 `wasm32-wasip1` or `wasm32-unknown-emscripten`, are sandboxed by default. A
 sandboxed environment typically makes reading environment variables set outside
-the sandbox impossible (or require opt-in support, such as [wasmtime]'s `-S
-inherit-env` or `--env` flags).
+the sandbox impossible (or require opt-in support, such as [wasmtime]'s
+`-S inherit-env` or `--env` flags).
+
+Jiff may read additional environment variables for platform specific
+integration.
 
 ### `TZDIR`
 
@@ -96,6 +99,22 @@ for an [existing issue for your platform][issue-platform], and if one doesn't
 exist, please [file a new issue][issue-new]. Otherwise, setting `TZ` should be
 considered as a work-around.
 
+### `ANDROID_ROOT` and `ANDROID_DATA`
+
+These environment variables are read to help determine the location of
+Android's [Concatenated Time Zone Database]. If `ANDROID_ROOT` is not defined,
+then Jiff uses `/system` as its default value. If `ANDROID_DATA` is not
+defined, then Jiff uses `/data/misc` as its default value.
+
+Note that these environment variables are not necessarily only read on
+Android, although they likely only make sense in the context of an Android
+environment. This is because Jiff's supported for the Concatenated Time
+Zone Database is platform independent. For example, Jiff will let users
+create a database from a Concatenated Time Zone Database file via the
+`TimeZoneDatabase::from_concatenated_path` API on _any_ platform. This is
+intended to enable maximum flexibility, and because there is no specific
+reason to make the Concatenated Time Zone Database format Android-specific.
+
 ## Platforms
 
 This section lists the platforms that Jiff has explicit support for. Support
@@ -126,14 +145,14 @@ detect. If your Unix system uses a different directory, you may try to submit
 a PR adding support for it in Jiff proper, or just set the `TZDIR` environment
 variable.
 
-The existence of `/usr/share/zoneinfo` is not guaranteed in all Unix environments.
-For example, stripped down Docker containers might omit a full copy of the
-time zone database. Jiff will still work in such environments, but all IANA
-time zone identifier lookups will fail. To fix this, you can either install the
-IANA Time Zone Database into your environment, or you can enable the Jiff
-crate feature `tzdb-bundle-always`. This compile time setting will cause Jiff
-to depend on `jiff-tzdb`, which includes a complete copy of the IANA Time Zone
-Database embedded into the compiled artifact.
+The existence of `/usr/share/zoneinfo` is not guaranteed in all Unix
+environments. For example, stripped down Docker containers might omit a full
+copy of the time zone database. Jiff will still work in such environments, but
+all IANA time zone identifier lookups will fail. To fix this, you can either
+install the IANA Time Zone Database into your environment, or you can enable
+the Jiff crate feature `tzdb-bundle-always`. This compile time setting will
+cause Jiff to depend on `jiff-tzdb`, which includes a complete copy of the IANA
+Time Zone Database embedded into the compiled artifact.
 
 Bundling the IANA Time Zone Database should only be done as a last resort.
 Especially on Unix systems, it is greatly preferred to use the system copy of
@@ -181,6 +200,84 @@ in lieu of the IANA time zone identifier.
 different way to configure the system time zone, please check [available
 platform issues][issue-platform] for a related issue. If one doesn't exist,
 please [create a new issue][issue-new].)
+
+### Android
+
+#### Current time
+
+All Android platforms should be supported in terms of getting the current time.
+This support comes from Rust's standard library.
+
+#### IANA Time Zone Database
+
+Unlike effectively every other Unix system, Android has its own special time
+zone database format. While it still makes use of TZif formatted data for
+defining time zone transitions themselves, it does not use the `zoneinfo`
+directory format (where there is one file per time zone). Instead, it
+_concatenates_ all time zone files into one single file. This is combined with
+some meta data that makes it quick to search for time zones by their IANA time
+zone identifier.
+
+This format is technically unnamed, but Jiff refers to it as the [Concatenated
+Time Zone Database] format. It has no formal specification. Jiff's
+implementation was done by inferring the format implemented by the Android
+Platform and also the implementation in [Go's standard library]. In practice
+this tends to work well, although there are obviously no guarantees. This is
+a practical trade-off given that there doesn't appear to be any obvious
+alternative. Moreover, others (such as Go, a project maintained by the same
+company that maintains Android) are already doing it, so it seems likely that
+if Android decides to make breaking changes to the format, they'll need to
+version it in some way to avoid breaking the ecosystem.
+
+Note that Jiff supports reading this format on all platforms, not just Android.
+For example, Jiff users can use the `TimeZoneDatabase::from_concatenated_path`
+API to create a `TimeZoneDatabase` from a concatenated `tzdata` file on any
+platform.
+
+If users of Jiff are uncomfortable relying on Android's "unstable" time zone
+database format, then there are three options available to them after disabling
+the `tzdb-concatenated` crate feature:
+
+* They can own the responsibility of putting a standard `zoneinfo` database
+installation into their environment. Then set the `TZDIR` environment variable
+to point at it, and Jiff will automatically use it.
+* Enable the `tzdb-bundle-always` crate feature. This will cause all time zone
+database to be compiled into your binary. Nothing else needs to be done. Jiff
+will automatically use the bundled copy.
+* Manually create `TimeZone` values via `TimeZone::tzif` from TZif formatted
+data. With this approach, you may need to change how you use Jiff in some
+cases. For example, any `in_tz` method will need to be changed to use the
+`to_zoned` equivalent.
+
+#### System time zone
+
+The system time zone on Android is discovered by reading the
+`persist.sys.timezone` property.
+
+Note that in addition to Android developers citing the [Concatenated Time Zone
+Database] format as unstable, they also discourage the discovery of the system
+time zone through properties as well. (See [chrono#1018] and [chrono#1148]
+for some discussion on this topic.) For Jiff at least, there is no feasible
+alternative. Apparently, the blessed API is to use their Java libraries, but
+that doesn't seem feasible to Jiff since I (Jiff's author) is unaware of a
+mechanism for easily calling Java code from Rust. The only option left is to
+use their `libc` APIs, which they did at least improve to make them thread
+safe, but this isn't enough for Jiff. For Jiff, we really want the actual IANA
+time zone identifier, and it isn't clear how to discover this from their `libc`
+APIs. Moreover, Jiff supports far more sophisticated operations on a time zone
+(like dealing with discontinuities in civil time) that cannot be implemented on
+top of `libc`-style APIs. Using Android's `libc` APIs for time handling would
+be a huge regression compared to all other platforms.
+
+It's worth noting that all other popular Unix systems provide at least some
+reliable means of both querying the time zone database _and_ discovering the
+system-wide IANA time zone identifier. Why Android is incapable of following
+the existing conventions for Unix systems is unclear.
+
+If users of Jiff are uncomfortable relying on Android's `persist.sys.timezone`
+property, then they should avoid APIs like `Zoned::now` and `TimeZone::system`.
+Instead, they can use `TimeZone::UTC`, which is what the fallback time zone
+would be when the system time zone cannot be discovered.
 
 ### Windows
 
@@ -317,3 +414,7 @@ the time zone in Jiff's configured IANA Time Zone Database.
 [CLDR XML data]: https://github.com/unicode-org/cldr/raw/main/common/supplemental/windowsZones.xml
 [`Intl.DateTimeFormat`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/resolvedOptions#timezone
 [`Date.now`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/now
+[Concatenated Time Zone Database]: https://android.googlesource.com/platform/libcore/+/jb-mr2-release/luni/src/main/java/libcore/util/ZoneInfoDB.java
+[Go's standard library]: https://github.com/golang/go/blob/19e923182e590ae6568c2c714f20f32512aeb3e3/src/time/zoneinfo_android.go
+[chrono#1018]: https://github.com/chronotope/chrono/pull/1018
+[chrono#1148]: https://github.com/chronotope/chrono/pull/1148

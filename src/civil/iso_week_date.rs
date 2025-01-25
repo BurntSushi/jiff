@@ -1,10 +1,11 @@
 use crate::{
-    civil::{Date, Weekday},
+    civil::{Date, DateTime, Weekday},
     error::{err, Error},
     util::{
         rangeint::RInto,
         t::{self, ISOWeek, ISOYear, C},
     },
+    Zoned,
 };
 
 /// A type representing an [ISO 8601 week date].
@@ -117,7 +118,7 @@ impl ISOWeekDate {
     /// assert_eq!(ISOWeekDate::ZERO, ISOWeekDate::default());
     /// // The first day of the 0th year in the ISO week calendar is actually
     /// // the third day of the 0th year in the proleptic Gregorian calendar!
-    /// assert_eq!(ISOWeekDate::default().to_date(), date(0, 1, 3));
+    /// assert_eq!(ISOWeekDate::default().date(), date(0, 1, 3));
     /// ```
     pub const ZERO: ISOWeekDate = ISOWeekDate {
         year: ISOYear::new_unchecked(0),
@@ -146,14 +147,14 @@ impl ISOWeekDate {
     /// // Examples of dates at or exceeding the maximum.
     /// let max = ISOWeekDate::new(9999, 52, Weekday::Friday).unwrap();
     /// assert_eq!(max, ISOWeekDate::MAX);
-    /// assert_eq!(max.to_date(), date(9999, 12, 31));
+    /// assert_eq!(max.date(), date(9999, 12, 31));
     /// assert!(ISOWeekDate::new(9999, 52, Weekday::Saturday).is_err());
     /// assert!(ISOWeekDate::new(9999, 53, Weekday::Monday).is_err());
     ///
     /// // Examples of dates at or exceeding the minimum.
     /// let min = ISOWeekDate::new(-9999, 1, Weekday::Monday).unwrap();
     /// assert_eq!(min, ISOWeekDate::MIN);
-    /// assert_eq!(min.to_date(), date(-9999, 1, 1));
+    /// assert_eq!(min.date(), date(-9999, 1, 1));
     /// assert!(ISOWeekDate::new(-10000, 52, Weekday::Sunday).is_err());
     /// ```
     #[inline]
@@ -190,7 +191,7 @@ impl ISOWeekDate {
     /// ```
     #[inline]
     pub fn from_date(date: Date) -> ISOWeekDate {
-        date.to_iso_week_date()
+        date.iso_week_date()
     }
 
     // N.B. I tried defining a `ISOWeekDate::constant` for defining ISO week
@@ -242,7 +243,10 @@ impl ISOWeekDate {
     /// Returns the day component of this ISO 8601 week date.
     ///
     /// One can use methods on `Weekday` such as
-    /// [`Weekday::to_sunday_zero_offset`] to convert the weekday to a number.
+    /// [`Weekday::to_monday_one_offset`]
+    /// and
+    /// [`Weekday::to_sunday_zero_offset`]
+    /// to convert the weekday to a number.
     ///
     /// # Example
     ///
@@ -253,6 +257,10 @@ impl ISOWeekDate {
     /// assert_eq!(weekdate.year(), 1948);
     /// assert_eq!(weekdate.week(), 53);
     /// assert_eq!(weekdate.weekday(), Weekday::Friday);
+    /// assert_eq!(weekdate.weekday().to_monday_zero_offset(), 4);
+    /// assert_eq!(weekdate.weekday().to_monday_one_offset(), 5);
+    /// assert_eq!(weekdate.weekday().to_sunday_zero_offset(), 5);
+    /// assert_eq!(weekdate.weekday().to_sunday_one_offset(), 6);
     /// ```
     #[inline]
     pub fn weekday(self) -> Weekday {
@@ -294,8 +302,21 @@ impl ISOWeekDate {
     /// use jiff::civil::{ISOWeekDate, Weekday, date};
     ///
     /// let weekdate = ISOWeekDate::new(1948, 7, Weekday::Tuesday).unwrap();
-    /// assert_eq!(weekdate.to_date(), date(1948, 2, 10));
+    /// assert_eq!(weekdate.date(), date(1948, 2, 10));
     /// ```
+    #[inline]
+    pub fn date(self) -> Date {
+        Date::from_iso_week_date(self)
+    }
+}
+
+/// Deprecated APIs.
+impl ISOWeekDate {
+    /// A deprecated equivalent to [`ISOWeekDate::date`].
+    ///
+    /// This method will be removed in `jiff 0.2`. This was done to make naming
+    /// more consistent throughout the crate.
+    #[deprecated(since = "0.1.26", note = "use ISOWeekDate::date instead")]
     #[inline]
     pub fn to_date(self) -> Date {
         Date::from_iso_week_date(self)
@@ -451,6 +472,27 @@ impl From<Date> for ISOWeekDate {
     }
 }
 
+impl From<DateTime> for ISOWeekDate {
+    #[inline]
+    fn from(dt: DateTime) -> ISOWeekDate {
+        ISOWeekDate::from(dt.date())
+    }
+}
+
+impl From<Zoned> for ISOWeekDate {
+    #[inline]
+    fn from(zdt: Zoned) -> ISOWeekDate {
+        ISOWeekDate::from(zdt.date())
+    }
+}
+
+impl<'a> From<&'a Zoned> for ISOWeekDate {
+    #[inline]
+    fn from(zdt: &'a Zoned) -> ISOWeekDate {
+        ISOWeekDate::from(zdt.date())
+    }
+}
+
 #[cfg(test)]
 impl quickcheck::Arbitrary for ISOWeekDate {
     fn arbitrary(g: &mut quickcheck::Gen) -> ISOWeekDate {
@@ -500,8 +542,8 @@ mod tests {
             if wd == ISOWeekDate::MIN {
                 return quickcheck::TestResult::discard();
             }
-            let prev_date = wd.to_date().checked_add(-1.days()).unwrap();
-            quickcheck::TestResult::from_bool(prev_date.to_iso_week_date() < wd)
+            let prev_date = wd.date().checked_add(-1.days()).unwrap();
+            quickcheck::TestResult::from_bool(prev_date.iso_week_date() < wd)
         }
 
         fn prop_next_day_is_greater(wd: ISOWeekDate) -> quickcheck::TestResult {
@@ -510,8 +552,8 @@ mod tests {
             if wd == ISOWeekDate::MAX {
                 return quickcheck::TestResult::discard();
             }
-            let next_date = wd.to_date().checked_add(1.days()).unwrap();
-            quickcheck::TestResult::from_bool(wd < next_date.to_iso_week_date())
+            let next_date = wd.date().checked_add(1.days()).unwrap();
+            quickcheck::TestResult::from_bool(wd < next_date.iso_week_date())
         }
     }
 }

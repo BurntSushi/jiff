@@ -1,6 +1,6 @@
 use crate::tz::TimeZone;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct BundledZoneInfo;
 
 impl BundledZoneInfo {
@@ -21,5 +21,11 @@ impl BundledZoneInfo {
 
     pub(crate) fn is_definitively_empty(&self) -> bool {
         true
+    }
+}
+
+impl core::fmt::Debug for BundledZoneInfo {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "Bundled(unavailable)")
     }
 }

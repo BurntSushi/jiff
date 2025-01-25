@@ -53,7 +53,11 @@ let spans = [
 ];
 for (string, span) in spans {
     let parsed: Span = string.parse()?;
-    assert_eq!(span, parsed, "result of parsing {string:?}");
+    assert_eq!(
+        span.fieldwise(),
+        parsed.fieldwise(),
+        "result of parsing {string:?}",
+    );
 }
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -106,9 +110,9 @@ use jiff::{SignedDuration, Span, ToSpan};
 
 let expected = 2.months().days(35).hours(2).minutes(30);
 let span: Span = "2 months, 35 days, 02:30:00".parse()?;
-assert_eq!(span, expected);
+assert_eq!(span, expected.fieldwise());
 let span: Span = "P2M35DT2H30M".parse()?;
-assert_eq!(span, expected);
+assert_eq!(span, expected.fieldwise());
 
 let expected = SignedDuration::new(2 * 60 * 60 + 30 * 60, 123_456_789);
 let sdur: SignedDuration = "2h 30m 0,123456789s".parse()?;
@@ -142,7 +146,10 @@ struct Record {
 
 let json = r#"{"span":"1 year 2 months 36 hours 1100ms"}"#;
 let got: Record = serde_json::from_str(&json)?;
-assert_eq!(got.span, 1.year().months(2).hours(36).milliseconds(1100));
+assert_eq!(
+    got.span.fieldwise(),
+    1.year().months(2).hours(36).milliseconds(1100),
+);
 
 let expected = r#"{"span":"1y 2mo 36h 1100ms"}"#;
 assert_eq!(serde_json::to_string(&got).unwrap(), expected);
@@ -172,8 +179,8 @@ hour before printing:
 ```
 use jiff::{civil, RoundMode, ToSpan, Unit, ZonedDifference};
 
-let commented_at = civil::date(2024, 8, 1).at(19, 29, 13, 123_456_789).intz("US/Eastern")?;
-let now = civil::date(2024, 12, 26).at(12, 49, 0, 0).intz("US/Eastern")?;
+let commented_at = civil::date(2024, 8, 1).at(19, 29, 13, 123_456_789).in_tz("US/Eastern")?;
+let now = civil::date(2024, 12, 26).at(12, 49, 0, 0).in_tz("US/Eastern")?;
 
 // The default, with units permitted up to years.
 let span = now.since((Unit::Year, &commented_at))?;
@@ -228,7 +235,7 @@ let expected =
         .milliseconds(123)
         .microseconds(456)
         .nanoseconds(789);
-assert_eq!(span, expected);
+assert_eq!(span, expected.fieldwise());
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -337,7 +344,7 @@ As the error message suggests, parsing into a [`Span`](crate::Span) works fine:
 ```
 use jiff::Span;
 
-assert_eq!("1 day".parse::<Span>().unwrap(), Span::new().days(1));
+assert_eq!("1 day".parse::<Span>().unwrap(), Span::new().days(1).fieldwise());
 ```
 
 Jiff has this behavior because it's not possible to determine, in general,
@@ -378,22 +385,22 @@ use jiff::{civil, Span};
 let span: Span = "1 day".parse()?;
 let dur = humantime::parse_duration("1 day")?;
 
-let zdt = civil::date(2024, 3, 9).at(17, 0, 0, 0).intz("US/Eastern")?;
+let zdt = civil::date(2024, 3, 9).at(17, 0, 0, 0).in_tz("US/Eastern")?;
 
 // Adding 1 day gives the generally expected result of the same clock
 // time on the following day when adding a `Span`.
-assert_eq!(&zdt + span, civil::date(2024, 3, 10).at(17, 0, 0, 0).intz("US/Eastern")?);
+assert_eq!(&zdt + span, civil::date(2024, 3, 10).at(17, 0, 0, 0).in_tz("US/Eastern")?);
 // But with humantime, all days are assumed to be exactly 24 hours. So
 // you get an instant in time that is 24 hours later, even when some
 // days are shorter and some are longer.
-assert_eq!(&zdt + dur, civil::date(2024, 3, 10).at(18, 0, 0, 0).intz("US/Eastern")?);
+assert_eq!(&zdt + dur, civil::date(2024, 3, 10).at(18, 0, 0, 0).in_tz("US/Eastern")?);
 
 // Notice also that this inaccuracy can occur merely by a duration that
 // _crosses_ a time zone transition boundary (like DST) at any point. It
 // doesn't require your datetimes to be "close" to when DST occurred.
 let dur = humantime::parse_duration("20 day")?;
-let zdt = civil::date(2024, 3, 1).at(17, 0, 0, 0).intz("US/Eastern")?;
-assert_eq!(&zdt + dur, civil::date(2024, 3, 21).at(18, 0, 0, 0).intz("US/Eastern")?);
+let zdt = civil::date(2024, 3, 1).at(17, 0, 0, 0).in_tz("US/Eastern")?;
+assert_eq!(&zdt + dur, civil::date(2024, 3, 21).at(18, 0, 0, 0).in_tz("US/Eastern")?);
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```

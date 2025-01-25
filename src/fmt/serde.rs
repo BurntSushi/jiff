@@ -107,7 +107,10 @@ struct Record {
 
 let json = r#"{"span":"1 year 2 months 36 hours 1100ms"}"#;
 let got: Record = serde_json::from_str(&json)?;
-assert_eq!(got.span, 1.year().months(2).hours(36).milliseconds(1100));
+assert_eq!(
+    got.span,
+    1.year().months(2).hours(36).milliseconds(1100).fieldwise(),
+);
 
 let expected = r#"{"span":"1y 2mo 36h 1100ms"}"#;
 assert_eq!(serde_json::to_string(&got).unwrap(), expected);
@@ -315,7 +318,10 @@ pub mod duration {
 ///
 /// let json = r#"{"duration": "1 year 2 months 36 hours 1100ms"}"#;
 /// let got: Data = serde_json::from_str(&json).unwrap();
-/// assert_eq!(got.duration, 1.year().months(2).hours(36).milliseconds(1100));
+/// assert_eq!(
+///     got.duration,
+///     1.year().months(2).hours(36).milliseconds(1100).fieldwise(),
+/// );
 ///
 /// let expected = r#"{"duration":"1 year, 2 months, 36:00:01.100"}"#;
 /// assert_eq!(serde_json::to_string(&got).unwrap(), expected);
@@ -1075,7 +1081,9 @@ pub mod timestamp {
 
 #[cfg(test)]
 mod tests {
-    use crate::{SignedDuration, Span, Timestamp, ToSpan};
+    use crate::{
+        span::span_eq, SignedDuration, Span, SpanFieldwise, Timestamp, ToSpan,
+    };
 
     #[test]
     fn duration_friendly_compact_required() {
@@ -1131,7 +1139,7 @@ mod tests {
 
         let json = r#"{"span":"1 year 2 months 36 hours 1100ms"}"#;
         let got: Data = serde_json::from_str(&json).unwrap();
-        assert_eq!(got.span, 1.year().months(2).hours(36).milliseconds(1100));
+        span_eq!(got.span, 1.year().months(2).hours(36).milliseconds(1100));
 
         let expected = r#"{"span":"1y 2mo 36h 1100ms"}"#;
         assert_eq!(serde_json::to_string(&got).unwrap(), expected);
@@ -1150,8 +1158,8 @@ mod tests {
         let json = r#"{"span":"1 year 2 months 36 hours 1100ms"}"#;
         let got: Data = serde_json::from_str(&json).unwrap();
         assert_eq!(
-            got.span,
-            Some(1.year().months(2).hours(36).milliseconds(1100))
+            got.span.map(SpanFieldwise),
+            Some(1.year().months(2).hours(36).milliseconds(1100).fieldwise())
         );
 
         let expected = r#"{"span":"1y 2mo 36h 1100ms"}"#;

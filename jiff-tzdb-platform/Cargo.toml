@@ -1,6 +1,6 @@
 [package]
 name = "jiff-tzdb-platform"
-version = "0.1.1"  #:version
+version = "0.1.2"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 license = "Unlicense OR MIT"
 homepage = "https://github.com/BurntSushi/jiff/tree/master/jiff-tzdb-platform"
@@ -14,6 +14,7 @@ keywords = ["date", "time", "temporal", "zone", "iana"]
 workspace = ".."
 edition = "2021"
 rust-version = "1.70"
+include = ["/*.rs", "COPYING", "LICENSE-MIT", "UNLICENSE"]
 
 [lib]
 name = "jiff_tzdb_platform"
@@ -21,4 +22,4 @@ bench = false
 path = "lib.rs"
 
 [dependencies]
-jiff-tzdb = { version = "0.1.1", path = "../jiff-tzdb" }
+jiff-tzdb = { version = "0.1.2", path = "../jiff-tzdb" }

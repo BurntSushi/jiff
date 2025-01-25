@@ -4,15 +4,18 @@ use crate::{
     util::sync::Arc,
 };
 
-use self::{bundled::BundledZoneInfo, zoneinfo::ZoneInfo};
+use self::{
+    bundled::BundledZoneInfo, concatenated::Concatenated, zoneinfo::ZoneInfo,
+};
 
 mod bundled;
+mod concatenated;
 mod zoneinfo;
 
 /// Returns a copy of the global [`TimeZoneDatabase`].
 ///
 /// This is the same database used for convenience routines like
-/// [`Timestamp::intz`](crate::Timestamp::intz) and parsing routines
+/// [`Timestamp::in_tz`](crate::Timestamp::in_tz) and parsing routines
 /// for [`Zoned`](crate::Zoned) that need to do IANA time zone identifier
 /// lookups. Basically, whenever an implicit time zone database is needed,
 /// it is *this* copy of the time zone database that is used.
@@ -102,7 +105,7 @@ pub fn db() -> &'static TimeZoneDatabase {
 /// and parsing the time zone transitions out of that file requires
 /// a fair amount of work, a `TimeZoneDatabase` does a fair bit of
 /// caching. This means that the vast majority of calls to, for example,
-/// [`Timestamp::intz`](crate::Timestamp::intz) don't actually need to hit
+/// [`Timestamp::in_tz`](crate::Timestamp::in_tz) don't actually need to hit
 /// disk. It will just find a cached copy of a [`TimeZone`] and return that.
 ///
 /// Of course, with caching comes problems of cache invalidation. Invariably,
@@ -190,6 +193,7 @@ pub struct TimeZoneDatabase {
 #[cfg_attr(not(feature = "alloc"), derive(Clone))]
 struct TimeZoneDatabaseInner {
     zoneinfo: ZoneInfo,
+    concatenated: Concatenated,
     bundled: BundledZoneInfo,
 }
 
@@ -242,9 +246,17 @@ impl TimeZoneDatabase {
     /// not have a canonical installation of the Time Zone Database.
     pub fn from_env() -> TimeZoneDatabase {
         let zoneinfo = ZoneInfo::from_env();
+        let concatenated = Concatenated::from_env();
         let bundled = BundledZoneInfo::new();
-        let inner = TimeZoneDatabaseInner { zoneinfo, bundled };
-        TimeZoneDatabase { inner: Some(Arc::new(inner)) }
+        let inner = TimeZoneDatabaseInner { zoneinfo, concatenated, bundled };
+        let db = TimeZoneDatabase { inner: Some(Arc::new(inner)) };
+        if db.is_definitively_empty() {
+            warn!(
+                "could not find zoneinfo, concatenated tzdata or \
+                 bundled time zone database",
+            );
+        }
+        db
     }
 
     /// Returns a time zone database initialized from the given directory.
@@ -266,10 +278,63 @@ impl TimeZoneDatabase {
     pub fn from_dir<P: AsRef<std::path::Path>>(
         path: P,
     ) -> Result<TimeZoneDatabase, Error> {
-        let zoneinfo = ZoneInfo::from_dir(path.as_ref())?;
+        let path = path.as_ref();
+        let zoneinfo = ZoneInfo::from_dir(path)?;
+        let concatenated = Concatenated::none();
         let bundled = BundledZoneInfo::new();
-        let inner = TimeZoneDatabaseInner { zoneinfo, bundled };
-        Ok(TimeZoneDatabase { inner: Some(Arc::new(inner)) })
+        let inner = TimeZoneDatabaseInner { zoneinfo, concatenated, bundled };
+        let db = TimeZoneDatabase { inner: Some(Arc::new(inner)) };
+        if db.is_definitively_empty() {
+            warn!(
+                "could not find zoneinfo data at directory {path} \
+                 (and there is no bundled time zone database)",
+                path = path.display(),
+            );
+        }
+        Ok(db)
+    }
+
+    /// Returns a time zone database initialized from a path pointing to a
+    /// concatenated `tzdata` file. This type of format is only known to be
+    /// found on Android environments. The specific format for this file isn't
+    /// defined formally anywhere, but Jiff parses the same format supported
+    /// by the [Android Platform].
+    ///
+    /// Unlike [`TimeZoneDatabase::from_env`], this always attempts to look for
+    /// a copy of the Time Zone Database at the path given. And if it
+    /// fails to find one at that path, then an error is returned.
+    ///
+    /// Basically, you should use this when you need to use a _specific_
+    /// copy of the Time Zone Database in its concatenated format, and use
+    /// `TimeZoneDatabase::from_env` when you just want Jiff to try and "do the
+    /// right thing for you." (`TimeZoneDatabase::from_env` will attempt to
+    /// automatically detect the presence of a system concatenated `tzdata`
+    /// file on Android.)
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given path does not contain a valid
+    /// copy of the concatenated Time Zone Database.
+    ///
+    /// [Android Platform]: https://android.googlesource.com/platform/libcore/+/jb-mr2-release/luni/src/main/java/libcore/util/ZoneInfoDB.java
+    #[cfg(feature = "std")]
+    pub fn from_concatenated_path<P: AsRef<std::path::Path>>(
+        path: P,
+    ) -> Result<TimeZoneDatabase, Error> {
+        let path = path.as_ref();
+        let zoneinfo = ZoneInfo::none();
+        let concatenated = Concatenated::from_path(path)?;
+        let bundled = BundledZoneInfo::new();
+        let inner = TimeZoneDatabaseInner { zoneinfo, concatenated, bundled };
+        let db = TimeZoneDatabase { inner: Some(Arc::new(inner)) };
+        if db.is_definitively_empty() {
+            warn!(
+                "could not find concatenated tzdata in file {path} \
+                 (and there is no bundled time zone database)",
+                path = path.display(),
+            );
+        }
+        Ok(db)
     }
 
     /// Returns a [`TimeZone`] corresponding to the IANA time zone identifier
@@ -308,14 +373,15 @@ impl TimeZoneDatabase {
             }
         })?;
         if let Some(tz) = inner.zoneinfo.get(name) {
-            trace!(
-                "found time zone {name} in system zoneinfo ({:?}) database",
-                inner.zoneinfo,
-            );
+            trace!("found time zone `{name}` in {:?}", inner.zoneinfo);
+            return Ok(tz);
+        }
+        if let Some(tz) = inner.concatenated.get(name) {
+            trace!("found time zone `{name}` in {:?}", inner.concatenated);
             return Ok(tz);
         }
         if let Some(tz) = inner.bundled.get(name) {
-            trace!("found time zone {name} in bundled zoneinfo database");
+            trace!("found time zone `{name}` in {:?}", inner.bundled);
             return Ok(tz);
         }
         Err(err!("failed to find time zone `{name}` in time zone database"))
@@ -347,6 +413,7 @@ impl TimeZoneDatabase {
             };
         };
         let mut all = inner.zoneinfo.available();
+        all.extend(inner.concatenated.available());
         all.extend(inner.bundled.available());
         all.sort();
         all.dedup();
@@ -365,6 +432,7 @@ impl TimeZoneDatabase {
     pub fn reset(&self) {
         let Some(inner) = self.inner.as_deref() else { return };
         inner.zoneinfo.reset();
+        inner.concatenated.reset();
         inner.bundled.reset();
     }
 
@@ -388,6 +456,7 @@ impl TimeZoneDatabase {
     pub fn is_definitively_empty(&self) -> bool {
         let Some(inner) = self.inner.as_deref() else { return true };
         inner.zoneinfo.is_definitively_empty()
+            && inner.concatenated.is_definitively_empty()
             && inner.bundled.is_definitively_empty()
     }
 }
@@ -398,11 +467,11 @@ impl core::fmt::Debug for TimeZoneDatabase {
         let Some(inner) = self.inner.as_deref() else {
             return write!(f, "unavailable)");
         };
-        write!(f, "system={:?}", inner.zoneinfo)?;
-        if !inner.bundled.is_definitively_empty() {
-            write!(f, " and bundled")?;
-        }
-        write!(f, ")")?;
+        write!(
+            f,
+            "{:?}, {:?}, {:?}",
+            inner.zoneinfo, inner.concatenated, inner.bundled
+        )?;
         Ok(())
     }
 }

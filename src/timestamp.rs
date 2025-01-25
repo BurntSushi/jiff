@@ -27,7 +27,7 @@ use crate::{
 ///
 /// To obtain civil or "local" datetime units like year, month, day or hour, a
 /// timestamp needs to be combined with a [`TimeZone`] to create a [`Zoned`].
-/// That can be done with [`Timestamp::intz`] or [`Timestamp::to_zoned`].
+/// That can be done with [`Timestamp::in_tz`] or [`Timestamp::to_zoned`].
 ///
 /// The integer count of nanoseconds since the Unix epoch is signed, where
 /// the Unix epoch is `1970-01-01 00:00:00Z`. A positive timestamp indicates
@@ -137,7 +137,7 @@ use crate::{
 /// let ts1: Timestamp = "2024-05-03 23:30:00.123Z".parse()?;
 /// let ts2: Timestamp = "2024-02-25 07Z".parse()?;
 /// // The default is to return spans with units no bigger than seconds.
-/// assert_eq!(ts1 - ts2, 5934600.seconds().milliseconds(123));
+/// assert_eq!(ts1 - ts2, 5934600.seconds().milliseconds(123).fieldwise());
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -156,7 +156,7 @@ use crate::{
 ///     // If you want to deal in units bigger than hours, then you'll have to
 ///     // convert your timestamp to a [`Zoned`] first.
 ///     ts1.since((Unit::Hour, ts2))?,
-///     1648.hours().minutes(30).milliseconds(123),
+///     1648.hours().minutes(30).milliseconds(123).fieldwise(),
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -175,7 +175,7 @@ use crate::{
 ///             .smallest(Unit::Minute)
 ///             .largest(Unit::Hour),
 ///     )?,
-///     40.hours().minutes(30),
+///     40.hours().minutes(30).fieldwise(),
 /// );
 /// // `TimestampDifference` uses truncation as a rounding mode by default,
 /// // but you can set the rounding mode to break ties away from zero:
@@ -187,7 +187,7 @@ use crate::{
 ///             .mode(RoundMode::HalfExpand),
 ///     )?,
 ///     // Rounds up to 31 minutes.
-///     40.hours().minutes(31),
+///     40.hours().minutes(31).fieldwise(),
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -247,8 +247,8 @@ use crate::{
 /// assert_eq!(after_hour_jump.to_string(), "2024-03-10T07:30:00Z");
 ///
 /// // Now let's attach each instant to an `America/New_York` time zone.
-/// let zdt_before = before_hour_jump.intz("America/New_York")?;
-/// let zdt_after = after_hour_jump.intz("America/New_York")?;
+/// let zdt_before = before_hour_jump.in_tz("America/New_York")?;
+/// let zdt_after = after_hour_jump.in_tz("America/New_York")?;
 /// // And now we can see that even though the original instant refers to
 /// // the 2 o'clock hour, since that hour never existed on the clocks in
 /// // `America/New_York`, an instant with a time zone correctly adjusts.
@@ -308,7 +308,7 @@ use crate::{
 /// ```
 /// use jiff::civil::date;
 ///
-/// let clock = date(2024, 6, 30).at(8, 36, 0, 0).intz("America/New_York")?;
+/// let clock = date(2024, 6, 30).at(8, 36, 0, 0).in_tz("America/New_York")?;
 /// assert_eq!(clock.timestamp().to_string(), "2024-06-30T12:36:00Z");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1035,7 +1035,7 @@ impl Timestamp {
     /// use jiff::Timestamp;
     ///
     /// let ts = Timestamp::new(123_456_789, 0).unwrap();
-    /// let zdt = ts.intz("America/New_York")?;
+    /// let zdt = ts.in_tz("America/New_York")?;
     /// assert_eq!(zdt.to_string(), "1973-11-29T16:33:09-05:00[America/New_York]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1048,7 +1048,7 @@ impl Timestamp {
     /// use jiff::Timestamp;
     ///
     /// // Time zone database lookups are case insensitive!
-    /// let zdt = Timestamp::UNIX_EPOCH.intz("australia/tasmania")?;
+    /// let zdt = Timestamp::UNIX_EPOCH.in_tz("australia/tasmania")?;
     /// assert_eq!(zdt.to_string(), "1970-01-01T11:00:00+11:00[Australia/Tasmania]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1061,10 +1061,10 @@ impl Timestamp {
     /// ```
     /// use jiff::Timestamp;
     ///
-    /// assert!(Timestamp::UNIX_EPOCH.intz("does not exist").is_err());
+    /// assert!(Timestamp::UNIX_EPOCH.in_tz("does not exist").is_err());
     /// ```
     #[inline]
-    pub fn intz(self, time_zone_name: &str) -> Result<Zoned, Error> {
+    pub fn in_tz(self, time_zone_name: &str) -> Result<Zoned, Error> {
         let tz = crate::tz::db().get(time_zone_name)?;
         Ok(self.to_zoned(tz))
     }
@@ -1079,6 +1079,10 @@ impl Timestamp {
     /// where a civil datetime might correspond to more than one instant in
     /// time (i.e., a fold, typically DST ending) or no instants in time (i.e.,
     /// a gap, typically DST starting).
+    ///
+    /// In the common case of a time zone being represented as a name string,
+    /// like `Australia/Tasmania`, consider using [`Timestamp::in_tz`]
+    /// instead.
     ///
     /// # Example
     ///
@@ -1499,10 +1503,10 @@ impl Timestamp {
     ///
     /// let earlier: Timestamp = "2006-08-24T22:30:00Z".parse()?;
     /// let later: Timestamp = "2019-01-31 21:00:00Z".parse()?;
-    /// assert_eq!(earlier.until(later)?, 392509800.seconds());
+    /// assert_eq!(earlier.until(later)?, 392509800.seconds().fieldwise());
     ///
     /// // Flipping the timestamps is fine, but you'll get a negative span.
-    /// assert_eq!(later.until(earlier)?, -392509800.seconds());
+    /// assert_eq!(later.until(earlier)?, -392509800.seconds().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1547,7 +1551,7 @@ impl Timestamp {
     /// let span = ts1.until(
     ///     TimestampDifference::from(ts2).smallest(Unit::Second),
     /// )?;
-    /// assert_eq!(span, 730641929.seconds());
+    /// assert_eq!(span.to_string(), "PT730641929S");
     ///
     /// // We can combine smallest and largest units too!
     /// let span = ts1.until(
@@ -1555,7 +1559,7 @@ impl Timestamp {
     ///         .smallest(Unit::Second)
     ///         .largest(Unit::Hour),
     /// )?;
-    /// assert_eq!(span, 202956.hours().minutes(5).seconds(29));
+    /// assert_eq!(span.to_string(), "PT202956H5M29S");
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
@@ -1590,7 +1594,7 @@ impl Timestamp {
     ///
     /// let earlier: Timestamp = "2006-08-24T22:30:00Z".parse()?;
     /// let later: Timestamp = "2019-01-31 21:00:00Z".parse()?;
-    /// assert_eq!(later - earlier, 392509800.seconds());
+    /// assert_eq!(later - earlier, 392509800.seconds().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1680,7 +1684,7 @@ impl Timestamp {
     /// // between two civil times never exceeds the limits
     /// // of a `Span`.
     /// let span = Span::try_from(dur).unwrap();
-    /// assert_eq!(span, Span::new().seconds(172_800));
+    /// assert_eq!(format!("{span:#}"), "172800s");
     /// // Guaranteed to succeed and always return the original
     /// // duration because the units are always hours or smaller,
     /// // and thus uniform. This means a relative datetime is
@@ -2142,6 +2146,17 @@ impl Timestamp {
         let nanosecond = u32::try_from(self.subsec_nanosecond().abs())
             .expect("nanosecond always fit in a u32");
         (self.signum(), core::time::Duration::new(second, nanosecond))
+    }
+
+    /// A deprecated equivalent to [`Timestamp::in_tz`].
+    ///
+    /// This will be removed in `jiff 0.2`. The method was renamed to make
+    /// it clearer that the name stood for "in time zone."
+    #[deprecated(since = "0.1.25", note = "use Timestamp::in_tz instead")]
+    #[inline]
+    pub fn intz(self, time_zone_name: &str) -> Result<Zoned, Error> {
+        let tz = crate::tz::db().get(time_zone_name)?;
+        Ok(self.to_zoned(tz))
     }
 }
 
@@ -3034,7 +3049,7 @@ impl<'a> From<&'a UnsignedDuration> for TimestampArithmetic {
 ///         .mode(RoundMode::HalfExpand)
 ///         .increment(30),
 /// )?;
-/// assert_eq!(span, 175.hours());
+/// assert_eq!(format!("{span:#}"), "175h");
 ///
 /// // One less minute, and because of the HalfExpand mode, the span would
 /// // get rounded down.
@@ -3046,7 +3061,7 @@ impl<'a> From<&'a UnsignedDuration> for TimestampArithmetic {
 ///         .mode(RoundMode::HalfExpand)
 ///         .increment(30),
 /// )?;
-/// assert_eq!(span, 174.hours().minutes(30));
+/// assert_eq!(span, 174.hours().minutes(30).fieldwise());
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -3094,7 +3109,7 @@ impl TimestampDifference {
     ///         .smallest(Unit::Second)
     ///         .mode(RoundMode::HalfExpand),
     /// )?;
-    /// assert_eq!(span, 121.seconds());
+    /// assert_eq!(span, 121.seconds().fieldwise());
     ///
     /// // Because of the rounding mode, a small less-than-1-second increase in
     /// // the first timestamp can change the result of rounding.
@@ -3104,7 +3119,7 @@ impl TimestampDifference {
     ///         .smallest(Unit::Second)
     ///         .mode(RoundMode::HalfExpand),
     /// )?;
-    /// assert_eq!(span, 120.seconds());
+    /// assert_eq!(span, 120.seconds().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -3139,7 +3154,7 @@ impl TimestampDifference {
     /// let span = ts1.until(
     ///     TimestampDifference::new(ts2).largest(Unit::Second),
     /// )?;
-    /// assert_eq!(span, 211076160.seconds());
+    /// assert_eq!(format!("{span:#}"), "211076160s");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -3172,7 +3187,7 @@ impl TimestampDifference {
     ///         .mode(RoundMode::Ceil),
     /// )?;
     /// // Only one minute elapsed, but we asked to always round up!
-    /// assert_eq!(span, 1.hour());
+    /// assert_eq!(span, 1.hour().fieldwise());
     ///
     /// // Since `Ceil` always rounds toward positive infinity, the behavior
     /// // flips for a negative span.
@@ -3181,7 +3196,7 @@ impl TimestampDifference {
     ///         .smallest(Unit::Hour)
     ///         .mode(RoundMode::Ceil),
     /// )?;
-    /// assert_eq!(span, 0.hour());
+    /// assert_eq!(span, 0.hour().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -3227,7 +3242,7 @@ impl TimestampDifference {
     ///         .increment(5)
     ///         .mode(RoundMode::HalfExpand),
     /// )?;
-    /// assert_eq!(span, 275.minutes());
+    /// assert_eq!(span.to_string(), "PT275M");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```

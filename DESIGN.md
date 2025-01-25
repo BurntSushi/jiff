@@ -297,12 +297,12 @@ fn main() -> anyhow::Result<()> {
 
     // When computing durations between `Date` values,
     // the spans default to days.
-    assert_eq!(date1.until(date2)?, 31.days());
-    assert_eq!(date2.until(date3)?, 30.days());
+    assert_eq!(date1.until(date2)?, 31.days().fieldwise());
+    assert_eq!(date2.until(date3)?, 30.days().fieldwise());
 
     // But we can request bigger units!
-    assert_eq!(date1.until((Unit::Month, date2))?, 1.month());
-    assert_eq!(date2.until((Unit::Month, date3))?, 1.month());
+    assert_eq!(date1.until((Unit::Month, date2))?, 1.month().fieldwise());
+    assert_eq!(date2.until((Unit::Month, date3))?, 1.month().fieldwise());
 
     Ok(())
 }
@@ -504,9 +504,9 @@ respectively. For example, this:
 ```rust
 use jiff::{civil::date, ToSpan};
 
-let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).intz("America/New_York")?;
-let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).intz("America/New_York")?;
-assert_eq!(zdt1.until(&zdt2)?, 744.hours().seconds(36));
+let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).in_tz("America/New_York")?;
+let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).in_tz("America/New_York")?;
+assert_eq!(zdt1.until(&zdt2)?, 744.hours().seconds(36).fieldwise());
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -516,9 +516,12 @@ Is equivalent to:
 ```rust
 use jiff::{civil::date, ToSpan, ZonedDifference};
 
-let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).intz("America/New_York")?;
-let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).intz("America/New_York")?;
-assert_eq!(zdt1.until(ZonedDifference::new(&zdt2))?, 744.hours().seconds(36));
+let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).in_tz("America/New_York")?;
+let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).in_tz("America/New_York")?;
+assert_eq!(
+  zdt1.until(ZonedDifference::new(&zdt2))?,
+  744.hours().seconds(36).fieldwise(),
+);
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -529,11 +532,11 @@ configuration. For example, rounding the span returned:
 ```rust
 use jiff::{civil::date, ToSpan, Unit, ZonedDifference};
 
-let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).intz("America/New_York")?;
-let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).intz("America/New_York")?;
+let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).in_tz("America/New_York")?;
+let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).in_tz("America/New_York")?;
 assert_eq!(
     zdt1.until(ZonedDifference::new(&zdt2).smallest(Unit::Minute))?,
-    744.hours(),
+    744.hours().fieldwise(),
 );
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -553,12 +556,12 @@ instead of this:
 ```rust
 use jiff::{civil::date, ToSpan, Unit, ZonedDifference};
 
-let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).intz("America/New_York")?;
-let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).intz("America/New_York")?;
+let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).in_tz("America/New_York")?;
+let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).in_tz("America/New_York")?;
 let diff = ZonedDifference::new(&zdt2)
     .largest(Unit::Month)
     .smallest(Unit::Minute);
-assert_eq!(zdt1.until(diff)?, 1.month());
+assert_eq!(zdt1.until(diff)?, 1.month().fieldwise());
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -568,8 +571,8 @@ One would need to do this:
 ```rust
 use jiff::{civil::date, RoundMode, SpanRound, ToSpan, Unit};
 
-let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).intz("America/New_York")?;
-let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).intz("America/New_York")?;
+let zdt1 = date(2024, 7, 16).at(22, 3, 23, 0).in_tz("America/New_York")?;
+let zdt2 = date(2024, 8, 16).at(22, 3, 59, 0).in_tz("America/New_York")?;
 let span = zdt1.until(&zdt2)?;
 let rounded = span.round(
     SpanRound::new()
@@ -578,7 +581,7 @@ let rounded = span.round(
         .relative(&zdt1)
         .mode(RoundMode::Trunc),
 )?;
-assert_eq!(rounded, 1.month());
+assert_eq!(rounded, 1.month().fieldwise());
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```

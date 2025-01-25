@@ -1,5 +1,135 @@
 # CHANGELOG
 
+0.1.26 (2025-01-23)
+===================
+This is a small release with another deprecation and a new API for doing
+prefix parsing via `strptime`. There's also a bug fix for a corner case
+when dealing with daylight saving time gaps with the `Zoned::with` API.
+
+Deprecations:
+
+* [#210](https://github.com/BurntSushi/jiff/pull/210):
+  Deprecate `ISOWeekDate::to_date` in favor of `ISOWeekDate::date`.
+
+Enhancements:
+
+* [#209](https://github.com/BurntSushi/jiff/issues/209):
+  Add `fmt::strtime::BrokenDownTime::parse_prefix` for parsing only a prefix.
+
+Bug fixes:
+
+* [#211](https://github.com/BurntSushi/jiff/issues/211):
+  Fix unintuitive behavior of `Zoned::with` when time falls in a DST gap.
+
+
+0.1.25 (2025-01-21)
+===================
+This release contains a number of deprecations in preparation for a `jiff 0.2`
+release. The deprecations are meant to facilitate a smoother transition. The
+deprecations, when possible, come with new APIs that will permit users to write
+forward compatible code that will work in both `jiff 0.1` and `jiff 0.2`.
+
+This release also includes a handful of new conversion specifiers in Jiff's
+`strftime` and `strptime` APIs. This improves compatibility with the analogous
+implementation with GNU libc.
+
+Deprecations:
+
+* [#28](https://github.com/BurntSushi/jiff/issues/28):
+The `intz` methods on `Zoned`, `Timestamp`, `civil::DateTime` and `civil::Date`
+have been deprecated in favor of `in_tz`.
+* [#32](https://github.com/BurntSushi/jiff/issues/32):
+The `Eq` and `PartialEq` trait implementations on `Span` have been deprecated
+in favor of using the new `SpanFieldwise` type.
+* [#48](https://github.com/BurntSushi/jiff/issues/48):
+Silently assuming days are always 24 hours in some `Span` APIs has now been
+deprecated. This will become an error in `jiff 0.2`. To continue assuming
+days are 24 hours without a relative reference date, you can use the new
+`SpanRelativeTo::days_are_24_hours` API. In `jiff 0.1`, you'll seen a
+WARN-level log message emitted if you're code will be broken by `jiff 0.2`.
+* [#147](https://github.com/BurntSushi/jiff/issues/147):
+Both `%V` and `%:V` have been deprecated in favor of `%Q` and `%:Q`. In
+`jiff 0.2`, `%V` will correspond to the ISO 8601 week number and `%:V` will
+result in an error. This change was made to improve compatibility with other
+`strtime` implementations. `%V` and `%:V` continue to correspond to IANA
+time zone identifiers in `jiff 0.1`, but using them for parsing or formatting
+will result in a WARN-level deprecation message.
+
+Enhancements:
+
+* [#147](https://github.com/BurntSushi/jiff/issues/147):
+Adds a number of new conversion specifiers to Jiff's `strftime` and
+`strptime` APIs. Specifically, `%C`, `%G`, `%g`, `%j`, `%k`, `%l`, `%n`, `%R`,
+`%s`, `%t`, `%U`, `%u`, `%W`, `%w`. Their behavior should match the
+corresponding specifiers in GNU libc.
+
+
+0.1.24 (2025-01-16)
+===================
+This release updates Jiff's bundled copy of the [IANA Time Zone Database] to
+`2025a`. See the [`2025a` release announcement] for more details.
+
+Enhancements:
+
+* [#206](https://github.com/BurntSushi/jiff/pull/206):
+Update `jiff-tzdb` to `2025a`.
+
+[`2025a` release announcement]: https://lists.iana.org/hyperkitty/list/tz-announce@iana.org/thread/MWII7R3HMCEDNUCIYQKSSTYYR7UWK4OQ/
+
+
+0.1.23 (2025-01-13)
+===================
+This release includes some bug fixes, particularly for compilation on
+`aarch64-linux-android`. There are also some minor enhancements, such as making
+`Zoned::iso_week_date` a convenience function for `civil::Date::iso_week_date`,
+in line with similar functions.
+
+My current plan is to make a reasonably quick transition to `jiff 0.2` with a
+few pending breaking changes. I will be making some `jiff 0.1` releases with
+deprecations in order to make the transition as smooth as possible. If all goes
+well with `jiff 0.2`, then my plan is still to do a Jiff 1.0 release in the
+Summer of 2025.
+
+Deprecations:
+
+* [#197](https://github.com/BurntSushi/jiff/discussions/197):
+`Date::to_iso_week_date` has been deprecated in favor of `Date::iso_week_date`.
+
+Enhancements:
+
+* [#196](https://github.com/BurntSushi/jiff/discussions/196):
+Improve ISO week date documentation regarding weekday offsets.
+* [#197](https://github.com/BurntSushi/jiff/discussions/197):
+Add `Zoned::iso_week_date`, `DateTime::iso_week_date` and
+`Date::iso_week_date`.
+
+Bug fixes:
+
+* [#200](https://github.com/BurntSushi/jiff/issues/200):
+Fix compilation failure on Android in a Termux shell.
+* [#202](https://github.com/BurntSushi/jiff/pull/202):
+Re-add license files to crate artifact.
+
+
+0.1.22 (2025-01-12)
+===================
+This release adds support for Android. This support means that Jiff will
+automatically read its special concatenated time zone database, and will
+read the `persist.sys.timezone` property to determine the system's current
+time zone.
+
+See [PLATFORM] for more specific information about Android support.
+
+Note that this release also removed all non-essential files (including tests
+and test data) for the artifact uploaded to crates.io. If you need or want
+these files, please open a new issue.
+
+Enhancements:
+
+* [#140](https://github.com/BurntSushi/jiff/issues/140):
+Add support for the Android platform.
+
+
 0.1.21 (2025-01-04)
 ===================
 This release includes a new API for setting the unit designator label in a

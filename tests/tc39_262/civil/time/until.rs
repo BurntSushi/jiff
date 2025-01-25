@@ -17,7 +17,7 @@ fn argument_cast() -> Result {
         .milliseconds(876)
         .microseconds(543)
         .nanoseconds(211);
-    assert_eq!(t1.until(t2)?, span);
+    span_eq!(t1.until(t2)?, span);
     Ok(())
 }
 
@@ -123,7 +123,7 @@ fn result_sub_second() -> Result {
     let t1 = time(10, 23, 15, 0);
     let t2 = time(17, 15, 57, 250_250_250);
 
-    assert_eq!(
+    span_eq!(
         t1.until((Unit::Millisecond, t2))?,
         24762250.milliseconds().microseconds(250).nanoseconds(250),
     );
@@ -135,7 +135,7 @@ fn result_sub_second() -> Result {
         "PT24762.25025025S",
     );
 
-    assert_eq!(
+    span_eq!(
         t1.until((Unit::Microsecond, t2))?,
         2_4762_250_250i64.microseconds().nanoseconds(250)
     );
@@ -144,7 +144,7 @@ fn result_sub_second() -> Result {
         "PT24762.25025025S",
     );
 
-    assert_eq!(
+    span_eq!(
         t1.until((Unit::Nanosecond, t2))?,
         2_4762_250_250_250i64.nanoseconds(),
     );
@@ -167,7 +167,7 @@ fn round_cross_unit_boundary() -> Result {
             .largest(Unit::Hour)
             .mode(RoundMode::Expand),
     )?;
-    assert_eq!(span, 2.hours());
+    span_eq!(span, 2.hours());
     Ok(())
 }
 
@@ -178,13 +178,13 @@ fn roundingincrement_hours() -> Result {
     let t2 = time(13, 47, 57, 988_655_322);
     let args = TimeDifference::new(t2).smallest(Unit::Hour);
 
-    assert_eq!(t1.until(args.increment(1))?, 10.hours());
-    assert_eq!(t1.until(args.increment(2))?, 10.hours());
-    assert_eq!(t1.until(args.increment(3))?, 9.hours());
-    assert_eq!(t1.until(args.increment(4))?, 8.hours());
-    assert_eq!(t1.until(args.increment(6))?, 6.hours());
-    assert_eq!(t1.until(args.increment(8))?, 8.hours());
-    assert_eq!(t1.until(args.increment(12))?, 0.hours());
+    span_eq!(t1.until(args.increment(1))?, 10.hours());
+    span_eq!(t1.until(args.increment(2))?, 10.hours());
+    span_eq!(t1.until(args.increment(3))?, 9.hours());
+    span_eq!(t1.until(args.increment(4))?, 8.hours());
+    span_eq!(t1.until(args.increment(6))?, 6.hours());
+    span_eq!(t1.until(args.increment(8))?, 8.hours());
+    span_eq!(t1.until(args.increment(12))?, 0.hours());
 
     Ok(())
 }
@@ -227,21 +227,21 @@ fn roundingincrement_microseconds() -> Result {
     let args = TimeDifference::new(t2).smallest(Unit::Microsecond);
 
     let span = 10.hours().minutes(35).seconds(23).milliseconds(865);
-    assert_eq!(t1.until(args.increment(1))?, span.microseconds(198));
-    assert_eq!(t1.until(args.increment(2))?, span.microseconds(198));
-    assert_eq!(t1.until(args.increment(4))?, span.microseconds(196));
-    assert_eq!(t1.until(args.increment(5))?, span.microseconds(195));
-    assert_eq!(t1.until(args.increment(8))?, span.microseconds(192));
-    assert_eq!(t1.until(args.increment(10))?, span.microseconds(190));
-    assert_eq!(t1.until(args.increment(20))?, span.microseconds(180));
-    assert_eq!(t1.until(args.increment(25))?, span.microseconds(175));
-    assert_eq!(t1.until(args.increment(40))?, span.microseconds(160));
-    assert_eq!(t1.until(args.increment(50))?, span.microseconds(150));
-    assert_eq!(t1.until(args.increment(100))?, span.microseconds(100));
-    assert_eq!(t1.until(args.increment(125))?, span.microseconds(125));
-    assert_eq!(t1.until(args.increment(200))?, span.microseconds(0));
-    assert_eq!(t1.until(args.increment(250))?, span.microseconds(0));
-    assert_eq!(t1.until(args.increment(500))?, span.microseconds(0));
+    span_eq!(t1.until(args.increment(1))?, span.microseconds(198));
+    span_eq!(t1.until(args.increment(2))?, span.microseconds(198));
+    span_eq!(t1.until(args.increment(4))?, span.microseconds(196));
+    span_eq!(t1.until(args.increment(5))?, span.microseconds(195));
+    span_eq!(t1.until(args.increment(8))?, span.microseconds(192));
+    span_eq!(t1.until(args.increment(10))?, span.microseconds(190));
+    span_eq!(t1.until(args.increment(20))?, span.microseconds(180));
+    span_eq!(t1.until(args.increment(25))?, span.microseconds(175));
+    span_eq!(t1.until(args.increment(40))?, span.microseconds(160));
+    span_eq!(t1.until(args.increment(50))?, span.microseconds(150));
+    span_eq!(t1.until(args.increment(100))?, span.microseconds(100));
+    span_eq!(t1.until(args.increment(125))?, span.microseconds(125));
+    span_eq!(t1.until(args.increment(200))?, span.microseconds(0));
+    span_eq!(t1.until(args.increment(250))?, span.microseconds(0));
+    span_eq!(t1.until(args.increment(500))?, span.microseconds(0));
 
     Ok(())
 }
@@ -254,21 +254,21 @@ fn roundingincrement_milliseconds() -> Result {
     let args = TimeDifference::new(t2).smallest(Unit::Millisecond);
 
     let span = 10.hours().minutes(35).seconds(23);
-    assert_eq!(t1.until(args.increment(1))?, span.milliseconds(865));
-    assert_eq!(t1.until(args.increment(2))?, span.milliseconds(864));
-    assert_eq!(t1.until(args.increment(4))?, span.milliseconds(864));
-    assert_eq!(t1.until(args.increment(5))?, span.milliseconds(865));
-    assert_eq!(t1.until(args.increment(8))?, span.milliseconds(864));
-    assert_eq!(t1.until(args.increment(10))?, span.milliseconds(860));
-    assert_eq!(t1.until(args.increment(20))?, span.milliseconds(860));
-    assert_eq!(t1.until(args.increment(25))?, span.milliseconds(850));
-    assert_eq!(t1.until(args.increment(40))?, span.milliseconds(840));
-    assert_eq!(t1.until(args.increment(50))?, span.milliseconds(850));
-    assert_eq!(t1.until(args.increment(100))?, span.milliseconds(800));
-    assert_eq!(t1.until(args.increment(125))?, span.milliseconds(750));
-    assert_eq!(t1.until(args.increment(200))?, span.milliseconds(800));
-    assert_eq!(t1.until(args.increment(250))?, span.milliseconds(750));
-    assert_eq!(t1.until(args.increment(500))?, span.milliseconds(500));
+    span_eq!(t1.until(args.increment(1))?, span.milliseconds(865));
+    span_eq!(t1.until(args.increment(2))?, span.milliseconds(864));
+    span_eq!(t1.until(args.increment(4))?, span.milliseconds(864));
+    span_eq!(t1.until(args.increment(5))?, span.milliseconds(865));
+    span_eq!(t1.until(args.increment(8))?, span.milliseconds(864));
+    span_eq!(t1.until(args.increment(10))?, span.milliseconds(860));
+    span_eq!(t1.until(args.increment(20))?, span.milliseconds(860));
+    span_eq!(t1.until(args.increment(25))?, span.milliseconds(850));
+    span_eq!(t1.until(args.increment(40))?, span.milliseconds(840));
+    span_eq!(t1.until(args.increment(50))?, span.milliseconds(850));
+    span_eq!(t1.until(args.increment(100))?, span.milliseconds(800));
+    span_eq!(t1.until(args.increment(125))?, span.milliseconds(750));
+    span_eq!(t1.until(args.increment(200))?, span.milliseconds(800));
+    span_eq!(t1.until(args.increment(250))?, span.milliseconds(750));
+    span_eq!(t1.until(args.increment(500))?, span.milliseconds(500));
 
     Ok(())
 }
@@ -281,17 +281,17 @@ fn roundingincrement_minutes() -> Result {
     let args = TimeDifference::new(t2).smallest(Unit::Minute);
 
     let span = 10.hours();
-    assert_eq!(t1.until(args.increment(1))?, span.minutes(35));
-    assert_eq!(t1.until(args.increment(2))?, span.minutes(34));
-    assert_eq!(t1.until(args.increment(3))?, span.minutes(33));
-    assert_eq!(t1.until(args.increment(4))?, span.minutes(32));
-    assert_eq!(t1.until(args.increment(5))?, span.minutes(35));
-    assert_eq!(t1.until(args.increment(6))?, span.minutes(30));
-    assert_eq!(t1.until(args.increment(10))?, span.minutes(30));
-    assert_eq!(t1.until(args.increment(12))?, span.minutes(24));
-    assert_eq!(t1.until(args.increment(15))?, span.minutes(30));
-    assert_eq!(t1.until(args.increment(20))?, span.minutes(20));
-    assert_eq!(t1.until(args.increment(30))?, span.minutes(30));
+    span_eq!(t1.until(args.increment(1))?, span.minutes(35));
+    span_eq!(t1.until(args.increment(2))?, span.minutes(34));
+    span_eq!(t1.until(args.increment(3))?, span.minutes(33));
+    span_eq!(t1.until(args.increment(4))?, span.minutes(32));
+    span_eq!(t1.until(args.increment(5))?, span.minutes(35));
+    span_eq!(t1.until(args.increment(6))?, span.minutes(30));
+    span_eq!(t1.until(args.increment(10))?, span.minutes(30));
+    span_eq!(t1.until(args.increment(12))?, span.minutes(24));
+    span_eq!(t1.until(args.increment(15))?, span.minutes(30));
+    span_eq!(t1.until(args.increment(20))?, span.minutes(20));
+    span_eq!(t1.until(args.increment(30))?, span.minutes(30));
 
     Ok(())
 }
@@ -305,21 +305,21 @@ fn roundingincrement_nanoseconds() -> Result {
 
     let span =
         10.hours().minutes(35).seconds(23).milliseconds(865).microseconds(198);
-    assert_eq!(t1.until(args.increment(1))?, span.nanoseconds(533));
-    assert_eq!(t1.until(args.increment(2))?, span.nanoseconds(532));
-    assert_eq!(t1.until(args.increment(4))?, span.nanoseconds(532));
-    assert_eq!(t1.until(args.increment(5))?, span.nanoseconds(530));
-    assert_eq!(t1.until(args.increment(8))?, span.nanoseconds(528));
-    assert_eq!(t1.until(args.increment(10))?, span.nanoseconds(530));
-    assert_eq!(t1.until(args.increment(20))?, span.nanoseconds(520));
-    assert_eq!(t1.until(args.increment(25))?, span.nanoseconds(525));
-    assert_eq!(t1.until(args.increment(40))?, span.nanoseconds(520));
-    assert_eq!(t1.until(args.increment(50))?, span.nanoseconds(500));
-    assert_eq!(t1.until(args.increment(100))?, span.nanoseconds(500));
-    assert_eq!(t1.until(args.increment(125))?, span.nanoseconds(500));
-    assert_eq!(t1.until(args.increment(200))?, span.nanoseconds(400));
-    assert_eq!(t1.until(args.increment(250))?, span.nanoseconds(500));
-    assert_eq!(t1.until(args.increment(500))?, span.nanoseconds(500));
+    span_eq!(t1.until(args.increment(1))?, span.nanoseconds(533));
+    span_eq!(t1.until(args.increment(2))?, span.nanoseconds(532));
+    span_eq!(t1.until(args.increment(4))?, span.nanoseconds(532));
+    span_eq!(t1.until(args.increment(5))?, span.nanoseconds(530));
+    span_eq!(t1.until(args.increment(8))?, span.nanoseconds(528));
+    span_eq!(t1.until(args.increment(10))?, span.nanoseconds(530));
+    span_eq!(t1.until(args.increment(20))?, span.nanoseconds(520));
+    span_eq!(t1.until(args.increment(25))?, span.nanoseconds(525));
+    span_eq!(t1.until(args.increment(40))?, span.nanoseconds(520));
+    span_eq!(t1.until(args.increment(50))?, span.nanoseconds(500));
+    span_eq!(t1.until(args.increment(100))?, span.nanoseconds(500));
+    span_eq!(t1.until(args.increment(125))?, span.nanoseconds(500));
+    span_eq!(t1.until(args.increment(200))?, span.nanoseconds(400));
+    span_eq!(t1.until(args.increment(250))?, span.nanoseconds(500));
+    span_eq!(t1.until(args.increment(500))?, span.nanoseconds(500));
 
     Ok(())
 }
@@ -332,17 +332,17 @@ fn roundingincrement_seconds() -> Result {
     let args = TimeDifference::new(t2).smallest(Unit::Second);
 
     let span = 10.hours().minutes(35);
-    assert_eq!(t1.until(args.increment(1))?, span.seconds(23));
-    assert_eq!(t1.until(args.increment(2))?, span.seconds(22));
-    assert_eq!(t1.until(args.increment(3))?, span.seconds(21));
-    assert_eq!(t1.until(args.increment(4))?, span.seconds(20));
-    assert_eq!(t1.until(args.increment(5))?, span.seconds(20));
-    assert_eq!(t1.until(args.increment(6))?, span.seconds(18));
-    assert_eq!(t1.until(args.increment(10))?, span.seconds(20));
-    assert_eq!(t1.until(args.increment(12))?, span.seconds(12));
-    assert_eq!(t1.until(args.increment(15))?, span.seconds(15));
-    assert_eq!(t1.until(args.increment(20))?, span.seconds(20));
-    assert_eq!(t1.until(args.increment(30))?, span.seconds(0));
+    span_eq!(t1.until(args.increment(1))?, span.seconds(23));
+    span_eq!(t1.until(args.increment(2))?, span.seconds(22));
+    span_eq!(t1.until(args.increment(3))?, span.seconds(21));
+    span_eq!(t1.until(args.increment(4))?, span.seconds(20));
+    span_eq!(t1.until(args.increment(5))?, span.seconds(20));
+    span_eq!(t1.until(args.increment(6))?, span.seconds(18));
+    span_eq!(t1.until(args.increment(10))?, span.seconds(20));
+    span_eq!(t1.until(args.increment(12))?, span.seconds(12));
+    span_eq!(t1.until(args.increment(15))?, span.seconds(15));
+    span_eq!(t1.until(args.increment(20))?, span.seconds(20));
+    span_eq!(t1.until(args.increment(30))?, span.seconds(0));
 
     Ok(())
 }
@@ -358,45 +358,45 @@ fn roundingmode_ceil() -> Result {
     let t2 = time(12, 39, 40, 987_654_289);
 
     let args = TimeDifference::new(t2).mode(RoundMode::Ceil);
-    assert_eq!(t1.until(args.smallest(Unit::Hour))?, 5.hours());
+    span_eq!(t1.until(args.smallest(Unit::Hour))?, 5.hours());
     let span = 4.hours();
-    assert_eq!(t1.until(args.smallest(Unit::Minute))?, span.minutes(18));
+    span_eq!(t1.until(args.smallest(Unit::Minute))?, span.minutes(18));
     let span = span.minutes(17);
-    assert_eq!(t1.until(args.smallest(Unit::Second))?, span.seconds(5));
+    span_eq!(t1.until(args.smallest(Unit::Second))?, span.seconds(5));
     let span = span.seconds(4);
-    assert_eq!(
+    span_eq!(
         t1.until(args.smallest(Unit::Millisecond))?,
         span.milliseconds(865)
     );
     let span = span.milliseconds(864);
-    assert_eq!(
+    span_eq!(
         t1.until(args.smallest(Unit::Microsecond))?,
         span.microseconds(198)
     );
     let span = span.microseconds(197);
-    assert_eq!(
+    span_eq!(
         t1.until(args.smallest(Unit::Nanosecond))?,
         span.nanoseconds(500)
     );
 
     let args = TimeDifference::new(t1).mode(RoundMode::Ceil);
-    assert_eq!(t2.until(args.smallest(Unit::Hour))?, -4.hours());
+    span_eq!(t2.until(args.smallest(Unit::Hour))?, -4.hours());
     let span = -4.hours();
-    assert_eq!(t2.until(args.smallest(Unit::Minute))?, span.minutes(17));
+    span_eq!(t2.until(args.smallest(Unit::Minute))?, span.minutes(17));
     let span = span.minutes(17);
-    assert_eq!(t2.until(args.smallest(Unit::Second))?, span.seconds(4));
+    span_eq!(t2.until(args.smallest(Unit::Second))?, span.seconds(4));
     let span = span.seconds(4);
-    assert_eq!(
+    span_eq!(
         t2.until(args.smallest(Unit::Millisecond))?,
         span.milliseconds(864)
     );
     let span = span.milliseconds(864);
-    assert_eq!(
+    span_eq!(
         t2.until(args.smallest(Unit::Microsecond))?,
         span.microseconds(197)
     );
     let span = span.microseconds(197);
-    assert_eq!(
+    span_eq!(
         t2.until(args.smallest(Unit::Nanosecond))?,
         span.nanoseconds(500)
     );

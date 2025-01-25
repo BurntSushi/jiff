@@ -144,7 +144,10 @@ use crate::{
 ///
 /// let time1 = time(22, 0, 0, 0);
 /// let time2 = time(20, 10, 1, 0);
-/// assert_eq!(time1 - time2, 1.hours().minutes(49).seconds(59));
+/// assert_eq!(
+///     time1 - time2,
+///     1.hours().minutes(49).seconds(59).fieldwise(),
+/// );
 /// ```
 ///
 /// The `until` and `since` APIs are polymorphic and allow re-balancing and
@@ -158,7 +161,7 @@ use crate::{
 /// let time2 = time(7, 0, 0, 0);
 /// assert_eq!(
 ///     time1.since((Unit::Minute, time2))?,
-///     990.minutes(),
+///     990.minutes().fieldwise(),
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -175,7 +178,7 @@ use crate::{
 ///     time1.until(
 ///         TimeDifference::new(time2).smallest(Unit::Minute),
 ///     )?,
-///     5.minutes(),
+///     5.minutes().fieldwise(),
 /// );
 /// // `TimeDifference` uses truncation as a rounding mode by default,
 /// // but you can set the rounding mode to break ties away from zero:
@@ -186,7 +189,7 @@ use crate::{
 ///             .mode(RoundMode::HalfExpand),
 ///     )?,
 ///     // Rounds up to 6 minutes.
-///     6.minutes(),
+///     6.minutes().fieldwise(),
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -533,12 +536,12 @@ impl Time {
     /// use jiff::{civil, Timestamp};
     ///
     /// // 1,234 nanoseconds after the Unix epoch.
-    /// let zdt = Timestamp::new(0, 1_234)?.intz("UTC")?;
+    /// let zdt = Timestamp::new(0, 1_234)?.in_tz("UTC")?;
     /// let time = zdt.datetime().time();
     /// assert_eq!(time.subsec_nanosecond(), 1_234);
     ///
     /// // 1,234 nanoseconds before the Unix epoch.
-    /// let zdt = Timestamp::new(0, -1_234)?.intz("UTC")?;
+    /// let zdt = Timestamp::new(0, -1_234)?.in_tz("UTC")?;
     /// let time = zdt.datetime().time();
     /// // The nanosecond is equal to `1_000_000_000 - 1_234`.
     /// assert_eq!(time.subsec_nanosecond(), 999998766);
@@ -1177,9 +1180,9 @@ impl Time {
     ///
     /// let t1 = time(22, 35, 1, 0);
     /// let t2 = time(22, 35, 3, 500_000_000);
-    /// assert_eq!(t1.until(t2)?, 2.seconds().milliseconds(500));
+    /// assert_eq!(t1.until(t2)?, 2.seconds().milliseconds(500).fieldwise());
     /// // Flipping the dates is fine, but you'll get a negative span.
-    /// assert_eq!(t2.until(t1)?, -2.seconds().milliseconds(500));
+    /// assert_eq!(t2.until(t1)?, -2.seconds().milliseconds(500).fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1239,7 +1242,7 @@ impl Time {
     ///
     /// let earlier = time(1, 0, 0, 0);
     /// let later = time(22, 30, 0, 0);
-    /// assert_eq!(later - earlier, 21.hours().minutes(30));
+    /// assert_eq!(later - earlier, 21.hours().minutes(30).fieldwise());
     /// ```
     #[inline]
     pub fn since<A: Into<TimeDifference>>(
@@ -1315,7 +1318,7 @@ impl Time {
     /// // between two civil times never exceeds the limits
     /// // of a `Span`.
     /// let span = Span::try_from(dur).unwrap();
-    /// assert_eq!(span, Span::new().seconds(2).milliseconds(500));
+    /// assert_eq!(span, Span::new().seconds(2).milliseconds(500).fieldwise());
     /// // Guaranteed to succeed and always return the original
     /// // duration because the units are always hours or smaller,
     /// // and thus uniform. This means a relative datetime is
@@ -2299,7 +2302,7 @@ impl<'a> From<&'a UnsignedDuration> for TimeArithmetic {
 ///         .mode(RoundMode::HalfExpand)
 ///         .increment(30),
 /// )?;
-/// assert_eq!(span, 7.hours());
+/// assert_eq!(span, 7.hours().fieldwise());
 ///
 /// // One less minute, and because of the HalfExpand mode, the span would
 /// // get rounded down.
@@ -2310,7 +2313,7 @@ impl<'a> From<&'a UnsignedDuration> for TimeArithmetic {
 ///         .mode(RoundMode::HalfExpand)
 ///         .increment(30),
 /// )?;
-/// assert_eq!(span, 6.hours().minutes(30));
+/// assert_eq!(span, 6.hours().minutes(30).fieldwise());
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -2358,7 +2361,7 @@ impl TimeDifference {
     ///         .smallest(Unit::Second)
     ///         .mode(RoundMode::HalfExpand),
     /// )?;
-    /// assert_eq!(span, 16.minutes().seconds(1));
+    /// assert_eq!(span, 16.minutes().seconds(1).fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2389,7 +2392,7 @@ impl TimeDifference {
     /// let t1 = "08:14".parse::<Time>()?;
     /// let t2 = "08:30".parse::<Time>()?;
     /// let span = t1.until(TimeDifference::new(t2).largest(Unit::Second))?;
-    /// assert_eq!(span, 960.seconds());
+    /// assert_eq!(span, 960.seconds().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2421,7 +2424,7 @@ impl TimeDifference {
     ///         .mode(RoundMode::Ceil),
     /// )?;
     /// // Only one minute elapsed, but we asked to always round up!
-    /// assert_eq!(span, 1.hour());
+    /// assert_eq!(span, 1.hour().fieldwise());
     ///
     /// // Since `Ceil` always rounds toward positive infinity, the behavior
     /// // flips for a negative span.
@@ -2430,7 +2433,7 @@ impl TimeDifference {
     ///         .smallest(Unit::Hour)
     ///         .mode(RoundMode::Ceil),
     /// )?;
-    /// assert_eq!(span, 0.hour());
+    /// assert_eq!(span, 0.hour().fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2476,7 +2479,7 @@ impl TimeDifference {
     ///         .increment(5)
     ///         .mode(RoundMode::HalfExpand),
     /// )?;
-    /// assert_eq!(span, 4.hour().minutes(35));
+    /// assert_eq!(span, 4.hour().minutes(35).fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -3160,7 +3163,7 @@ impl TimeWith {
 mod tests {
     use std::io::Cursor;
 
-    use crate::{civil::time, ToSpan};
+    use crate::{civil::time, span::span_eq, ToSpan};
 
     use super::*;
 
@@ -3318,7 +3321,7 @@ mod tests {
         let t1 = time(23, 30, 0, 0);
         let (t2, span) = t1.overflowing_add(5.hours()).unwrap();
         assert_eq!(t2, time(4, 30, 0, 0));
-        assert_eq!(span, 1.days());
+        span_eq!(span, 1.days());
     }
 
     #[test]

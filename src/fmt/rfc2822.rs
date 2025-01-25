@@ -97,7 +97,7 @@ pub(crate) static DEFAULT_DATETIME_PRINTER: DateTimePrinter =
 /// ```
 /// use jiff::{civil::date, fmt::rfc2822};
 ///
-/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).intz("Australia/Tasmania")?;
+/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("Australia/Tasmania")?;
 /// assert_eq!(rfc2822::to_string(&zdt)?, "Sat, 15 Jun 2024 07:00:00 +1000");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -152,7 +152,7 @@ pub fn to_string(zdt: &Zoned) -> Result<alloc::string::String, Error> {
 ///
 /// let zdt = date(2024, 7, 13)
 ///     .at(15, 9, 59, 789_000_000)
-///     .intz("America/New_York")?;
+///     .in_tz("America/New_York")?;
 /// // The default format (i.e., Temporal) guarantees lossless
 /// // serialization.
 /// assert_eq!(zdt.to_string(), "2024-07-13T15:09:59.789-04:00[America/New_York]");
@@ -200,7 +200,7 @@ pub fn parse(string: &str) -> Result<Zoned, Error> {
 ///
 /// let zdt = date(2024, 7, 13)
 ///     .at(15, 9, 59, 789_000_000)
-///     .intz("America/New_York")?;
+///     .in_tz("America/New_York")?;
 /// // The default format (i.e., Temporal) guarantees lossless
 /// // serialization.
 /// assert_eq!(zdt.to_string(), "2024-07-13T15:09:59.789-04:00[America/New_York]");
@@ -252,7 +252,7 @@ impl DateTimeParser {
     ///     .relaxed_weekday(true);
     /// assert_eq!(
     ///     P.parse_zoned(string)?,
-    ///     date(2024, 7, 13).at(15, 9, 59, 0).intz("America/New_York")?,
+    ///     date(2024, 7, 13).at(15, 9, 59, 0).in_tz("America/New_York")?,
     /// );
     /// // But note that something that isn't recognized as a valid weekday
     /// // will still result in an error:
@@ -1048,7 +1048,7 @@ impl DateTimeParser {
 ///
 /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
 ///
-/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).intz("Australia/Tasmania")?;
+/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("Australia/Tasmania")?;
 ///
 /// let mut buf = String::new();
 /// PRINTER.print_zoned(&zdt, &mut buf)?;
@@ -1071,7 +1071,7 @@ impl DateTimeParser {
 ///
 /// use jiff::{civil::date, fmt::{StdIoWrite, rfc2822::DateTimePrinter}};
 ///
-/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).intz("Asia/Kolkata")?;
+/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("Asia/Kolkata")?;
 ///
 /// let path = Path::new("/tmp/output");
 /// let mut file = BufWriter::new(File::create(path)?);
@@ -1137,7 +1137,7 @@ impl DateTimePrinter {
     ///
     /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
     ///
-    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).intz("America/New_York")?;
+    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("America/New_York")?;
     /// assert_eq!(
     ///     PRINTER.zoned_to_string(&zdt)?,
     ///     "Sat, 15 Jun 2024 07:00:00 -0400",
@@ -1238,7 +1238,7 @@ impl DateTimePrinter {
         &self,
         timestamp: &Timestamp,
     ) -> Result<alloc::string::String, Error> {
-        let mut buf = alloc::string::String::with_capacity(4);
+        let mut buf = alloc::string::String::with_capacity(29);
         self.print_timestamp_rfc9110(timestamp, &mut buf)?;
         Ok(buf)
     }
@@ -1284,7 +1284,7 @@ impl DateTimePrinter {
     ///
     /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
     ///
-    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).intz("America/New_York")?;
+    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("America/New_York")?;
     ///
     /// let mut buf = String::new();
     /// PRINTER.print_zoned(&zdt, &mut buf)?;
@@ -1841,23 +1841,23 @@ mod tests {
 
         let zdt = date(2024, 1, 10)
             .at(5, 34, 45, 0)
-            .intz("America/New_York")
+            .in_tz("America/New_York")
             .unwrap();
         insta::assert_snapshot!(p(&zdt), @"Wed, 10 Jan 2024 05:34:45 -0500");
 
         let zdt = date(2024, 2, 5)
             .at(5, 34, 45, 0)
-            .intz("America/New_York")
+            .in_tz("America/New_York")
             .unwrap();
         insta::assert_snapshot!(p(&zdt), @"Mon, 5 Feb 2024 05:34:45 -0500");
 
         let zdt = date(2024, 7, 31)
             .at(5, 34, 45, 0)
-            .intz("America/New_York")
+            .in_tz("America/New_York")
             .unwrap();
         insta::assert_snapshot!(p(&zdt), @"Wed, 31 Jul 2024 05:34:45 -0400");
 
-        let zdt = date(2024, 3, 5).at(5, 34, 45, 0).intz("UTC").unwrap();
+        let zdt = date(2024, 3, 5).at(5, 34, 45, 0).in_tz("UTC").unwrap();
         // Notice that this prints a +0000 offset.
         // But when printing a Timestamp, a -0000 offset is used.
         // This is because in the case of Timestamp, the "true"
@@ -1879,27 +1879,30 @@ mod tests {
 
         let ts = date(2024, 1, 10)
             .at(5, 34, 45, 0)
-            .intz("America/New_York")
+            .in_tz("America/New_York")
             .unwrap()
             .timestamp();
         insta::assert_snapshot!(p(ts), @"Wed, 10 Jan 2024 10:34:45 -0000");
 
         let ts = date(2024, 2, 5)
             .at(5, 34, 45, 0)
-            .intz("America/New_York")
+            .in_tz("America/New_York")
             .unwrap()
             .timestamp();
         insta::assert_snapshot!(p(ts), @"Mon, 5 Feb 2024 10:34:45 -0000");
 
         let ts = date(2024, 7, 31)
             .at(5, 34, 45, 0)
-            .intz("America/New_York")
+            .in_tz("America/New_York")
             .unwrap()
             .timestamp();
         insta::assert_snapshot!(p(ts), @"Wed, 31 Jul 2024 09:34:45 -0000");
 
-        let ts =
-            date(2024, 3, 5).at(5, 34, 45, 0).intz("UTC").unwrap().timestamp();
+        let ts = date(2024, 3, 5)
+            .at(5, 34, 45, 0)
+            .in_tz("UTC")
+            .unwrap()
+            .timestamp();
         // Notice that this prints a +0000 offset.
         // But when printing a Timestamp, a -0000 offset is used.
         // This is because in the case of Timestamp, the "true"
@@ -1923,27 +1926,30 @@ mod tests {
 
         let ts = date(2024, 1, 10)
             .at(5, 34, 45, 0)
-            .intz("America/New_York")
+            .in_tz("America/New_York")
             .unwrap()
             .timestamp();
         insta::assert_snapshot!(p(ts), @"Wed, 10 Jan 2024 10:34:45 GMT");
 
         let ts = date(2024, 2, 5)
             .at(5, 34, 45, 0)
-            .intz("America/New_York")
+            .in_tz("America/New_York")
             .unwrap()
             .timestamp();
         insta::assert_snapshot!(p(ts), @"Mon, 05 Feb 2024 10:34:45 GMT");
 
         let ts = date(2024, 7, 31)
             .at(5, 34, 45, 0)
-            .intz("America/New_York")
+            .in_tz("America/New_York")
             .unwrap()
             .timestamp();
         insta::assert_snapshot!(p(ts), @"Wed, 31 Jul 2024 09:34:45 GMT");
 
-        let ts =
-            date(2024, 3, 5).at(5, 34, 45, 0).intz("UTC").unwrap().timestamp();
+        let ts = date(2024, 3, 5)
+            .at(5, 34, 45, 0)
+            .in_tz("UTC")
+            .unwrap()
+            .timestamp();
         // Notice that this prints a +0000 offset.
         // But when printing a Timestamp, a -0000 offset is used.
         // This is because in the case of Timestamp, the "true"
@@ -1965,8 +1971,10 @@ mod tests {
                 .to_string()
         };
 
-        let zdt =
-            date(-1, 1, 10).at(5, 34, 45, 0).intz("America/New_York").unwrap();
+        let zdt = date(-1, 1, 10)
+            .at(5, 34, 45, 0)
+            .in_tz("America/New_York")
+            .unwrap();
         insta::assert_snapshot!(p(&zdt), @"datetime -000001-01-10T05:34:45 has negative year, which cannot be formatted with RFC 2822");
     }
 
@@ -1986,7 +1994,7 @@ mod tests {
 
         let ts = date(-1, 1, 10)
             .at(5, 34, 45, 0)
-            .intz("America/New_York")
+            .in_tz("America/New_York")
             .unwrap()
             .timestamp();
         insta::assert_snapshot!(p(ts), @"datetime -000001-01-10T10:30:47 has negative year, which cannot be formatted with RFC 2822");

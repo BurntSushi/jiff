@@ -1,5 +1,3 @@
-use core::cmp::Ordering;
-
 use alloc::{
     string::{String, ToString},
     vec,
@@ -18,7 +16,7 @@ use crate::{
     error::{err, Error},
     timestamp::Timestamp,
     tz::{tzif::is_possibly_tzif, TimeZone},
-    util::{cache::Expiration, parse},
+    util::{self, cache::Expiration, parse, utf8},
 };
 
 const DEFAULT_TTL: Duration = Duration::new(5 * 60, 0);
@@ -36,10 +34,13 @@ impl ZoneInfo {
     pub(crate) fn from_env() -> ZoneInfo {
         if let Some(tzdir) = std::env::var_os("TZDIR") {
             let tzdir = PathBuf::from(tzdir);
-            debug!("opening zoneinfo database at TZDIR={}", tzdir.display());
+            trace!("opening zoneinfo database at TZDIR={}", tzdir.display());
             match ZoneInfo::from_dir(&tzdir) {
                 Ok(db) => return db,
                 Err(_err) => {
+                    // This is a WARN because it represents a failure to
+                    // satisfy a more direct request, which should be louder
+                    // than failures related to auto-detection.
                     warn!("failed opening TZDIR={}: {_err}", tzdir.display());
                     // fall through to attempt default directories
                 }
@@ -47,15 +48,15 @@ impl ZoneInfo {
         }
         for dir in ZONEINFO_DIRECTORIES {
             let tzdir = Path::new(dir);
-            debug!("opening zoneinfo database at {}", tzdir.display());
+            trace!("opening zoneinfo database at {}", tzdir.display());
             match ZoneInfo::from_dir(&tzdir) {
                 Ok(db) => return db,
                 Err(_err) => {
-                    debug!("failed opening {}: {_err}", tzdir.display());
+                    trace!("failed opening {}: {_err}", tzdir.display());
                 }
             }
         }
-        warn!(
+        debug!(
             "could not find zoneinfo database at any of the following \
              paths: {}",
             ZONEINFO_DIRECTORIES.join(", "),
@@ -70,7 +71,7 @@ impl ZoneInfo {
     }
 
     /// Creates a "dummy" zoneinfo database in which all lookups fail.
-    fn none() -> ZoneInfo {
+    pub(crate) fn none() -> ZoneInfo {
         let dir = None;
         let names = None;
         let zones = RwLock::new(CachedZones::new());
@@ -216,7 +217,7 @@ impl CachedZones {
 
     fn get_zone_index(&self, query: &str) -> Result<usize, usize> {
         self.zones.binary_search_by(|zone| {
-            cmp_ignore_ascii_case(zone.name.lower(), query)
+            utf8::cmp_ignore_ascii_case(zone.name.lower(), query)
         })
     }
 
@@ -251,7 +252,7 @@ impl CachedTimeZone {
         let tz = TimeZone::tzif(&info.inner.original, &data)
             .map_err(|e| e.path(path))?;
         let name = info.clone();
-        let last_modified = last_modified_from_file(path, &file);
+        let last_modified = util::fs::last_modified_from_file(path, &file);
         let expiration = Expiration::after(ttl);
         Ok(CachedTimeZone { tz, name, expiration, last_modified })
     }
@@ -278,7 +279,7 @@ impl CachedTimeZone {
         // should always fail revalidation? I suppose a case could be made to
         // do the opposite: always pass revalidation.
         let Some(old_last_modified) = self.last_modified else {
-            info!(
+            trace!(
                 "revalidation for {} failed because old last modified time \
                  is unavailable",
                 info.inner.full.display(),
@@ -286,9 +287,9 @@ impl CachedTimeZone {
             return false;
         };
         let Some(new_last_modified) =
-            last_modified_from_path(&info.inner.full)
+            util::fs::last_modified_from_path(&info.inner.full)
         else {
-            info!(
+            trace!(
                 "revalidation for {} failed because new last modified time \
                  is unavailable",
                 info.inner.full.display(),
@@ -297,7 +298,7 @@ impl CachedTimeZone {
         };
         // We consider any change to invalidate cache.
         if old_last_modified != new_last_modified {
-            info!(
+            trace!(
                 "revalidation for {} failed because last modified times \
                  do not match: old = {} != {} = new",
                 info.inner.full.display(),
@@ -426,7 +427,9 @@ impl ZoneInfoNamesInner {
     /// `None` is returned if one isn't found.
     fn get(&self, query: &str) -> Option<ZoneInfoName> {
         self.names
-            .binary_search_by(|n| cmp_ignore_ascii_case(&n.inner.lower, query))
+            .binary_search_by(|n| {
+                utf8::cmp_ignore_ascii_case(&n.inner.lower, query)
+            })
             .ok()
             .map(|i| self.names[i].clone())
     }
@@ -550,70 +553,6 @@ impl core::hash::Hash for ZoneInfoName {
     }
 }
 
-/// Returns the last modified time for the given file path as a Jiff timestamp.
-///
-/// If there was a problem accessing the last modified time or if it could not
-/// fit in a Jiff timestamp, then a warning message is logged and `None` is
-/// returned.
-fn last_modified_from_path(path: &Path) -> Option<Timestamp> {
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(_err) => {
-            warn!(
-                "failed to open file to get last modified time {}: {_err}",
-                path.display(),
-            );
-            return None;
-        }
-    };
-    last_modified_from_file(path, &file)
-}
-
-/// Returns the last modified time for the given file as a Jiff timestamp.
-///
-/// If there was a problem accessing the last modified time or if it could not
-/// fit in a Jiff timestamp, then a warning message is logged and `None` is
-/// returned.
-///
-/// The path given should be the path to the given file. It is used for
-/// diagnostic purposes.
-fn last_modified_from_file(_path: &Path, file: &File) -> Option<Timestamp> {
-    let md = match file.metadata() {
-        Ok(md) => md,
-        Err(_err) => {
-            warn!(
-                "failed to get metadata (for last modified time) \
-                 for {}: {_err}",
-                _path.display(),
-            );
-            return None;
-        }
-    };
-    let systime = match md.modified() {
-        Ok(systime) => systime,
-        Err(_err) => {
-            warn!(
-                "failed to get last modified time for {}: {_err}",
-                _path.display()
-            );
-            return None;
-        }
-    };
-    let timestamp = match Timestamp::try_from(systime) {
-        Ok(timestamp) => timestamp,
-        Err(_err) => {
-            warn!(
-                "system time {systime:?} out of bounds \
-                 for Jiff timestamp for last modified time \
-                 from {}: {_err}",
-                _path.display(),
-            );
-            return None;
-        }
-    };
-    Some(timestamp)
-}
-
 /// Recursively walks the given directory and returns the names of all time
 /// zones found.
 ///
@@ -639,7 +578,7 @@ fn walk(start: &Path) -> Result<Vec<ZoneInfoName>, Error> {
         let readdir = match dir.read_dir() {
             Ok(readdir) => readdir,
             Err(err) => {
-                info!(
+                trace!(
                     "error when reading {} as a directory: {err}",
                     dir.display()
                 );
@@ -651,7 +590,7 @@ fn walk(start: &Path) -> Result<Vec<ZoneInfoName>, Error> {
             let dent = match result {
                 Ok(dent) => dent,
                 Err(err) => {
-                    info!(
+                    trace!(
                         "error when reading directory entry from {}: {err}",
                         dir.display()
                     );
@@ -663,7 +602,7 @@ fn walk(start: &Path) -> Result<Vec<ZoneInfoName>, Error> {
                 Ok(file_type) => file_type,
                 Err(err) => {
                     let path = dent.path();
-                    info!(
+                    trace!(
                         "error when reading file type from {}: {err}",
                         path.display()
                     );
@@ -687,14 +626,14 @@ fn walk(start: &Path) -> Result<Vec<ZoneInfoName>, Error> {
             let mut f = match File::open(&path) {
                 Ok(f) => f,
                 Err(err) => {
-                    info!("failed to open {}: {err}", path.display());
+                    trace!("failed to open {}: {err}", path.display());
                     seterr(&path, Error::io(err));
                     continue;
                 }
             };
             let mut buf = [0; 4];
             if let Err(err) = f.read_exact(&mut buf) {
-                info!(
+                trace!(
                     "failed to read first 4 bytes of {}: {err}",
                     path.display()
                 );
@@ -716,7 +655,7 @@ fn walk(start: &Path) -> Result<Vec<ZoneInfoName>, Error> {
             let time_zone_name = match path.strip_prefix(start) {
                 Ok(time_zone_name) => time_zone_name,
                 Err(err) => {
-                    info!(
+                    trace!(
                         "failed to extract time zone name from {} \
                          using {} as a base: {err}",
                         path.display(),
@@ -748,34 +687,6 @@ fn walk(start: &Path) -> Result<Vec<ZoneInfoName>, Error> {
         // though.
         names.sort();
         Ok(names)
-    }
-}
-
-/// Like std's `eq_ignore_ascii_case`, but returns a full `Ordering`.
-fn cmp_ignore_ascii_case(s1: &str, s2: &str) -> Ordering {
-    // This function used to look like this:
-    //
-    //     let it1 = s1.as_bytes().iter().map(|&b| b.to_ascii_lowercase());
-    //     let it2 = s2.as_bytes().iter().map(|&b| b.to_ascii_lowercase());
-    //     it1.cmp(it2)
-    //
-    // But the code below seems to do better in microbenchmarks.
-    //
-    // TODO: Experiment with a HashMap, probably using FNV. We can use it
-    // here since this code is only present when std is present. We will need
-    // a wrapper type that does ASCII case insensitive comparisons.
-    let (bytes1, bytes2) = (s1.as_bytes(), s2.as_bytes());
-    let mut i = 0;
-    loop {
-        let b1 = bytes1.get(i).copied().map(|b| b.to_ascii_lowercase());
-        let b2 = bytes2.get(i).copied().map(|b| b.to_ascii_lowercase());
-        match (b1, b2) {
-            (None, None) => return Ordering::Equal,
-            (Some(_), None) => return Ordering::Greater,
-            (None, Some(_)) => return Ordering::Less,
-            (Some(b1), Some(b2)) if b1 == b2 => i += 1,
-            (Some(b1), Some(b2)) => return b1.cmp(&b2),
-        }
     }
 }
 

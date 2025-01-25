@@ -137,6 +137,8 @@ jobs:
         - powerpc-unknown-linux-gnu
         - powerpc64-unknown-linux-gnu
         - s390x-unknown-linux-gnu
+        - x86_64-linux-android
+        - aarch64-linux-android
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -152,8 +154,15 @@ jobs:
         curl -LO "https://github.com/cross-rs/cross/releases/download/$CROSS_VERSION/cross-x86_64-unknown-linux-musl.tar.gz"
         tar xf cross-x86_64-unknown-linux-musl.tar.gz
     - run: cross build --verbose --target ${{ matrix.target }}
-    - run: cross test --verbose --target ${{ matrix.target }} --all
-    - run: cross test --verbose --target ${{ matrix.target }} -p jiff-cli
+    # I haven't been able to get Insta working in this context, so I guess
+    # we just test the build.
+    #
+    # Note that I also have a very manual testing setup for Android:
+    # https://github.com/BurntSushi/tauri-jiff
+    - if: "!contains(matrix.target, 'android')"
+      run: cross test --verbose --target ${{ matrix.target }} --all
+    - if: "!contains(matrix.target, 'android')"
+      run: cross test --verbose --target ${{ matrix.target }} -p jiff-cli
 
   # This is meant to test that Jiff's use of `Arc` from `portable-atomic-util`
   # on targets that don't have `alloc::sync::Arc` in `std` works.
@@ -226,7 +235,9 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
+      # Rust 1.84 fails for reasons unknown to me, and I'm not familiar enough
+      # with emscripten to figure out how to debug it.
+      uses: dtolnay/rust-toolchain@1.83.0
       with:
         toolchain: stable
     - name: Install and configure Cross

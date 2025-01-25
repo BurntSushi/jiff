@@ -152,7 +152,7 @@ impl<W: Write> Write for &mut W {
 ///
 /// use jiff::{civil::date, fmt::{StdIoWrite, temporal::DateTimePrinter}};
 ///
-/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).intz("America/New_York")?;
+/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("America/New_York")?;
 ///
 /// let path = Path::new("/tmp/output");
 /// let mut file = BufWriter::new(File::create(path)?);

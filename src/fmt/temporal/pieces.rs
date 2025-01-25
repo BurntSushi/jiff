@@ -810,7 +810,10 @@ impl<'n> Pieces<'n> {
     /// use jiff::{Timestamp, ToSpan, Unit};
     ///
     /// let ts: Timestamp = "1970-01-01T00:00:00-05:00".parse()?;
-    /// assert_eq!(ts.since((Unit::Hour, Timestamp::UNIX_EPOCH))?, 5.hours());
+    /// assert_eq!(
+    ///     ts.since((Unit::Hour, Timestamp::UNIX_EPOCH))?,
+    ///     5.hours().fieldwise(),
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```

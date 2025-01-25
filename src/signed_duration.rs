@@ -71,7 +71,7 @@ use crate::util::libm::Float;
 /// use jiff::{civil::date, SignedDuration, Span};
 ///
 /// let span: Span = "P1d".parse()?;
-/// let relative = date(2024, 11, 3).intz("US/Eastern")?;
+/// let relative = date(2024, 11, 3).in_tz("US/Eastern")?;
 /// let duration = span.to_jiff_duration(&relative)?;
 /// // This example also motivates *why* a relative date
 /// // is required. Not all days are the same length!
@@ -232,13 +232,13 @@ use crate::util::libm::Float;
 /// ```
 /// use jiff::{civil::date, SignedDuration};
 ///
-/// let zdt = date(2024, 3, 10).at(1, 59, 0, 0).intz("US/Eastern")?;
+/// let zdt = date(2024, 3, 10).at(1, 59, 0, 0).in_tz("US/Eastern")?;
 /// assert_eq!(
 ///     zdt.checked_add(SignedDuration::from_hours(1))?,
 ///     // Time on the clock skipped an hour, but in this time
 ///     // zone, 03:59 is actually precisely 1 hour later than
 ///     // 01:59.
-///     date(2024, 3, 10).at(3, 59, 0, 0).intz("US/Eastern")?,
+///     date(2024, 3, 10).at(3, 59, 0, 0).in_tz("US/Eastern")?,
 /// );
 /// // The same would apply if you used a `Span`:
 /// assert_eq!(
@@ -246,7 +246,7 @@ use crate::util::libm::Float;
 ///     // Time on the clock skipped an hour, but in this time
 ///     // zone, 03:59 is actually precisely 1 hour later than
 ///     // 01:59.
-///     date(2024, 3, 10).at(3, 59, 0, 0).intz("US/Eastern")?,
+///     date(2024, 3, 10).at(3, 59, 0, 0).in_tz("US/Eastern")?,
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -262,10 +262,10 @@ use crate::util::libm::Float;
 /// ```
 /// use jiff::{civil::date, SignedDuration};
 ///
-/// let zdt = date(2024, 3, 8).at(17, 0, 0, 0).intz("US/Eastern")?;
+/// let zdt = date(2024, 3, 8).at(17, 0, 0, 0).in_tz("US/Eastern")?;
 /// assert_eq!(
 ///     zdt.checked_add(SignedDuration::from_hours(7 * 24))?,
-///     date(2024, 3, 15).at(18, 0, 0, 0).intz("US/Eastern")?,
+///     date(2024, 3, 15).at(18, 0, 0, 0).in_tz("US/Eastern")?,
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -280,11 +280,11 @@ use crate::util::libm::Float;
 /// ```
 /// use jiff::{civil::date, ToSpan};
 ///
-/// let zdt = date(2024, 3, 8).at(17, 0, 0, 0).intz("US/Eastern")?;
+/// let zdt = date(2024, 3, 8).at(17, 0, 0, 0).in_tz("US/Eastern")?;
 /// assert_eq!(
 ///     zdt.checked_add(1.week())?,
 ///     // The expected time!
-///     date(2024, 3, 15).at(17, 0, 0, 0).intz("US/Eastern")?,
+///     date(2024, 3, 15).at(17, 0, 0, 0).in_tz("US/Eastern")?,
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())

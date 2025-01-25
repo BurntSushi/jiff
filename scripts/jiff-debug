@@ -43,13 +43,22 @@ case "$1" in
       tz::tzif::tests::debug_tzif -- --nocapture \
       2>&1 > /dev/null
     ;;
+  tzdata-list)
+    if [ -z "$2" ]; then
+      echo "Usage: $(basename "$0") tzdata-list <path/to/tzdata>" >&2
+      exit 1
+    fi
+    JIFF_DEBUG_CONCATENATED_TZDATA="$2" $cargo_test --quiet --lib --features logging \
+      tz::db::concatenated::inner::tests::debug_tzdata_list -- --nocapture \
+      2>&1 > /dev/null
+    ;;
   zoneinfo-walk)
     if [ -z "$2" ]; then
       echo "Usage: $(basename "$0") zoneinfo-walk <path/to/zoneinfo/dir>" >&2
       exit 1
     fi
     JIFF_DEBUG_ZONEINFO_DIR="$2" $cargo_test --quiet --lib --features logging \
-      tz::db::zoneinfo::tests::debug_zoneinfo_walk -- --nocapture \
+      tz::db::zoneinfo::inner::tests::debug_zoneinfo_walk -- --nocapture \
       2>&1 > /dev/null
     ;;
   *)
