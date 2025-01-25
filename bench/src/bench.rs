@@ -673,7 +673,7 @@ fn parse_friendly(c: &mut Criterion) {
         c.bench_function(&format!("jiff-span/{NAME}/{kind}"), |b| {
             b.iter(|| {
                 let got: jiff::Span = input.parse().unwrap();
-                assert_eq!(got, expected);
+                assert_eq!(got.fieldwise(), expected.fieldwise());
             })
         });
     }
