@@ -72,7 +72,7 @@ use crate::util::libm::Float;
 ///
 /// let span: Span = "P1d".parse()?;
 /// let relative = date(2024, 11, 3).in_tz("US/Eastern")?;
-/// let duration = span.to_jiff_duration(&relative)?;
+/// let duration = span.to_duration(&relative)?;
 /// // This example also motivates *why* a relative date
 /// // is required. Not all days are the same length!
 /// assert_eq!(duration.to_string(), "PT25H");
@@ -1791,7 +1791,7 @@ impl SignedDuration {
     ) -> SignedDuration {
         // OK because all the difference between any two timestamp values can
         // fit into a signed duration.
-        timestamp2.as_jiff_duration() - timestamp1.as_jiff_duration()
+        timestamp2.as_duration() - timestamp1.as_duration()
     }
 
     pub(crate) fn datetime_until(
@@ -2075,6 +2075,13 @@ impl TryFrom<SignedDuration> for Duration {
     type Error = Error;
 
     fn try_from(sd: SignedDuration) -> Result<Duration, Error> {
+        // This isn't needed, but improves error messages.
+        if sd.is_negative() {
+            return Err(err!(
+                "cannot convert negative duration `{sd:?}` to \
+                 unsigned `std::time::Duration`",
+            ));
+        }
         let secs = u64::try_from(sd.as_secs()).map_err(|_| {
             err!("seconds in signed duration {sd:?} overflowed u64")
         })?;

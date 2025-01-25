@@ -1187,7 +1187,7 @@ impl SpanPrinter {
         self.print_span_designators_non_fraction(&non_fractional, wtr)?;
         wtr.write_fractional_duration(
             unit,
-            &fractional.to_jiff_duration_invariant(),
+            &fractional.to_duration_invariant(),
         )?;
         Ok(())
     }
@@ -1615,7 +1615,7 @@ impl FractionalPrinter {
         fmtfraction: FractionalFormatter,
     ) -> FractionalPrinter {
         debug_assert!(span.largest_unit() <= Unit::from(unit));
-        let dur = span.to_jiff_duration_invariant();
+        let dur = span.to_duration_invariant();
         FractionalPrinter::from_duration(&dur, unit, fmtint, fmtfraction)
     }
 

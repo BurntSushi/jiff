@@ -648,7 +648,7 @@ pub(crate) use span_eq;
 /// Similar code can be written for `SignedDuration` as well.
 ///
 /// If you need to convert such spans, then as the error suggests, you'll need
-/// to use [`Span::to_jiff_duration`] with a relative date.
+/// to use [`Span::to_duration`] with a relative date.
 ///
 /// And note that since a `Span` is signed and a `std::time::Duration` is unsigned,
 /// converting a negative `Span` to `std::time::Duration` will always fail. One can use
@@ -2279,15 +2279,6 @@ impl Span {
     /// (Which will error when given a span with non-zero units bigger than
     /// days.)
     ///
-    /// # Planned breaking change
-    ///
-    /// It is planned to rename this routine to `Span::to_duration` in `jiff
-    /// 0.2`. The current `Span::to_duration` routine, which returns a
-    /// `std::time::Duration`, will be removed. If callers need to convert
-    /// a `Span` to a `std::time::Duration`, then they should first convert
-    /// it to a `SignedDuration`, and then to a `std::time::Duration` via
-    /// `TryFrom<SignedDuration> for Duration`.
-    ///
     /// # Errors
     ///
     /// This returns an error if adding this span to the date given results in
@@ -2305,22 +2296,22 @@ impl Span {
     ///
     /// let span = 1.year();
     ///
-    /// let duration = span.to_jiff_duration(date(2024, 1, 1))?;
+    /// let duration = span.to_duration(date(2024, 1, 1))?;
     /// assert_eq!(duration, SignedDuration::from_secs(31_622_400));
-    /// let duration = span.to_jiff_duration(date(2023, 1, 1))?;
+    /// let duration = span.to_duration(date(2023, 1, 1))?;
     /// assert_eq!(duration, SignedDuration::from_secs(31_536_000));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_jiff_duration<'a, R: Into<SpanRelativeTo<'a>>>(
+    pub fn to_duration<'a, R: Into<SpanRelativeTo<'a>>>(
         &self,
         relative: R,
     ) -> Result<SignedDuration, Error> {
         let max_unit = self.largest_unit();
         let relative: SpanRelativeTo<'a> = relative.into();
         let Some(result) = relative.to_relative(max_unit).transpose() else {
-            return Ok(self.to_jiff_duration_invariant());
+            return Ok(self.to_duration_invariant());
         };
         let relspan = result
             .and_then(|r| r.into_relative_span(Unit::Second, *self))
@@ -2332,7 +2323,7 @@ impl Span {
                 )
             })?;
         debug_assert!(relspan.span.largest_unit() <= Unit::Second);
-        Ok(relspan.span.to_jiff_duration_invariant())
+        Ok(relspan.span.to_duration_invariant())
     }
 
     /// Converts an entirely invariant span to a `SignedDuration`.
@@ -2341,7 +2332,7 @@ impl Span {
     /// it does have non-zero units of days, then every day is considered 24
     /// hours.
     #[inline]
-    pub(crate) fn to_jiff_duration_invariant(&self) -> SignedDuration {
+    pub(crate) fn to_duration_invariant(&self) -> SignedDuration {
         // This guarantees, at compile time, that a maximal invariant Span
         // (that is, all units are days or lower and all units are set to their
         // maximum values) will still balance out to a number of seconds that
@@ -2383,167 +2374,6 @@ impl Span {
         // because we guaranteed by construction above that |subsec_nanos| <
         // 1_000_000_000.
         SignedDuration::new(seconds, subsec_nanos)
-    }
-}
-
-/// Deprecated APIs on `Span`.
-impl Span {
-    /// Converts a non-negative `Span` to an unsigned [`std::time::Duration`]
-    /// relative to the date given.
-    ///
-    /// In most cases, it is unlikely that you'll need to use this routine to
-    /// convert a `Span` to a `Duration`. Namely, every Jiff routine for
-    /// computing a `Span` between datetimes ([`Zoned`], [`Timestamp`],
-    /// [`DateTime`], etc.) will return spans with uniform units by default.
-    /// That is, _by default_:
-    ///
-    /// * [`Zoned::until`] guarantees that the biggest non-zero unit is hours.
-    /// * [`Timestamp::until`] guarantees that the biggest non-zero unit is
-    /// seconds.
-    /// * [`DateTime::until`] guarantees that the biggest non-zero unit is
-    /// days.
-    /// * [`Date::until`] guarantees that the biggest non-zero unit is days.
-    /// * [`Time::until`] guarantees that the biggest non-zero unit is hours.
-    ///
-    /// Of course, this can be changed by asking, for example, `Zoned::until`
-    /// to return units up to years. But by default, in every case above,
-    /// converting the resulting `Span` to a `std::time::Duration` can be done
-    /// _correctly_ without providing a relative date. This conversion is done
-    /// with the `TryFrom<Span> for Duration` trait implementation. (Which will
-    /// error when given a span with non-zero units bigger than days.)
-    ///
-    /// # Errors
-    ///
-    /// This returns an error if this span is negative or if adding this span
-    /// to the date given results in overflow.
-    ///
-    /// # Example: converting a span with calendar units to a `Duration`
-    ///
-    /// This compares the number of seconds in a non-leap year with a leap
-    /// year:
-    ///
-    /// ```
-    /// use std::time::Duration;
-    ///
-    /// use jiff::{civil::date, Span, ToSpan};
-    ///
-    /// let span = 1.year();
-    ///
-    /// let duration = span.to_duration(date(2024, 1, 1))?;
-    /// assert_eq!(duration, Duration::from_secs(31_622_400));
-    /// let duration = span.to_duration(date(2023, 1, 1))?;
-    /// assert_eq!(duration, Duration::from_secs(31_536_000));
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    ///
-    /// # Example: converting a negative span
-    ///
-    /// Since a `Span` is signed and a `Duration` is unsigned, converting
-    /// a negative `Span` to `Duration` will always fail. One can use
-    /// [`Span::signum`] to get the sign of the span and [`Span::abs`] to make
-    /// the span positive before converting it to a `Duration`:
-    ///
-    /// ```
-    /// use std::time::Duration;
-    ///
-    /// use jiff::{civil::date, Span, ToSpan};
-    ///
-    /// let span = -1.year();
-    /// let (sign, duration) = (
-    ///     span.signum(),
-    ///     span.abs().to_duration(date(2024, 1, 1))?,
-    /// );
-    /// assert_eq!((sign, duration), (-1, Duration::from_secs(31_622_400)));
-    ///
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
-    #[deprecated(since = "0.1.5", note = "use Span::to_jiff_duration instead")]
-    #[inline]
-    pub fn to_duration<'a, R: Into<SpanRelativeTo<'a>>>(
-        &self,
-        relative: R,
-    ) -> Result<UnsignedDuration, Error> {
-        if self.is_negative() {
-            return Err(err!(
-                "cannot convert negative span {self:?} \
-                 to unsigned std::time::Duration",
-            ));
-        }
-        let max_unit = self.largest_unit();
-        let relative: SpanRelativeTo<'a> = relative.into();
-        let Some(result) = relative.to_relative(max_unit).transpose() else {
-            return Ok(self.to_duration_invariant());
-        };
-        let relspan = result
-            .and_then(|r| r.into_relative_span(Unit::Second, *self))
-            .with_context(|| {
-                err!(
-                    "could not compute normalized relative span \
-                     from datetime {relative} and span {self}",
-                    relative = relative.kind,
-                )
-            })?;
-        debug_assert!(relspan.span.largest_unit() <= Unit::Second);
-        Ok(relspan.span.to_duration_invariant())
-    }
-
-    /// Converts a positive and entirely invariant span to a std Duration.
-    ///
-    /// Callers must ensure that this span is positive and that it has no units
-    /// greater than days. If it does have non-zero units of days, then every
-    /// day is considered 24 hours.
-    #[inline]
-    fn to_duration_invariant(&self) -> UnsignedDuration {
-        // This guarantees, at compile time, that a maximal invariant Span
-        // (that is, all units are days or lower and all units are set to their
-        // maximum values) will still balance out to a number of seconds that
-        // fits into a `u64`. This in turn implies that a `Duration` can
-        // represent all possible invariant positive spans.
-        const _FITS_IN_U64: () = {
-            debug_assert!(
-                u64::MAX as u128
-                    > ((t::SpanDays::MAX * t::SECONDS_PER_CIVIL_DAY.bound())
-                        + (t::SpanHours::MAX * t::SECONDS_PER_HOUR.bound())
-                        + (t::SpanMinutes::MAX
-                            * t::SECONDS_PER_MINUTE.bound())
-                        + t::SpanSeconds::MAX
-                        + (t::SpanMilliseconds::MAX
-                            / t::MILLIS_PER_SECOND.bound())
-                        + (t::SpanMicroseconds::MAX
-                            / t::MICROS_PER_SECOND.bound())
-                        + (t::SpanNanoseconds::MAX
-                            / t::NANOS_PER_SECOND.bound()))
-                        as u128,
-            );
-            ()
-        };
-
-        let nanos = self.to_invariant_nanoseconds();
-        debug_assert!(nanos >= 0, "span must be positive");
-        debug_assert!(
-            self.largest_unit() <= Unit::Day,
-            "units must be days or lower"
-        );
-
-        let seconds = nanos / t::NANOS_PER_SECOND;
-        // These are OK because even if we have maximal units for days, hours,
-        // minutes, seconds, milliseconds, microseconds and nanoseconds, it
-        // still doesn't combine to more than u64::MAX seconds.
-        let seconds = i64::from(seconds);
-        let seconds = u64::try_from(seconds).unwrap();
-
-        let subsec_nanos = nanos % t::NANOS_PER_SECOND;
-        // These are okay because we assume nanos is positive and
-        // because % 1_000_000_000 above guarantees that the result
-        // fits into a 32-bit integer, signed or unsigned.
-        let subsec_nanos = i32::try_from(subsec_nanos).unwrap();
-        let subsec_nanos = u32::try_from(subsec_nanos).unwrap();
-
-        // Duration::new can panic if subsec_nanos >= 1_000_000_000 and seconds
-        // == u64::MAX. But this can never happen because we guaranteed by
-        // construction above that subsec_nanos < 1_000_000_000.
-        UnsignedDuration::new(seconds, subsec_nanos)
     }
 }
 
@@ -3463,21 +3293,14 @@ impl TryFrom<Span> for UnsignedDuration {
 
     #[inline]
     fn try_from(sp: Span) -> Result<UnsignedDuration, Error> {
+        // This isn't needed, but improves error messages.
         if sp.is_negative() {
             return Err(err!(
                 "cannot convert negative span {sp:?} \
                  to unsigned std::time::Duration",
             ));
         }
-        if sp.largest_unit() > Unit::Day {
-            return Err(err!(
-                "cannot convert span with non-zero {unit}, \
-                 must use Span::to_duration with a relative date \
-                 instead",
-                unit = sp.largest_unit().plural(),
-            ));
-        }
-        Ok(sp.to_duration_invariant())
+        SignedDuration::try_from(sp).and_then(UnsignedDuration::try_from)
     }
 }
 
@@ -3580,12 +3403,12 @@ impl TryFrom<UnsignedDuration> for Span {
 ///
 /// If you need to convert a `Span` to a `SignedDuration` that has non-zero
 /// units bigger than days (or a `Span` with days of non-uniform length), then
-/// please use [`Span::to_jiff_duration`] with a corresponding relative date.
+/// please use [`Span::to_duration`] with a corresponding relative date.
 ///
 /// Note that in `jiff 0.2`, this routine will return an error the span has
 /// non-zero units of _days_ or greater. Callers may write forward compatible
 /// code that assumes days are an invariant 24 hours in length by providing
-/// [`SpanRelativeTo::days_are_24_hours`] to [`Span::to_jiff_duration`].
+/// [`SpanRelativeTo::days_are_24_hours`] to [`Span::to_duration`].
 ///
 /// # Example: maximal span
 ///
@@ -3623,7 +3446,7 @@ impl TryFrom<Span> for SignedDuration {
             ));
         }
         deprecation_warn_invariant_days(largest);
-        Ok(sp.to_jiff_duration_invariant())
+        Ok(sp.to_duration_invariant())
     }
 }
 
@@ -5451,7 +5274,7 @@ impl<'a> SpanRelativeTo<'a> {
     /// * [`Span::compare`]
     /// * [`Span::total`]
     /// * [`Span::round`]
-    /// * [`Span::to_jiff_duration`]
+    /// * [`Span::to_duration`]
     ///
     /// Specifically, in `jiff 0.1`, the above APIs permitted _silently_
     /// assuming that days are always 24 hours when a relative reference date
