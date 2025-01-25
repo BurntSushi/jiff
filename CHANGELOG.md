@@ -9,6 +9,12 @@
 The deprecated `intz` routines on `Zoned`, `Timestamp`, `civil::DateTime` and
 `civil::Date` have been removed. You can use `in_tz` instead. This change was
 made because many found the name `intz` to be unclear.
+* [#32](https://github.com/BurntSushi/jiff/issues/32):
+The `PartialEq` and `Eq` trait implementations on `Span` have been removed.
+Ideally these shouldn't have been used, but if you do need them, please use
+`Span::fieldwise` to create a `SpanFieldwise`, which does have the `PartialEq`
+and `Eq` traits implemented. These were removed on `Span` itself because they
+made it very easy to commit subtle bugs.
 * [#36](https://github.com/BurntSushi/jiff/issues/36):
 Turn panics during `Timestamp::saturing_add` into errors. Callers adding
 spans that are known to contain units of hours or smaller are guaranteed that

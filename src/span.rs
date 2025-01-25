@@ -294,24 +294,22 @@ pub(crate) use span_eq;
 ///
 /// # Comparisons
 ///
-/// While a `Span` currently implements the `PartialEq` and `Eq` traits, these
-/// implementations are deprecated and will be removed in `jiff 0.2`. The trait
-/// implementations only do comparisons based on the fields in the `Span` and
-/// do not take total duration into account. These were deprecated because
-/// it made it too easy to introduce bugs. For example, `120.minutes()` and
-/// `2.hours()` always correspond to the same total duration, but they have
-/// different representations in memory.
+/// A `Span` does not implement the `PartialEq` or `Eq` traits. These traits
+/// were implemented in an earlier version of Jiff, but they made it too
+/// easy to introduce bugs. For example, `120.minutes()` and `2.hours()`
+/// always correspond to the same total duration, but they have different
+/// representations in memory and so didn't compare equivalent.
 ///
 /// The reason why the `PartialEq` and `Eq` trait implementations do not do
 /// comparisons with total duration is because it is fundamentally impossible
 /// to do such comparisons without a reference date in all cases.
 ///
-/// However, it is undeniably occasionally useful to do comparisons based on
-/// the component fields, so long as such use cases can tolerate two different
-/// spans comparing unequal even when their total durations are equivalent. For
-/// example, many of the tests in Jiff (including the tests in the documentation)
-/// work by comparing a `Span` to an expected result. This is a good demonstration
-/// of when fieldwise comparisons are appropriate.
+/// However, it is undeniably occasionally useful to do comparisons based
+/// on the component fields, so long as such use cases can tolerate two
+/// different spans comparing unequal even when their total durations are
+/// equivalent. For example, many of the tests in Jiff (including the tests in
+/// the documentation) work by comparing a `Span` to an expected result. This
+/// is a good demonstration of when fieldwise comparisons are appropriate.
 ///
 /// To do fieldwise comparisons with a span, use the [`Span::fieldwise`]
 /// method. This method creates a [`SpanFieldwise`], which is just a `Span`
@@ -1406,11 +1404,6 @@ impl Span {
     /// However, in some cases, it is useful to be able to assert precise
     /// field values. For example, Jiff itself makes heavy use of fieldwise
     /// comparisons for tests.
-    ///
-    /// **NOTE:** In `jiff 0.1`, the `Span` type itself also implements the
-    /// `Eq` and `PartialEq` traits. This was considered a bug in the API and
-    /// these trait implementations have been deprecated and will be removed
-    /// in `jiff 0.2`.
     ///
     /// # Example: the difference between `SpanFieldwise` and `Span::compare`
     ///
@@ -3330,26 +3323,6 @@ impl Default for Span {
     }
 }
 
-/// DEPRECATED since `jiff 0.1.25`.
-///
-/// Please use [`Span::fieldwise`] to create a span that can be compared by its
-/// fields.
-///
-/// This trait implementation will be removed in `jiff 0.2`.
-impl Eq for Span {}
-
-/// DEPRECATED since `jiff 0.1.25`.
-///
-/// Please use [`Span::fieldwise`] to create a span that can be compared by its
-/// fields.
-///
-/// This trait implementation will be removed in `jiff 0.2`.
-impl PartialEq for Span {
-    fn eq(&self, rhs: &Span) -> bool {
-        self.fieldwise() == rhs.fieldwise()
-    }
-}
-
 impl core::fmt::Debug for Span {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -3856,11 +3829,6 @@ impl quickcheck::Arbitrary for Span {
 /// However, in some cases, it is useful to be able to assert precise field
 /// values. For example, Jiff itself makes heavy use of fieldwise comparisons
 /// for tests.
-///
-/// **NOTE:** In `jiff 0.1`, the `Span` type itself also implements the
-/// `Eq` and `PartialEq` traits. This was considered a bug in the API and
-/// these trait implementations have been deprecated and will be removed
-/// in `jiff 0.2`.
 ///
 /// # Construction
 ///
