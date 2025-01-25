@@ -188,6 +188,7 @@ strings, the strings are matched without regard to ASCII case.
 | `%t` | `\t` | Formats as a tab character. Parses arbitrary whitespace. |
 | `%U` | `03` | Week number. Week 1 is the first week starting with a Sunday. Zero padded. |
 | `%u` | `7` | The day of the week beginning with Monday at `1`. |
+| `%V` | `05` | Week number in the [ISO 8601 week-based] calendar. Zero padded. |
 | `%W` | `03` | Week number. Week 1 is the first week starting with a Monday. Zero padded. |
 | `%w` | `0` | The day of the week beginning with Sunday at `0`. |
 | `%Y` | `2024` | A full year, including century. Zero padded to 4 digits. |
@@ -195,17 +196,6 @@ strings, the strings are matched without regard to ASCII case.
 | `%Z` | `EDT` | A time zone abbreviation. Supported when formatting only. |
 | `%z` | `+0530` | A time zone offset in the format `[+-]HHMM[SS]`. |
 | `%:z` | `+05:30` | A time zone offset in the format `[+-]HH:MM[:SS]`. |
-
-The following specifiers are deprecated. Specifically, in `jiff 0.2`, `%V` will
-parse or print the ISO 8601 week number and `%:V` will no longer be recognized.
-To emit an IANA time zone identifier (which is what `%V` does in `jiff 0.1`)
-in a forward compatible way, please use the `%Q` or `%:Q` specifier (as listed
-above).
-
-| Specifier | Example | Description |
-| --------- | ------- | ----------- |
-| `%V` | `America/New_York`, `+0530` | An IANA time zone identifier, or `%z` if one doesn't exist. |
-| `%:V` | `America/New_York`, `+05:30` | An IANA time zone identifier, or `%:z` if one doesn't exist. |
 
 When formatting, the following flags can be inserted immediately after the `%`
 and before the directive:
@@ -257,8 +247,6 @@ is variable width data. If you have a use case for this, please
 The following things are currently unsupported:
 
 * Parsing or formatting fractional seconds in the time time zone offset.
-* A conversion specifier for an ISO 8601 week number. It is planned to support
-  this, via `%V`, in `jiff 0.2`.
 * Locale oriented conversion specifiers, such as `%c`, `%r` and `%+`, are not
   supported by Jiff. For locale oriented datetime formatting, please use the
   [`icu`] crate.
@@ -270,7 +258,7 @@ The following things are currently unsupported:
 */
 
 use crate::{
-    civil::{Date, DateTime, Time, Weekday},
+    civil::{Date, DateTime, ISOWeekDate, Time, Weekday},
     error::{err, ErrorContext},
     fmt::{
         strtime::{format::Formatter, parse::Parser},
@@ -488,6 +476,7 @@ pub struct BrokenDownTime {
     day: Option<t::Day>,
     day_of_year: Option<t::DayOfYear>,
     iso_week_year: Option<t::ISOYear>,
+    iso_week: Option<t::ISOWeek>,
     week_sun: Option<t::WeekNum>,
     week_mon: Option<t::WeekNum>,
     hour: Option<t::Hour>,
@@ -1035,9 +1024,18 @@ impl BrokenDownTime {
     #[inline]
     pub fn to_date(&self) -> Result<Date, Error> {
         let Some(year) = self.year else {
+            // The Gregorian year and ISO week year may be parsed separately.
+            // That is, they are two different fields. So if the Gregorian year
+            // is absent, we might still have an ISO 8601 week date.
+            if let Some(date) = self.to_date_from_iso()? {
+                return Ok(date);
+            }
             return Err(err!("missing year, date cannot be created"));
         };
         let mut date = self.to_date_from_gregorian(year)?;
+        if date.is_none() {
+            date = self.to_date_from_iso()?;
+        }
         if date.is_none() {
             date = self.to_date_from_day_of_year(year)?;
         }
@@ -1091,6 +1089,18 @@ impl BrokenDownTime {
                 .build()
                 .context("invalid date")?
         }))
+    }
+
+    #[inline]
+    fn to_date_from_iso(&self) -> Result<Option<Date>, Error> {
+        let (Some(y), Some(w), Some(d)) =
+            (self.iso_week_year, self.iso_week, self.weekday)
+        else {
+            return Ok(None);
+        };
+        let wd = ISOWeekDate::new_ranged(y, w, d)
+            .context("invalid ISO 8601 week date")?;
+        Ok(Some(wd.date()))
     }
 
     #[inline]
@@ -1538,6 +1548,32 @@ impl BrokenDownTime {
     #[inline]
     pub fn iso_week_year(&self) -> Option<i16> {
         self.iso_week_year.map(|x| x.get())
+    }
+
+    /// Returns the parsed ISO 8601 week-based number, if available.
+    ///
+    /// The week number is guaranteed to be in the range `1..53`. Week `1` is
+    /// the first week of the year to contain 4 days.
+    ///
+    ///
+    /// # Example
+    ///
+    /// This shows how to parse just an ISO 8601 week-based dates:
+    ///
+    /// ```
+    /// use jiff::{civil::{Weekday, date}, fmt::strtime::BrokenDownTime};
+    ///
+    /// let tm = BrokenDownTime::parse("%G-W%V-%w", "2020-W01-1")?;
+    /// assert_eq!(tm.iso_week_year(), Some(2020));
+    /// assert_eq!(tm.iso_week(), Some(1));
+    /// assert_eq!(tm.weekday(), Some(Weekday::Monday));
+    /// assert_eq!(tm.to_date()?, date(2019, 12, 30));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn iso_week(&self) -> Option<i8> {
+        self.iso_week.map(|x| x.get())
     }
 
     /// Returns the Sunday based week number.
@@ -2016,6 +2052,46 @@ impl BrokenDownTime {
         Ok(())
     }
 
+    /// Set the ISO 8601 week-based number on this broken down time.
+    ///
+    /// The week number must be in the range `1..53`. Week `1` is
+    /// the first week of the year to contain 4 days.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given week number is out of range.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil::Weekday, fmt::strtime::BrokenDownTime};
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// // out of range
+    /// assert!(tm.set_iso_week(Some(0)).is_err());
+    /// // out of range
+    /// assert!(tm.set_iso_week(Some(54)).is_err());
+    ///
+    /// tm.set_iso_week_year(Some(2020))?;
+    /// tm.set_iso_week(Some(1))?;
+    /// tm.set_weekday(Some(Weekday::Monday));
+    /// assert_eq!(tm.to_string("%G-W%V-%w")?, "2020-W01-1");
+    /// assert_eq!(tm.to_string("%F")?, "2019-12-30");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_iso_week(
+        &mut self,
+        week_number: Option<i8>,
+    ) -> Result<(), Error> {
+        self.iso_week = match week_number {
+            None => None,
+            Some(wk) => Some(t::ISOWeek::try_new("week-number", wk)?),
+        };
+        Ok(())
+    }
+
     /// Set the Sunday based week number.
     ///
     /// The week number returned is always in the range `0..=53`. Week `1`
@@ -2431,6 +2507,17 @@ impl From<Date> for BrokenDownTime {
             year: Some(d.year_ranged()),
             month: Some(d.month_ranged()),
             day: Some(d.day_ranged()),
+            ..BrokenDownTime::default()
+        }
+    }
+}
+
+impl From<ISOWeekDate> for BrokenDownTime {
+    fn from(wd: ISOWeekDate) -> BrokenDownTime {
+        BrokenDownTime {
+            iso_week_year: Some(wd.year_ranged()),
+            iso_week: Some(wd.week_ranged()),
+            weekday: Some(wd.weekday()),
             ..BrokenDownTime::default()
         }
     }
