@@ -5166,10 +5166,9 @@ impl ZonedWith {
     ///
     /// # Example: offset conflict resolution and disambiguation
     ///
-    /// This example shows how to set the disambiguation configuration can
-    /// interact with the default offset conflict resolution strategy in
-    /// unintuitive ways. For example, here, we request the "earlier" datetime
-    /// whenever there's an ambiguity:
+    /// This example shows how the disambiguation configuration can
+    /// interact with the default offset conflict resolution strategy of
+    /// [`OffsetConflict::PreferOffset`]:
     ///
     /// ```
     /// use jiff::{civil::date, tz, Zoned};
@@ -5181,6 +5180,32 @@ impl ZonedWith {
     /// let zdt2 = zdt1
     ///     .with()
     ///     .disambiguation(tz::Disambiguation::Earlier)
+    ///     .day(10)
+    ///     .build()?;
+    /// assert_eq!(zdt2.datetime(), date(2024, 3, 10).at(1, 5, 0, 0));
+    /// assert_eq!(zdt2.offset(), tz::offset(-5));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Namely, while we started with an offset of `-04`, it (along with all
+    /// other offsets) are considered invalid during civil time gaps due to
+    /// time zone transitions (such as the beginning of daylight saving time in
+    /// most locations).
+    ///
+    /// The default disambiguation strategy is
+    /// [`Disambiguation::Compatible`], which in the case of gaps, chooses the
+    /// time after the gap:
+    ///
+    /// ```
+    /// use jiff::{civil::date, tz, Zoned};
+    ///
+    /// // This datetime is unambiguous.
+    /// let zdt1 = "2024-03-11T02:05[America/New_York]".parse::<Zoned>()?;
+    /// assert_eq!(zdt1.offset(), tz::offset(-4));
+    /// // But the same time on March 10 is ambiguous because there is a gap!
+    /// let zdt2 = zdt1
+    ///     .with()
     ///     .day(10)
     ///     .build()?;
     /// assert_eq!(zdt2.datetime(), date(2024, 3, 10).at(3, 5, 0, 0));
@@ -5189,13 +5214,10 @@ impl ZonedWith {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
-    /// Yet instead, we get the later time, after the gap. This is because
-    /// the default offset conflict resolution strategy is
-    /// [`OffsetConflict::PreferOffset`], and therefore, the offset in the
-    /// current zoned datetime is prioritized. In the example above, the
-    /// offset of `zdt1` is `-04`, since it comes after DST takes effect in
-    /// `America/New_York`. One can override the offset conflict resolution
-    /// to force disambiguation in cases like this:
+    /// Alternatively, one can choose to always respect the offset, and thus
+    /// civil time for the provided time zone will be adjusted to match the
+    /// instant prescribed by the offset. In this case, no disambiguation is
+    /// performed:
     ///
     /// ```
     /// use jiff::{civil::date, tz, Zoned};
@@ -5206,11 +5228,12 @@ impl ZonedWith {
     /// // But the same time on March 10 is ambiguous because there is a gap!
     /// let zdt2 = zdt1
     ///     .with()
-    ///     .disambiguation(tz::Disambiguation::Earlier)
-    ///     // ignore any offset given
-    ///     .offset_conflict(tz::OffsetConflict::AlwaysTimeZone)
+    ///     .offset_conflict(tz::OffsetConflict::AlwaysOffset)
     ///     .day(10)
     ///     .build()?;
+    /// // Why do we get this result? Because `2024-03-10T02:05-04` is
+    /// // `2024-03-10T06:05Z`. And in `America/New_York`, the civil time
+    /// // for that timestamp is `2024-03-10T01:05-05`.
     /// assert_eq!(zdt2.datetime(), date(2024, 3, 10).at(1, 5, 0, 0));
     /// assert_eq!(zdt2.offset(), tz::offset(-5));
     ///
@@ -5454,8 +5477,9 @@ mod tests {
         let zdt2 = zdt1.with().hour(2).build().unwrap();
         assert_eq!(zdt2.to_string(), "2024-03-10T03:30:00-04:00[US/Eastern]");
 
-        // This is a current difference from Temporal. Temporal ignores the
-        // disambiguation setting (and the bad offset).
+        // I originally thought that this was difference from Temporal. Namely,
+        // I thought that Temporal ignored the disambiguation setting (and the
+        // bad offset). But it doesn't. I was holding it wrong.
         //
         // See: https://github.com/tc39/proposal-temporal/issues/3078
         let zdt1: Zoned = "2024-03-10T01:30[US/Eastern]".parse().unwrap();
@@ -5463,6 +5487,20 @@ mod tests {
         let zdt2 = zdt1
             .with()
             .offset(tz::offset(10))
+            .hour(2)
+            .disambiguation(Disambiguation::Earlier)
+            .build()
+            .unwrap();
+        assert_eq!(zdt2.to_string(), "2024-03-10T01:30:00-05:00[US/Eastern]");
+
+        // This should also respect the disambiguation setting even without
+        // explicitly specifying an invalid offset. This is becaue `02:30-05`
+        // is regarded as invalid since `02:30` isn't a valid civil time on
+        // this date in this time zone.
+        let zdt1: Zoned = "2024-03-10T01:30[US/Eastern]".parse().unwrap();
+        assert_eq!(zdt1.to_string(), "2024-03-10T01:30:00-05:00[US/Eastern]");
+        let zdt2 = zdt1
+            .with()
             .hour(2)
             .disambiguation(Disambiguation::Earlier)
             .build()
