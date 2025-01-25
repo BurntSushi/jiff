@@ -1,5 +1,21 @@
 # CHANGELOG
 
+0.2.0 (TBD)
+===========
+
+**BREAKING CHANGES**:
+
+* [#36](https://github.com/BurntSushi/jiff/issues/36):
+Turn panics during `Timestamp::saturing_add` into errors. Callers adding
+spans that are known to contain units of hours or smaller are guaranteed that
+this will not panic.
+* [#147](https://github.com/BurntSushi/jiff/issues/147):
+Change the behavior of the deprecated `%V` conversion specifier in
+`jiff::fmt::strtime` from formatting an IANA time zone identifier to formatting
+an ISO 8601 week number. To format an IANA time zone identifier, use `%Q` or
+`%:Q` (which were introduced in `jiff 0.1`).
+
+
 0.1.26 (2025-01-23)
 ===================
 This is a small release with another deprecation and a new API for doing
