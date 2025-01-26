@@ -19,6 +19,12 @@ made it very easy to commit subtle bugs.
 Turn panics during `Timestamp::saturing_add` into errors. Callers adding
 spans that are known to contain units of hours or smaller are guaranteed that
 this will not panic.
+* [#48](https://github.com/BurntSushi/jiff/issues/48):
+On `Span` APIs, days are no longer silently assumed to always be 24 hours when
+a relative datetime is not provided. Instead, to perform operations on units
+of days or bigger, callers must either provide a relative date or opt into
+invariant 24-hour days with `SpanRelativeTo::days_are_24_hours`. Shortcuts have
+been added to the span builders. For example, `SpanTotal::days_are_24_hours`.
 * [#147](https://github.com/BurntSushi/jiff/issues/147):
 Change the behavior of the deprecated `%V` conversion specifier in
 `jiff::fmt::strtime` from formatting an IANA time zone identifier to formatting
