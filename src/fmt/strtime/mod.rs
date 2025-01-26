@@ -2455,7 +2455,7 @@ impl BrokenDownTime {
 
 impl<'a> From<&'a Zoned> for BrokenDownTime {
     fn from(zdt: &'a Zoned) -> BrokenDownTime {
-        let (_, _, tzabbrev) = zdt.time_zone().to_offset(zdt.timestamp());
+        let offset_info = zdt.time_zone().to_offset_info(zdt.timestamp());
         #[cfg(feature = "alloc")]
         let iana = {
             use alloc::string::ToString;
@@ -2466,7 +2466,7 @@ impl<'a> From<&'a Zoned> for BrokenDownTime {
             // In theory, this could fail, but I've never seen a time zone
             // abbreviation longer than a few bytes. Please file an issue if
             // this is a problem for you.
-            tzabbrev: Abbreviation::new(tzabbrev),
+            tzabbrev: Abbreviation::new(offset_info.abbreviation()),
             #[cfg(feature = "alloc")]
             iana,
             ..BrokenDownTime::from(zdt.datetime())

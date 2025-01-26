@@ -490,7 +490,7 @@ impl Zoned {
     /// ```
     #[inline]
     pub fn new(timestamp: Timestamp, time_zone: TimeZone) -> Zoned {
-        let (offset, _, _) = time_zone.to_offset(timestamp);
+        let offset = time_zone.to_offset(timestamp);
         let datetime = offset.to_datetime(timestamp);
         let inner = ZonedInner { timestamp, datetime, offset, time_zone };
         Zoned { inner }
@@ -5381,7 +5381,7 @@ mod tests {
             }
             #[cfg(all(target_pointer_width = "64", not(feature = "alloc")))]
             {
-                assert_eq!(120, core::mem::size_of::<Zoned>());
+                assert_eq!(104, core::mem::size_of::<Zoned>());
             }
         }
         #[cfg(not(debug_assertions))]
@@ -5392,7 +5392,13 @@ mod tests {
             }
             #[cfg(all(target_pointer_width = "64", not(feature = "alloc")))]
             {
-                assert_eq!(56, core::mem::size_of::<Zoned>());
+                // This asserts the same value as the alloc value above, but
+                // it wasn't always this way, which is why it's written out
+                // separately. Moreover, in theory, I'd be open to regressing
+                // this value if it led to an improvement in alloc-mode. But
+                // more likely, it would be nice to decrease this size in
+                // non-alloc modes.
+                assert_eq!(40, core::mem::size_of::<Zoned>());
             }
         }
     }
