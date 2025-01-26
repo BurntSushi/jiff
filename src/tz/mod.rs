@@ -677,8 +677,7 @@ impl TimeZone {
     /// ```
     #[inline]
     pub fn to_datetime(&self, timestamp: Timestamp) -> DateTime {
-        let (offset, _, _) = self.to_offset(timestamp);
-        offset.to_datetime(timestamp)
+        self.to_offset(timestamp).to_datetime(timestamp)
     }
 
     /// Returns the offset corresponding to the given timestamp in this time
@@ -704,33 +703,89 @@ impl TimeZone {
     ///
     /// // A timestamp in DST in New York.
     /// let ts = Timestamp::from_second(1_720_493_204)?;
-    /// let (offset, dst, abbrev) = tz.to_offset(ts);
+    /// let offset = tz.to_offset(ts);
     /// assert_eq!(offset, tz::offset(-4));
-    /// assert_eq!(dst, Dst::Yes);
-    /// assert_eq!(abbrev, "EDT");
     /// assert_eq!(offset.to_datetime(ts).to_string(), "2024-07-08T22:46:44");
     ///
     /// // A timestamp *not* in DST in New York.
     /// let ts = Timestamp::from_second(1_704_941_204)?;
-    /// let (offset, dst, abbrev) = tz.to_offset(ts);
+    /// let offset = tz.to_offset(ts);
     /// assert_eq!(offset, tz::offset(-5));
-    /// assert_eq!(dst, Dst::No);
-    /// assert_eq!(abbrev, "EST");
     /// assert_eq!(offset.to_datetime(ts).to_string(), "2024-01-10T21:46:44");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_offset(&self, _timestamp: Timestamp) -> (Offset, Dst, &str) {
+    pub fn to_offset(&self, _timestamp: Timestamp) -> Offset {
         let Some(ref kind) = self.kind else {
-            return (Offset::UTC, Dst::No, "UTC");
+            return Offset::UTC;
         };
         match **kind {
-            TimeZoneKind::Fixed(ref tz) => (tz.offset(), Dst::No, tz.name()),
+            TimeZoneKind::Fixed(ref tz) => tz.to_offset(),
             #[cfg(feature = "alloc")]
             TimeZoneKind::Posix(ref tz) => tz.to_offset(_timestamp),
             #[cfg(feature = "alloc")]
             TimeZoneKind::Tzif(ref tz) => tz.to_offset(_timestamp),
+        }
+    }
+
+    /// Returns the offset information corresponding to the given timestamp in
+    /// this time zone. This includes the offset along with daylight saving
+    /// time status and a time zone abbreviation.
+    ///
+    /// This is like [`TimeZone::to_offset`], but returns the aforementioned
+    /// extra data in addition to the offset. This data may, in some cases, be
+    /// more expensive to compute.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{tz::{self, Dst, TimeZone}, Timestamp};
+    ///
+    /// let tz = TimeZone::get("America/New_York")?;
+    ///
+    /// // A timestamp in DST in New York.
+    /// let ts = Timestamp::from_second(1_720_493_204)?;
+    /// let info = tz.to_offset_info(ts);
+    /// assert_eq!(info.offset(), tz::offset(-4));
+    /// assert_eq!(info.dst(), Dst::Yes);
+    /// assert_eq!(info.abbreviation(), "EDT");
+    /// assert_eq!(
+    ///     info.offset().to_datetime(ts).to_string(),
+    ///     "2024-07-08T22:46:44",
+    /// );
+    ///
+    /// // A timestamp *not* in DST in New York.
+    /// let ts = Timestamp::from_second(1_704_941_204)?;
+    /// let info = tz.to_offset_info(ts);
+    /// assert_eq!(info.offset(), tz::offset(-5));
+    /// assert_eq!(info.dst(), Dst::No);
+    /// assert_eq!(info.abbreviation(), "EST");
+    /// assert_eq!(
+    ///     info.offset().to_datetime(ts).to_string(),
+    ///     "2024-01-10T21:46:44",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn to_offset_info<'t>(
+        &'t self,
+        _timestamp: Timestamp,
+    ) -> TimeZoneOffsetInfo<'t> {
+        let Some(ref kind) = self.kind else {
+            return TimeZoneOffsetInfo {
+                offset: Offset::UTC,
+                dst: Dst::No,
+                abbreviation: TimeZoneAbbreviation::Borrowed("UTC"),
+            };
+        };
+        match **kind {
+            TimeZoneKind::Fixed(ref tz) => tz.to_offset_info(),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Posix(ref tz) => tz.to_offset_info(_timestamp),
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Tzif(ref tz) => tz.to_offset_info(_timestamp),
         }
     }
 
@@ -789,7 +844,7 @@ impl TimeZone {
                 kind = self.kind_description(),
             ));
         };
-        Ok(tz.offset())
+        Ok(tz.to_offset())
     }
 
     /// Converts a civil datetime to a [`Zoned`] in this time zone.
@@ -1025,7 +1080,7 @@ impl TimeZone {
             None => AmbiguousOffset::Unambiguous { offset: Offset::UTC },
             Some(ref kind) => match **kind {
                 TimeZoneKind::Fixed(ref tz) => {
-                    AmbiguousOffset::Unambiguous { offset: tz.offset() }
+                    AmbiguousOffset::Unambiguous { offset: tz.to_offset() }
                 }
                 #[cfg(feature = "alloc")]
                 TimeZoneKind::Posix(ref tz) => tz.to_ambiguous_kind(dt),
@@ -1095,15 +1150,15 @@ impl TimeZone {
     ///     .map(|t| (
     ///         t.timestamp().to_zoned(now.time_zone().clone()),
     ///         t.offset(),
-    ///         t.abbreviation(),
+    ///         t.abbreviation().to_string(),
     ///     ))
     ///     .collect::<Vec<_>>();
     /// assert_eq!(transitions, vec![
-    ///     ("2024-11-03 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
-    ///     ("2024-03-10 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
-    ///     ("2023-11-05 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
-    ///     ("2023-03-12 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
-    ///     ("2022-11-06 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+    ///     ("2024-11-03 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
+    ///     ("2024-03-10 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
+    ///     ("2023-11-05 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
+    ///     ("2023-03-12 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
+    ///     ("2022-11-06 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
     /// ]);
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1175,15 +1230,15 @@ impl TimeZone {
     ///     .map(|t| (
     ///         t.timestamp().to_zoned(now.time_zone().clone()),
     ///         t.offset(),
-    ///         t.abbreviation(),
+    ///         t.abbreviation().to_string(),
     ///     ))
     ///     .collect::<Vec<_>>();
     /// assert_eq!(transitions, vec![
-    ///     ("2025-03-09 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
-    ///     ("2025-11-02 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
-    ///     ("2026-03-08 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
-    ///     ("2026-11-01 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
-    ///     ("2027-03-14 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+    ///     ("2025-03-09 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
+    ///     ("2025-11-02 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
+    ///     ("2026-03-08 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
+    ///     ("2026-11-01 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
+    ///     ("2027-03-14 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
     /// ]);
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1273,38 +1328,38 @@ enum TimeZoneKind {
 #[derive(Clone)]
 struct TimeZoneFixed {
     offset: Offset,
-    name: ArrayStr<9>,
 }
 
 impl TimeZoneFixed {
     #[inline]
     fn new(offset: Offset) -> TimeZoneFixed {
-        let name = offset.to_array_str();
-        TimeZoneFixed { offset, name }
+        TimeZoneFixed { offset }
     }
 
     #[inline]
-    fn name(&self) -> &str {
-        self.name.as_str()
-    }
-
-    #[inline]
-    fn offset(&self) -> Offset {
+    fn to_offset(&self) -> Offset {
         self.offset
+    }
+
+    #[inline]
+    fn to_offset_info(&self) -> TimeZoneOffsetInfo<'_> {
+        let abbreviation =
+            TimeZoneAbbreviation::Owned(self.offset.to_array_str());
+        TimeZoneOffsetInfo { offset: self.offset, dst: Dst::No, abbreviation }
     }
 }
 
 impl core::fmt::Debug for TimeZoneFixed {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.debug_tuple("Fixed").field(&self.offset()).finish()
+        f.debug_tuple("Fixed").field(&self.to_offset()).finish()
     }
 }
 
 impl core::fmt::Display for TimeZoneFixed {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self.name, f)
+        core::fmt::Display::fmt(&self.offset, f)
     }
 }
 
@@ -1313,7 +1368,7 @@ impl Eq for TimeZoneFixed {}
 impl PartialEq for TimeZoneFixed {
     #[inline]
     fn eq(&self, rhs: &TimeZoneFixed) -> bool {
-        self.offset() == rhs.offset()
+        self.to_offset() == rhs.to_offset()
     }
 }
 
@@ -1332,8 +1387,13 @@ impl TimeZonePosix {
     }
 
     #[inline]
-    fn to_offset(&self, timestamp: Timestamp) -> (Offset, Dst, &str) {
+    fn to_offset(&self, timestamp: Timestamp) -> Offset {
         self.posix.to_offset(timestamp)
+    }
+
+    #[inline]
+    fn to_offset_info(&self, timestamp: Timestamp) -> TimeZoneOffsetInfo<'_> {
+        self.posix.to_offset_info(timestamp)
     }
 
     #[inline]
@@ -1407,8 +1467,13 @@ impl TimeZoneTzif {
     }
 
     #[inline]
-    fn to_offset(&self, timestamp: Timestamp) -> (Offset, Dst, &str) {
+    fn to_offset(&self, timestamp: Timestamp) -> Offset {
         self.tzif.to_offset(timestamp)
+    }
+
+    #[inline]
+    fn to_offset_info(&self, timestamp: Timestamp) -> TimeZoneOffsetInfo<'_> {
+        self.tzif.to_offset_info(timestamp)
     }
 
     #[inline]
@@ -1564,6 +1629,10 @@ impl<'t> TimeZoneTransition<'t> {
     /// abbreviation `CST` can be used for the time zones `Asia/Shanghai`,
     /// `America/Chicago` and `America/Havana`.
     ///
+    /// The lifetime of the string returned is tied to this
+    /// `TimeZoneTransition`, which may be shorter than `'t` (the lifetime of
+    /// the time zone this transition was created from).
+    ///
     /// # Example
     ///
     /// ```
@@ -1582,7 +1651,7 @@ impl<'t> TimeZoneTransition<'t> {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn abbreviation(&self) -> &'t str {
+    pub fn abbreviation<'a>(&'a self) -> &'a str {
         self.abbrev
     }
 
@@ -1637,15 +1706,15 @@ impl<'t> TimeZoneTransition<'t> {
 ///     .map(|t| (
 ///         t.timestamp().to_zoned(now.time_zone().clone()),
 ///         t.offset(),
-///         t.abbreviation(),
+///         t.abbreviation().to_string(),
 ///     ))
 ///     .collect::<Vec<_>>();
 /// assert_eq!(transitions, vec![
-///     ("2024-11-03 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
-///     ("2024-03-10 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
-///     ("2023-11-05 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
-///     ("2023-03-12 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
-///     ("2022-11-06 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
+///     ("2024-11-03 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
+///     ("2024-03-10 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
+///     ("2023-11-05 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
+///     ("2023-03-12 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
+///     ("2022-11-06 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
 /// ]);
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1688,15 +1757,15 @@ impl<'t> core::iter::FusedIterator for TimeZonePrecedingTransitions<'t> {}
 ///     .map(|t| (
 ///         t.timestamp().to_zoned(now.time_zone().clone()),
 ///         t.offset(),
-///         t.abbreviation(),
+///         t.abbreviation().to_string(),
 ///     ))
 ///     .collect::<Vec<_>>();
 /// assert_eq!(transitions, vec![
-///     ("2025-03-09 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
-///     ("2025-11-02 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
-///     ("2026-03-08 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
-///     ("2026-11-01 01:00-05[US/Eastern]".parse()?, offset(-5), "EST"),
-///     ("2027-03-14 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT"),
+///     ("2025-03-09 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
+///     ("2025-11-02 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
+///     ("2026-03-08 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
+///     ("2026-11-01 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
+///     ("2027-03-14 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
 /// ]);
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -3007,6 +3076,193 @@ impl AmbiguousZoned {
     }
 }
 
+/// An offset along with DST status and a time zone abbreviation.
+///
+/// This information can be computed from a [`TimeZone`] given a [`Timestamp`]
+/// via [`TimeZone::to_offset_info`].
+///
+/// Generally, the extra information associated with the offset is not commonly
+/// needed. And indeed, inspecting the daylight saving time status of a
+/// particular instant in a time zone _usually_ leads to bugs. For example, not
+/// all time zone transitions are the result of daylight saving time. Some are
+/// the result of permanent changes to the standard UTC offset of a region.
+///
+/// This information is available via an API distinct from
+/// [`TimeZone::to_offset`] because it is not commonly needed and because it
+/// can sometimes be more expensive to compute.
+///
+/// The main use case for daylight saving time status or time zone
+/// abbreviations is for formatting datetimes in an end user's locale. If you
+/// want this, consider using the [`icu`] crate.
+///
+/// The lifetime parameter `'t` corresponds to the lifetime of the `TimeZone`
+/// that this info was extracted from.
+///
+/// # Example
+///
+/// ```
+/// use jiff::{tz::{self, Dst, TimeZone}, Timestamp};
+///
+/// let tz = TimeZone::get("America/New_York")?;
+///
+/// // A timestamp in DST in New York.
+/// let ts = Timestamp::from_second(1_720_493_204)?;
+/// let info = tz.to_offset_info(ts);
+/// assert_eq!(info.offset(), tz::offset(-4));
+/// assert_eq!(info.dst(), Dst::Yes);
+/// assert_eq!(info.abbreviation(), "EDT");
+/// assert_eq!(
+///     info.offset().to_datetime(ts).to_string(),
+///     "2024-07-08T22:46:44",
+/// );
+///
+/// // A timestamp *not* in DST in New York.
+/// let ts = Timestamp::from_second(1_704_941_204)?;
+/// let info = tz.to_offset_info(ts);
+/// assert_eq!(info.offset(), tz::offset(-5));
+/// assert_eq!(info.dst(), Dst::No);
+/// assert_eq!(info.abbreviation(), "EST");
+/// assert_eq!(
+///     info.offset().to_datetime(ts).to_string(),
+///     "2024-01-10T21:46:44",
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// [`icu`]: https://docs.rs/icu
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct TimeZoneOffsetInfo<'t> {
+    offset: Offset,
+    dst: Dst,
+    abbreviation: TimeZoneAbbreviation<'t>,
+}
+
+impl<'t> TimeZoneOffsetInfo<'t> {
+    /// Returns the offset.
+    ///
+    /// The offset is duration, from UTC, that should be used to offset the
+    /// civil time in a particular location.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil, tz::{TimeZone, offset}};
+    ///
+    /// let tz = TimeZone::get("US/Eastern")?;
+    /// // Get the offset for 2023-03-10 00:00:00.
+    /// let start = civil::date(2024, 3, 10).to_zoned(tz.clone())?.timestamp();
+    /// let info = tz.to_offset_info(start);
+    /// assert_eq!(info.offset(), offset(-5));
+    /// // Go forward a day and notice the offset changes due to DST!
+    /// let start = civil::date(2024, 3, 11).to_zoned(tz.clone())?.timestamp();
+    /// let info = tz.to_offset_info(start);
+    /// assert_eq!(info.offset(), offset(-4));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn offset(&self) -> Offset {
+        self.offset
+    }
+
+    /// Returns the time zone abbreviation corresponding to this offset info.
+    ///
+    /// Note that abbreviations can to be ambiguous. For example, the
+    /// abbreviation `CST` can be used for the time zones `Asia/Shanghai`,
+    /// `America/Chicago` and `America/Havana`.
+    ///
+    /// The lifetime of the string returned is tied to this
+    /// `TimeZoneOffsetInfo`, which may be shorter than `'t` (the lifetime of
+    /// the time zone this transition was created from).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil, tz::TimeZone};
+    ///
+    /// let tz = TimeZone::get("US/Eastern")?;
+    /// // Get the time zone abbreviation for 2023-03-10 00:00:00.
+    /// let start = civil::date(2024, 3, 10).to_zoned(tz.clone())?.timestamp();
+    /// let info = tz.to_offset_info(start);
+    /// assert_eq!(info.abbreviation(), "EST");
+    /// // Go forward a day and notice the abbreviation changes due to DST!
+    /// let start = civil::date(2024, 3, 11).to_zoned(tz.clone())?.timestamp();
+    /// let info = tz.to_offset_info(start);
+    /// assert_eq!(info.abbreviation(), "EDT");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn abbreviation(&self) -> &str {
+        self.abbreviation.as_str()
+    }
+
+    /// Returns whether daylight saving time is enabled for this offset
+    /// info.
+    ///
+    /// Callers should generally treat this as informational only. In
+    /// particular, not all time zone transitions are related to daylight
+    /// saving time. For example, some transitions are a result of a region
+    /// permanently changing their offset from UTC.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{civil, tz::{Dst, TimeZone}};
+    ///
+    /// let tz = TimeZone::get("US/Eastern")?;
+    /// // Get the DST status of 2023-03-11 00:00:00.
+    /// let start = civil::date(2024, 3, 11).to_zoned(tz.clone())?.timestamp();
+    /// let info = tz.to_offset_info(start);
+    /// assert_eq!(info.dst(), Dst::Yes);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn dst(&self) -> Dst {
+        self.dst
+    }
+}
+
+/// A light abstraction over different representations of a time zone
+/// abbreviation.
+///
+/// The lifetime parameter `'t` corresponds to the lifetime of the time zone
+/// that produced this abbreviation.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+enum TimeZoneAbbreviation<'t> {
+    /// For when the abbreviation is borrowed directly from other data. For
+    /// example, from TZif or from POSIX TZ strings.
+    Borrowed(&'t str),
+    /// For when the abbreviation has to be derived from other data. For
+    /// example, from a fixed offset.
+    ///
+    /// The idea here is that a `TimeZone` shouldn't need to store the
+    /// string representation of a fixed offset. Particularly in core-only
+    /// environments, this is quite wasteful. So we make the string on-demand
+    /// only when it's requested.
+    ///
+    /// An alternative design is to just implement `Display` and reuse
+    /// `Offset`'s `Display` impl, but then we couldn't offer a `-> &str` API.
+    /// I feel like that's just a bit overkill, and really just comes from the
+    /// core-only straight-jacket.
+    Owned(ArrayStr<9>),
+}
+
+impl<'t> TimeZoneAbbreviation<'t> {
+    /// Returns this abbreviation as a string borrowed from `self`.
+    ///
+    /// Notice that, like `Cow`, the lifetime of the string returned is
+    /// tied to `self` and thus may be shorter than `'t`.
+    fn as_str<'a>(&'a self) -> &'a str {
+        match *self {
+            TimeZoneAbbreviation::Borrowed(s) => s,
+            TimeZoneAbbreviation::Owned(ref s) => s.as_str(),
+        }
+    }
+}
+
 /// Creates a new time zone offset in a `const` context from a given number
 /// of hours.
 ///
@@ -3661,17 +3917,19 @@ mod tests {
             {
                 let (year, month, day, hour, min, sec, nano) = datetime;
                 let timestamp = Timestamp::new(unix_sec, unix_nano).unwrap();
-                let (got_offset, _, got_abbrev) = tz.to_offset(timestamp);
+                let info = tz.to_offset_info(timestamp);
                 assert_eq!(
-                    got_offset, offset,
+                    info.offset(),
+                    offset,
                     "\nTZ={tzname}, timestamp({unix_sec}, {unix_nano})",
                 );
                 assert_eq!(
-                    got_abbrev, abbrev,
+                    info.abbreviation(),
+                    abbrev,
                     "\nTZ={tzname}, timestamp({unix_sec}, {unix_nano})",
                 );
                 assert_eq!(
-                    got_offset.to_datetime(timestamp),
+                    info.offset().to_datetime(timestamp),
                     date(year, month, day).at(hour, min, sec, nano),
                     "\nTZ={tzname}, timestamp({unix_sec}, {unix_nano})",
                 );
@@ -3939,7 +4197,7 @@ mod tests {
                 let (year, month, day, hour, min, sec, nano) = datetime;
                 let timestamp = Timestamp::new(unix_sec, unix_nano).unwrap();
                 assert_eq!(
-                    tz.to_offset(timestamp).0,
+                    tz.to_offset(timestamp),
                     offset,
                     "\ntimestamp({unix_sec}, {unix_nano})",
                 );
@@ -4320,11 +4578,17 @@ mod tests {
         {
             #[cfg(debug_assertions)]
             {
-                assert_eq!(28, core::mem::size_of::<TimeZone>());
+                assert_eq!(16, core::mem::size_of::<TimeZone>());
             }
             #[cfg(not(debug_assertions))]
             {
-                assert_eq!(20, core::mem::size_of::<TimeZone>());
+                // This asserts the same value as the alloc value above, but
+                // it wasn't always this way, which is why it's written out
+                // separately. Moreover, in theory, I'd be open to regressing
+                // this value if it led to an improvement in alloc-mode. But
+                // more likely, it would be nice to decrease this size in
+                // non-alloc modes.
+                assert_eq!(8, core::mem::size_of::<TimeZone>());
             }
         }
     }
@@ -4336,34 +4600,34 @@ mod tests {
         let ts = Timestamp::from_second(123456789).unwrap();
 
         let tz = TimeZone::fixed(offset(-5));
-        let (off, dst, label) = tz.to_offset(ts);
-        assert_eq!(off, offset(-5));
-        assert_eq!(dst, Dst::No);
-        assert_eq!(label, "-05");
+        let info = tz.to_offset_info(ts);
+        assert_eq!(info.offset(), offset(-5));
+        assert_eq!(info.dst(), Dst::No);
+        assert_eq!(info.abbreviation(), "-05");
 
         let tz = TimeZone::fixed(offset(5));
-        let (off, dst, label) = tz.to_offset(ts);
-        assert_eq!(off, offset(5));
-        assert_eq!(dst, Dst::No);
-        assert_eq!(label, "+05");
+        let info = tz.to_offset_info(ts);
+        assert_eq!(info.offset(), offset(5));
+        assert_eq!(info.dst(), Dst::No);
+        assert_eq!(info.abbreviation(), "+05");
 
         let tz = TimeZone::fixed(offset(-12));
-        let (off, dst, label) = tz.to_offset(ts);
-        assert_eq!(off, offset(-12));
-        assert_eq!(dst, Dst::No);
-        assert_eq!(label, "-12");
+        let info = tz.to_offset_info(ts);
+        assert_eq!(info.offset(), offset(-12));
+        assert_eq!(info.dst(), Dst::No);
+        assert_eq!(info.abbreviation(), "-12");
 
         let tz = TimeZone::fixed(offset(12));
-        let (off, dst, label) = tz.to_offset(ts);
-        assert_eq!(off, offset(12));
-        assert_eq!(dst, Dst::No);
-        assert_eq!(label, "+12");
+        let info = tz.to_offset_info(ts);
+        assert_eq!(info.offset(), offset(12));
+        assert_eq!(info.dst(), Dst::No);
+        assert_eq!(info.abbreviation(), "+12");
 
         let tz = TimeZone::fixed(offset(0));
-        let (off, dst, label) = tz.to_offset(ts);
-        assert_eq!(off, offset(0));
-        assert_eq!(dst, Dst::No);
-        assert_eq!(label, "UTC");
+        let info = tz.to_offset_info(ts);
+        assert_eq!(info.offset(), offset(0));
+        assert_eq!(info.dst(), Dst::No);
+        assert_eq!(info.abbreviation(), "UTC");
     }
 
     /// This tests a few other cases for `TimeZone::to_fixed_offset` that

@@ -5,7 +5,7 @@
 ///
 /// Also, since it isn't needed and it lets us save on storage requirements,
 /// `N` must be less than `256` (so that the length can fit in a `u8`).
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub(crate) struct ArrayStr<const N: usize> {
     /// The UTF-8 bytes that make up the string.
     ///

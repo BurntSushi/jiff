@@ -18,7 +18,8 @@ use crate::{
     timestamp::Timestamp,
     tz::{
         posix::{IanaTz, ReasonablePosixTimeZone},
-        AmbiguousOffset, Dst, Offset, TimeZoneTransition,
+        AmbiguousOffset, Dst, Offset, TimeZoneAbbreviation,
+        TimeZoneOffsetInfo, TimeZoneTransition,
     },
     util::{
         crc32,
@@ -100,14 +101,44 @@ impl Tzif {
 
     /// Returns the appropriate time zone offset to use for the given
     /// timestamp.
+    pub(crate) fn to_offset(&self, timestamp: Timestamp) -> Offset {
+        match self.to_local_time_type(timestamp) {
+            Ok(typ) => typ.offset,
+            Err(tz) => tz.to_offset(timestamp),
+        }
+    }
+
+    /// Returns the appropriate time zone offset to use for the given
+    /// timestamp.
     ///
     /// This also includes whether the offset returned should be considered to
     /// be DST or not, along with the time zone abbreviation (e.g., EST for
     /// standard time in New York, and EDT for DST in New York).
-    pub(crate) fn to_offset(
+    pub(crate) fn to_offset_info(
         &self,
         timestamp: Timestamp,
-    ) -> (Offset, Dst, &str) {
+    ) -> TimeZoneOffsetInfo<'_> {
+        let typ = match self.to_local_time_type(timestamp) {
+            Ok(typ) => typ,
+            Err(tz) => return tz.to_offset_info(timestamp),
+        };
+        let abbreviation =
+            TimeZoneAbbreviation::Borrowed(self.designation(typ));
+        TimeZoneOffsetInfo {
+            offset: typ.offset,
+            dst: typ.is_dst,
+            abbreviation,
+        }
+    }
+
+    /// Returns the local time type for the timestamp given.
+    ///
+    /// If one could not be found, then this implies that the caller should
+    /// use the POSIX time zone returned in the error variant.
+    fn to_local_time_type(
+        &self,
+        timestamp: Timestamp,
+    ) -> Result<&LocalTimeType, &ReasonablePosixTimeZone> {
         // This is guaranteed because we always push at least one transition.
         // This isn't guaranteed by TZif since it might have 0 transitions,
         // but we always add a "dummy" first transition with our minimum
@@ -163,15 +194,14 @@ impl Tzif {
                 // This is likely why some things break with the "slim"
                 // version: they don't support POSIX TZ strings (or don't
                 // support them correctly).
-                Some(tz) => return tz.to_offset(timestamp),
+                Some(tz) => return Err(tz),
                 // This case is technically unspecified, but I think the
                 // typical thing to do is to just use the last transition.
                 // I'm not 100% sure on this one.
                 None => &self.transitions[index],
             }
         };
-        let typ = self.local_time_type(t);
-        self.local_time_type_to_offset(typ)
+        Ok(self.local_time_type(t))
     }
 
     /// Returns a possibly ambiguous timestamp for the given civil datetime.
@@ -338,13 +368,6 @@ impl Tzif {
         })
     }
 
-    fn local_time_type_to_offset(
-        &self,
-        typ: &LocalTimeType,
-    ) -> (Offset, Dst, &str) {
-        (typ.offset, typ.is_dst, self.designation(typ))
-    }
-
     fn designation(&self, typ: &LocalTimeType) -> &str {
         // OK because we verify that the designation range on every local
         // time type is a valid range into `self.designations`.
@@ -440,32 +463,34 @@ impl Tzif {
             if let Some(ref tz) = tzif.posix_tz {
                 let last = tzif.transitions.last().expect("last transition");
                 let typ = tzif.local_time_type(last);
-                let (offset, dst, abbrev) = tz.to_offset(last.timestamp);
-                if offset != typ.offset {
+                let info = tz.to_offset_info(last.timestamp);
+                if info.offset() != typ.offset {
                     return Err(err!(
                         "expected last transition to have DST offset \
-                         of {}, but got {offset} according to POSIX TZ \
+                         of {}, but got {} according to POSIX TZ \
                          string {}",
                         typ.offset,
+                        info.offset(),
                         tz,
                     ));
                 }
-                if dst != typ.is_dst {
+                if info.dst() != typ.is_dst {
                     return Err(err!(
                         "expected last transition to have is_dst={}, \
                          but got is_dst={} according to POSIX TZ \
                          string {}",
                         typ.is_dst.is_dst(),
-                        dst.is_dst(),
+                        info.dst().is_dst(),
                         tz,
                     ));
                 }
-                if abbrev != tzif.designation(&typ) {
+                if info.abbreviation() != tzif.designation(&typ) {
                     return Err(err!(
                         "expected last transition to have \
-                         designation={abbrev}, \
+                         designation={}, \
                          but got designation={} according to POSIX TZ \
                          string {}",
+                        info.abbreviation(),
                         tzif.designation(&typ),
                         tz,
                     ));
