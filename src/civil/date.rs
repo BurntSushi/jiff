@@ -1808,7 +1808,8 @@ impl Date {
     /// units like hours, this can only be done for uniform units. (Uniform
     /// units are units for which each individual unit always corresponds to
     /// the same elapsed time regardless of the datetime it is relative to.)
-    /// This can't be done for units like years or months.
+    /// This can't be done for units like years, months or days without a
+    /// relative date.
     ///
     /// ```
     /// use jiff::{civil::date, SignedDuration, Span, SpanRound, ToSpan, Unit};

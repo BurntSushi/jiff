@@ -603,15 +603,18 @@ them into one, and Chrono does not provide operations on both at the same time.
 ### Jiff supports zone-aware re-balancing of durations
 
 If you have a span of `1.day()` and want to convert it to hours, then that
-calculation depends on how long the day is. If you don't provide any reference
-datetime, then Jiff assumes the day is always 24 hours long:
+calculation depends on how long the day is. If you provide a civil date as
+a relative reference point, then Jiff assumes the day is always 24 hours long:
 
 ```rust
-use jiff::{SpanRound, ToSpan, Unit};
+use jiff::{civil, SpanRound, ToSpan, Unit};
 
 fn main() -> anyhow::Result<()> {
+    let relative = civil::date(2024, 4, 1);
     let span1 = 1.day();
-    let span2 = span1.round(SpanRound::new().largest(Unit::Hour))?;
+    let span2 = span1.round(
+        SpanRound::new().largest(Unit::Hour).relative(relative),
+    )?;
     assert_eq!(span2, 24.hours().fieldwise());
 
     Ok(())
