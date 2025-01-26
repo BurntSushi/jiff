@@ -4,13 +4,14 @@ use crate::tc39_262::Result;
 
 const MAX_SPAN_SECONDS: i64 = 631_107_417_600;
 const MAX_SPAN_NANOSECONDS: i64 = 9_223_372_036_854_775_807;
+const DAY24: jiff::SpanRelativeTo = jiff::SpanRelativeTo::days_are_24_hours();
 
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/Duration/prototype/add/balance-negative-result.js
 #[test]
 fn balance_negative_result() -> Result {
     let sp1 = -60.hours();
     let sp2 = -1.day();
-    let result = sp1.checked_add(sp2)?;
+    let result = sp1.checked_add((sp2, DAY24))?;
     span_eq!(result, -3.days().hours(12));
 
     Ok(())
@@ -99,21 +100,21 @@ fn balance_negative_time_units() -> Result {
 #[test]
 fn basic() -> Result {
     let sp = 1.day().minutes(5);
-    let result = sp.checked_add(2.days().minutes(5))?;
+    let result = sp.checked_add((2.days().minutes(5), DAY24))?;
     span_eq!(result, 3.days().minutes(10));
-    let result = sp.checked_add(12.hours().seconds(30))?;
+    let result = sp.checked_add((12.hours().seconds(30), DAY24))?;
     span_eq!(result, 1.day().hours(12).minutes(5).seconds(30));
 
     let sp = 3.days().minutes(10);
-    let result = sp.checked_add(-2.days().minutes(5))?;
+    let result = sp.checked_add((-2.days().minutes(5), DAY24))?;
     span_eq!(result, 1.day().minutes(5));
 
     let sp = 1.day().hours(12).minutes(5).seconds(30);
-    let result = sp.checked_add(-12.hours().seconds(30))?;
+    let result = sp.checked_add((-12.hours().seconds(30), DAY24))?;
     span_eq!(result, 1.day().minutes(5));
 
     let sp = "P50DT50H50M50.500500500S".parse::<Span>()?;
-    let result = sp.checked_add(sp)?;
+    let result = sp.checked_add((sp, DAY24))?;
     span_eq!(
         result,
         104.days()
@@ -140,7 +141,7 @@ fn basic() -> Result {
 fn nanoseconds_is_number_max_safe_integer() -> Result {
     let sp1 = MAX_SPAN_NANOSECONDS.nanoseconds();
     let sp2 = 1.day().nanoseconds(2);
-    let result = sp1.checked_add(sp2)?;
+    let result = sp1.checked_add((sp2, DAY24))?;
 
     let nanos = i128::from(MAX_SPAN_NANOSECONDS) + 2;
     let expected = Span::new()

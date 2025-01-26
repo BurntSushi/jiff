@@ -2,11 +2,13 @@ use jiff::{civil::date, tz, Timestamp, ToSpan, Unit};
 
 use crate::tc39_262::Result;
 
+const DAY24: jiff::SpanRelativeTo = jiff::SpanRelativeTo::days_are_24_hours();
+
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/Duration/prototype/total/balance-negative-result.js
 #[test]
 fn balance_negative_result() -> Result {
     let sp = -60.hours();
-    let result = sp.total(Unit::Day)?;
+    let result = sp.total((Unit::Day, DAY24))?;
     assert_eq!(result, -2.5);
 
     Ok(())
@@ -57,7 +59,12 @@ fn calendar_possibly_required() -> Result {
     let result = week.total((Unit::Day, d))?;
     assert_eq!(result, 7.0);
 
-    let result = day.total(Unit::Day)?;
+    // Differs from Temporal. We require explicit opt-in for 24-hour days.
+    insta::assert_snapshot!(
+        day.total(Unit::Day).unwrap_err(),
+        @"using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+    );
+    let result = day.total((Unit::Day, DAY24))?;
     assert_eq!(result, 42.0);
     let result = day.total((Unit::Day, d))?;
     assert_eq!(result, 42.0);
@@ -198,8 +205,9 @@ fn dst_rounding_result() -> Result {
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/Duration/prototype/total/no-dst-day-length.js
 #[test]
 fn no_dst_day_length() -> Result {
-    assert_eq!(1.day().total(Unit::Hour)?, 24.0);
-    assert_eq!(48.hours().total(Unit::Day)?, 2.0);
+    // We differ from Temporal in that we require opt-in for 24-hour days.
+    assert_eq!(1.day().total((Unit::Hour, DAY24))?, 24.0);
+    assert_eq!(48.hours().total((Unit::Day, DAY24))?, 2.0);
 
     let d = date(2017, 1, 1);
     assert_eq!(1.day().total((Unit::Hour, d))?, 24.0);

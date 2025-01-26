@@ -6,6 +6,7 @@ use jiff::{
 use crate::tc39_262::Result;
 
 const MAX_SPAN_SECONDS: i64 = 631_107_417_600;
+const DAY24: jiff::SpanRelativeTo = jiff::SpanRelativeTo::days_are_24_hours();
 
 fn mk<const N: usize>(units: [i64; N]) -> Span {
     assert!(N <= 10);
@@ -26,7 +27,8 @@ fn mk<const N: usize>(units: [i64; N]) -> Span {
 #[test]
 fn balance_negative_result() -> Result {
     let span1 = -60.hours();
-    let span2 = span1.round(SpanRound::new().largest(Unit::Day))?;
+    let span2 = span1
+        .round(SpanRound::new().largest(Unit::Day).days_are_24_hours())?;
     span_eq!(span2, -2.days().hours(12));
     Ok(())
 }
@@ -65,7 +67,7 @@ fn calendar_possibly_required() -> Result {
     let sp = 1.year();
     insta::assert_snapshot!(
         sp.round(Unit::Hour).unwrap_err(),
-        @"using largest unit (which is 'year') in given span requires that a relative reference time be given, but none was provided",
+        @"error with largest unit in span to be rounded: using unit 'year' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     span_eq!(sp.round(relative_years)?, 1.year());
     span_eq!(sp.round(relative_months)?, 12.months());
@@ -75,7 +77,7 @@ fn calendar_possibly_required() -> Result {
     let sp = 12.months();
     insta::assert_snapshot!(
         sp.round(Unit::Hour).unwrap_err(),
-        @"using largest unit (which is 'month') in given span requires that a relative reference time be given, but none was provided",
+        @"error with largest unit in span to be rounded: using unit 'month' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     span_eq!(sp.round(relative_years)?, 1.year());
     span_eq!(sp.round(relative_months)?, 12.months());
@@ -85,7 +87,7 @@ fn calendar_possibly_required() -> Result {
     let sp = 5.weeks();
     insta::assert_snapshot!(
         sp.round(Unit::Hour).unwrap_err(),
-        @"using largest unit (which is 'week') in given span requires that a relative reference time be given, but none was provided",
+        @"error with largest unit in span to be rounded: using unit 'week' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     span_eq!(sp.round(relative_years)?, 1.month().days(4));
     span_eq!(sp.round(relative_months)?, 1.month().days(4));
@@ -93,13 +95,19 @@ fn calendar_possibly_required() -> Result {
     span_eq!(sp.round(relative_days)?, 35.days());
 
     let sp = 42.days();
+    // We differ from Temporal in that we require opt-in for 24-hour days.
+    insta::assert_snapshot!(
+        sp.round(Unit::Hour).unwrap_err(),
+        @"error with largest unit in span to be rounded: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+    );
     span_eq!(sp.round(relative_years)?, 1.month().days(11));
     span_eq!(sp.round(relative_months)?, 1.month().days(11));
     span_eq!(sp.round(relative_weeks)?, 6.weeks());
     span_eq!(sp.round(relative_days)?, 42.days());
-    // We don't need a relative datetime for rounding days.
-    // In this case, we assume civil day (always 24 hours).
-    span_eq!(sp.round(Unit::Hour)?, 42.days());
+    span_eq!(
+        sp.round(SpanRound::new().largest(Unit::Day).relative(DAY24))?,
+        42.days()
+    );
 
     Ok(())
 }
@@ -508,6 +516,89 @@ fn largestunit_smallestunit_combinations() -> Result {
 
     for &(largest, entry) in exact.iter() {
         for &(smallest, expected) in entry.iter() {
+            let result = sp.round(
+                SpanRound::new()
+                    .largest(largest)
+                    .smallest(smallest)
+                    .relative(DAY24),
+            )?;
+            span_eq!(
+                result,
+                expected,
+                "largest unit {largest:?}, smallest unit {smallest:?}",
+            );
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn largestunit_smallestunit_combinations_without_day() -> Result {
+    let sp = mk([0, 0, 0, 0, 125, 5, 5, 5, 5, 5]);
+    let exact: &[(Unit, &[(Unit, Span)])] = &[
+        (
+            Unit::Hour,
+            &[
+                (Unit::Hour, mk([0, 0, 0, 0, 125])),
+                (Unit::Minute, mk([0, 0, 0, 0, 125, 5])),
+                (Unit::Second, mk([0, 0, 0, 0, 125, 5, 5])),
+                (Unit::Millisecond, mk([0, 0, 0, 0, 125, 5, 5, 5])),
+                (Unit::Microsecond, mk([0, 0, 0, 0, 125, 5, 5, 5, 5])),
+                (Unit::Nanosecond, mk([0, 0, 0, 0, 125, 5, 5, 5, 5, 5])),
+            ],
+        ),
+        (
+            Unit::Minute,
+            &[
+                (Unit::Minute, mk([0, 0, 0, 0, 0, 7_505])),
+                (Unit::Second, mk([0, 0, 0, 0, 0, 7_505, 5])),
+                (Unit::Millisecond, mk([0, 0, 0, 0, 0, 7_505, 5, 5])),
+                (Unit::Microsecond, mk([0, 0, 0, 0, 0, 7_505, 5, 5, 5])),
+                (Unit::Nanosecond, mk([0, 0, 0, 0, 0, 7_505, 5, 5, 5, 5])),
+            ],
+        ),
+        (
+            Unit::Second,
+            &[
+                (Unit::Second, mk([0, 0, 0, 0, 0, 0, 450_305])),
+                (Unit::Millisecond, mk([0, 0, 0, 0, 0, 0, 450_305, 5])),
+                (Unit::Microsecond, mk([0, 0, 0, 0, 0, 0, 450_305, 5, 5])),
+                (Unit::Nanosecond, mk([0, 0, 0, 0, 0, 0, 450_305, 5, 5, 5])),
+            ],
+        ),
+        (
+            Unit::Millisecond,
+            &[
+                (Unit::Millisecond, mk([0, 0, 0, 0, 0, 0, 0, 450305005])),
+                (Unit::Microsecond, mk([0, 0, 0, 0, 0, 0, 0, 450305005, 5])),
+                (Unit::Nanosecond, mk([0, 0, 0, 0, 0, 0, 0, 450305005, 5, 5])),
+            ],
+        ),
+        (
+            Unit::Microsecond,
+            &[
+                (
+                    Unit::Microsecond,
+                    mk([0, 0, 0, 0, 0, 0, 0, 0, 450305005005]),
+                ),
+                (
+                    Unit::Nanosecond,
+                    mk([0, 0, 0, 0, 0, 0, 0, 0, 450305005005, 5]),
+                ),
+            ],
+        ),
+        (
+            Unit::Nanosecond,
+            &[(
+                Unit::Nanosecond,
+                mk([0, 0, 0, 0, 0, 0, 0, 0, 0, 450305005005005]),
+            )],
+        ),
+    ];
+
+    for &(largest, entry) in exact.iter() {
+        for &(smallest, expected) in entry.iter() {
             let result = sp
                 .round(SpanRound::new().largest(largest).smallest(smallest))?;
             span_eq!(
@@ -539,7 +630,12 @@ fn largestunit_smallestunit_default() -> Result {
     span_eq!(almost_week.round(options)?, 1.week());
 
     let almost_day = 86_399.seconds();
-    span_eq!(almost_day.round(Unit::Day)?, 1.day());
+    let options = SpanRound::new().smallest(Unit::Day).relative(d);
+    span_eq!(almost_day.round(options)?, 1.day());
+
+    let almost_day = 86_399.seconds();
+    let options = SpanRound::new().smallest(Unit::Day).days_are_24_hours();
+    span_eq!(almost_day.round(options)?, 1.day());
 
     let almost_hour = 3599.seconds();
     span_eq!(almost_hour.round(Unit::Hour)?, 1.hour());
@@ -643,8 +739,12 @@ fn precision_exact_in_round_duration() -> Result {
     span_eq!(result, 100_001.hours());
 
     let sp = 1_000.days().nanoseconds(5);
-    let result =
-        sp.round(SpanRound::new().smallest(Unit::Day).mode(RoundMode::Ceil))?;
+    let result = sp.round(
+        SpanRound::new()
+            .smallest(Unit::Day)
+            .mode(RoundMode::Ceil)
+            .days_are_24_hours(),
+    )?;
     span_eq!(result, 1001.days());
 
     Ok(())
@@ -653,31 +753,59 @@ fn precision_exact_in_round_duration() -> Result {
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/Duration/prototype/round/relativeto-undefined-throw-on-calendar-units.js
 #[test]
 fn relativeto_undefined_throw_on_calendar_units() -> Result {
-    span_eq!(1.day().round(SpanRound::new().largest(Unit::Day))?, 1.day());
+    insta::assert_snapshot!(
+        1.day().round(SpanRound::new().largest(Unit::Hour)).unwrap_err(),
+        @"error with largest unit in span to be rounded: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+    );
+    insta::assert_snapshot!(
+        1.day().round(SpanRound::new().largest(Unit::Hour)).unwrap_err(),
+        @"error with largest unit in span to be rounded: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+    );
+    insta::assert_snapshot!(
+        1.week().round(SpanRound::new().largest(Unit::Hour)).unwrap_err(),
+        @"error with largest unit in span to be rounded: using unit 'week' in a span or configuration requires that a relative reference time be given, but none was provided",
+    );
+    insta::assert_snapshot!(
+        1.month().round(SpanRound::new().largest(Unit::Hour)).unwrap_err(),
+        @"error with largest unit in span to be rounded: using unit 'month' in a span or configuration requires that a relative reference time be given, but none was provided",
+    );
+    insta::assert_snapshot!(
+        1.year().round(SpanRound::new().largest(Unit::Hour)).unwrap_err(),
+        @"error with largest unit in span to be rounded: using unit 'year' in a span or configuration requires that a relative reference time be given, but none was provided",
+    );
+
+    insta::assert_snapshot!(
+        1.hour().round(SpanRound::new().largest(Unit::Day)).unwrap_err(),
+        @"error with `largest` rounding option: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+    );
+    insta::assert_snapshot!(
+        1.day().round(SpanRound::new().largest(Unit::Day)).unwrap_err(),
+        @"error with `largest` rounding option: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+    );
     insta::assert_snapshot!(
         1.week().round(SpanRound::new().largest(Unit::Day)).unwrap_err(),
-        @"using largest unit (which is 'week') in given span requires that a relative reference time be given, but none was provided",
+        @"error with `largest` rounding option: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     insta::assert_snapshot!(
         1.month().round(SpanRound::new().largest(Unit::Day)).unwrap_err(),
-        @"using largest unit (which is 'month') in given span requires that a relative reference time be given, but none was provided",
+        @"error with `largest` rounding option: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     insta::assert_snapshot!(
         1.year().round(SpanRound::new().largest(Unit::Day)).unwrap_err(),
-        @"using largest unit (which is 'year') in given span requires that a relative reference time be given, but none was provided",
+        @"error with `largest` rounding option: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
 
     insta::assert_snapshot!(
         1.day().round(SpanRound::new().largest(Unit::Week)).unwrap_err(),
-        @"using unit 'week' in round option 'largest' requires that a relative reference time be given, but none was provided",
+        @"error with `largest` rounding option: using unit 'week' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     insta::assert_snapshot!(
         1.day().round(SpanRound::new().largest(Unit::Month)).unwrap_err(),
-        @"using unit 'month' in round option 'largest' requires that a relative reference time be given, but none was provided",
+        @"error with `largest` rounding option: using unit 'month' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
     insta::assert_snapshot!(
         1.day().round(SpanRound::new().largest(Unit::Year)).unwrap_err(),
-        @"using unit 'year' in round option 'largest' requires that a relative reference time be given, but none was provided",
+        @"error with `largest` rounding option: using unit 'year' in a span or configuration requires that a relative reference time be given, but none was provided",
     );
 
     Ok(())
@@ -756,7 +884,7 @@ fn round_cross_unit_bondary() -> Result {
 #[test]
 fn round_negative_result() -> Result {
     let sp = -60.hours();
-    let result = sp.round(Unit::Day)?;
+    let result = sp.round(SpanRound::from(Unit::Day).days_are_24_hours())?;
     span_eq!(result, -3.days());
 
     Ok(())
@@ -1307,6 +1435,44 @@ fn smallestunit() -> Result {
             Unit::Nanosecond,
             1.day()
                 .hours(2)
+                .minutes(3)
+                .seconds(4)
+                .milliseconds(5)
+                .microseconds(6)
+                .nanoseconds(7),
+        ),
+    ];
+    for &(smallest, expected) in tests {
+        span_eq!(
+            sp.round(SpanRound::from(smallest).days_are_24_hours())?,
+            expected,
+            "rounding {sp} to {smallest:?}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn smallestunit_no_days() -> Result {
+    let sp = 2
+        .hours()
+        .minutes(3)
+        .seconds(4)
+        .milliseconds(5)
+        .microseconds(6)
+        .nanoseconds(7);
+    let tests: &[(Unit, Span)] = &[
+        (Unit::Hour, 2.hours()),
+        (Unit::Minute, 2.hours().minutes(3)),
+        (Unit::Second, 2.hours().minutes(3).seconds(4)),
+        (Unit::Millisecond, 2.hours().minutes(3).seconds(4).milliseconds(5)),
+        (
+            Unit::Microsecond,
+            2.hours().minutes(3).seconds(4).milliseconds(5).microseconds(6),
+        ),
+        (
+            Unit::Nanosecond,
+            2.hours()
                 .minutes(3)
                 .seconds(4)
                 .milliseconds(5)
