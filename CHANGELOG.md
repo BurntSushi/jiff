@@ -63,6 +63,18 @@ Change the type of the value yielded by the `jiff::tz::TimeZoneNameIter`
 iterator from `String` to `jiff::tz::TimeZoneName`. This opaque type is more
 API evolution friendly. To access the string, either use `TimeZoneName`'s
 `Display` trait implementation, or its `as_str` method.
+* [#222](https://github.com/BurntSushi/jiff/issues/222):
+Split `TimeZone::to_offset` into two methods. One that just returns the
+offset, and another, `TimeZone::to_offset_info`, which includes the offset,
+DST status and time zone abbreviation. The extra info is rarely needed and
+is sometimes more costly to compute. Also, make the lifetime of the time
+zone abbreviation returned by `TimeZoneTransition::abbreviation` tied to
+the transition instead of the time zone (for future API flexibility, likely
+in core-only environments). This change was overall motivated by wanting to
+do less work in the common case (where we only need the offset), and for
+reducing the size of a `TimeZone` considerably in core-only environments.
+Callers previously using `TimeZone::to_offset` to get DST status and time zone
+abbreviation should now use `TimeZone::to_offset_info`.
 
 
 0.1.29 (2025-02-02)

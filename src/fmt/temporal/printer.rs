@@ -53,7 +53,7 @@ impl DateTimePrinter {
     ) -> Result<(), Error> {
         let timestamp = zdt.timestamp();
         let tz = zdt.time_zone();
-        let (offset, _, _) = tz.to_offset(timestamp);
+        let offset = tz.to_offset(timestamp);
         let dt = offset.to_datetime(timestamp);
         self.print_datetime(&dt, &mut wtr)?;
         self.print_offset_rounded(&offset, &mut wtr)?;

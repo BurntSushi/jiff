@@ -82,7 +82,10 @@ use crate::{
     civil::{Date, DateTime, Time, Weekday},
     error::{err, Error, ErrorContext},
     timestamp::Timestamp,
-    tz::{AmbiguousOffset, Dst, Offset, TimeZoneTransition},
+    tz::{
+        AmbiguousOffset, Dst, Offset, TimeZoneAbbreviation,
+        TimeZoneOffsetInfo, TimeZoneTransition,
+    },
     util::{
         array_str::Abbreviation,
         escape::{Byte, Bytes},
@@ -257,22 +260,59 @@ impl ReasonablePosixTimeZone {
     /// This also includes whether the offset returned should be considered
     /// to be "DST" or not, along with the time zone abbreviation (e.g., EST
     /// for standard time in New York, and EDT for DST in New York).
-    pub(crate) fn to_offset(
+    pub(crate) fn to_offset(&self, timestamp: Timestamp) -> Offset {
+        if self.dst.is_none() {
+            return self.std_offset();
+        }
+
+        let dt = Offset::UTC.to_datetime(timestamp);
+        self.dst_info_utc(dt.date().year_ranged())
+            .filter(|dst_info| dst_info.in_dst(dt))
+            .map(|dst_info| dst_info.offset)
+            .unwrap_or_else(|| self.std_offset())
+    }
+
+    /// Returns the appropriate time zone offset to use for the given
+    /// timestamp.
+    ///
+    /// This also includes whether the offset returned should be considered
+    /// to be "DST" or not, along with the time zone abbreviation (e.g., EST
+    /// for standard time in New York, and EDT for DST in New York).
+    pub(crate) fn to_offset_info(
         &self,
         timestamp: Timestamp,
-    ) -> (Offset, Dst, &str) {
+    ) -> TimeZoneOffsetInfo<'_> {
         if self.dst.is_none() {
-            return (self.std_offset(), Dst::No, self.std_abbrev.as_str());
+            let abbreviation =
+                TimeZoneAbbreviation::Borrowed(self.std_abbrev.as_str());
+            return TimeZoneOffsetInfo {
+                offset: self.std_offset(),
+                dst: Dst::No,
+                abbreviation,
+            };
         }
 
         let dt = Offset::UTC.to_datetime(timestamp);
         self.dst_info_utc(dt.date().year_ranged())
             .filter(|dst_info| dst_info.in_dst(dt))
             .map(|dst_info| {
-                (dst_info.offset, Dst::Yes, dst_info.dst.abbrev.as_str())
+                let abbreviation = TimeZoneAbbreviation::Borrowed(
+                    dst_info.dst.abbrev.as_str(),
+                );
+                TimeZoneOffsetInfo {
+                    offset: dst_info.offset,
+                    dst: Dst::Yes,
+                    abbreviation,
+                }
             })
             .unwrap_or_else(|| {
-                (self.std_offset(), Dst::No, self.std_abbrev.as_str())
+                let abbreviation =
+                    TimeZoneAbbreviation::Borrowed(self.std_abbrev.as_str());
+                TimeZoneOffsetInfo {
+                    offset: self.std_offset(),
+                    dst: Dst::No,
+                    abbreviation,
+                }
             })
     }
 
