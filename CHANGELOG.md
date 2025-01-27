@@ -1,5 +1,19 @@
 # CHANGELOG
 
+0.1.28 (2025-01-27)
+===================
+This is a small release that just removes the dev-dependency on `serde_yml`.
+It has been replaced with the deprecated `serde_yaml`. See
+[this post about `serde_yml` shenanigans](https://x.com/davidtolnay/status/1883906113428676938)
+for why this was done. Note that this was only a dev-dependency and thus doesn't
+impact folks using Jiff.
+
+Bug fixes:
+
+* [#225](https://github.com/BurntSushi/jiff/pull/225):
+Remove dependency on `serde_yml` in favor of `serde_yaml`.
+
+
 0.1.27 (2025-01-25)
 ===================
 This is a small release with a bug fix for precision loss in some cases when

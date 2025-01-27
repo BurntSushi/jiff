@@ -4403,18 +4403,18 @@ mod tests {
         let expected = datetime(2024, 10, 31, 16, 33, 53, 123456789);
 
         let deserialized: DateTime =
-            serde_yml::from_str("2024-10-31 16:33:53.123456789").unwrap();
+            serde_yaml::from_str("2024-10-31 16:33:53.123456789").unwrap();
 
         assert_eq!(deserialized, expected);
 
         let deserialized: DateTime =
-            serde_yml::from_slice("2024-10-31 16:33:53.123456789".as_bytes())
+            serde_yaml::from_slice("2024-10-31 16:33:53.123456789".as_bytes())
                 .unwrap();
 
         assert_eq!(deserialized, expected);
 
         let cursor = Cursor::new(b"2024-10-31 16:33:53.123456789");
-        let deserialized: DateTime = serde_yml::from_reader(cursor).unwrap();
+        let deserialized: DateTime = serde_yaml::from_reader(cursor).unwrap();
 
         assert_eq!(deserialized, expected);
     }

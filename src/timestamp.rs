@@ -3749,12 +3749,12 @@ mod tests {
             .timestamp();
 
         let deserialized: Timestamp =
-            serde_yml::from_str("2024-10-31T16:33:53.123456789+00:00")
+            serde_yaml::from_str("2024-10-31T16:33:53.123456789+00:00")
                 .unwrap();
 
         assert_eq!(deserialized, expected);
 
-        let deserialized: Timestamp = serde_yml::from_slice(
+        let deserialized: Timestamp = serde_yaml::from_slice(
             "2024-10-31T16:33:53.123456789+00:00".as_bytes(),
         )
         .unwrap();
@@ -3762,7 +3762,7 @@ mod tests {
         assert_eq!(deserialized, expected);
 
         let cursor = Cursor::new(b"2024-10-31T16:33:53.123456789+00:00");
-        let deserialized: Timestamp = serde_yml::from_reader(cursor).unwrap();
+        let deserialized: Timestamp = serde_yaml::from_reader(cursor).unwrap();
 
         assert_eq!(deserialized, expected);
     }
