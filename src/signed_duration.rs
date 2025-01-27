@@ -2619,18 +2619,18 @@ mod tests {
         let expected = SignedDuration::from_secs(123456789);
 
         let deserialized: SignedDuration =
-            serde_yml::from_str("PT34293h33m9s").unwrap();
+            serde_yaml::from_str("PT34293h33m9s").unwrap();
 
         assert_eq!(deserialized, expected);
 
         let deserialized: SignedDuration =
-            serde_yml::from_slice("PT34293h33m9s".as_bytes()).unwrap();
+            serde_yaml::from_slice("PT34293h33m9s".as_bytes()).unwrap();
 
         assert_eq!(deserialized, expected);
 
         let cursor = Cursor::new(b"PT34293h33m9s");
         let deserialized: SignedDuration =
-            serde_yml::from_reader(cursor).unwrap();
+            serde_yaml::from_reader(cursor).unwrap();
 
         assert_eq!(deserialized, expected);
     }

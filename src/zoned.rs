@@ -5406,12 +5406,12 @@ mod tests {
             .unwrap();
 
         let deserialized: Zoned =
-            serde_yml::from_str("2024-10-31T16:33:53.123456789+00:00[UTC]")
+            serde_yaml::from_str("2024-10-31T16:33:53.123456789+00:00[UTC]")
                 .unwrap();
 
         assert_eq!(deserialized, expected);
 
-        let deserialized: Zoned = serde_yml::from_slice(
+        let deserialized: Zoned = serde_yaml::from_slice(
             "2024-10-31T16:33:53.123456789+00:00[UTC]".as_bytes(),
         )
         .unwrap();
@@ -5419,7 +5419,7 @@ mod tests {
         assert_eq!(deserialized, expected);
 
         let cursor = Cursor::new(b"2024-10-31T16:33:53.123456789+00:00[UTC]");
-        let deserialized: Zoned = serde_yml::from_reader(cursor).unwrap();
+        let deserialized: Zoned = serde_yaml::from_reader(cursor).unwrap();
 
         assert_eq!(deserialized, expected);
     }
