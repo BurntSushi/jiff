@@ -171,7 +171,7 @@ fn no_calendar_units() -> Result {
     );
     insta::assert_snapshot!(
         1.week().checked_add(blank).unwrap_err(),
-        @"using unit 'week' in a span or configuration requires that a relative reference time be given, but none was provided",
+        @"using unit 'week' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
 
     let ok = 1.day();

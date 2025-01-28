@@ -418,6 +418,9 @@ pub(crate) type SpanZoneOffsetSeconds = ri8<-59, 59>;
 /// The number of months in a year.
 pub(crate) const MONTHS_PER_YEAR: Constant = Constant(12);
 
+/// The number of days in a week.
+pub(crate) const DAYS_PER_CIVIL_WEEK: Constant = Constant(7);
+
 /// The number of whole hours in one day.
 pub(crate) const HOURS_PER_CIVIL_DAY: Constant = Constant(24);
 
@@ -427,6 +430,17 @@ pub(crate) const MINUTES_PER_CIVIL_DAY: Constant =
 
 /// The number of minutes in an hour.
 pub(crate) const MINUTES_PER_HOUR: Constant = Constant(60);
+
+/// The number of seconds in a civil week.
+///
+/// Some weeks will have more or less seconds because of DST transitions. But
+/// such things are ignored when dealing with civil time, and so this constant
+/// is still useful.
+pub(crate) const SECONDS_PER_CIVIL_WEEK: Constant = Constant(
+    DAYS_PER_CIVIL_WEEK.value()
+        * HOURS_PER_CIVIL_DAY.value()
+        * SECONDS_PER_HOUR.value(),
+);
 
 /// The number of seconds in a civil day.
 ///
@@ -459,6 +473,14 @@ pub(crate) const MICROS_PER_SECOND: Constant = Constant(1_000_000);
 
 /// The number of microseconds in a single millisecond.
 pub(crate) const MICROS_PER_MILLI: Constant = Constant(1_000);
+
+/// The number of nanoseconds in a civil week.
+///
+/// Some weeks will have more or less seconds because of DST transitions. But
+/// such things are ignored when dealing with civil time, and so this constant
+/// is still useful.
+pub(crate) const NANOS_PER_CIVIL_WEEK: Constant =
+    Constant(SECONDS_PER_CIVIL_WEEK.value() * NANOS_PER_SECOND.value());
 
 /// The number of nanoseconds in a civil day.
 ///

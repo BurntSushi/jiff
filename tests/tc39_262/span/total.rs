@@ -54,7 +54,7 @@ fn calendar_possibly_required() -> Result {
 
     insta::assert_snapshot!(
         week.total(Unit::Day).unwrap_err(),
-        @"using unit 'week' in a span or configuration requires that a relative reference time be given, but none was provided",
+        @"using unit 'week' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     let result = week.total((Unit::Day, d))?;
     assert_eq!(result, 7.0);

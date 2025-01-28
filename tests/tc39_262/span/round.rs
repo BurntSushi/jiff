@@ -87,7 +87,7 @@ fn calendar_possibly_required() -> Result {
     let sp = 5.weeks();
     insta::assert_snapshot!(
         sp.round(Unit::Hour).unwrap_err(),
-        @"error with largest unit in span to be rounded: using unit 'week' in a span or configuration requires that a relative reference time be given, but none was provided",
+        @"error with largest unit in span to be rounded: using unit 'week' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     span_eq!(sp.round(relative_years)?, 1.month().days(4));
     span_eq!(sp.round(relative_months)?, 1.month().days(4));
@@ -629,6 +629,10 @@ fn largestunit_smallestunit_default() -> Result {
     let options = SpanRound::new().smallest(Unit::Week).relative(d);
     span_eq!(almost_week.round(options)?, 1.week());
 
+    let almost_week = 6.days();
+    let options = SpanRound::new().smallest(Unit::Week).days_are_24_hours();
+    span_eq!(almost_week.round(options)?, 1.week());
+
     let almost_day = 86_399.seconds();
     let options = SpanRound::new().smallest(Unit::Day).relative(d);
     span_eq!(almost_day.round(options)?, 1.day());
@@ -763,7 +767,7 @@ fn relativeto_undefined_throw_on_calendar_units() -> Result {
     );
     insta::assert_snapshot!(
         1.week().round(SpanRound::new().largest(Unit::Hour)).unwrap_err(),
-        @"error with largest unit in span to be rounded: using unit 'week' in a span or configuration requires that a relative reference time be given, but none was provided",
+        @"error with largest unit in span to be rounded: using unit 'week' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     insta::assert_snapshot!(
         1.month().round(SpanRound::new().largest(Unit::Hour)).unwrap_err(),
@@ -772,6 +776,15 @@ fn relativeto_undefined_throw_on_calendar_units() -> Result {
     insta::assert_snapshot!(
         1.year().round(SpanRound::new().largest(Unit::Hour)).unwrap_err(),
         @"error with largest unit in span to be rounded: using unit 'year' in a span or configuration requires that a relative reference time be given, but none was provided",
+    );
+
+    insta::assert_snapshot!(
+        1.month().round(SpanRound::new().largest(Unit::Hour).days_are_24_hours()).unwrap_err(),
+        @"using unit 'month' in span or configuration requires that a relative reference time be given (`SpanRelativeTo::days_are_24_hours()` was given but this only permits using days and weeks without a relative reference time)",
+    );
+    insta::assert_snapshot!(
+        1.year().round(SpanRound::new().largest(Unit::Hour).days_are_24_hours()).unwrap_err(),
+        @"using unit 'year' in span or configuration requires that a relative reference time be given (`SpanRelativeTo::days_are_24_hours()` was given but this only permits using days and weeks without a relative reference time)",
     );
 
     insta::assert_snapshot!(
@@ -797,7 +810,7 @@ fn relativeto_undefined_throw_on_calendar_units() -> Result {
 
     insta::assert_snapshot!(
         1.day().round(SpanRound::new().largest(Unit::Week)).unwrap_err(),
-        @"error with `largest` rounding option: using unit 'week' in a span or configuration requires that a relative reference time be given, but none was provided",
+        @"error with `largest` rounding option: using unit 'week' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     insta::assert_snapshot!(
         1.day().round(SpanRound::new().largest(Unit::Month)).unwrap_err(),

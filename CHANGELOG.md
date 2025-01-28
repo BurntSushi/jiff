@@ -82,6 +82,13 @@ reducing the size of a `TimeZone` considerably in core-only environments.
 Callers previously using `TimeZone::to_offset` to get DST status and time zone
 abbreviation should now use `TimeZone::to_offset_info`.
 
+Enhancements:
+
+* [#136](https://github.com/BurntSushi/jiff/issues/136):
+When the special `SpanRelativeTo::days_are_24_hours()` marker is used, weeks
+will also be treated as invariant. That is, 7 24-hour days. In all cases,
+working with years and months still requires a relative date.
+
 
 0.1.29 (2025-02-02)
 ===================
