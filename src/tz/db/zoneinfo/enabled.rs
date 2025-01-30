@@ -15,7 +15,7 @@ use std::{
 use crate::{
     error::{err, Error},
     timestamp::Timestamp,
-    tz::{tzif::is_possibly_tzif, TimeZone},
+    tz::{tzif::is_possibly_tzif, TimeZone, TimeZoneNameIter},
     util::{self, cache::Expiration, parse, utf8},
 };
 
@@ -24,18 +24,18 @@ const DEFAULT_TTL: Duration = Duration::new(5 * 60, 0);
 static ZONEINFO_DIRECTORIES: &[&str] =
     &["/usr/share/zoneinfo", "/etc/zoneinfo"];
 
-pub(crate) struct ZoneInfo {
+pub(crate) struct Database {
     dir: Option<PathBuf>,
     names: Option<ZoneInfoNames>,
     zones: RwLock<CachedZones>,
 }
 
-impl ZoneInfo {
-    pub(crate) fn from_env() -> ZoneInfo {
+impl Database {
+    pub(crate) fn from_env() -> Database {
         if let Some(tzdir) = std::env::var_os("TZDIR") {
             let tzdir = PathBuf::from(tzdir);
             trace!("opening zoneinfo database at TZDIR={}", tzdir.display());
-            match ZoneInfo::from_dir(&tzdir) {
+            match Database::from_dir(&tzdir) {
                 Ok(db) => return db,
                 Err(_err) => {
                     // This is a WARN because it represents a failure to
@@ -49,7 +49,7 @@ impl ZoneInfo {
         for dir in ZONEINFO_DIRECTORIES {
             let tzdir = Path::new(dir);
             trace!("opening zoneinfo database at {}", tzdir.display());
-            match ZoneInfo::from_dir(&tzdir) {
+            match Database::from_dir(&tzdir) {
                 Ok(db) => return db,
                 Err(_err) => {
                     trace!("failed opening {}: {_err}", tzdir.display());
@@ -61,21 +61,21 @@ impl ZoneInfo {
              paths: {}",
             ZONEINFO_DIRECTORIES.join(", "),
         );
-        ZoneInfo::none()
+        Database::none()
     }
 
-    pub(crate) fn from_dir(dir: &Path) -> Result<ZoneInfo, Error> {
+    pub(crate) fn from_dir(dir: &Path) -> Result<Database, Error> {
         let names = Some(ZoneInfoNames::new(dir)?);
         let zones = RwLock::new(CachedZones::new());
-        Ok(ZoneInfo { dir: Some(dir.to_path_buf()), names, zones })
+        Ok(Database { dir: Some(dir.to_path_buf()), names, zones })
     }
 
     /// Creates a "dummy" zoneinfo database in which all lookups fail.
-    pub(crate) fn none() -> ZoneInfo {
+    pub(crate) fn none() -> Database {
         let dir = None;
         let names = None;
         let zones = RwLock::new(CachedZones::new());
-        ZoneInfo { dir, names, zones }
+        Database { dir, names, zones }
     }
 
     pub(crate) fn reset(&self) {
@@ -176,9 +176,11 @@ impl ZoneInfo {
         }
     }
 
-    pub(crate) fn available(&self) -> Vec<String> {
-        let Some(names) = self.names.as_ref() else { return vec![] };
-        names.available()
+    pub(crate) fn available<'d>(&'d self) -> TimeZoneNameIter<'d> {
+        let Some(names) = self.names.as_ref() else {
+            return TimeZoneNameIter::empty();
+        };
+        TimeZoneNameIter::from_iter(names.available().into_iter())
     }
 
     pub(crate) fn is_definitively_empty(&self) -> bool {
@@ -186,7 +188,7 @@ impl ZoneInfo {
     }
 }
 
-impl core::fmt::Debug for ZoneInfo {
+impl core::fmt::Debug for Database {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "ZoneInfo(")?;
         if let Some(ref dir) = self.dir {

@@ -1,5 +1,95 @@
 # CHANGELOG
 
+0.2.0 (TBD)
+===========
+
+**BREAKING CHANGES**:
+
+* [#28](https://github.com/BurntSushi/jiff/issues/28):
+The deprecated `intz` routines on `Zoned`, `Timestamp`, `civil::DateTime` and
+`civil::Date` have been removed. You can use `in_tz` instead. This change was
+made because many found the name `intz` to be unclear.
+* [#32](https://github.com/BurntSushi/jiff/issues/32):
+The `PartialEq` and `Eq` trait implementations on `Span` have been removed.
+Ideally these shouldn't have been used, but if you do need them, please use
+`Span::fieldwise` to create a `SpanFieldwise`, which does have the `PartialEq`
+and `Eq` traits implemented. These were removed on `Span` itself because they
+made it very easy to commit subtle bugs.
+* [#36](https://github.com/BurntSushi/jiff/issues/36):
+Turn panics during `Timestamp::saturing_add` into errors. Callers adding
+spans that are known to contain units of hours or smaller are guaranteed that
+this will not panic.
+* [#48](https://github.com/BurntSushi/jiff/issues/48):
+On `Span` APIs, days are no longer silently assumed to always be 24 hours when
+a relative datetime is not provided. Instead, to perform operations on units
+of days or bigger, callers must either provide a relative date or opt into
+invariant 24-hour days with `SpanRelativeTo::days_are_24_hours`. Shortcuts have
+been added to the span builders. For example, `SpanTotal::days_are_24_hours`.
+* [#147](https://github.com/BurntSushi/jiff/issues/147):
+Change the behavior of the deprecated `%V` conversion specifier in
+`jiff::fmt::strtime` from formatting an IANA time zone identifier to formatting
+an ISO 8601 week number. To format an IANA time zone identifier, use `%Q` or
+`%:Q` (which were introduced in `jiff 0.1`).
+* [#212](https://github.com/BurntSushi/jiff/issues/212):
+When parsing into a `Zoned` with a civil time corresponding to a gap, we treat
+all offsets as invalid and return an error. Previously, we would accept the
+offset as given. This brings us into line with Temporal's behavior. For
+example, previously Jiff accepted `2006-04-02T02:30-05[America/Indiana/Vevay]`
+but will now return an error. This is desirable for cases where a datetime in
+the future is serialized before a change in the daylight saving time rules.
+For more examples, see `jiff::fmt::temporal::DateTimeParser::offset_conflict`
+for details on how to change Jiff's default behavior. This behavior change also
+applies to `tz::OffsetConflict::PreferOffset`.
+* [#213](https://github.com/BurntSushi/jiff/issues/213):
+Tweak the semantics of `tz::TimeZoneDatabase` so that it only initializes one
+internal tzdb instead of trying to find as many as possible. It is unlikely
+that you'll be impacted by this change, but it's meant to make the semantics
+be a bit more sensible. (In `jiff 0.1`, it was in theory possible for one tz
+lookup to succeed in the system zoneinfo and then another tz lookup to fail
+in zoneinfo but succeed automatically via the bundled copy. But this seems
+confusing and possibly not desirable. Hence the change.)
+* [#218](https://github.com/BurntSushi/jiff/issues/218):
+In order to make naming a little more consistent between `Zoned`
+and `civil::Date`, the `civil::Date::to_iso_week_date` and
+`civil::ISOWeekDate::to_date` APIs were renamed to `civil::Date::iso_week_date`
+and `civil::ISOWeekDate::date`.
+* [#220](https://github.com/BurntSushi/jiff/issues/220):
+Remove `Span::to_duration` for converting a `Span` to a `std::time::Duration`
+and rename `Span::to_jiff_duration` to `Span::to_duration`. This prioritizes
+`SignedDuration` as the "primary" non-calendar duration type in Jiff. And makes
+it more consistent with APIs like `Zoned::duration_since`. For non-calendar
+spans, the `TryFrom<Span> for std::time::Duration` still exists. For calendar
+durations, use `Span::to_duration` and then convert the `SignedDuration` to
+`std::time::Duration`. Additionally, `Timestamp::from_jiff_duration` and
+`Timestamp::as_jiff_duration` were renamed to `Timestamp::from_duration` and
+`Timestamp::as_duration`, respectively. The old deprecated routines on the
+unsigned `std::time::Duration` have been removed.
+* [#221](https://github.com/BurntSushi/jiff/issues/221):
+Change the type of the value yielded by the `jiff::tz::TimeZoneNameIter`
+iterator from `String` to `jiff::tz::TimeZoneName`. This opaque type is more
+API evolution friendly. To access the string, either use `TimeZoneName`'s
+`Display` trait implementation, or its `as_str` method.
+* [#222](https://github.com/BurntSushi/jiff/issues/222):
+Split `TimeZone::to_offset` into two methods. One that just returns the
+offset, and another, `TimeZone::to_offset_info`, which includes the offset,
+DST status and time zone abbreviation. The extra info is rarely needed and
+is sometimes more costly to compute. Also, make the lifetime of the time
+zone abbreviation returned by `TimeZoneTransition::abbreviation` tied to
+the transition instead of the time zone (for future API flexibility, likely
+in core-only environments). This change was overall motivated by wanting to
+do less work in the common case (where we only need the offset), and for
+reducing the size of a `TimeZone` considerably in core-only environments.
+Callers previously using `TimeZone::to_offset` to get DST status and time zone
+abbreviation should now use `TimeZone::to_offset_info`.
+
+Enhancements:
+
+* [#136](https://github.com/BurntSushi/jiff/issues/136):
+When the special `SpanRelativeTo::days_are_24_hours()` marker is used, weeks
+will also be treated as invariant. That is, 7 24-hour days. In all cases,
+working with years and months still requires a relative date.
+
+
 0.1.29 (TBD)
 ============
 TODO

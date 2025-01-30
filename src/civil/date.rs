@@ -307,7 +307,7 @@ impl Date {
     /// precisely to the minimum and maximum values of a `Date`. Therefore,
     /// converting between them is lossless and infallible.
     ///
-    /// This routine is equivalent to [`ISOWeekDate::to_date`]. It is also
+    /// This routine is equivalent to [`ISOWeekDate::date`]. It is also
     /// available via a `From<ISOWeekDate>` trait implementation for `Date`.
     ///
     /// [ISO 8601 week date]: https://en.wikipedia.org/wiki/ISO_week_date
@@ -1808,7 +1808,8 @@ impl Date {
     /// units like hours, this can only be done for uniform units. (Uniform
     /// units are units for which each individual unit always corresponds to
     /// the same elapsed time regardless of the datetime it is relative to.)
-    /// This can't be done for units like years or months.
+    /// This can't be done for units like years, months or days without a
+    /// relative date.
     ///
     /// ```
     /// use jiff::{civil::date, SignedDuration, Span, SpanRound, ToSpan, Unit};
@@ -2052,30 +2053,6 @@ impl Date {
         format: &'f F,
     ) -> fmt::strtime::Display<'f> {
         fmt::strtime::Display { fmt: format.as_ref(), tm: (*self).into() }
-    }
-}
-
-/// Deprecated APIs.
-impl Date {
-    /// A deprecated equivalent to [`Date::iso_week_date`].
-    ///
-    /// This method will be removed in `jiff 0.2`. This was done to make naming
-    /// more consistent throughout the crate.
-    #[deprecated(since = "0.1.23", note = "use Date::iso_week_date instead")]
-    #[inline]
-    pub fn to_iso_week_date(self) -> ISOWeekDate {
-        self.iso_week_date()
-    }
-
-    /// A deprecated equivalent to [`Date::in_tz`].
-    ///
-    /// This will be removed in `jiff 0.2`. The method was renamed to make
-    /// it clearer that the name stood for "in time zone."
-    #[deprecated(since = "0.1.25", note = "use Date::in_tz instead")]
-    #[inline]
-    pub fn intz(self, time_zone_name: &str) -> Result<Zoned, Error> {
-        let tz = crate::tz::db().get(time_zone_name)?;
-        self.to_zoned(tz)
     }
 }
 
