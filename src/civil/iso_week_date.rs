@@ -77,6 +77,38 @@ use crate::{
 ///     1904, 1908, 1920, 1932, 1936, 1948, 1960, 1964, 1976, 1988, 1992,
 /// ]);
 /// ```
+///
+/// # Example: printing all weeks in a year
+///
+/// The ISO 8601 week calendar can be useful when you want to categorize
+/// things into buckets of weeks where all weeks are exactly 7 days, _and_
+/// you don't care as much about the precise Gregorian year. Here's an example
+/// that prints all of the ISO 8601 weeks in one ISO 8601 week year:
+///
+/// ```
+/// use jiff::{civil::{ISOWeekDate, Weekday}, ToSpan};
+///
+/// let target_year = 2024;
+/// let iso_week_date = ISOWeekDate::new(target_year, 1, Weekday::Monday)?;
+/// // Create a series of dates via the Gregorian calendar. But since a
+/// // Gregorian week and an ISO 8601 week calendar week are both 7 days,
+/// // this works fine.
+/// let weeks = iso_week_date
+///     .date()
+///     .series(1.week())
+///     .map(|d| d.iso_week_date())
+///     .take_while(|wd| wd.year() == target_year);
+/// for start_of_week in weeks {
+///     let end_of_week = start_of_week.last_of_week()?;
+///     println!(
+///         "ISO week {}: {} - {}",
+///         start_of_week.week(),
+///         start_of_week.date(),
+///         end_of_week.date()
+///     );
+/// }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Clone, Copy, Hash)]
 pub struct ISOWeekDate {
     year: ISOYear,
@@ -267,6 +299,244 @@ impl ISOWeekDate {
         self.weekday
     }
 
+    /// Returns the ISO 8601 week date corresponding to the first day in the
+    /// week of this week date. The date returned is guaranteed to have a
+    /// weekday of [`Weekday::Monday`].
+    ///
+    /// # Errors
+    ///
+    /// Since `-9999-01-01` falls on a Monday, it follows that the minimum
+    /// support Gregorian date is exactly equivalent to the minimum supported
+    /// ISO 8601 week date. This means that this routine can never actually
+    /// fail, but only insomuch as the minimums line up. For that reason, and
+    /// for consistency with [`ISOWeekDate::last_of_week`], the API is
+    /// fallible.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::civil::{ISOWeekDate, Weekday, date};
+    ///
+    /// let wd = ISOWeekDate::new(2025, 5, Weekday::Wednesday).unwrap();
+    /// assert_eq!(wd.date(), date(2025, 1, 29));
+    /// assert_eq!(
+    ///     wd.first_of_week()?,
+    ///     ISOWeekDate::new(2025, 5, Weekday::Monday).unwrap(),
+    /// );
+    ///
+    /// // Works even for the minimum date.
+    /// assert_eq!(
+    ///     ISOWeekDate::MIN.first_of_week()?,
+    ///     ISOWeekDate::new(-9999, 1, Weekday::Monday).unwrap(),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn first_of_week(self) -> Result<ISOWeekDate, Error> {
+        // I believe this can never return an error because `Monday` is in
+        // bounds for all possible year-and-week combinations. This is *only*
+        // because -9999-01-01 corresponds to -9999-W01-Monday. Which is kinda
+        // lucky. And I guess if we ever change the ranges, this could become
+        // fallible.
+        ISOWeekDate::new_ranged(
+            self.year_ranged(),
+            self.week_ranged(),
+            Weekday::Monday,
+        )
+    }
+
+    /// Returns the ISO 8601 week date corresponding to the last day in the
+    /// week of this week date. The date returned is guaranteed to have a
+    /// weekday of [`Weekday::Sunday`].
+    ///
+    /// # Errors
+    ///
+    /// This can return an error if the last day of the week exceeds Jiff's
+    /// maximum Gregorian date of `9999-12-31`. It turns out this can happen
+    /// since `9999-12-31` falls on a Friday.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::civil::{ISOWeekDate, Weekday, date};
+    ///
+    /// let wd = ISOWeekDate::new(2025, 5, Weekday::Wednesday).unwrap();
+    /// assert_eq!(wd.date(), date(2025, 1, 29));
+    /// assert_eq!(
+    ///     wd.last_of_week()?,
+    ///     ISOWeekDate::new(2025, 5, Weekday::Sunday).unwrap(),
+    /// );
+    ///
+    /// // Unlike `first_of_week`, this routine can actually fail on real
+    /// // values, although, only when close to the maximum supported date.
+    /// assert_eq!(
+    ///     ISOWeekDate::MAX.last_of_week().unwrap_err().to_string(),
+    ///     "parameter 'weekday' with value 7 is not \
+    ///      in the required range of 1..=5",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn last_of_week(self) -> Result<ISOWeekDate, Error> {
+        // This can return an error when in the last week of the maximum year
+        // supported by Jiff. That's because the Saturday and Sunday of that
+        // week are actually in Gregorian year 10,000.
+        ISOWeekDate::new_ranged(
+            self.year_ranged(),
+            self.week_ranged(),
+            Weekday::Sunday,
+        )
+    }
+
+    /// Returns the ISO 8601 week date corresponding to the first day in the
+    /// year of this week date. The date returned is guaranteed to have a
+    /// weekday of [`Weekday::Monday`].
+    ///
+    /// # Errors
+    ///
+    /// Since `-9999-01-01` falls on a Monday, it follows that the minimum
+    /// support Gregorian date is exactly equivalent to the minimum supported
+    /// ISO 8601 week date. This means that this routine can never actually
+    /// fail, but only insomuch as the minimums line up. For that reason, and
+    /// for consistency with [`ISOWeekDate::last_of_year`], the API is
+    /// fallible.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::civil::{ISOWeekDate, Weekday, date};
+    ///
+    /// let wd = ISOWeekDate::new(2025, 5, Weekday::Wednesday).unwrap();
+    /// assert_eq!(wd.date(), date(2025, 1, 29));
+    /// assert_eq!(
+    ///     wd.first_of_year()?,
+    ///     ISOWeekDate::new(2025, 1, Weekday::Monday).unwrap(),
+    /// );
+    ///
+    /// // Works even for the minimum date.
+    /// assert_eq!(
+    ///     ISOWeekDate::MIN.first_of_year()?,
+    ///     ISOWeekDate::new(-9999, 1, Weekday::Monday).unwrap(),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn first_of_year(self) -> Result<ISOWeekDate, Error> {
+        // I believe this can never return an error because `Monday` is in
+        // bounds for all possible years. This is *only* because -9999-01-01
+        // corresponds to -9999-W01-Monday. Which is kinda lucky. And I guess
+        // if we ever change the ranges, this could become fallible.
+        ISOWeekDate::new_ranged(self.year_ranged(), C(1), Weekday::Monday)
+    }
+
+    /// Returns the ISO 8601 week date corresponding to the last day in the
+    /// year of this week date. The date returned is guaranteed to have a
+    /// weekday of [`Weekday::Sunday`].
+    ///
+    /// # Errors
+    ///
+    /// This can return an error if the last day of the year exceeds Jiff's
+    /// maximum Gregorian date of `9999-12-31`. It turns out this can happen
+    /// since `9999-12-31` falls on a Friday.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::civil::{ISOWeekDate, Weekday, date};
+    ///
+    /// let wd = ISOWeekDate::new(2025, 5, Weekday::Wednesday).unwrap();
+    /// assert_eq!(wd.date(), date(2025, 1, 29));
+    /// assert_eq!(
+    ///     wd.last_of_year()?,
+    ///     ISOWeekDate::new(2025, 52, Weekday::Sunday).unwrap(),
+    /// );
+    ///
+    /// // Works correctly for "long" years.
+    /// let wd = ISOWeekDate::new(2026, 5, Weekday::Wednesday).unwrap();
+    /// assert_eq!(wd.date(), date(2026, 1, 28));
+    /// assert_eq!(
+    ///     wd.last_of_year()?,
+    ///     ISOWeekDate::new(2026, 53, Weekday::Sunday).unwrap(),
+    /// );
+    ///
+    /// // Unlike `first_of_year`, this routine can actually fail on real
+    /// // values, although, only when close to the maximum supported date.
+    /// assert_eq!(
+    ///     ISOWeekDate::MAX.last_of_year().unwrap_err().to_string(),
+    ///     "parameter 'weekday' with value 7 is not \
+    ///      in the required range of 1..=5",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn last_of_year(self) -> Result<ISOWeekDate, Error> {
+        // This can return an error when in the maximum year supported by
+        // Jiff. That's because the last Saturday and Sunday of that year are
+        // actually in Gregorian year 10,000.
+        let week = if self.in_long_year() {
+            ISOWeek::V::<53, 52, 53>()
+        } else {
+            ISOWeek::V::<52, 52, 53>()
+        };
+        ISOWeekDate::new_ranged(self.year_ranged(), week, Weekday::Sunday)
+    }
+
+    /// Returns the total number of days in the year of this ISO 8601 week
+    /// date.
+    ///
+    /// It is guaranteed that the value returned is either 364 or 371. The
+    /// latter case occurs precisely when [`ISOWeekDate::in_long_year`]
+    /// returns `true`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::civil::{ISOWeekDate, Weekday};
+    ///
+    /// let weekdate = ISOWeekDate::new(2025, 7, Weekday::Monday).unwrap();
+    /// assert_eq!(weekdate.days_in_year(), 364);
+    /// let weekdate = ISOWeekDate::new(2026, 7, Weekday::Monday).unwrap();
+    /// assert_eq!(weekdate.days_in_year(), 371);
+    /// ```
+    #[inline]
+    pub fn days_in_year(self) -> i16 {
+        if self.in_long_year() {
+            371
+        } else {
+            364
+        }
+    }
+
+    /// Returns the total number of weeks in the year of this ISO 8601 week
+    /// date.
+    ///
+    /// It is guaranteed that the value returned is either 52 or 53. The
+    /// latter case occurs precisely when [`ISOWeekDate::in_long_year`]
+    /// returns `true`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::civil::{ISOWeekDate, Weekday};
+    ///
+    /// let weekdate = ISOWeekDate::new(2025, 7, Weekday::Monday).unwrap();
+    /// assert_eq!(weekdate.weeks_in_year(), 52);
+    /// let weekdate = ISOWeekDate::new(2026, 7, Weekday::Monday).unwrap();
+    /// assert_eq!(weekdate.weeks_in_year(), 53);
+    /// ```
+    #[inline]
+    pub fn weeks_in_year(self) -> i8 {
+        if self.in_long_year() {
+            53
+        } else {
+            52
+        }
+    }
+
     /// Returns true if and only if the year of this week date is a "long"
     /// year.
     ///
@@ -286,6 +556,64 @@ impl ISOWeekDate {
     #[inline]
     pub fn in_long_year(self) -> bool {
         is_long_year(self.year_ranged())
+    }
+
+    /// Returns the ISO 8601 date immediately following this one.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error when this date is the maximum value.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::civil::{ISOWeekDate, Weekday};
+    ///
+    /// let wd = ISOWeekDate::new(2025, 5, Weekday::Wednesday).unwrap();
+    /// assert_eq!(
+    ///     wd.tomorrow()?,
+    ///     ISOWeekDate::new(2025, 5, Weekday::Thursday).unwrap(),
+    /// );
+    ///
+    /// // The max doesn't have a tomorrow.
+    /// assert!(ISOWeekDate::MAX.tomorrow().is_err());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn tomorrow(self) -> Result<ISOWeekDate, Error> {
+        // I suppose we could probably implement this in a more efficient
+        // manner but avoiding the roundtrip through Gregorian dates.
+        self.date().tomorrow().map(|d| d.iso_week_date())
+    }
+
+    /// Returns the ISO 8601 week date immediately preceding this one.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error when this date is the minimum value.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::civil::{ISOWeekDate, Weekday};
+    ///
+    /// let wd = ISOWeekDate::new(2025, 5, Weekday::Wednesday).unwrap();
+    /// assert_eq!(
+    ///     wd.yesterday()?,
+    ///     ISOWeekDate::new(2025, 5, Weekday::Tuesday).unwrap(),
+    /// );
+    ///
+    /// // The min doesn't have a yesterday.
+    /// assert!(ISOWeekDate::MIN.yesterday().is_err());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn yesterday(self) -> Result<ISOWeekDate, Error> {
+        // I suppose we could probably implement this in a more efficient
+        // manner but avoiding the roundtrip through Gregorian dates.
+        self.date().yesterday().map(|d| d.iso_week_date())
     }
 
     /// Converts this ISO week date to a Gregorian [`Date`].
@@ -369,7 +697,7 @@ impl ISOWeekDate {
         {
             return Err(Error::range(
                 "weekday",
-                weekday.to_monday_zero_offset(),
+                weekday.to_monday_one_offset(),
                 Weekday::Monday.to_monday_one_offset(),
                 Weekday::Friday.to_monday_one_offset(),
             ));
