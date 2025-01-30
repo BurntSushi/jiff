@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.1.29 (TBD)
+============
+TODO
+
+Enhancements:
+
+* [#227](https://github.com/BurntSushi/jiff/issues/227):
+The `civil::ISOWeekDate` API has been beefed up with a few convenience methods.
+
+
 0.1.28 (2025-01-27)
 ===================
 This is a small release that just removes the dev-dependency on `serde_yml`.
