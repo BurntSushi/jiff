@@ -1,5 +1,3 @@
-use alloc::{string::String, vec::Vec};
-
 use crate::tz::{TimeZone, TimeZoneNameIter};
 
 pub(crate) struct Database;
