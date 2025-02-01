@@ -81,6 +81,14 @@ do less work in the common case (where we only need the offset), and for
 reducing the size of a `TimeZone` considerably in core-only environments.
 Callers previously using `TimeZone::to_offset` to get DST status and time zone
 abbreviation should now use `TimeZone::to_offset_info`.
+* [#230](https://github.com/BurntSushi/jiff/issues/230):
+When `TimeZone::system()` cannot find a system configured time zone, `jiff
+0.1` would automatically fall back to `TimeZone::UTC` (with a WARN-level log
+message). In `jiff 0.2`, the fall back is now to `TimeZone::unknown()`, which
+has a special `Etc/Unknown` identifier (as specified by Unicode and reserved by
+the IANA time zone database). The fallback otherwise still behaves as if it
+were `TimeZone::UTC`. This helps surface error conditions related to finding
+the system time zone without causing unrecoverable failure.
 
 Enhancements:
 

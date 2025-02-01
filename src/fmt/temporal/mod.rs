@@ -370,6 +370,55 @@ impl DateTimeParser {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    ///
+    /// # Example: a `Z` never results in an offset conflict
+    ///
+    /// [RFC 9557] specifies that `Z` indicates that the offset from UTC to
+    /// get local time is unknown. Since it doesn't prescribe a particular
+    /// offset, when a `Z` is parsed with a time zone annotation, the
+    /// `OffsetConflict::ALwaysOffset` strategy is used regardless of what
+    /// is set here. For example:
+    ///
+    /// ```
+    /// use jiff::fmt::temporal::DateTimeParser;
+    ///
+    /// // NOTE: The default is reject.
+    /// static PARSER: DateTimeParser = DateTimeParser::new();
+    ///
+    /// let zdt = PARSER.parse_zoned(
+    ///     "2025-06-20T17:30Z[America/New_York]",
+    /// )?;
+    /// assert_eq!(
+    ///     zdt.to_string(),
+    ///     "2025-06-20T13:30:00-04:00[America/New_York]",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Conversely, if the `+00:00` offset was used, then an error would
+    /// occur because of the offset conflict:
+    ///
+    /// ```
+    /// use jiff::fmt::temporal::DateTimeParser;
+    ///
+    /// // NOTE: The default is reject.
+    /// static PARSER: DateTimeParser = DateTimeParser::new();
+    ///
+    /// let result = PARSER.parse_zoned(
+    ///     "2025-06-20T17:30+00[America/New_York]",
+    /// );
+    /// assert_eq!(
+    ///     result.unwrap_err().to_string(),
+    ///     "parsing \"2025-06-20T17:30+00[America/New_York]\" failed: \
+    ///      datetime 2025-06-20T17:30:00 could not resolve to a timestamp \
+    ///      since 'reject' conflict resolution was chosen, and because \
+    ///      datetime has offset +00, but the time zone America/New_York \
+    ///      for the given datetime unambiguously has offset -04",
+    /// );
+    /// ```
+    ///
+    /// [RFC 9557]: https://datatracker.ietf.org/doc/rfc9557/
     #[inline]
     pub const fn offset_conflict(
         self,
@@ -520,6 +569,11 @@ impl DateTimeParser {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    ///
+    /// If you _really_ need to parse something like `2024-06-08T07:00-04`
+    /// into a `Zoned` with a fixed offset of `-04:00` as its `TimeZone`,
+    /// then you'll need to use lower level parsing routines. See the
+    /// documentation on [`Pieces`] for a case study of how to achieve this.
     pub fn parse_zoned<I: AsRef<[u8]>>(
         &self,
         input: I,

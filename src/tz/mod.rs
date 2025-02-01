@@ -359,19 +359,28 @@ impl TimeZone {
 
     /// Returns the system configured time zone, if available.
     ///
-    /// If the system's default time zone could not be determined, or if
-    /// the `tz-system` crate feature is not enabled, then this returns
-    /// [`TimeZone::UTC`]. A `WARN` level log will also be emitted with a
-    /// message explaining why time zone detection failed. The fallback
-    /// to UTC is a practical trade-off, is what most other systems tend
-    /// to do and is also recommended by [relevant standards such as
-    /// freedesktop.org][freedesktop-org-localtime].
-    ///
     /// Detection of a system's default time zone is generally heuristic
     /// based and platform specific.
     ///
     /// If callers need to know whether discovery of the system time zone
     /// failed, then use [`TimeZone::try_system`].
+    ///
+    /// # Fallback behavior
+    ///
+    /// If the system's default time zone could not be determined, or if
+    /// the `tz-system` crate feature is not enabled, then this returns
+    /// [`TimeZone::unknown`]. A `WARN` level log will also be emitted with
+    /// a message explaining why time zone detection failed. The fallback to
+    /// an unknown time zone is a practical trade-off, is what most other
+    /// systems tend to do and is also recommended by [relevant standards such
+    /// as freedesktop.org][freedesktop-org-localtime].
+    ///
+    /// An unknown time zone _behaves_ like [`TimeZone::UTC`], but will
+    /// print as `Etc/Unknown` when converting a `Zoned` to a string.
+    ///
+    /// If you would instead like to fall back to UTC instead
+    /// of the special "unknown" time zone, then you can do
+    /// `TimeZone::try_system().unwrap_or(TimeZone::UTC)`.
     ///
     /// # Platform behavior
     ///
@@ -392,10 +401,12 @@ impl TimeZone {
     ///
     /// Otherwise, when `TZ` isn't set, then:
     ///
-    /// On Unix systems, this inspects `/etc/localtime`. If it's a symbolic
-    /// link to an entry in `/usr/share/zoneinfo`, then the suffix is
-    /// considered an IANA Time Zone Database identifier. Otherwise,
+    /// On Unix non-Android systems, this inspects `/etc/localtime`. If it's
+    /// a symbolic link to an entry in `/usr/share/zoneinfo`, then the suffix
+    /// is considered an IANA Time Zone Database identifier. Otherwise,
     /// `/etc/localtime` is read as a TZif file directly.
+    ///
+    /// On Android systems, this inspects the `persist.sys.timezone` property.
     ///
     /// On Windows, the system time zone is determined via
     /// [`GetDynamicTimeZoneInformation`]. The result is then mapped to an
@@ -413,9 +424,10 @@ impl TimeZone {
             Err(_err) => {
                 warn!(
                     "failed to get system time zone, \
-                     falling back to UTC: {_err}",
+                     falling back to `Etc/Unknown` \
+                     (which behaves like UTC): {_err}",
                 );
-                TimeZone::UTC
+                TimeZone::unknown()
             }
         }
     }
@@ -625,6 +637,48 @@ impl TimeZone {
         Ok(TimeZone { kind: Some(Arc::new(kind)) })
     }
 
+    /// Returns a `TimeZone` that is specifially marked as "unknown."
+    ///
+    /// This corresponds to the Unicode CLDR identifier `Etc/Unknown`, which
+    /// is guaranteed to never be a valid IANA time zone identifier (as of
+    /// the `2025a` release of tzdb).
+    ///
+    /// This type of `TimeZone` is used in circumstances where one wants to
+    /// signal that discovering a time zone failed for some reason, but that
+    /// execution can reasonably continue. For example, [`TimeZone::system`]
+    /// returns this type of time zone when the system time zone could not be
+    /// discovered.
+    ///
+    /// # Example
+    ///
+    /// Jiff permits an "unknown" time zone to losslessly be transmitted
+    /// through serialization:
+    ///
+    /// ```
+    /// use jiff::{civil::date, tz::TimeZone, Zoned};
+    ///
+    /// let tz = TimeZone::unknown();
+    /// let zdt = date(2025, 2, 1).at(17, 0, 0, 0).to_zoned(tz)?;
+    /// assert_eq!(zdt.to_string(), "2025-02-01T17:00:00Z[Etc/Unknown]");
+    /// let got: Zoned = "2025-02-01T17:00:00Z[Etc/Unknown]".parse()?;
+    /// assert_eq!(got, zdt);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Note that not all systems support this. Some systems will reject
+    /// `Etc/Unknown` because it is not a valid IANA time zone identifier and
+    /// does not have an entry in the IANA time zone database. However, Jiff
+    /// takes this approach because it surfaces an error condition in detecting
+    /// the end user's time zone. Callers not wanting an "unknown" time zone
+    /// can use `TimeZone::try_system().unwrap_or(TimeZone::UTC)` instead of
+    /// `TimeZone::system`. (Where the latter falls back to the "unknown" time
+    /// zone when a system configured time zone could not be found.)
+    pub fn unknown() -> TimeZone {
+        let kind = TimeZoneKind::Unknown;
+        TimeZone { kind: Some(Arc::new(kind)) }
+    }
+
     /// This creates an unnamed TZif-backed `TimeZone`.
     ///
     /// At present, the only way for an unnamed TZif-backed `TimeZone` to be
@@ -671,12 +725,14 @@ impl TimeZone {
     ///
     /// Basically, this is only `false` when this `TimeZone` was created from
     /// a `/etc/localtime` for which a valid IANA time zone identifier could
-    /// not be extracted.
+    /// not be extracted. It is also `false` when [`TimeZone::is_unknown`]
+    /// is `true`.
     #[cfg(feature = "serde")]
     #[inline]
     pub(crate) fn has_succinct_serialization(&self) -> bool {
         let Some(ref kind) = self.kind else { return true };
         match **kind {
+            TimeZoneKind::Unknown => true,
             TimeZoneKind::Fixed(_) => true,
             #[cfg(feature = "alloc")]
             TimeZoneKind::Posix(_) => true,
@@ -704,8 +760,40 @@ impl TimeZone {
         match **kind {
             #[cfg(feature = "alloc")]
             TimeZoneKind::Tzif(ref tz) => tz.name(),
+            // Note that while `Etc/Unknown` looks like an IANA time zone
+            // identifier, it is specifically and explicitly NOT an IANA time
+            // zone identifier. So we do not return it here if we have an
+            // unknown time zone identifier.
             _ => None,
         }
+    }
+
+    /// Returns true if and only if this time zone is unknown.
+    ///
+    /// This has the special internal identifier of `Etc/Unknown`, and this
+    /// is what will be used when converting a `Zoned` to a string.
+    ///
+    /// Note that while `Etc/Unknown` looks like an IANA time zone identifier,
+    /// it is specifically and explicitly not one. It is reserved and is
+    /// guaranteed to never be an IANA time zone identifier.
+    ///
+    /// An unknown time zone can be created via [`TimeZone::unknown`]. It is
+    /// also returned by [`TimeZone::system`] when a system configured time
+    /// zone could not be found.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::tz::TimeZone;
+    ///
+    /// let tz = TimeZone::unknown();
+    /// assert_eq!(tz.iana_name(), None);
+    /// assert!(tz.is_unknown());
+    /// ```
+    #[inline]
+    pub fn is_unknown(&self) -> bool {
+        let Some(ref kind) = self.kind else { return false };
+        matches!(**kind, TimeZoneKind::Unknown)
     }
 
     /// When this time zone is a POSIX time zone, return it.
@@ -806,6 +894,7 @@ impl TimeZone {
             return Offset::UTC;
         };
         match **kind {
+            TimeZoneKind::Unknown => Offset::UTC,
             TimeZoneKind::Fixed(ref tz) => tz.to_offset(),
             #[cfg(feature = "alloc")]
             TimeZoneKind::Posix(ref tz) => tz.to_offset(_timestamp),
@@ -866,6 +955,17 @@ impl TimeZone {
             };
         };
         match **kind {
+            TimeZoneKind::Unknown => {
+                TimeZoneOffsetInfo {
+                    offset: Offset::UTC,
+                    dst: Dst::No,
+                    // It'd be kinda nice if this were just `ERR` to
+                    // indicate an error, but I can't find any precedent
+                    // for that. And CLDR says `Etc/Unknown` should behave
+                    // like UTC, so... I guess we use UTC here.
+                    abbreviation: TimeZoneAbbreviation::Borrowed("UTC"),
+                }
+            }
             TimeZoneKind::Fixed(ref tz) => tz.to_offset_info(),
             #[cfg(feature = "alloc")]
             TimeZoneKind::Posix(ref tz) => tz.to_offset_info(_timestamp),
@@ -921,15 +1021,16 @@ impl TimeZone {
     pub fn to_fixed_offset(&self) -> Result<Offset, Error> {
         let Some(ref kind) = self.kind else { return Ok(Offset::UTC) };
         #[allow(irrefutable_let_patterns)]
-        let TimeZoneKind::Fixed(ref tz) = **kind
-        else {
-            return Err(err!(
+        match **kind {
+            TimeZoneKind::Unknown => Ok(Offset::UTC),
+            TimeZoneKind::Fixed(ref tz) => Ok(tz.to_offset()),
+            #[cfg(feature = "alloc")]
+            _ => Err(err!(
                 "cannot convert non-fixed {kind} time zone to offset \
                  without timestamp or civil datetime",
                 kind = self.kind_description(),
-            ));
-        };
-        Ok(tz.to_offset())
+            )),
+        }
     }
 
     /// Converts a civil datetime to a [`Zoned`] in this time zone.
@@ -1164,6 +1265,9 @@ impl TimeZone {
         let ambiguous_kind = match self.kind {
             None => AmbiguousOffset::Unambiguous { offset: Offset::UTC },
             Some(ref kind) => match **kind {
+                TimeZoneKind::Unknown => {
+                    AmbiguousOffset::Unambiguous { offset: Offset::UTC }
+                }
                 TimeZoneKind::Fixed(ref tz) => {
                     AmbiguousOffset::Unambiguous { offset: tz.to_offset() }
                 }
@@ -1343,6 +1447,7 @@ impl TimeZone {
         _timestamp: Timestamp,
     ) -> Option<TimeZoneTransition> {
         match **self.kind.as_ref()? {
+            TimeZoneKind::Unknown => None,
             TimeZoneKind::Fixed(_) => None,
             #[cfg(feature = "alloc")]
             TimeZoneKind::Posix(ref tz) => tz.previous_transition(_timestamp),
@@ -1358,6 +1463,7 @@ impl TimeZone {
         _timestamp: Timestamp,
     ) -> Option<TimeZoneTransition> {
         match **self.kind.as_ref()? {
+            TimeZoneKind::Unknown => None,
             TimeZoneKind::Fixed(_) => None,
             #[cfg(feature = "alloc")]
             TimeZoneKind::Posix(ref tz) => tz.next_transition(_timestamp),
@@ -1374,6 +1480,7 @@ impl TimeZone {
             return "UTC";
         };
         match **kind {
+            TimeZoneKind::Unknown => "Etc/Unknown",
             TimeZoneKind::Fixed(_) => "fixed",
             #[cfg(feature = "alloc")]
             TimeZoneKind::Posix(_) => "POSIX",
@@ -1389,6 +1496,7 @@ impl core::fmt::Debug for TimeZone {
         let field: &dyn core::fmt::Debug = match self.kind {
             None => &"UTC",
             Some(ref kind) => match &**kind {
+                TimeZoneKind::Unknown => &"Etc/Unknown",
                 TimeZoneKind::Fixed(ref tz) => tz,
                 #[cfg(feature = "alloc")]
                 TimeZoneKind::Posix(ref tz) => tz,
@@ -1403,6 +1511,14 @@ impl core::fmt::Debug for TimeZone {
 #[derive(Debug, Eq, PartialEq)]
 #[cfg_attr(not(feature = "alloc"), derive(Clone))]
 enum TimeZoneKind {
+    // It would be nice if we could represent this similarly to
+    // `TimeZone::UTC`. That is, without putting it behind an `Arc`. But I
+    // didn't see an easy way to do that while retaining the single-word size
+    // of `TimeZone` without pointer tagging, since `Arc` only gives the
+    // compiler a single niche value. Plus, it should be exceptionally rare
+    // for a unknown time zone to be used anyway. It's generally an error
+    // condition.
+    Unknown,
     Fixed(TimeZoneFixed),
     #[cfg(feature = "alloc")]
     Posix(TimeZonePosix),
@@ -1873,6 +1989,7 @@ impl<'a> core::fmt::Display for DiagnosticName<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         let Some(ref kind) = self.0.kind else { return write!(f, "UTC") };
         match **kind {
+            TimeZoneKind::Unknown => write!(f, "Etc/Unknown"),
             TimeZoneKind::Fixed(ref tz) => write!(f, "{tz}"),
             #[cfg(feature = "alloc")]
             TimeZoneKind::Posix(ref tz) => write!(f, "{tz}"),

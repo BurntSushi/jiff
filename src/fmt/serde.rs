@@ -1119,6 +1119,55 @@ pub mod timestamp {
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+///
+/// # Example: serializing an unknown `TimeZone` works
+///
+/// For example, when a time zone was created from
+/// [`TimeZone::system`](crate::tz::TimeZone::system) and a system configured
+/// time zone could not be found. One can artifically create this situation
+/// with [`TimeZone::unknown`](crate::tz::TimeZone::unknown):
+///
+/// ```
+/// use jiff::tz::TimeZone;
+///
+/// #[derive(Debug, serde::Deserialize, serde::Serialize)]
+/// struct Record {
+///     #[serde(with = "jiff::fmt::serde::tz::required")]
+///     tz: TimeZone,
+/// }
+///
+/// let record = Record { tz: TimeZone::unknown() };
+/// assert_eq!(
+///     serde_json::to_string(&record)?,
+///     r#"{"tz":"Etc/Unknown"}"#,
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// And it deserializes as well:
+///
+/// ```
+/// use jiff::tz::TimeZone;
+///
+/// #[derive(Debug, serde::Deserialize, serde::Serialize)]
+/// struct Record {
+///     #[serde(with = "jiff::fmt::serde::tz::required")]
+///     tz: TimeZone,
+/// }
+///
+/// let json = r#"{"tz":"Etc/Unknown"}"#;
+/// let got: Record = serde_json::from_str(&json)?;
+/// assert!(got.tz.is_unknown());
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// An unknown time zone is "allowed" to percolate through Jiff because it's
+/// usually not desirable to return an error and completely fail if a system
+/// time zone could not be detected. On the other hand, by using a special
+/// `Etc/Unknown` identifier for this case, it still surfaces the fact that
+/// something has gone wrong.
 pub mod tz {
     use serde::de;
 
@@ -1229,7 +1278,7 @@ pub mod tz {
                      fixed offsets or a POSIX time zone can't be serialized \
                      (this typically occurs when this is a system time zone \
                       derived from `/etc/localtime` on Unix systems that \
-                      isn't symlinked to an entry in `/usr/share/zoneinfo`)",
+                      isn't symlinked to an entry in `/usr/share/zoneinfo)",
                 ));
             }
             se.collect_str(&super::TemporalTimeZone(tz))

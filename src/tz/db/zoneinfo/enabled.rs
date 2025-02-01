@@ -92,6 +92,10 @@ impl Database {
         if query == "UTC" {
             return Some(TimeZone::UTC);
         }
+        // Similarly for the special `Etc/Unknown` value.
+        if query == "Etc/Unknown" {
+            return Some(TimeZone::unknown());
+        }
         // If we couldn't build any time zone names, then every lookup will
         // fail. So just bail now.
         let names = self.names.as_ref()?;
