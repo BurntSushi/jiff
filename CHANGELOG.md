@@ -96,6 +96,14 @@ Enhancements:
 When the special `SpanRelativeTo::days_are_24_hours()` marker is used, weeks
 will also be treated as invariant. That is, 7 24-hour days. In all cases,
 working with years and months still requires a relative date.
+* [#228](https://github.com/BurntSushi/jiff/issues/228):
+It is now possible to forcefully use a bundled copy of the IANA time zone
+database without relying on disabling crate features. This can be done by
+enabling the `tzdb-bundle-always` crate feature and explicitly creating a
+`jiff::tz::TimeZoneDatabase::bundled()` database. Once in hand, you must use
+APIs like `TimeZoneDatabase::get` to create a `TimeZone` and avoid any APIs
+that implicitly use the global time zone database (like `Timestamp::in_tz` or
+even `Zoned::from_str`).
 
 
 0.1.29 (2025-02-02)
