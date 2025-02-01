@@ -17,6 +17,11 @@ impl Database {
         if let Some(tz) = self::global::get(name) {
             return Some(tz);
         }
+        // Check for the special `Etc/Unknown` value, which isn't in the
+        // IANA time zone database.
+        if name == "Etc/Unknown" {
+            return Some(TimeZone::unknown());
+        }
         let (canonical_name, tzif) = lookup(name)?;
         let tz = match TimeZone::tzif(canonical_name, tzif) {
             Ok(tz) => tz,

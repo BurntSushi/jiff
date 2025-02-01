@@ -94,6 +94,10 @@ impl Database {
         if query == "UTC" {
             return Some(TimeZone::UTC);
         }
+        // Similarly for the special `Etc/Unknown` value.
+        if query == "Etc/Unknown" {
+            return Some(TimeZone::unknown());
+        }
         let path = self.path.as_ref()?;
         // The fast path is when the query matches a pre-existing unexpired
         // time zone.

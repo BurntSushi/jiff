@@ -91,6 +91,22 @@ impl<'i> ParsedDateTime<'i> {
         let Some(ref parsed_offset) = self.offset else {
             return Ok(tz.into_ambiguous_zoned(dt));
         };
+        if parsed_offset.is_zulu() {
+            // When `Z` is used, that means the offset to local time is not
+            // known. In this case, there really can't be a conflict because
+            // there is an explicit acknowledgment that the offset could be
+            // anything. So we just always accept `Z` as if it were `UTC` and
+            // respect that. If we didn't have this special check, we'd fall
+            // below and the `Z` would just be treated as `+00:00`, which would
+            // likely result in `OffsetConflict::Reject` raising an error.
+            // (Unless the actual correct offset at the time is `+00:00` for
+            // the time zone parsed.)
+            return OffsetConflict::AlwaysOffset
+                .resolve(dt, Offset::UTC, tz)
+                .with_context(|| {
+                    err!("parsing {input:?} failed", input = self.input)
+                });
+        }
         let offset = parsed_offset.to_offset()?;
         let is_equal = |parsed: Offset, candidate: Offset| {
             // If they're equal down to the second, then no amount of rounding

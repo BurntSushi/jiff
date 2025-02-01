@@ -56,8 +56,12 @@ impl DateTimePrinter {
         let offset = tz.to_offset(timestamp);
         let dt = offset.to_datetime(timestamp);
         self.print_datetime(&dt, &mut wtr)?;
-        self.print_offset_rounded(&offset, &mut wtr)?;
-        self.print_time_zone_annotation(&tz, &offset, &mut wtr)?;
+        if tz.is_unknown() {
+            wtr.write_str("Z[Etc/Unknown]")?;
+        } else {
+            self.print_offset_rounded(&offset, &mut wtr)?;
+            self.print_time_zone_annotation(&tz, &offset, &mut wtr)?;
+        }
         Ok(())
     }
 
@@ -152,6 +156,9 @@ impl DateTimePrinter {
     ) -> Result<(), Error> {
         if let Some(iana_name) = tz.iana_name() {
             return wtr.write_str(iana_name);
+        }
+        if tz.is_unknown() {
+            return wtr.write_str("Etc/Unknown");
         }
         if let Ok(offset) = tz.to_fixed_offset() {
             return self.print_offset_full_precision(&offset, wtr);
