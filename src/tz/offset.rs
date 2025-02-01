@@ -1836,7 +1836,7 @@ impl OffsetConflict {
     ///      for the given datetime unambiguously has offset -00:44:30",
     /// );
     /// let is_equal = |parsed: Offset, candidate: Offset| {
-    ///     candidate.round(Unit::Minute).map_or(
+    ///     parsed == candidate || candidate.round(Unit::Minute).map_or(
     ///         parsed == candidate,
     ///         |candidate| parsed == candidate,
     ///     )
