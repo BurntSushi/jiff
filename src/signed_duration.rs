@@ -2086,6 +2086,12 @@ impl TryFrom<SignedDuration> for Duration {
     }
 }
 
+impl From<Offset> for SignedDuration {
+    fn from(offset: Offset) -> SignedDuration {
+        SignedDuration::from_secs(i64::from(offset.seconds()))
+    }
+}
+
 impl core::str::FromStr for SignedDuration {
     type Err = Error;
 
@@ -2384,6 +2390,11 @@ impl SignedDurationRound {
     #[inline]
     pub fn increment(self, increment: i64) -> SignedDurationRound {
         SignedDurationRound { increment, ..self }
+    }
+
+    /// Returns the `smallest` unit configuration.
+    pub(crate) fn get_smallest(&self) -> Unit {
+        self.smallest
     }
 
     /// Does the actual duration rounding.
