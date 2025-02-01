@@ -193,6 +193,25 @@ impl IanaTz {
         Ok(IanaTz(reasonable))
     }
 
+    /// Like `parse_v3plus`, but parses a POSIX TZ string from a prefix of the
+    /// given input. And remaining input is returned.
+    pub(crate) fn parse_v3plus_prefix<'b, B: AsRef<[u8]> + ?Sized + 'b>(
+        bytes: &'b B,
+    ) -> Result<(IanaTz, &'b [u8]), Error> {
+        let bytes = bytes.as_ref();
+        let (posix_tz, remaining) = PosixTimeZone::parse_prefix(bytes)
+            .map_err(|e| {
+                e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
+            })?;
+        let Ok(reasonable) = posix_tz.reasonable() else {
+            return Err(err!(
+                "TZ string {:?} in v3+ tzfile has DST but no transition rules",
+                Bytes(bytes),
+            ));
+        };
+        Ok((IanaTz(reasonable), remaining))
+    }
+
     /// Return ownership of the underlying "reasonable" POSIX time zone value.
     ///
     /// If this was parsed as an IANA v3+ `TZ` string, then the DST transition
@@ -582,6 +601,16 @@ impl PosixTimeZone {
         let parser =
             Parser { ianav3plus: true, ..Parser::new(bytes.as_ref()) };
         parser.parse()
+    }
+
+    /// Like parse, but parses a prefix of the input given and returns whatever
+    /// is remaining.
+    fn parse_prefix<'b, B: AsRef<[u8]> + ?Sized + 'b>(
+        bytes: &'b B,
+    ) -> Result<(PosixTimeZone, &'b [u8]), Error> {
+        let parser =
+            Parser { ianav3plus: true, ..Parser::new(bytes.as_ref()) };
+        parser.parse_prefix()
     }
 
     /// Transforms this POSIX time zone into a "reasonable" time zone.
@@ -1037,16 +1066,23 @@ impl<'s> Parser<'s> {
     /// ensures that the entire TZ string corresponds to a single valid POSIX
     /// time zone.
     fn parse(&self) -> Result<PosixTimeZone, Error> {
-        let time_zone = self.parse_posix_time_zone()?;
-        if !self.remaining().is_empty() {
+        let (time_zone, remaining) = self.parse_prefix()?;
+        if !remaining.is_empty() {
             return Err(err!(
                 "expected entire TZ string to be a valid POSIX \
                  time zone, but found '{}' after what would otherwise \
                  be a valid POSIX TZ string",
-                Bytes(self.remaining()),
+                Bytes(remaining),
             ));
         }
         Ok(time_zone)
+    }
+
+    /// Parses a POSIX time zone from the current position of the parser and
+    /// returns the remaining input.
+    fn parse_prefix(&self) -> Result<(PosixTimeZone, &'s [u8]), Error> {
+        let time_zone = self.parse_posix_time_zone()?;
+        Ok((time_zone, self.remaining()))
     }
 
     /// Parse a POSIX time zone from the current position of the parser.
@@ -1753,7 +1789,7 @@ impl<'s> Parser<'s> {
     /// Returns the remaining bytes of the TZ string.
     ///
     /// This includes `self.byte()`. It may be empty.
-    fn remaining(&self) -> &[u8] {
+    fn remaining(&self) -> &'s [u8] {
         &self.tz[self.pos()..]
     }
 }

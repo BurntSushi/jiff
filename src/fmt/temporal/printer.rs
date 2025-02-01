@@ -1,6 +1,6 @@
 use crate::{
     civil::{Date, DateTime, Time},
-    error::Error,
+    error::{err, Error},
     fmt::{
         temporal::{Pieces, PiecesOffset, TimeZoneAnnotationKind},
         util::{DecimalFormatter, FractionalFormatter},
@@ -56,8 +56,8 @@ impl DateTimePrinter {
         let (offset, _, _) = tz.to_offset(timestamp);
         let dt = offset.to_datetime(timestamp);
         self.print_datetime(&dt, &mut wtr)?;
-        self.print_offset(&offset, &mut wtr)?;
-        self.print_time_zone(&tz, &offset, &mut wtr)?;
+        self.print_offset_rounded(&offset, &mut wtr)?;
+        self.print_time_zone_annotation(&tz, &offset, &mut wtr)?;
         Ok(())
     }
 
@@ -75,7 +75,7 @@ impl DateTimePrinter {
         };
         let dt = offset.to_datetime(*timestamp);
         self.print_datetime(&dt, &mut wtr)?;
-        self.print_offset(&offset, &mut wtr)?;
+        self.print_offset_rounded(&offset, &mut wtr)?;
         Ok(())
     }
 
@@ -144,6 +144,55 @@ impl DateTimePrinter {
         Ok(())
     }
 
+    /// Formats the given time zone into the writer given.
+    pub(super) fn print_time_zone<W: Write>(
+        &self,
+        tz: &TimeZone,
+        mut wtr: W,
+    ) -> Result<(), Error> {
+        if let Some(iana_name) = tz.iana_name() {
+            return wtr.write_str(iana_name);
+        }
+        if let Ok(offset) = tz.to_fixed_offset() {
+            return self.print_offset_full_precision(&offset, wtr);
+        }
+        // `ReasonablePosixTimeZone` is currently only available when the
+        // `alloc` feature is enabled. (The type itself is compatible with
+        // core-only environments, but is effectively disabled because it
+        // greatly bloats the size of `TimeZone` and thus `Zoned` since there's
+        // no way to easily introduce indirection in core-only environments.)
+        #[cfg(feature = "alloc")]
+        {
+            if let Some(posix_tz) = tz.posix_tz() {
+                // This is pretty unfortunate, but at time of writing, I
+                // didn't see an easy way to make the `Display` impl for
+                // `ReasonablePosixTimeZone` automatically work with
+                // `jiff::fmt::Write` without allocating a new string. As
+                // far as I can see, I either have to duplicate the code or
+                // make it generic in some way. I judged neither to be worth
+                // doing for such a rare case. ---AG
+                let s = alloc::string::ToString::to_string(posix_tz);
+                return wtr.write_str(&s);
+            }
+        }
+        // Ideally this never actually happens, but it can, and there
+        // are likely system configurations out there in which it does.
+        // I can imagine "lightweight" installations that just have a
+        // `/etc/localtime` as a TZif file that doesn't point to any IANA time
+        // zone. In which case, serializing a time zone probably doesn't make
+        // much sense.
+        //
+        // Anyway, if you're seeing this error and think there should be a
+        // different behavior, please file an issue.
+        Err(err!(
+            "time zones without IANA identifiers that aren't either \
+             fixed offsets or a POSIX time zone can't be serialized \
+             (this typically occurs when this is a system time zone \
+              derived from `/etc/localtime` on Unix systems that \
+              isn't symlinked to an entry in `/usr/share/zoneinfo`)",
+        ))
+    }
+
     pub(super) fn print_pieces<W: Write>(
         &self,
         pieces: &Pieces,
@@ -185,7 +234,7 @@ impl DateTimePrinter {
                     wtr.write_str(name.as_str())?
                 }
                 TimeZoneAnnotationKind::Offset(offset) => {
-                    self.print_offset(&offset, &mut wtr)?
+                    self.print_offset_rounded(&offset, &mut wtr)?
                 }
             }
             wtr.write_str("]")?;
@@ -205,14 +254,17 @@ impl DateTimePrinter {
                 if noffset.offset().is_zero() && noffset.is_negative() {
                     wtr.write_str("-00:00")
                 } else {
-                    self.print_offset(&noffset.offset(), wtr)
+                    self.print_offset_rounded(&noffset.offset(), wtr)
                 }
             }
         }
     }
 
     /// Formats the given offset into the writer given.
-    fn print_offset<W: Write>(
+    ///
+    /// If the given offset has non-zero seconds, then they are rounded to
+    /// the nearest minute.
+    fn print_offset_rounded<W: Write>(
         &self,
         offset: &Offset,
         mut wtr: W,
@@ -242,6 +294,32 @@ impl DateTimePrinter {
         Ok(())
     }
 
+    /// Formats the given offset into the writer given.
+    ///
+    /// If the given offset has non-zero seconds, then they are emitted as a
+    /// third `:`-delimited component of the offset. If seconds are zero, then
+    /// only the hours and minute components are emitted.
+    fn print_offset_full_precision<W: Write>(
+        &self,
+        offset: &Offset,
+        mut wtr: W,
+    ) -> Result<(), Error> {
+        static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
+
+        wtr.write_str(if offset.is_negative() { "-" } else { "+" })?;
+        let hours = offset.part_hours_ranged().abs().get();
+        let minutes = offset.part_minutes_ranged().abs().get();
+        let seconds = offset.part_seconds_ranged().abs().get();
+        wtr.write_int(&FMT_TWO, hours)?;
+        wtr.write_str(":")?;
+        wtr.write_int(&FMT_TWO, minutes)?;
+        if seconds > 0 {
+            wtr.write_str(":")?;
+            wtr.write_int(&FMT_TWO, seconds)?;
+        }
+        Ok(())
+    }
+
     /// Prints the "zulu" indicator.
     ///
     /// This should only be used when the offset is not known. For example,
@@ -250,14 +328,15 @@ impl DateTimePrinter {
         wtr.write_str(if self.lowercase { "z" } else { "Z" })
     }
 
-    /// Formats the given time zone name into the writer given.
+    /// Formats the given time zone name into the writer given as an RFC 9557
+    /// time zone annotation.
     ///
     /// This is a no-op when RFC 9557 support isn't enabled. And when the given
     /// time zone is not an IANA time zone name, then the offset is printed
     /// instead. (This means the offset will be printed twice, which is indeed
     /// an intended behavior of RFC 9557 for cases where a time zone name is
     /// not used or unavailable.)
-    fn print_time_zone<W: Write>(
+    fn print_time_zone_annotation<W: Write>(
         &self,
         time_zone: &TimeZone,
         offset: &Offset,
@@ -270,7 +349,7 @@ impl DateTimePrinter {
         if let Some(iana_name) = time_zone.iana_name() {
             wtr.write_str(iana_name)?;
         } else {
-            self.print_offset(offset, &mut wtr)?;
+            self.print_offset_rounded(offset, &mut wtr)?;
         }
         wtr.write_str("]")?;
         Ok(())

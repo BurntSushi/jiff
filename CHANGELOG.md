@@ -6,6 +6,8 @@ TODO
 
 Enhancements:
 
+* [#89](https://github.com/BurntSushi/jiff/issues/89):
+Opt-in support for using Serde with `jiff::tz::TimeZone` has been added.
 * [#227](https://github.com/BurntSushi/jiff/issues/227):
 The `civil::ISOWeekDate` API has been beefed up with a few convenience methods.
 

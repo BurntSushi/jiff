@@ -48,6 +48,7 @@ impl core::fmt::Debug for Byte {
 /// This generally works best when the bytes are presumed to be mostly UTF-8,
 /// but will work for anything. For any bytes that aren't UTF-8, they are
 /// emitted as hex escape sequences.
+#[derive(Clone, Copy)]
 pub struct Bytes<'a>(pub &'a [u8]);
 
 impl<'a> core::fmt::Display for Bytes<'a> {

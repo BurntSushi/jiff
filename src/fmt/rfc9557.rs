@@ -246,11 +246,6 @@ impl Parser {
         }
         input = &input[1..];
 
-        // This does a quick check for an `=` after the opening `[` but before
-        // the closing `]`. If one is found, then we know we cannot have a
-        // time zone annotation, but a more generic key-value annotation. We
-        // could do this while parsing below, but I found this to be simpler.
-
         let critical = input.starts_with(b"!");
         if critical {
             input = &input[1..];

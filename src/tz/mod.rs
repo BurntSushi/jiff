@@ -105,7 +105,7 @@ mod concatenated;
 mod db;
 mod offset;
 #[cfg(feature = "alloc")]
-mod posix;
+pub(crate) mod posix;
 #[cfg(feature = "tz-system")]
 mod system;
 #[cfg(all(test, feature = "alloc"))]
@@ -296,12 +296,50 @@ mod zic;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
+/// # Serde integration
+///
+/// At present, a `TimeZone` does not implement Serde's `Serialize` or
+/// `Deserialize` traits directly. Nor does it implement `std::fmt::Display`
+/// or `std::str::FromStr`. The reason for this is that it's not totally
+/// clear if there is one single obvious behavior. Moreover, some `TimeZone`
+/// values do not have an obvious succinct serialized representation. (For
+/// example, when `/etc/localtime` on a Unix system is your system's time zone,
+/// and it isn't a symlink to a TZif file in `/usr/share/zoneinfo`. In which
+/// case, an IANA time zone identifier cannot easily be deduced by Jiff.)
+///
+/// Instead, Jiff offers helpers for use with Serde's [`with` attribute] via
+/// the [`fmt::serde`](crate::fmt::serde) module:
+///
+/// ```
+/// use jiff::tz::TimeZone;
+///
+/// #[derive(Debug, serde::Deserialize, serde::Serialize)]
+/// struct Record {
+///     #[serde(with = "jiff::fmt::serde::tz::optional")]
+///     tz: Option<TimeZone>,
+/// }
+///
+/// let json = r#"{"tz":"America/Nuuk"}"#;
+/// let got: Record = serde_json::from_str(&json)?;
+/// assert_eq!(got.tz, Some(TimeZone::get("America/Nuuk")?));
+/// assert_eq!(serde_json::to_string(&got)?, json);
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// Alternatively, you may use the
+/// [`fmt::temporal::DateTimeParser::parse_time_zone`](crate::fmt::temporal::DateTimeParser::parse_time_zone)
+/// or
+/// [`fmt::temporal::DateTimePrinter::print_time_zone`](crate::fmt::temporal::DateTimePrinter::print_time_zone)
+/// routines to parse or print `TimeZone` values without using Serde.
+///
 /// [time zone]: https://en.wikipedia.org/wiki/Time_zone
 /// [daylight saving time]: https://en.wikipedia.org/wiki/Daylight_saving_time
 /// [IANA Time Zone Database]: https://en.wikipedia.org/wiki/Tz_database
 /// [POSIX TZ]: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap08.html
 /// [`env_logger`]: https://docs.rs/env_logger
 /// [RFC 8536]: https://datatracker.ietf.org/doc/html/rfc8536
+/// [`with` attribute]: https://serde.rs/field-attrs.html#with
 #[derive(Clone, Eq, PartialEq)]
 pub struct TimeZone {
     kind: Option<Arc<TimeZoneKind>>,
@@ -539,9 +577,20 @@ impl TimeZone {
     /// ```
     #[cfg(feature = "alloc")]
     pub fn posix(posix_tz_string: &str) -> Result<TimeZone, Error> {
-        let posix = TimeZonePosix::new(posix_tz_string)?;
+        let iana_tz = posix::IanaTz::parse_v3plus(posix_tz_string)?;
+        let reasonable = iana_tz.into_tz();
+        Ok(TimeZone::from_reasonable_posix_tz(reasonable))
+    }
+
+    /// Creates a time zone from a POSIX tz. Expose so that other parts of Jiff
+    /// can create a `TimeZone` from a POSIX tz. (Kinda sloppy to be honest.)
+    #[cfg(feature = "alloc")]
+    pub(crate) fn from_reasonable_posix_tz(
+        posix: ReasonablePosixTimeZone,
+    ) -> TimeZone {
+        let posix = TimeZonePosix { posix };
         let kind = TimeZoneKind::Posix(posix);
-        Ok(TimeZone { kind: Some(Arc::new(kind)) })
+        TimeZone { kind: Some(Arc::new(kind)) }
     }
 
     /// Creates a time zone from TZif binary data, whose format is specified
@@ -611,6 +660,25 @@ impl TimeZone {
         DiagnosticName(self)
     }
 
+    /// Returns true if and only if this `TimeZone` can be succinctly
+    /// serialized.
+    ///
+    /// Basically, this is only `false` when this `TimeZone` was created from
+    /// a `/etc/localtime` for which a valid IANA time zone identifier could
+    /// not be extracted.
+    #[cfg(feature = "serde")]
+    #[inline]
+    pub(crate) fn has_succinct_serialization(&self) -> bool {
+        let Some(ref kind) = self.kind else { return true };
+        match **kind {
+            TimeZoneKind::Fixed(_) => true,
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Posix(_) => true,
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Tzif(ref tz) => tz.name().is_some(),
+        }
+    }
+
     /// When this time zone was loaded from an IANA time zone database entry,
     /// then this returns the canonicalized name for that time zone.
     ///
@@ -630,6 +698,23 @@ impl TimeZone {
         match **kind {
             #[cfg(feature = "alloc")]
             TimeZoneKind::Tzif(ref tz) => tz.name(),
+            _ => None,
+        }
+    }
+
+    /// When this time zone is a POSIX time zone, return it.
+    ///
+    /// This doesn't attempt to convert other time zones that are representable
+    /// as POSIX time zones to POSIX time zones (e.g., fixed offset time
+    /// zones). Instead, this only returns something when the actual
+    /// representation of the time zone is a POSIX time zone.
+    #[cfg(feature = "alloc")]
+    #[inline]
+    pub(crate) fn posix_tz(&self) -> Option<&ReasonablePosixTimeZone> {
+        let Some(ref kind) = self.kind else { return None };
+        match **kind {
+            #[cfg(feature = "alloc")]
+            TimeZoneKind::Posix(ref tz) => Some(&tz.posix),
             _ => None,
         }
     }
@@ -1320,12 +1405,6 @@ struct TimeZonePosix {
 #[cfg(feature = "alloc")]
 impl TimeZonePosix {
     #[inline]
-    fn new(s: &str) -> Result<TimeZonePosix, Error> {
-        let iana_tz = posix::IanaTz::parse_v3plus(s)?;
-        Ok(TimeZonePosix::from(iana_tz.into_tz()))
-    }
-
-    #[inline]
     fn to_offset(&self, timestamp: Timestamp) -> (Offset, Dst, &str) {
         self.posix.to_offset(timestamp)
     }
@@ -1349,14 +1428,6 @@ impl TimeZonePosix {
         timestamp: Timestamp,
     ) -> Option<TimeZoneTransition> {
         self.posix.next_transition(timestamp)
-    }
-}
-
-#[cfg(feature = "alloc")]
-impl From<ReasonablePosixTimeZone> for TimeZonePosix {
-    #[inline]
-    fn from(posix: ReasonablePosixTimeZone) -> TimeZonePosix {
-        TimeZonePosix { posix }
     }
 }
 

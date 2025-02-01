@@ -220,6 +220,13 @@ impl<W: core::fmt::Write> Write for StdFmtWrite<W> {
     }
 }
 
+impl<W: Write> core::fmt::Write for StdFmtWrite<W> {
+    #[inline]
+    fn write_str(&mut self, string: &str) -> Result<(), core::fmt::Error> {
+        self.0.write_str(string).map_err(|_| core::fmt::Error)
+    }
+}
+
 /// An extension trait to `Write` that provides crate internal routines.
 ///
 /// These routines aren't exposed because they make use of crate internal
