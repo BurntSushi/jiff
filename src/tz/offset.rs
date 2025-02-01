@@ -1773,6 +1773,125 @@ impl OffsetConflict {
         offset: Offset,
         tz: TimeZone,
     ) -> Result<AmbiguousZoned, Error> {
+        self.resolve_with(dt, offset, tz, |off1, off2| off1 == off2)
+    }
+
+    /// Resolve a potential conflict between an [`Offset`] and a [`TimeZone`]
+    /// using the given definition of equality for an `Offset`.
+    ///
+    /// The equality predicate is always given a pair of offsets where the
+    /// first is the offset given to `resolve_with` and the second is the
+    /// offset found in the `TimeZone`.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if this would have returned a timestamp outside
+    /// of its minimum and maximum values.
+    ///
+    /// This can also return an error when using the [`OffsetConflict::Reject`]
+    /// strategy. Namely, when using the `Reject` strategy, any offset that is
+    /// not compatible with the given datetime and time zone will always result
+    /// in an error.
+    ///
+    /// # Example
+    ///
+    /// Unlike [`OffsetConflict::resolve`], this routine permits overriding
+    /// the definition of equality used for comparing offsets. In
+    /// `OffsetConflict::resolve`, exact equality is used. This can be
+    /// troublesome in some cases when a time zone has an offset with
+    /// fractional minutes, such as `Africa/Monrovia` before 1972.
+    ///
+    /// Because RFC 3339 and RFC 9557 do not support time zone offsets
+    /// with fractional minutes, Jiff will serialize offsets with
+    /// fractional minutes by rounding to the nearest minute. This
+    /// will result in a different offset than what is actually
+    /// used in the time zone. Parsing this _should_ succeed, but
+    /// if exact offset equality is used, it won't. This is why a
+    /// [`fmt::temporal::DateTimeParser`](crate::fmt::temporal::DateTimeParser)
+    /// uses this routine with offset equality that rounds offsets to the
+    /// nearest minute before comparison.
+    ///
+    /// ```
+    /// use jiff::{civil::date, tz::{Offset, OffsetConflict, TimeZone}, Unit};
+    ///
+    /// let dt = date(1968, 2, 1).at(23, 15, 0, 0);
+    /// let offset = Offset::from_seconds(-(44 * 60 + 30)).unwrap();
+    /// let zdt = dt.in_tz("Africa/Monrovia")?;
+    /// assert_eq!(zdt.offset(), offset);
+    /// // Notice that the offset has been rounded!
+    /// assert_eq!(zdt.to_string(), "1968-02-01T23:15:00-00:45[Africa/Monrovia]");
+    ///
+    /// // Now imagine parsing extracts the civil datetime, the offset and
+    /// // the time zone, and then naively does exact offset comparison:
+    /// let tz = TimeZone::get("Africa/Monrovia")?;
+    /// // This is the parsed offset, which won't precisely match the actual
+    /// // offset used by `Africa/Monrovia` at this time.
+    /// let offset = Offset::from_seconds(-45 * 60).unwrap();
+    /// let result = OffsetConflict::Reject.resolve(dt, offset, tz.clone());
+    /// assert_eq!(
+    ///     result.unwrap_err().to_string(),
+    ///     "datetime 1968-02-01T23:15:00 could not resolve to a timestamp \
+    ///      since 'reject' conflict resolution was chosen, and because \
+    ///      datetime has offset -00:45, but the time zone Africa/Monrovia \
+    ///      for the given datetime unambiguously has offset -00:44:30",
+    /// );
+    /// let is_equal = |parsed: Offset, candidate: Offset| {
+    ///     candidate.round(Unit::Minute).map_or(
+    ///         parsed == candidate,
+    ///         |candidate| parsed == candidate,
+    ///     )
+    /// };
+    /// let zdt = OffsetConflict::Reject.resolve_with(
+    ///     dt,
+    ///     offset,
+    ///     tz.clone(),
+    ///     is_equal,
+    /// )?.unambiguous()?;
+    /// // Notice that the offset is the actual offset from the time zone:
+    /// assert_eq!(zdt.offset(), Offset::from_seconds(-(44 * 60 + 30)).unwrap());
+    /// // But when we serialize, the offset gets rounded. If we didn't
+    /// // do this, we'd risk the datetime not being parsable by other
+    /// // implementations since RFC 3339 and RFC 9557 don't support fractional
+    /// // minutes in the offset.
+    /// assert_eq!(zdt.to_string(), "1968-02-01T23:15:00-00:45[Africa/Monrovia]");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// And indeed, notice that parsing uses this same kind of offset equality
+    /// to permit zoned datetimes whose offsets would be equivalent after
+    /// rounding:
+    ///
+    /// ```
+    /// use jiff::{tz::Offset, Zoned};
+    ///
+    /// let zdt: Zoned = "1968-02-01T23:15:00-00:45[Africa/Monrovia]".parse()?;
+    /// // As above, notice that even though we parsed `-00:45` as the
+    /// // offset, the actual offset of our zoned datetime is the correct
+    /// // one from the time zone.
+    /// assert_eq!(zdt.offset(), Offset::from_seconds(-(44 * 60 + 30)).unwrap());
+    /// // And similarly, re-serializing it results in rounding the offset
+    /// // again for compatibility with RFC 3339 and RFC 9557.
+    /// assert_eq!(zdt.to_string(), "1968-02-01T23:15:00-00:45[Africa/Monrovia]");
+    ///
+    /// // And we also support parsing the actual fractional minute offset
+    /// // as well:
+    /// let zdt: Zoned = "1968-02-01T23:15:00-00:44:30[Africa/Monrovia]".parse()?;
+    /// assert_eq!(zdt.offset(), Offset::from_seconds(-(44 * 60 + 30)).unwrap());
+    /// assert_eq!(zdt.to_string(), "1968-02-01T23:15:00-00:45[Africa/Monrovia]");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn resolve_with<F>(
+        self,
+        dt: civil::DateTime,
+        offset: Offset,
+        tz: TimeZone,
+        is_equal: F,
+    ) -> Result<AmbiguousZoned, Error>
+    where
+        F: FnMut(Offset, Offset) -> bool,
+    {
         match self {
             // In this case, we ignore any TZ annotation (although still
             // require that it exists) and always use the provided offset.
@@ -1785,13 +1904,13 @@ impl OffsetConflict {
             OffsetConflict::AlwaysTimeZone => Ok(tz.into_ambiguous_zoned(dt)),
             // In this case, we use the offset if it's correct, but otherwise
             // fall back to the time zone annotation if it's not.
-            OffsetConflict::PreferOffset => {
-                Ok(OffsetConflict::resolve_via_prefer(dt, offset, tz))
-            }
+            OffsetConflict::PreferOffset => Ok(
+                OffsetConflict::resolve_via_prefer(dt, offset, tz, is_equal),
+            ),
             // In this case, if the offset isn't possible for the provided time
             // zone annotation, then we return an error.
             OffsetConflict::Reject => {
-                OffsetConflict::resolve_via_reject(dt, offset, tz)
+                OffsetConflict::resolve_via_reject(dt, offset, tz, is_equal)
             }
         }
     }
@@ -1809,6 +1928,7 @@ impl OffsetConflict {
         dt: civil::DateTime,
         given: Offset,
         tz: TimeZone,
+        mut is_equal: impl FnMut(Offset, Offset) -> bool,
     ) -> AmbiguousZoned {
         use crate::tz::AmbiguousOffset::*;
 
@@ -1847,11 +1967,15 @@ impl OffsetConflict {
             //
             // See also: https://github.com/tc39/proposal-temporal/issues/3078
             // See also: https://github.com/BurntSushi/jiff/issues/211
-            Gap { before, after } if given == before || given == after => {
+            Gap { before, after }
+                if is_equal(given, before) || is_equal(given, after) =>
+            {
                 let kind = Unambiguous { offset: before };
                 AmbiguousTimestamp::new(dt, kind)
             }
-            Fold { before, after } if given == before || given == after => {
+            Fold { before, after }
+                if is_equal(given, before) || is_equal(given, after) =>
+            {
                 let kind = Unambiguous { offset: given };
                 AmbiguousTimestamp::new(dt, kind)
             }
@@ -1876,12 +2000,13 @@ impl OffsetConflict {
         dt: civil::DateTime,
         given: Offset,
         tz: TimeZone,
+        mut is_equal: impl FnMut(Offset, Offset) -> bool,
     ) -> Result<AmbiguousZoned, Error> {
         use crate::tz::AmbiguousOffset::*;
 
         let amb = tz.to_ambiguous_timestamp(dt);
         match amb.offset() {
-            Unambiguous { offset } if given != offset => Err(err!(
+            Unambiguous { offset } if !is_equal(given, offset) => Err(err!(
                 "datetime {dt} could not resolve to a timestamp since \
                  'reject' conflict resolution was chosen, and because \
                  datetime has offset {given}, but the time zone {tzname} for \
@@ -1889,7 +2014,9 @@ impl OffsetConflict {
                 tzname = tz.diagnostic_name(),
             )),
             Unambiguous { .. } => Ok(amb.into_ambiguous_zoned(tz)),
-            Gap { before, after } if given != before && given != after => {
+            Gap { before, after }
+                if !is_equal(given, before) && !is_equal(given, after) =>
+            {
                 // Temporal actually seems to report an error whenever a gap
                 // is found, even if the parsed offset matches one of the two
                 // offsets in the gap. I think the reasoning is because the
@@ -1927,7 +2054,9 @@ impl OffsetConflict {
                     tzname = tz.diagnostic_name(),
                 ))
             }
-            Fold { before, after } if given != before && given != after => {
+            Fold { before, after }
+                if !is_equal(given, before) && !is_equal(given, after) =>
+            {
                 Err(err!(
                     "datetime {dt} could not resolve to timestamp \
                      since 'reject' conflict resolution was chosen, and \

@@ -13,7 +13,7 @@ use crate::{
     },
     span::Span,
     tz::{
-        AmbiguousZoned, Disambiguation, OffsetConflict, TimeZone,
+        AmbiguousZoned, Disambiguation, Offset, OffsetConflict, TimeZone,
         TimeZoneDatabase,
     },
     util::{escape, parse, t},
@@ -92,9 +92,27 @@ impl<'i> ParsedDateTime<'i> {
             return Ok(tz.into_ambiguous_zoned(dt));
         };
         let offset = parsed_offset.to_offset()?;
-        offset_conflict.resolve(dt, offset, tz).with_context(|| {
-            err!("parsing {input:?} failed", input = self.input)
-        })
+        let is_equal = |parsed: Offset, candidate: Offset| {
+            // If they're equal down to the second, then no amount of rounding
+            // or whatever should change that.
+            if parsed == candidate {
+                return true;
+            }
+            // If the candidate offset we're considering is a whole minute,
+            // then we never need rounding.
+            if candidate.part_seconds_ranged() == 0 {
+                return parsed == candidate;
+            }
+            let Ok(candidate) = candidate.round(Unit::Minute) else {
+                // This is a degenerate case and this is the only sensible
+                // thing to do.
+                return parsed == candidate;
+            };
+            parsed == candidate
+        };
+        offset_conflict.resolve_with(dt, offset, tz, is_equal).with_context(
+            || err!("parsing {input:?} failed", input = self.input),
+        )
     }
 
     #[inline(always)]
