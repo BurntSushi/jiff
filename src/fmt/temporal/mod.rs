@@ -175,7 +175,7 @@ use crate::{
     error::Error,
     fmt::Write,
     span::Span,
-    tz::{Disambiguation, Offset, OffsetConflict, TimeZoneDatabase},
+    tz::{Disambiguation, Offset, OffsetConflict, TimeZone, TimeZoneDatabase},
     SignedDuration, Timestamp, Zoned,
 };
 
@@ -764,6 +764,103 @@ impl DateTimeParser {
         Ok(time)
     }
 
+    /// Parses a string representing a time zone into a [`TimeZone`].
+    ///
+    /// This will parse one of three different categories of strings:
+    ///
+    /// 1. An IANA Time Zone Database identifier. For example,
+    /// `America/New_York` or `UTC`.
+    /// 2. A fixed offset. For example, `-05:00` or `-00:44:30`.
+    /// 3. A POSIX time zone string. For example, `EST5EDT,M3.2.0,M11.1.0`.
+    ///
+    /// # Example
+    ///
+    /// This shows a few examples of parsing different kinds of time zones:
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::DateTimeParser, tz::{self, TimeZone}};
+    ///
+    /// static PARSER: DateTimeParser = DateTimeParser::new();
+    ///
+    /// assert_eq!(
+    ///     PARSER.parse_time_zone("-05:00")?,
+    ///     TimeZone::fixed(tz::offset(-5)),
+    /// );
+    /// assert_eq!(
+    ///     PARSER.parse_time_zone("+05:00:01")?,
+    ///     TimeZone::fixed(tz::Offset::from_seconds(5 * 60 * 60 + 1).unwrap()),
+    /// );
+    /// assert_eq!(
+    ///     PARSER.parse_time_zone("America/New_York")?,
+    ///     TimeZone::get("America/New_York")?,
+    /// );
+    /// assert_eq!(
+    ///     PARSER.parse_time_zone("Israel")?,
+    ///     TimeZone::get("Israel")?,
+    /// );
+    /// assert_eq!(
+    ///     PARSER.parse_time_zone("EST5EDT,M3.2.0,M11.1.0")?,
+    ///     TimeZone::posix("EST5EDT,M3.2.0,M11.1.0")?,
+    /// );
+    ///
+    /// // Some error cases!
+    /// assert!(PARSER.parse_time_zone("Z").is_err());
+    /// assert!(PARSER.parse_time_zone("05:00").is_err());
+    /// assert!(PARSER.parse_time_zone("+05:00:01.5").is_err());
+    /// assert!(PARSER.parse_time_zone("Does/Not/Exist").is_err());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn parse_time_zone<'i, I: AsRef<[u8]>>(
+        &self,
+        input: I,
+    ) -> Result<TimeZone, Error> {
+        self.parse_time_zone_with(crate::tz::db(), input)
+    }
+
+    /// Parses a string representing a time zone into a [`TimeZone`] and
+    /// performs any time zone database lookups using the [`TimeZoneDatabase`]
+    /// given.
+    ///
+    /// This is like [`DateTimeParser::parse_time_zone`], but uses the time
+    /// zone database given instead of the implicit global time zone database.
+    ///
+    /// This will parse one of three different categories of strings:
+    ///
+    /// 1. An IANA Time Zone Database identifier. For example,
+    /// `America/New_York` or `UTC`.
+    /// 2. A fixed offset. For example, `-05:00` or `-00:44:30`.
+    /// 3. A POSIX time zone string. For example, `EST5EDT,M3.2.0,M11.1.0`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::DateTimeParser, tz::{self, TimeZone}};
+    ///
+    /// static PARSER: DateTimeParser = DateTimeParser::new();
+    ///
+    /// let db = jiff::tz::db();
+    /// assert_eq!(
+    ///     PARSER.parse_time_zone_with(db, "America/New_York")?,
+    ///     TimeZone::get("America/New_York")?,
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// See also the example for [`DateTimeParser::parse_zoned_with`] for a
+    /// more interesting example using a time zone database other than the
+    /// default.
+    pub fn parse_time_zone_with<'i, I: AsRef<[u8]>>(
+        &self,
+        db: &TimeZoneDatabase,
+        input: I,
+    ) -> Result<TimeZone, Error> {
+        let input = input.as_ref();
+        let parsed = self.p.parse_time_zone(input)?.into_full()?;
+        parsed.into_time_zone(db)
+    }
+
     /// Parse a Temporal datetime string into [`Pieces`].
     ///
     /// This is a lower level routine meant to give callers raw access to the
@@ -1295,6 +1392,44 @@ impl DateTimePrinter {
         buf
     }
 
+    /// Format a `TimeZone` into a string.
+    ///
+    /// This is a convenience routine for [`DateTimePrinter::print_time_zone`].
+    ///
+    /// # Errors
+    ///
+    /// In some rare cases, serialization may fail when there is no succinct
+    /// representation of a time zone. One specific case in which this
+    /// occurs is when `TimeZone` is a user's system time zone derived from
+    /// `/etc/localtime`, but where an IANA time zone identifier could not
+    /// be found. This can occur, for example, when `/etc/localtime` is not
+    /// symlinked to an entry in `/usr/share/zoneinfo`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::DateTimePrinter, tz::{self, TimeZone}};
+    ///
+    /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
+    ///
+    /// // IANA time zone
+    /// let tz = TimeZone::get("US/Eastern")?;
+    /// assert_eq!(PRINTER.time_zone_to_string(&tz)?, "US/Eastern");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[cfg(feature = "alloc")]
+    pub fn time_zone_to_string(
+        &self,
+        tz: &TimeZone,
+    ) -> Result<alloc::string::String, Error> {
+        let mut buf = alloc::string::String::with_capacity(4);
+        // Writing to a `String` itself will never fail, but this could fail
+        // as described above in the docs.
+        self.print_time_zone(tz, &mut buf)?;
+        Ok(buf)
+    }
+
     /// Format `Pieces` of a Temporal datetime.
     ///
     /// This is a convenience routine for [`DateTimePrinter::print_pieces`]
@@ -1588,6 +1723,85 @@ impl DateTimePrinter {
         wtr: W,
     ) -> Result<(), Error> {
         self.p.print_time(time, wtr)
+    }
+
+    /// Print a `TimeZone`.
+    ///
+    /// This will emit one of three different categories of strings:
+    ///
+    /// 1. An IANA Time Zone Database identifier. For example,
+    /// `America/New_York` or `UTC`.
+    /// 2. A fixed offset. For example, `-05:00` or `-00:44:30`.
+    /// 3. A POSIX time zone string. For example, `EST5EDT,M3.2.0,M11.1.0`.
+    ///
+    /// # Differences with RFC 9557 annotations
+    ///
+    /// Jiff's [`Offset`] has second precision. If a `TimeZone` is a fixed
+    /// offset and has fractional minutes, then they will be expressed in the
+    /// `[+-]HH:MM:SS` format. Otherwise, the `:SS` will be omitted.
+    ///
+    /// This differs from RFC 3339 and RFC 9557 because neither support
+    /// sub-minute resolution in UTC offsets. Indeed, if one were to format
+    /// a `Zoned` with an offset that contains fractional minutes, the offset
+    /// would be rounded to the nearest minute to preserve compatibility with
+    /// RFC 3339 and RFC 9557. However, this routine does no such rounding.
+    /// This is because there is no RFC standardizing the serialization of
+    /// a lone time zone, and there is otherwise no need to reduce an offset's
+    /// precision.
+    ///
+    /// # Errors
+    ///
+    /// In some rare cases, serialization may fail when there is no succinct
+    /// representation of a time zone. One specific case in which this
+    /// occurs is when `TimeZone` is a user's system time zone derived from
+    /// `/etc/localtime`, but where an IANA time zone identifier could not
+    /// be found. This can occur, for example, when `/etc/localtime` is not
+    /// symlinked to an entry in `/usr/share/zoneinfo`.
+    ///
+    /// An error can also occur when writing to the given [`Write`]
+    /// implementation would fail. Some such implementations, like for `String`
+    /// and `Vec<u8>`, never fail (unless memory allocation fails).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{fmt::temporal::DateTimePrinter, tz::{self, TimeZone}};
+    ///
+    /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
+    ///
+    /// // IANA time zone
+    /// let tz = TimeZone::get("US/Eastern")?;
+    /// let mut buf = String::new();
+    /// PRINTER.print_time_zone(&tz, &mut buf)?;
+    /// assert_eq!(buf, "US/Eastern");
+    ///
+    /// // Fixed offset
+    /// let tz = TimeZone::fixed(tz::offset(-5));
+    /// let mut buf = String::new();
+    /// PRINTER.print_time_zone(&tz, &mut buf)?;
+    /// assert_eq!(buf, "-05:00");
+    ///
+    /// // POSIX time zone
+    /// let tz = TimeZone::posix("EST5EDT,M3.2.0,M11.1.0")?;
+    /// let mut buf = String::new();
+    /// PRINTER.print_time_zone(&tz, &mut buf)?;
+    /// assert_eq!(buf, "EST5EDT,M3.2.0,M11.1.0");
+    ///
+    /// // The error case for a time zone that doesn't fall
+    /// // into one of the three categories about is not easy
+    /// // to create artificially. The only way, at time of
+    /// // writing, to produce it is via `TimeZone::system()`
+    /// // with a non-symlinked `/etc/timezone`. (Or `TZ` set
+    /// // to the path of a similar file.)
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn print_time_zone<W: Write>(
+        &self,
+        tz: &TimeZone,
+        wtr: W,
+    ) -> Result<(), Error> {
+        self.p.print_time_zone(tz, wtr)
     }
 
     /// Print the `Pieces` of a Temporal datetime.

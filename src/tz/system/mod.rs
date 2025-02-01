@@ -5,7 +5,7 @@ use alloc::string::ToString;
 use crate::{
     error::{err, Error, ErrorContext},
     tz::{posix::PosixTz, TimeZone, TimeZoneDatabase},
-    util::{cache::Expiration, sync::Arc},
+    util::cache::Expiration,
 };
 
 #[cfg(all(unix, not(target_os = "android")))]
@@ -197,11 +197,9 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
         Ok(PosixTz::Implementation(string)) => string.to_string(),
         Ok(PosixTz::Rule(tz)) => match tz.reasonable() {
             Ok(reasonable_posix_tz) => {
-                let kind = super::TimeZoneKind::Posix(
-                    super::TimeZonePosix::from(reasonable_posix_tz),
-                );
-                let tz = TimeZone { kind: Some(Arc::new(kind)) };
-                return Ok(Some(tz));
+                return Ok(Some(TimeZone::from_reasonable_posix_tz(
+                    reasonable_posix_tz,
+                )));
             }
             Err(_) => {
                 warn!(

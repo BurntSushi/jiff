@@ -12,7 +12,10 @@ use crate::{
         Parsed,
     },
     span::Span,
-    tz::{AmbiguousZoned, Disambiguation, OffsetConflict, TimeZoneDatabase},
+    tz::{
+        AmbiguousZoned, Disambiguation, OffsetConflict, TimeZone,
+        TimeZoneDatabase,
+    },
     util::{escape, parse, t},
     SignedDuration, Timestamp, Unit, Zoned,
 };
@@ -195,6 +198,63 @@ impl<'i> core::fmt::Display for ParsedTime<'i> {
     }
 }
 
+#[derive(Debug)]
+pub(super) struct ParsedTimeZone<'i> {
+    /// The original input that the time zone was parsed from.
+    input: escape::Bytes<'i>,
+    /// The kind of time zone parsed.
+    kind: ParsedTimeZoneKind<'i>,
+}
+
+impl<'i> core::fmt::Display for ParsedTimeZone<'i> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        core::fmt::Display::fmt(&self.input, f)
+    }
+}
+
+#[derive(Debug)]
+pub(super) enum ParsedTimeZoneKind<'i> {
+    Named(&'i str),
+    Offset(ParsedOffset),
+    #[cfg(feature = "alloc")]
+    Posix(crate::tz::posix::ReasonablePosixTimeZone),
+}
+
+impl<'i> ParsedTimeZone<'i> {
+    pub(super) fn into_time_zone(
+        self,
+        db: &TimeZoneDatabase,
+    ) -> Result<TimeZone, Error> {
+        match self.kind {
+            ParsedTimeZoneKind::Named(iana_name) => {
+                let tz = db.get(iana_name).with_context(|| {
+                    err!(
+                        "parsed apparent IANA time zone identifier \
+                         {iana_name} from {input}, but the tzdb lookup \
+                         failed",
+                        input = self.input,
+                    )
+                })?;
+                Ok(tz)
+            }
+            ParsedTimeZoneKind::Offset(poff) => {
+                let offset = poff.to_offset().with_context(|| {
+                    err!(
+                        "offset successfully parsed from {input}, \
+                         but failed to convert to numeric `Offset`",
+                        input = self.input,
+                    )
+                })?;
+                Ok(TimeZone::fixed(offset))
+            }
+            #[cfg(feature = "alloc")]
+            ParsedTimeZoneKind::Posix(posix_tz) => {
+                Ok(TimeZone::from_reasonable_posix_tz(posix_tz))
+            }
+        }
+    }
+}
+
 /// A parser for Temporal datetimes.
 #[derive(Debug)]
 pub(super) struct DateTimeParser {
@@ -364,6 +424,91 @@ impl DateTimeParser {
         // OK... carry on.
         let Parsed { input, .. } = self.parse_annotations(input)?;
         Ok(Parsed { value: time, input })
+    }
+
+    #[inline(always)]
+    pub(super) fn parse_time_zone<'i>(
+        &self,
+        mut input: &'i [u8],
+    ) -> Result<Parsed<'i, ParsedTimeZone<'i>>, Error> {
+        let Some(first) = input.first().copied() else {
+            return Err(err!("an empty string is not a valid time zone"));
+        };
+        let original = escape::Bytes(input);
+        if matches!(first, b'+' | b'-') {
+            static P: offset::Parser = offset::Parser::new()
+                .zulu(false)
+                .subminute(true)
+                .subsecond(false);
+            let Parsed { value: offset, input } = P.parse(input)?;
+            let kind = ParsedTimeZoneKind::Offset(offset);
+            let value = ParsedTimeZone { input: original, kind };
+            return Ok(Parsed { value, input });
+        }
+
+        // Creates a "named" parsed time zone, generally meant to
+        // be an IANA time zone identifier. We do this in a couple
+        // different cases below, hence the helper function.
+        let mknamed = |consumed, remaining| {
+            let Ok(tzid) = core::str::from_utf8(consumed) else {
+                return Err(err!(
+                    "found plausible IANA time zone identifier \
+                     {input:?}, but it is not valid UTF-8",
+                    input = escape::Bytes(consumed),
+                ));
+            };
+            let kind = ParsedTimeZoneKind::Named(tzid);
+            let value = ParsedTimeZone { input: original, kind };
+            Ok(Parsed { value, input: remaining })
+        };
+        // This part get tricky. The common case is absolutely an IANA time
+        // zone identifer. So we try to parse something that looks like an IANA
+        // tz id.
+        //
+        // In theory, IANA tz ids can never be valid POSIX TZ strings, since
+        // POSIX TZ strings minimally require an offset in them (e.g., `EST5`)
+        // and IANA tz ids aren't supposed to contain numbers. But there are
+        // some legacy IANA tz ids (`EST5EDT`) that do contain numbers.
+        //
+        // However, the legacy IANA tz ids, like `EST5EDT`, are pretty much
+        // nonsense as POSIX TZ strings since there is no DST transition rule.
+        // So in cases of nonsense tz ids, we assume they are IANA tz ids.
+        let mkconsumed = parse::slicer(input);
+        let mut saw_number = false;
+        loop {
+            let Some(byte) = input.first().copied() else { break };
+            if byte.is_ascii_whitespace() {
+                break;
+            }
+            saw_number = saw_number || byte.is_ascii_digit();
+            input = &input[1..];
+        }
+        let consumed = mkconsumed(input);
+        if !saw_number {
+            return mknamed(consumed, input);
+        }
+        #[cfg(not(feature = "alloc"))]
+        {
+            Err(err!(
+                "cannot parsed time zones other than fixed offsets \
+                 without the `alloc` crate feature enabled",
+            ))
+        }
+        #[cfg(feature = "alloc")]
+        {
+            match crate::tz::posix::IanaTz::parse_v3plus_prefix(consumed) {
+                Ok((iana_tz, input)) => {
+                    let kind = ParsedTimeZoneKind::Posix(iana_tz.into_tz());
+                    let value = ParsedTimeZone { input: original, kind };
+                    Ok(Parsed { value, input })
+                }
+                // We get here for invalid POSIX tz strings, or even if they
+                // are valid but not "reasonable", i.e., `EST5EDT`. Which in
+                // that case would end up doing an IANA tz lookup. (And it
+                // might hit because `EST5EDT` is a legacy IANA tz id. Lol.)
+                Err(_) => mknamed(consumed, input),
+            }
+        }
     }
 
     // Date :::

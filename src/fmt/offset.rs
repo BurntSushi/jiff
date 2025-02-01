@@ -292,12 +292,13 @@ impl core::fmt::Debug for Numeric {
 pub(crate) struct Parser {
     zulu: bool,
     subminute: bool,
+    subsecond: bool,
 }
 
 impl Parser {
     /// Create a new UTC offset parser with the default configuration.
     pub(crate) const fn new() -> Parser {
-        Parser { zulu: true, subminute: true }
+        Parser { zulu: true, subminute: true, subsecond: true }
     }
 
     /// When enabled, the `z` and `Z` designators are recognized as a "zulu"
@@ -315,9 +316,24 @@ impl Parser {
     /// are supported. Specifically, when enabled, nanosecond precision is
     /// supported.
     ///
-    /// When disabled, offsets must be integral minutes.
+    /// When disabled, offsets must be integral minutes. And the `subsecond`
+    /// option is ignored.
     pub(crate) const fn subminute(self, yes: bool) -> Parser {
         Parser { subminute: yes, ..self }
+    }
+
+    /// When enabled, offsets with precision greater than integral seconds
+    /// are supported. Specifically, when enabled, nanosecond precision is
+    /// supported. Note though that when a fractional second is found, it is
+    /// used to round to the nearest second. (Jiff's `Offset` type only has
+    /// second resolution.)
+    ///
+    /// When disabled, offsets must be integral seconds (or integrate minutes
+    /// if the `subminute` option is disabled as well).
+    ///
+    /// This is ignored if `subminute` is disabled.
+    pub(crate) const fn subsecond(self, yes: bool) -> Parser {
+        Parser { subsecond: yes, ..self }
     }
 
     /// Parse an offset from the beginning of `input`.
@@ -490,6 +506,18 @@ impl Parser {
                 )
             })?;
         numeric.seconds = Some(seconds);
+
+        // If subsecond resolution is not supported, then we're done here.
+        if !self.subsecond {
+            if input.get(0).map_or(false, |&b| b == b'.' || b == b',') {
+                return Err(err!(
+                    "subsecond precision for UTC numeric offset {original:?} \
+                     is not enabled in this context (must provide only \
+                     integral minutes or seconds)",
+                ));
+            }
+            return Ok(Parsed { value: numeric, input });
+        }
 
         // Parse an optional fractional component.
         let Parsed { value: nanoseconds, input } =

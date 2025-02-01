@@ -36,8 +36,11 @@ easy copy & paste.
     * [`nanosecond`](self::timestamp::millisecond)
         * [`jiff::fmt::serde::timestamp::nanosecond::required`](self::timestamp::nanosecond::required)
         * [`jiff::fmt::serde::timestamp::nanosecond::optional`](self::timestamp::nanosecond::optional)
+* [`tz`]
+    * [`jiff::fmt::serde::tz::required`](self::tz::required)
+    * [`jiff::fmt::serde::tz::optional`](self::tz::optional)
 
-# Example
+# Example: timestamps as an integer
 
 This example shows how to deserialize an integer number of seconds since the
 Unix epoch into a [`Timestamp`](crate::Timestamp). And the reverse operation
@@ -60,7 +63,7 @@ assert_eq!(serde_json::to_string(&got)?, json);
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-# Example: optional support
+# Example: optional timestamp support
 
 And this example shows how to use an `Option<Timestamp>` instead of a
 `Timestamp`. Note that in this case, we show how to roundtrip the number of
@@ -257,9 +260,7 @@ pub mod duration {
             ) -> Result<S::Ok, S::Error> {
                 match *duration {
                     None => se.serialize_none(),
-                    Some(ref duration) => {
-                        se.collect_str(&CompactDuration(duration))
-                    }
+                    Some(ref duration) => required(duration, se),
                 }
             }
         }
@@ -403,7 +404,7 @@ pub mod span {
             ) -> Result<S::Ok, S::Error> {
                 match *span {
                     None => se.serialize_none(),
-                    Some(ref span) => se.collect_str(&CompactSpan(span)),
+                    Some(ref span) => required(span, se),
                 }
             }
         }
@@ -1075,6 +1076,208 @@ pub mod timestamp {
                     super::Visitor,
                 ))
             }
+        }
+    }
+}
+
+/// Convenience routines for (de)serializing [`TimeZone`](crate::tz::TimeZone)
+/// values.
+///
+/// The `required` and `optional` sub-modules each provide serialization and
+/// deserialization routines. They are meant to be used with Serde's
+/// [`with` attribute].
+///
+/// # Advice
+///
+/// Serializing time zones is useful when you want to accept user configuration
+/// selecting a time zone to use. This might be beneficial when one cannot rely
+/// on a system's time zone.
+///
+/// Note that when deserializing time zones that are IANA time zone
+/// identifiers, Jiff will automatically use the implicit global database to
+/// resolve the identifier to an actual time zone. If you do not want to use
+/// Jiff's global time zone database for this, you'll need to write your own
+/// Serde integration.
+///
+/// [`with` attribute]: https://serde.rs/field-attrs.html#with
+///
+/// # Example
+///
+/// ```
+/// use jiff::tz::TimeZone;
+///
+/// #[derive(Debug, serde::Deserialize, serde::Serialize)]
+/// struct Record {
+///     #[serde(with = "jiff::fmt::serde::tz::required")]
+///     tz: TimeZone,
+/// }
+///
+/// let json = r#"{"tz":"America/Nuuk"}"#;
+/// let got: Record = serde_json::from_str(&json)?;
+/// assert_eq!(got.tz, TimeZone::get("America/Nuuk")?);
+/// assert_eq!(serde_json::to_string(&got)?, json);
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub mod tz {
+    use serde::de;
+
+    use crate::fmt::{temporal, StdFmtWrite};
+
+    struct TemporalTimeZone<'a>(&'a crate::tz::TimeZone);
+
+    impl<'a> core::fmt::Display for TemporalTimeZone<'a> {
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            static PRINTER: temporal::DateTimePrinter =
+                temporal::DateTimePrinter::new();
+            PRINTER
+                .print_time_zone(self.0, StdFmtWrite(f))
+                .map_err(|_| core::fmt::Error)
+        }
+    }
+
+    /// A required visitor for `TimeZone`.
+    struct Visitor;
+
+    impl<'de> de::Visitor<'de> for Visitor {
+        type Value = crate::tz::TimeZone;
+
+        fn expecting(
+            &self,
+            f: &mut core::fmt::Formatter,
+        ) -> core::fmt::Result {
+            f.write_str(
+                "a string representing a time zone via an \
+                 IANA time zone identifier, fixed offset from UTC \
+                 or a POSIX time zone string",
+            )
+        }
+
+        #[inline]
+        fn visit_bytes<E: de::Error>(
+            self,
+            value: &[u8],
+        ) -> Result<crate::tz::TimeZone, E> {
+            static PARSER: temporal::DateTimeParser =
+                temporal::DateTimeParser::new();
+            PARSER.parse_time_zone(value).map_err(de::Error::custom)
+        }
+
+        #[inline]
+        fn visit_str<E: de::Error>(
+            self,
+            value: &str,
+        ) -> Result<crate::tz::TimeZone, E> {
+            self.visit_bytes(value.as_bytes())
+        }
+    }
+
+    /// A generic optional visitor for `TimeZone`.
+    struct OptionalVisitor<V>(V);
+
+    impl<'de, V: de::Visitor<'de, Value = crate::tz::TimeZone>>
+        de::Visitor<'de> for OptionalVisitor<V>
+    {
+        type Value = Option<crate::tz::TimeZone>;
+
+        fn expecting(
+            &self,
+            f: &mut core::fmt::Formatter,
+        ) -> core::fmt::Result {
+            f.write_str(
+                "a string representing a time zone via an \
+                 IANA time zone identifier, fixed offset from UTC \
+                 or a POSIX time zone string",
+            )
+        }
+
+        #[inline]
+        fn visit_some<D: de::Deserializer<'de>>(
+            self,
+            de: D,
+        ) -> Result<Option<crate::tz::TimeZone>, D::Error> {
+            de.deserialize_str(self.0).map(Some)
+        }
+
+        #[inline]
+        fn visit_none<E: de::Error>(
+            self,
+        ) -> Result<Option<crate::tz::TimeZone>, E> {
+            Ok(None)
+        }
+    }
+
+    /// (De)serialize a required [`TimeZone`](crate::tz::TimeZone).
+    pub mod required {
+        /// Serialize a required [`TimeZone`](crate::tz::TimeZone).
+        ///
+        /// This will result in an IANA time zone identifier, fixed offset or a
+        /// POSIX time zone string.
+        ///
+        /// This can return an error in some cases when the `TimeZone` has no
+        /// succinct string representation. For example, when the `TimeZone` is
+        /// derived from a system `/etc/localtime` for which no IANA time zone
+        /// identifier could be found.
+        #[inline]
+        pub fn serialize<S: serde::Serializer>(
+            tz: &crate::tz::TimeZone,
+            se: S,
+        ) -> Result<S::Ok, S::Error> {
+            if !tz.has_succinct_serialization() {
+                return Err(<S::Error as serde::ser::Error>::custom(
+                    "time zones without IANA identifiers that aren't either \
+                     fixed offsets or a POSIX time zone can't be serialized \
+                     (this typically occurs when this is a system time zone \
+                      derived from `/etc/localtime` on Unix systems that \
+                      isn't symlinked to an entry in `/usr/share/zoneinfo`)",
+                ));
+            }
+            se.collect_str(&super::TemporalTimeZone(tz))
+        }
+
+        /// Deserialize a required [`TimeZone`](crate::tz::TimeZone).
+        ///
+        /// This will attempt to parse an IANA time zone identifier, a fixed
+        /// offset or a POSIX time zone string.
+        #[inline]
+        pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+            de: D,
+        ) -> Result<crate::tz::TimeZone, D::Error> {
+            de.deserialize_str(super::Visitor)
+        }
+    }
+
+    /// (De)serialize an optional [`TimeZone`](crate::tz::TimeZone).
+    pub mod optional {
+        /// Serialize an optional [`TimeZone`](crate::tz::TimeZone).
+        ///
+        /// This will result in an IANA time zone identifier, fixed offset or a
+        /// POSIX time zone string.
+        ///
+        /// This can return an error in some cases when the `TimeZone` has no
+        /// succinct string representation. For example, when the `TimeZone` is
+        /// derived from a system `/etc/localtime` for which no IANA time zone
+        /// identifier could be found.
+        #[inline]
+        pub fn serialize<S: serde::Serializer>(
+            tz: &Option<crate::tz::TimeZone>,
+            se: S,
+        ) -> Result<S::Ok, S::Error> {
+            match *tz {
+                None => se.serialize_none(),
+                Some(ref tz) => super::required::serialize(tz, se),
+            }
+        }
+
+        /// Deserialize an optional [`TimeZone`](crate::tz::TimeZone).
+        ///
+        /// This will attempt to parse an IANA time zone identifier, a fixed
+        /// offset or a POSIX time zone string.
+        #[inline]
+        pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+            de: D,
+        ) -> Result<Option<crate::tz::TimeZone>, D::Error> {
+            de.deserialize_option(super::OptionalVisitor(super::Visitor))
         }
     }
 }
