@@ -13,6 +13,11 @@ The `civil::ISOWeekDate` API has been beefed up with a few convenience methods.
 * [#233](https://github.com/BurntSushi/jiff/issues/233):
 Add `tz::Offset::round` for rounding time zone offsets.
 
+Bug fixes:
+
+* [#231](https://github.com/BurntSushi/jiff/issues/231):
+Use more flexible offset equality when parsing offsets with fractional minutes.
+
 
 0.1.28 (2025-01-27)
 ===================
