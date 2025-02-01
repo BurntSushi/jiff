@@ -97,7 +97,7 @@ use self::posix::ReasonablePosixTimeZone;
 pub use self::db::TimeZoneNameIter;
 pub use self::{
     db::{db, TimeZoneDatabase},
-    offset::{Dst, Offset, OffsetArithmetic, OffsetConflict},
+    offset::{Dst, Offset, OffsetArithmetic, OffsetConflict, OffsetRound},
 };
 
 #[cfg(feature = "tzdb-concatenated")]

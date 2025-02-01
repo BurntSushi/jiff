@@ -10,6 +10,8 @@ Enhancements:
 Opt-in support for using Serde with `jiff::tz::TimeZone` has been added.
 * [#227](https://github.com/BurntSushi/jiff/issues/227):
 The `civil::ISOWeekDate` API has been beefed up with a few convenience methods.
+* [#233](https://github.com/BurntSushi/jiff/issues/233):
+Add `tz::Offset::round` for rounding time zone offsets.
 
 
 0.1.28 (2025-01-27)

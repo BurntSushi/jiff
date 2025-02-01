@@ -801,7 +801,7 @@ impl PosixDateTimeSpec {
         let Some(date) = self.date.to_civil_date(year) else { return mkmax() };
         let mut dt = date.to_datetime(Time::MIN);
         let dur_transition = self.time().to_duration();
-        let dur_offset = offset.to_duration();
+        let dur_offset = SignedDuration::from(offset);
         dt = dt.checked_add(dur_transition).unwrap_or_else(|_| {
             if dur_transition.is_negative() {
                 mkmin()

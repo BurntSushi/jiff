@@ -15,7 +15,7 @@ use crate::{
         rangeint::{RFrom, RInto, TryRFrom},
         t::{self, C},
     },
-    SignedDuration,
+    RoundMode, SignedDuration, SignedDurationRound, Unit,
 };
 
 /// An enum indicating whether a particular datetime  is in DST or not.
@@ -888,10 +888,80 @@ impl Offset {
         SignedDuration::offset_until(other, self)
     }
 
-    /// Returns this offset as a [`SignedDuration`].
+    /// Returns a new offset that is rounded according to the given
+    /// configuration.
+    ///
+    /// Rounding an offset has a number of parameters, all of which are
+    /// optional. When no parameters are given, then no rounding is done, and
+    /// the offset as given is returned. That is, it's a no-op.
+    ///
+    /// As is consistent with `Offset` itself, rounding only supports units of
+    /// hours, minutes or seconds. If any other unit is provided, then an error
+    /// is returned.
+    ///
+    /// The parameters are, in brief:
+    ///
+    /// * [`OffsetRound::smallest`] sets the smallest [`Unit`] that is allowed
+    /// to be non-zero in the offset returned. By default, it is set to
+    /// [`Unit::Second`], i.e., no rounding occurs. When the smallest unit is
+    /// set to something bigger than seconds, then the non-zero units in the
+    /// offset smaller than the smallest unit are used to determine how the
+    /// offset should be rounded. For example, rounding `+01:59` to the nearest
+    /// hour using the default rounding mode would produce `+02:00`.
+    /// * [`OffsetRound::mode`] determines how to handle the remainder
+    /// when rounding. The default is [`RoundMode::HalfExpand`], which
+    /// corresponds to how you were likely taught to round in school.
+    /// Alternative modes, like [`RoundMode::Trunc`], exist too. For example,
+    /// a truncating rounding of `+01:59` to the nearest hour would
+    /// produce `+01:00`.
+    /// * [`OffsetRound::increment`] sets the rounding granularity to
+    /// use for the configured smallest unit. For example, if the smallest unit
+    /// is minutes and the increment is `15`, then the offset returned will
+    /// always have its minute component set to a multiple of `15`.
+    ///
+    /// # Errors
+    ///
+    /// In general, there are two main ways for rounding to fail: an improper
+    /// configuration like trying to round an offset to the nearest unit other
+    /// than hours/minutes/seconds, or when overflow occurs. Overflow can occur
+    /// when the offset would exceed the minimum or maximum `Offset` values.
+    /// Typically, this can only realistically happen if the offset before
+    /// rounding is already close to its minimum or maximum value.
+    ///
+    /// # Example: rounding to the nearest multiple of 15 minutes
+    ///
+    /// Most time zone offsets fall on an hour boundary, but some fall on the
+    /// half-hour or even 15 minute boundary:
+    ///
+    /// ```
+    /// use jiff::{tz::Offset, Unit};
+    ///
+    /// let offset = Offset::from_seconds(-(44 * 60 + 30)).unwrap();
+    /// let rounded = offset.round((Unit::Minute, 15))?;
+    /// assert_eq!(rounded, Offset::from_seconds(-45 * 60).unwrap());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: rounding can fail via overflow
+    ///
+    /// ```
+    /// use jiff::{tz::Offset, Unit};
+    ///
+    /// assert_eq!(Offset::MAX.to_string(), "+25:59:59");
+    /// assert_eq!(
+    ///     Offset::MAX.round(Unit::Minute).unwrap_err().to_string(),
+    ///     "rounding offset `+25:59:59` resulted in a duration of 26h, \
+    ///      which overflows `Offset`",
+    /// );
+    /// ```
     #[inline]
-    pub(crate) fn to_duration(self) -> SignedDuration {
-        SignedDuration::from_secs(i64::from(self.seconds()))
+    pub fn round<R: Into<OffsetRound>>(
+        self,
+        options: R,
+    ) -> Result<Offset, Error> {
+        let options: OffsetRound = options.into();
+        options.round(self)
     }
 }
 
@@ -1182,6 +1252,51 @@ impl Neg for Offset {
     }
 }
 
+/// Converts a `SignedDuration` to a time zone offset.
+///
+/// If the signed duration has fractional seconds, then it is automatically
+/// rounded to the nearest second. (Because an `Offset` has only second
+/// precision.)
+///
+/// # Errors
+///
+/// This returns an error if the duration overflows the limits of an `Offset`.
+///
+/// # Example
+///
+/// ```
+/// use jiff::{tz::{self, Offset}, SignedDuration};
+///
+/// let sdur = SignedDuration::from_secs(-5 * 60 * 60);
+/// let offset = Offset::try_from(sdur)?;
+/// assert_eq!(offset, tz::offset(-5));
+///
+/// // Sub-seconds results in rounded.
+/// let sdur = SignedDuration::new(-5 * 60 * 60, -500_000_000);
+/// let offset = Offset::try_from(sdur)?;
+/// assert_eq!(offset, tz::Offset::from_seconds(-(5 * 60 * 60 + 1)).unwrap());
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+impl TryFrom<SignedDuration> for Offset {
+    type Error = Error;
+
+    fn try_from(sdur: SignedDuration) -> Result<Offset, Error> {
+        let mut seconds = sdur.as_secs();
+        let subsec = sdur.subsec_nanos();
+        if subsec >= 500_000_000 {
+            seconds = seconds.saturating_add(1);
+        } else if subsec <= -500_000_000 {
+            seconds = seconds.saturating_sub(1);
+        }
+        let seconds = i32::try_from(seconds).map_err(|_| {
+            err!("`SignedDuration` of {sdur} overflows `Offset`")
+        })?;
+        Offset::from_seconds(seconds)
+            .map_err(|_| err!("`SignedDuration` of {sdur} overflows `Offset`"))
+    }
+}
+
 /// Options for [`Offset::checked_add`] and [`Offset::checked_sub`].
 ///
 /// This type provides a way to ergonomically add one of a few different
@@ -1273,6 +1388,191 @@ impl<'a> From<&'a SignedDuration> for OffsetArithmetic {
 impl<'a> From<&'a UnsignedDuration> for OffsetArithmetic {
     fn from(udur: &'a UnsignedDuration) -> OffsetArithmetic {
         OffsetArithmetic::from(*udur)
+    }
+}
+
+/// Options for [`Offset::round`].
+///
+/// This type provides a way to configure the rounding of an offset. This
+/// includes setting the smallest unit (i.e., the unit to round), the rounding
+/// increment and the rounding mode (e.g., "ceil" or "truncate").
+///
+/// [`Offset::round`] accepts anything that implements
+/// `Into<OffsetRound>`. There are a few key trait implementations that
+/// make this convenient:
+///
+/// * `From<Unit> for OffsetRound` will construct a rounding
+/// configuration where the smallest unit is set to the one given.
+/// * `From<(Unit, i64)> for OffsetRound` will construct a rounding
+/// configuration where the smallest unit and the rounding increment are set to
+/// the ones given.
+///
+/// In order to set other options (like the rounding mode), one must explicitly
+/// create a `OffsetRound` and pass it to `Offset::round`.
+///
+/// # Example
+///
+/// This example shows how to always round up to the nearest half-hour:
+///
+/// ```
+/// use jiff::{tz::{Offset, OffsetRound}, RoundMode, Unit};
+///
+/// let offset = Offset::from_seconds(4 * 60 * 60 + 17 * 60).unwrap();
+/// let rounded = offset.round(
+///     OffsetRound::new()
+///         .smallest(Unit::Minute)
+///         .increment(30)
+///         .mode(RoundMode::Expand),
+/// )?;
+/// assert_eq!(rounded, Offset::from_seconds(4 * 60 * 60 + 30 * 60).unwrap());
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct OffsetRound(SignedDurationRound);
+
+impl OffsetRound {
+    /// Create a new default configuration for rounding a time zone offset via
+    /// [`Offset::round`].
+    ///
+    /// The default configuration does no rounding.
+    #[inline]
+    pub fn new() -> OffsetRound {
+        OffsetRound(SignedDurationRound::new().smallest(Unit::Second))
+    }
+
+    /// Set the smallest units allowed in the offset returned. These are the
+    /// units that the offset is rounded to.
+    ///
+    /// # Errors
+    ///
+    /// The unit must be [`Unit::Hour`], [`Unit::Minute`] or [`Unit::Second`].
+    ///
+    /// # Example
+    ///
+    /// A basic example that rounds to the nearest minute:
+    ///
+    /// ```
+    /// use jiff::{tz::Offset, Unit};
+    ///
+    /// let offset = Offset::from_seconds(-(5 * 60 * 60 + 30)).unwrap();
+    /// assert_eq!(offset.round(Unit::Hour)?, Offset::from_hours(-5).unwrap());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn smallest(self, unit: Unit) -> OffsetRound {
+        OffsetRound(self.0.smallest(unit))
+    }
+
+    /// Set the rounding mode.
+    ///
+    /// This defaults to [`RoundMode::HalfExpand`], which makes rounding work
+    /// like how you were taught in school.
+    ///
+    /// # Example
+    ///
+    /// A basic example that rounds to the nearest hour, but changing its
+    /// rounding mode to truncation:
+    ///
+    /// ```
+    /// use jiff::{tz::{Offset, OffsetRound}, RoundMode, Unit};
+    ///
+    /// let offset = Offset::from_seconds(-(5 * 60 * 60 + 30 * 60)).unwrap();
+    /// assert_eq!(
+    ///     offset.round(OffsetRound::new()
+    ///         .smallest(Unit::Hour)
+    ///         .mode(RoundMode::Trunc),
+    ///     )?,
+    ///     // The default round mode does rounding like
+    ///     // how you probably learned in school, and would
+    ///     // result in rounding to -6 hours. But we
+    ///     // change it to truncation here, which makes it
+    ///     // round -5.
+    ///     Offset::from_hours(-5).unwrap(),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn mode(self, mode: RoundMode) -> OffsetRound {
+        OffsetRound(self.0.mode(mode))
+    }
+
+    /// Set the rounding increment for the smallest unit.
+    ///
+    /// The default value is `1`. Other values permit rounding the smallest
+    /// unit to the nearest integer increment specified. For example, if the
+    /// smallest unit is set to [`Unit::Minute`], then a rounding increment of
+    /// `30` would result in rounding in increments of a half hour. That is,
+    /// the only minute value that could result would be `0` or `30`.
+    ///
+    /// # Errors
+    ///
+    /// The rounding increment must divide evenly into the next highest unit
+    /// after the smallest unit configured (and must not be equivalent to
+    /// it). For example, if the smallest unit is [`Unit::Second`], then
+    /// *some* of the valid values for the rounding increment are `1`, `2`,
+    /// `4`, `5`, `15` and `30`. Namely, any integer that divides evenly into
+    /// `60` seconds since there are `60` seconds in the next highest unit
+    /// (minutes).
+    ///
+    /// # Example
+    ///
+    /// This shows how to round an offset to the nearest 30 minute increment:
+    ///
+    /// ```
+    /// use jiff::{tz::Offset, Unit};
+    ///
+    /// let offset = Offset::from_seconds(4 * 60 * 60 + 15 * 60).unwrap();
+    /// assert_eq!(
+    ///     offset.round((Unit::Minute, 30))?,
+    ///     Offset::from_seconds(4 * 60 * 60 + 30 * 60).unwrap(),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn increment(self, increment: i64) -> OffsetRound {
+        OffsetRound(self.0.increment(increment))
+    }
+
+    /// Does the actual offset rounding.
+    fn round(&self, offset: Offset) -> Result<Offset, Error> {
+        let smallest = self.0.get_smallest();
+        if !(Unit::Second <= smallest && smallest <= Unit::Hour) {
+            return Err(err!(
+                "rounding `Offset` failed because \
+                 a unit of {plural} was provided, but offset rounding \
+                 can only use hours, minutes or seconds",
+                plural = smallest.plural(),
+            ));
+        }
+        let rounded_sdur = SignedDuration::from(offset).round(self.0)?;
+        Offset::try_from(rounded_sdur).map_err(|_| {
+            err!(
+                "rounding offset `{offset}` resulted in a duration \
+                 of {rounded_sdur:?}, which overflows `Offset`",
+            )
+        })
+    }
+}
+
+impl Default for OffsetRound {
+    fn default() -> OffsetRound {
+        OffsetRound::new()
+    }
+}
+
+impl From<Unit> for OffsetRound {
+    fn from(unit: Unit) -> OffsetRound {
+        OffsetRound::default().smallest(unit)
+    }
+}
+
+impl From<(Unit, i64)> for OffsetRound {
+    fn from((unit, increment): (Unit, i64)) -> OffsetRound {
+        OffsetRound::default().smallest(unit).increment(increment)
     }
 }
 
