@@ -28,7 +28,8 @@ USAGE:
     jiff-cli generate jiff-tzdb <zoneinfo-dir> [<jiff-tzdb-dir>]
 
 This program should be run from the root of the Jiff repository. Namely, it
-assumes that `./jiff-tzdb` exists and corresponds to the `jiff-tzdb` crate.
+assumes that `./crates/jiff-tzdb` exists and corresponds to the `jiff-tzdb`
+crate.
 
 While you can run this program using your system's zoneinfo directory, it is
 recommended to generate your own zoneinfo directory via
@@ -204,7 +205,9 @@ impl Config {
     }
 
     fn jiff_tzdb(&self) -> &Path {
-        self.jiff_tzdb.as_deref().unwrap_or_else(|| Path::new("./jiff-tzdb"))
+        self.jiff_tzdb
+            .as_deref()
+            .unwrap_or_else(|| Path::new("./crates/jiff-tzdb"))
     }
 }
 
