@@ -8,7 +8,7 @@ A command line tool for supporting the development of the Jiff datetime
 library. Currently, this tool is not published and only used for development
 purposes. (For example, generating the data for the `jiff-tzdb` crate.)
 """
-repository = "https://github.com/BurntSushi/jiff/tree/master/jiff-cli"
+repository = "https://github.com/BurntSushi/jiff/tree/master/crates/jiff-cli"
 keywords = ["cli", "jiff", "date", "time", "datetime"]
 license = "Unlicense OR MIT"
 categories = ["date-and-time"]
