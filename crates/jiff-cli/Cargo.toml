@@ -15,7 +15,7 @@ categories = ["date-and-time"]
 autotests = false
 edition = "2021"
 rust-version = "1.79"
-workspace = ".."
+workspace = "../.."
 
 [[bin]]
 name = "jiff-cli"
@@ -27,7 +27,7 @@ default = []
 [dependencies]
 anyhow = "1.0.28"
 bstr = "1.9.1"
-jiff = { path = "..", features = ["logging"] }
+jiff = { path = "../..", features = ["logging"] }
 lexopt = "0.3.0"
 log = { version = "0.4.17", features = ["std"] }
 regex-lite = "0.1.6"
