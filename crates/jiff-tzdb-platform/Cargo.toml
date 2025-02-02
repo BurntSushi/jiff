@@ -11,7 +11,7 @@ The entire Time Zone Database embedded into your binary for specific platforms.
 """
 categories = ["date-and-time"]
 keywords = ["date", "time", "temporal", "zone", "iana"]
-workspace = ".."
+workspace = "../.."
 edition = "2021"
 rust-version = "1.70"
 include = ["/*.rs", "COPYING", "LICENSE-MIT", "UNLICENSE"]

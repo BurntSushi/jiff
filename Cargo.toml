@@ -30,9 +30,9 @@ include = [
 
 [workspace]
 members = [
-  "jiff-cli",
-  "jiff-tzdb",
-  "jiff-tzdb-platform",
+  "crates/jiff-cli",
+  "crates/jiff-tzdb",
+  "crates/jiff-tzdb-platform",
   "examples/*",
 ]
 
@@ -100,7 +100,7 @@ tzdb-concatenated = ["std"]
 js = ["dep:wasm-bindgen", "dep:js-sys"]
 
 [dependencies]
-jiff-tzdb = { version = "0.1.2", path = "jiff-tzdb", optional = true }
+jiff-tzdb = { version = "0.1.2", path = "crates/jiff-tzdb", optional = true }
 log = { version = "0.4.21", optional = true, default-features = false }
 serde = { version = "1.0.203", optional = true, default-features = false }
 
@@ -109,7 +109,7 @@ serde = { version = "1.0.203", optional = true, default-features = false }
 # is enabled by default, but that the `tzdb-bundle-platform` crate is only
 # actually used on platforms without a system tzdb (i.e., Windows and wasm).
 [target.'cfg(any(windows, target_family = "wasm"))'.dependencies]
-jiff-tzdb-platform = { version = "0.1.2", path = "jiff-tzdb-platform", optional = true }
+jiff-tzdb-platform = { version = "0.1.2", path = "crates/jiff-tzdb-platform", optional = true }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = ">=0.52.0, <=0.59.*"
