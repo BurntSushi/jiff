@@ -274,7 +274,7 @@ jobs:
         curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
     - name: Test wasm-pack project
       run: |
-        cd jiff-wasm
+        cd crates/jiff-wasm
         wasm-pack test --node
 
   # Run benchmarks as tests.
