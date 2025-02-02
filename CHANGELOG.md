@@ -1,8 +1,13 @@
 # CHANGELOG
 
-0.1.29 (TBD)
-============
-TODO
+0.1.29 (2025-02-02)
+===================
+This release includes a few small enhancements and a bug fix. In particular,
+there is now Serde support for `TimeZone` and the `ISOWeekDate` API has been
+filled out a bit more.
+
+Unless a serious issue is uncovered, my plan is that this will be the last
+release before `jiff 0.2`.
 
 Enhancements:
 
