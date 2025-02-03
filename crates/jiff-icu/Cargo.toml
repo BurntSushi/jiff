@@ -1,0 +1,33 @@
+[package]
+name = "jiff-icu"
+version = "0.0.1"  #:version
+authors = ["Andrew Gallant <jamslam@gmail.com>"]
+license = "Unlicense OR MIT"
+homepage = "https://github.com/BurntSushi/jiff/tree/master/crates/jiff-icu"
+repository = "https://github.com/BurntSushi/jiff"
+documentation = "https://docs.rs/jiff-icu"
+description = "The entire Time Zone Database embedded into your binary."
+categories = ["date-and-time"]
+keywords = ["date", "time", "temporal", "zone", "iana"]
+workspace = "../.."
+edition = "2021"
+rust-version = "1.70"
+include = ["/*.rs", "/*.dat", "COPYING", "LICENSE-MIT", "UNLICENSE"]
+
+[lib]
+name = "jiff_icu"
+bench = false
+path = "src/lib.rs"
+
+[features]
+default = ["std"]
+std = ["alloc", "icu_calendar/std", "jiff/std"]
+alloc = ["jiff/alloc"]
+
+[dependencies]
+jiff = { path = "../..", default-features = false }
+icu_calendar = { version = "1.5.2", default-features = false }
+
+[dev-dependencies]
+jiff = { path = "../..", default-features = true }
+icu = { version = "1.5.0", features = ["std"] }
