@@ -59,7 +59,6 @@ jobs:
     - run: cargo build --verbose
     - run: cargo doc --features serde --verbose
     - run: cargo test --verbose --all
-    - run: cargo test --verbose -p jiff-cli
     # Skip on Windows because it takes freaking forever.
     - if: matrix.build != 'win-msvc'
       run: cargo test --verbose --lib --profile testrelease
@@ -110,8 +109,14 @@ jobs:
       run: cargo build -p jiff-tzdb-platform --verbose
     - name: Build docs
       run: cargo doc --features serde --verbose
-    # We don't really care much about adding dev dependencies, and they can
-    # move quite a bit faster. So unfortunately don't run tests on MSRV. We
+    # NOTE: We currently don't track some ecosystem integration crates
+    # like `jiff-icu`. They don't support Jiff's MSRV at time of writing
+    # (2025-02-02), and I think these sorts of integration crates are at very
+    # low risk of being more aggressive with respect to MSRV than the crates
+    # they depend on. So for now, we just don't test them here.
+    #
+    # NOTE: We don't really care much about adding dev dependencies, and they
+    # can move quite a bit faster. So unfortunately don't run tests on MSRV. We
     # could fix this by adding a `Carg.msrv.lock` or some such, but it doesn't
     # seem worth it.
     # - name: Run library tests

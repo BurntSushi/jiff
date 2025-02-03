@@ -31,6 +31,7 @@ include = [
 [workspace]
 members = [
   "crates/jiff-cli",
+  "crates/jiff-icu",
   "crates/jiff-tzdb",
   "crates/jiff-tzdb-platform",
   "examples/*",
