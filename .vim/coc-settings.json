@@ -1,6 +1,8 @@
 {
   "rust-analyzer.linkedProjects": [
     "bench/Cargo.toml",
+    "examples/sqlx-postgres/Cargo.toml",
+    "examples/sqlx-sqlite/Cargo.toml",
     "Cargo.toml"
   ]
 }

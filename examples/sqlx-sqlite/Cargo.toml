@@ -1,0 +1,23 @@
+[package]
+publish = false
+name = "sqlx-sqlite-test"
+version = "0.0.1"
+edition = "2021"
+
+# This example has very fat dependencies. And running it requires a PostgreSQL
+# dataabase connection. This makes it so this example won't get compiled or run
+# with `cargo test --all`.
+[workspace]
+
+[dependencies]
+anyhow = "1.0.95"
+chrono = "0.4.39"
+jiff = { path = "../.." }
+jiff-sqlx = { path = "../../crates/jiff-sqlx", features = ["sqlite"] }
+tempfile = "3.16.0"
+sqlx = { version = "0.8.3", features = ["chrono", "runtime-tokio", "sqlite"] }
+tokio = { version = "1.43.0", features = ["full"] }
+
+[[bin]]
+name = "sqlx-sqlite-test"
+path = "main.rs"
