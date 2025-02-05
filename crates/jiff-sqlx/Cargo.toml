@@ -1,0 +1,34 @@
+[package]
+name = "jiff-sqlx"
+version = "0.0.1"  #:version
+authors = ["Andrew Gallant <jamslam@gmail.com>"]
+license = "Unlicense OR MIT"
+homepage = "https://github.com/BurntSushi/jiff/tree/master/crates/jiff-sqlx"
+repository = "https://github.com/BurntSushi/jiff"
+documentation = "https://docs.rs/jiff-sqlx"
+description = "Integration for Jiff in sqlx."
+categories = ["date-and-time"]
+keywords = ["date", "time", "jiff", "sqlx", "zone"]
+workspace = "../.."
+edition = "2021"
+rust-version = "1.70"
+include = ["/*.rs", "/*.dat", "COPYING", "LICENSE-MIT", "UNLICENSE"]
+
+[lib]
+name = "jiff_sqlx"
+bench = false
+path = "src/lib.rs"
+
+[features]
+default = []
+postgres = ["dep:sqlx-postgres"]
+sqlite = ["dep:sqlx-sqlite"]
+
+[dependencies]
+jiff = { path = "../..", default-features = false }
+sqlx-core = { version = "0.8.0", default-features = false }
+sqlx-postgres = { version = "0.8.0", default-features = false, optional = true }
+sqlx-sqlite = { version = "0.8.0", default-features = false, optional = true }
+
+[dev-dependencies]
+jiff = { path = "../..", default-features = true }

@@ -124,6 +124,24 @@ jobs:
     # - name: Run integration tests
       # run: cargo test --test integration
 
+  # This job tests that examples outside the workspace build.
+  #
+  # These are outside the workspace because their dependency graphs are
+  # absolutely ludicrous.
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+    - name: Build sqlx-postgres example
+      run: cargo build --manifest-path ./examples/sqlx-postgres/Cargo.toml
+    - name: Run sqlx-sqlite example
+      run: cargo run --manifest-path ./examples/sqlx-sqlite/Cargo.toml
+
   # Generic testing for most cross targets. Some get special treatment in
   # other jobs.
   cross:
