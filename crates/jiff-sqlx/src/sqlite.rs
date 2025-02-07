@@ -37,7 +37,7 @@ impl<'r> Decode<'r, Sqlite> for Timestamp {
     fn decode(value: SqliteValueRef<'r>) -> Result<Self, BoxDynError> {
         // We use a `&str` here because we might need to parse an `f64` from
         // it. std doesn't support parsing `f64` from `&[u8]` AND it seems like
-        // we can pass `value` by reference or clone it, so we are limited
+        // we can't pass `value` by reference or clone it, so we are limited
         // to exactly one decode. WTF.
         let text = <&str as Decode<Sqlite>>::decode(value)?;
         // If there's a `:` somewhere, then it must be a textual timestamp.
@@ -116,8 +116,6 @@ impl Encode<'_, Sqlite> for Time {
 
 impl<'r> Decode<'r, Sqlite> for Time {
     fn decode(value: SqliteValueRef<'r>) -> Result<Self, BoxDynError> {
-        static PARSER: DateTimeParser = DateTimeParser::new();
-
         let text = <&[u8] as Decode<Sqlite>>::decode(value)?;
         let date = PARSER.parse_time(text)?;
         Ok(date.to_sqlx())

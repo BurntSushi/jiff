@@ -1,6 +1,6 @@
 [package]
 publish = false
-name = "sqlx-postgres-test"
+name = "diesel-postgres-test"
 version = "0.0.1"
 edition = "2021"
 
@@ -11,11 +11,10 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.95"
+diesel = { version = "2.2.0", features = ["postgres"] }
 jiff = { path = "../.." }
-jiff-sqlx = { path = "../../crates/jiff-sqlx", features = ["postgres"] }
-sqlx = { version = "0.8.3", features = ["postgres", "runtime-tokio"] }
-tokio = { version = "1.43.0", features = ["full"] }
+jiff-diesel = { path = "../../crates/jiff-diesel", features = ["postgres"] }
 
 [[bin]]
-name = "sqlx-postgres-test"
+name = "diesel-postgres-test"
 path = "main.rs"
