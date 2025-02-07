@@ -1,0 +1,33 @@
+[package]
+name = "jiff-diesel"
+version = "0.0.1"  #:version
+authors = ["Andrew Gallant <jamslam@gmail.com>"]
+license = "Unlicense OR MIT"
+homepage = "https://github.com/BurntSushi/jiff/tree/master/crates/jiff-diesel"
+repository = "https://github.com/BurntSushi/jiff"
+documentation = "https://docs.rs/jiff-diesel"
+description = "Integration for Jiff in Diesel."
+categories = ["date-and-time"]
+keywords = ["date", "time", "jiff", "diesel", "zone"]
+workspace = "../.."
+edition = "2021"
+rust-version = "1.70"
+include = ["/*.rs", "COPYING", "LICENSE-MIT", "UNLICENSE"]
+
+[lib]
+name = "jiff_diesel"
+bench = false
+path = "src/lib.rs"
+
+[features]
+default = []
+mysql = ["diesel/mysql"]
+postgres = ["diesel/postgres"]
+sqlite = ["diesel/sqlite"]
+
+[dependencies]
+jiff = { path = "../..", default-features = false }
+diesel = { version = "2.0.0", default-features = false }
+
+[dev-dependencies]
+jiff = { path = "../..", default-features = true }

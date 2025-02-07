@@ -141,6 +141,12 @@ jobs:
       run: cargo build --manifest-path ./examples/sqlx-postgres/Cargo.toml
     - name: Run sqlx-sqlite example
       run: cargo run --manifest-path ./examples/sqlx-sqlite/Cargo.toml
+    - name: Build diesel-mysql example
+      run: cargo build --manifest-path ./examples/diesel-mysql/Cargo.toml
+    - name: Build diesel-postgres example
+      run: cargo build --manifest-path ./examples/diesel-postgres/Cargo.toml
+    - name: Run diesel-sqlite example
+      run: cargo build --manifest-path ./examples/diesel-sqlite/Cargo.toml
 
   # Generic testing for most cross targets. Some get special treatment in
   # other jobs.

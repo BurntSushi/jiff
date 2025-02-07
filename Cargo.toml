@@ -31,13 +31,20 @@ include = [
 [workspace]
 members = [
   "crates/jiff-cli",
+  "crates/jiff-diesel",
   "crates/jiff-icu",
   "crates/jiff-sqlx",
   "crates/jiff-tzdb",
   "crates/jiff-tzdb-platform",
   "examples/*",
 ]
-exclude = ["examples/sqlx-postgres", "examples/sqlx-sqlite"]
+exclude = [
+  "examples/diesel-mysql",
+  "examples/diesel-postgres",
+  "examples/diesel-sqlite",
+  "examples/sqlx-postgres",
+  "examples/sqlx-sqlite",
+]
 
 # Features are documented in the "Crate features" section of the crate docs:
 # https://docs.rs/jiff/*/#crate-features
