@@ -118,8 +118,8 @@ maximum datetime values.][cppchrono]
 * [Jiff aims to have reasonable performance and may not be capable of doing the
 fastest possible thing.][perf]
 
-At present, it is recommended to use the [`icu`] crate for localization and
-non-Gregorian use cases.
+At present, it is recommended to use the [`icu`] crate via [`jiff-icu`] for
+localization and non-Gregorian use cases.
 
 [Leap seconds]: https://github.com/BurntSushi/jiff/issues/7
 [Calendars other than Gregorian]: https://github.com/BurntSushi/jiff/issues/6
@@ -127,6 +127,7 @@ non-Gregorian use cases.
 [cppchrono]: https://github.com/BurntSushi/jiff/issues/3
 [perf]: https://github.com/BurntSushi/jiff/issues/17
 [`icu`]: https://docs.rs/icu
+[`jiff-icu`]: https://docs.rs/jiff-icu
 
 Please file an issue if you can think of more (substantial) things to add to
 the above list.
