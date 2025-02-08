@@ -56,7 +56,7 @@ In the future, it may be prudent for this crate to be upstreamed into SQLx
 itself.
 
 [sqlx]: https://docs.rs/sqlx/0.8
-[examples]: https://github.com/BurntSushi/jiff/tree/master/examples/uptime
+[examples]: https://github.com/BurntSushi/jiff/tree/master/examples
 [`chrono`]: https://docs.rs/chrono
 [`time`]: https://docs.rs/time
 [sqlx-mysql-bunk]: https://github.com/launchbadge/sqlx/issues/3487#issuecomment-2641843693
