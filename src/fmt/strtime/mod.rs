@@ -249,12 +249,13 @@ The following things are currently unsupported:
 * Parsing or formatting fractional seconds in the time time zone offset.
 * Locale oriented conversion specifiers, such as `%c`, `%r` and `%+`, are not
   supported by Jiff. For locale oriented datetime formatting, please use the
-  [`icu`] crate.
+  [`icu`] crate via [`jiff-icu`].
 
 [`strftime`]: https://pubs.opengroup.org/onlinepubs/009695399/functions/strftime.html
 [`strptime`]: https://pubs.opengroup.org/onlinepubs/009695399/functions/strptime.html
 [ISO 8601 week-based]: https://en.wikipedia.org/wiki/ISO_week_date
 [`icu`]: https://docs.rs/icu
+[`jiff-icu`]: https://docs.rs/jiff-icu
 */
 
 use crate::{

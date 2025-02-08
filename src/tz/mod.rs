@@ -3281,7 +3281,7 @@ impl AmbiguousZoned {
 ///
 /// The main use case for daylight saving time status or time zone
 /// abbreviations is for formatting datetimes in an end user's locale. If you
-/// want this, consider using the [`icu`] crate.
+/// want this, consider using the [`icu`] crate via [`jiff-icu`].
 ///
 /// The lifetime parameter `'t` corresponds to the lifetime of the `TimeZone`
 /// that this info was extracted from.
@@ -3319,6 +3319,7 @@ impl AmbiguousZoned {
 /// ```
 ///
 /// [`icu`]: https://docs.rs/icu
+/// [`jiff-icu`]: https://docs.rs/jiff-icu
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct TimeZoneOffsetInfo<'t> {
     offset: Offset,

@@ -1121,7 +1121,7 @@ fn main() -> anyhow::Result<()> {
 
 ## [`icu`](https://docs.rs/icu) (v1.5.0)
 
-The `icu` crate fulfils a slightly different need than `jiff`. Its main
+The ICU4X project fulfils a slightly different need than `jiff`. Its main
 features are calendrical calculations (`icu::calendar`), supporting conversions
 between different calendar systems such as Gregorian, Buddhist, Islamic,
 Japanese, etc., as well as localized datetime formatting (`icu::datetime`).
@@ -1130,7 +1130,10 @@ It does not perform datetime or time-zone arithmetic, and does not have a
 timestamp or duration type.
 
 `icu` can be used to complement `jiff` when localized date formatting or
-calendar conversions are required:
+calendar conversions are required. To facilitate this, the
+[`jiff-icu`](https://docs.rs/jiff-icu) crate makes conversions between Jiff
+and ICU4X data types seamless. For example, to do localization starting from
+a Jiff data type:
 
 ```rust
 use icu::{
@@ -1139,23 +1142,14 @@ use icu::{
     locid::locale,
 };
 use jiff::Timestamp;
+use jiff_icu::ConvertFrom as _;
 
 fn main() -> anyhow::Result<()> {
     let ts: Timestamp = "2024-09-10T23:37:20Z".parse()?;
     let zoned = ts.in_tz("Asia/Tokyo")?;
 
     // Create ICU datetime.
-    let datetime = DateTime::try_new_iso_datetime(
-        i32::from(zoned.year()),
-        // These unwraps are all guaranteed to be
-        // correct because Jiff's bounds on allowable
-        // values fit within icu's bounds.
-        u8::try_from(zoned.month()).unwrap(),
-        u8::try_from(zoned.day()).unwrap(),
-        u8::try_from(zoned.hour()).unwrap(),
-        u8::try_from(zoned.minute()).unwrap(),
-        u8::try_from(zoned.second()).unwrap(),
-    )?;
+    let datetime = DateTime::convert_from(zoned.datetime());
 
     // Convert to Japanese calendar.
     let japanese_datetime = DateTime::new_from_iso(datetime, Japanese::new());
@@ -1182,4 +1176,5 @@ The above example requires the following dependency specifications:
 anyhow = "1.0.81"
 icu = { version = "1.5.0", features = ["std"] }
 jiff = { version = "0.1.0", features = ["serde"] }
+jiff-icu = { version = "0.1.0" }
 ```
