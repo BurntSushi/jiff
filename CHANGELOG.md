@@ -2,8 +2,38 @@
 
 0.2.0 (TBD)
 ===========
+This is a new semver incompatible release of Jiff. It contains several breaking
+changes. I expect most users of Jiff to be able to upgrade without any changes.
+The fundamental API organization of Jiff has not changed.
+
+Some of the highlights of this release include reducing footguns and better
+ecosystem integration.
+
+For reducing footguns, APIs on `Span` will no longer implicitly assume that
+days are always 24 hours long. And `Span` no longer implements `PartialEq` or
+`Eq` (instead favoring `span.fieldwise()` to create a value that supports naive
+fieldwise comparison). Moreover, when using `TimeZone::system()` (perhaps via
+`Zoned::now()`), if the system time zone could not be detected, then a special
+`Etc/Unknown` time zone will be used instead. This avoids erroring, but also
+surfaces itself to make it clearer that something has (perhaps) gone wrong.
+
+As for ecosystem integration, this release coincides with the publication
+of the [`jiff-icu`], [`jiff-sqlx`] and [`jiff-diesel`] crates. `jiff-icu`
+integrates with the [ICU4X project], and is now the recommended way to use
+Jiff to work with non-Gregorian calendars or to localize datetimes for end
+users. `jiff-sqlx` and `jiff-diesel` provide wrapper types that implement the
+necessary traits to make it ergonomic to store and retrieve Jiff values in a
+database using [SQLx] or [Diesel], respectively.
+
+Unless something unexpected happens, my plan is for the next breaking change
+release to be Jiff 1.0 in about 6 months. Once Jiff 1.0 is out, I plan to
+commit to it indefinitely.
 
 **BREAKING CHANGES**:
+
+This is an exhaustive list of breaking changes. Changes with the bolded
+**RUNTIME** prefix are changes that will not be caught by the Rust compiler.
+That is, they are changes in runtime behavior.
 
 * [#28](https://github.com/BurntSushi/jiff/issues/28):
 The deprecated `intz` routines on `Zoned`, `Timestamp`, `civil::DateTime` and
@@ -18,19 +48,19 @@ made it very easy to commit subtle bugs.
 * [#36](https://github.com/BurntSushi/jiff/issues/36):
 Turn panics during `Timestamp::saturing_add` into errors. Callers adding
 spans that are known to contain units of hours or smaller are guaranteed that
-this will not panic.
-* [#48](https://github.com/BurntSushi/jiff/issues/48):
+this will not return an error.
+* **RUNTIME** [#48](https://github.com/BurntSushi/jiff/issues/48):
 On `Span` APIs, days are no longer silently assumed to always be 24 hours when
 a relative datetime is not provided. Instead, to perform operations on units
 of days or bigger, callers must either provide a relative date or opt into
 invariant 24-hour days with `SpanRelativeTo::days_are_24_hours`. Shortcuts have
 been added to the span builders. For example, `SpanTotal::days_are_24_hours`.
-* [#147](https://github.com/BurntSushi/jiff/issues/147):
+* **RUNTIME** [#147](https://github.com/BurntSushi/jiff/issues/147):
 Change the behavior of the deprecated `%V` conversion specifier in
 `jiff::fmt::strtime` from formatting an IANA time zone identifier to formatting
 an ISO 8601 week number. To format an IANA time zone identifier, use `%Q` or
 `%:Q` (which were introduced in `jiff 0.1`).
-* [#212](https://github.com/BurntSushi/jiff/issues/212):
+* **RUNTIME** [#212](https://github.com/BurntSushi/jiff/issues/212):
 When parsing into a `Zoned` with a civil time corresponding to a gap, we treat
 all offsets as invalid and return an error. Previously, we would accept the
 offset as given. This brings us into line with Temporal's behavior. For
@@ -40,7 +70,7 @@ the future is serialized before a change in the daylight saving time rules.
 For more examples, see `jiff::fmt::temporal::DateTimeParser::offset_conflict`
 for details on how to change Jiff's default behavior. This behavior change also
 applies to `tz::OffsetConflict::PreferOffset`.
-* [#213](https://github.com/BurntSushi/jiff/issues/213):
+* **RUNTIME** [#213](https://github.com/BurntSushi/jiff/issues/213):
 Tweak the semantics of `tz::TimeZoneDatabase` so that it only initializes one
 internal tzdb instead of trying to find as many as possible. It is unlikely
 that you'll be impacted by this change, but it's meant to make the semantics
@@ -81,7 +111,7 @@ do less work in the common case (where we only need the offset), and for
 reducing the size of a `TimeZone` considerably in core-only environments.
 Callers previously using `TimeZone::to_offset` to get DST status and time zone
 abbreviation should now use `TimeZone::to_offset_info`.
-* [#230](https://github.com/BurntSushi/jiff/issues/230):
+* **RUNTIME** [#230](https://github.com/BurntSushi/jiff/issues/230):
 When `TimeZone::system()` cannot find a system configured time zone, `jiff
 0.1` would automatically fall back to `TimeZone::UTC` (with a WARN-level log
 message). In `jiff 0.2`, the fall back is now to `TimeZone::unknown()`, which
@@ -94,7 +124,7 @@ Enhancements:
 
 * [#136](https://github.com/BurntSushi/jiff/issues/136):
 When the special `SpanRelativeTo::days_are_24_hours()` marker is used, weeks
-will also be treated as invariant. That is, 7 24-hour days. In all cases,
+will also be treated as invariant. That is, seven 24-hour days. In all cases,
 working with years and months still requires a relative date.
 * [#228](https://github.com/BurntSushi/jiff/issues/228):
 It is now possible to forcefully use a bundled copy of the IANA time zone
@@ -104,6 +134,21 @@ enabling the `tzdb-bundle-always` crate feature and explicitly creating a
 APIs like `TimeZoneDatabase::get` to create a `TimeZone` and avoid any APIs
 that implicitly use the global time zone database (like `Timestamp::in_tz` or
 even `Zoned::from_str`).
+* [#238](https://github.com/BurntSushi/jiff/pull/238):
+Add integration with the ICU4X project via the [`jiff-icu`] crate. `jiff-icu`
+provides traits for easily converting between datetime types defined in Jiff
+and datetime types defined in ICU4X.
+* [#240](https://github.com/BurntSushi/jiff/pull/240):
+Add integration with the SQLx project via the [`jiff-sqlx`] crate. `jiff-sqlx`
+provides wrapper types that implement the necessary traits in SQLx for
+reasonably ergonomic integration. This includes PostgreSQL and SQLite support,
+but not MySQL support. (It's not clear if it's possible at present to provide
+MySQL supprot fro SQLx for datetime types outside of SQLx itself.)
+* [#241](https://github.com/BurntSushi/jiff/pull/241):
+Add integration with the Diesel project via the [`jiff-diesel`] crate.
+`jiff-diesel` provides wrapper types that implement the necessary traits in
+Diesel for reasonably ergonomic integration. This includes MySQL, PostgreSQL
+and SQLite support.
 
 
 0.1.29 (2025-02-02)
@@ -867,3 +912,9 @@ The initial release of Jiff.
 [IANA Time Zone Database]: https://www.iana.org/time-zones
 [PLATFORM]: PLATFORM.md
 [RFC 9110]: https://datatracker.ietf.org/doc/html/rfc9110#section-5.6.7-15
+[`jiff-icu`]: https://docs.rs/jiff-icu
+[`jiff-sqlx`]: https://docs.rs/jiff-sqlx
+[`jiff-diesel`]: https://docs.rs/jiff-diesel
+[ICU4X project]: https://github.com/unicode-org/icu4x
+[SQLx]: https://github.com/launchbadge/sqlx
+[Diesel]: https://github.com/diesel-rs/diesel
