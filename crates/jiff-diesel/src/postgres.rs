@@ -1,5 +1,5 @@
 use diesel::{
-    deserialize::{self, FromSql, Queryable},
+    deserialize::{self, FromSql},
     pg::{
         data_types::{PgDate, PgInterval, PgTime, PgTimestamp},
         Pg, PgValue,
@@ -24,14 +24,6 @@ static POSTGRES_EPOCH_TIMESTAMP: i64 = 946684800;
 static MIDNIGHT: civil::Time = civil::Time::midnight();
 static UTC: tz::TimeZone = tz::TimeZone::UTC;
 
-impl Queryable<sql_types::Timestamptz, Pg> for Timestamp {
-    type Row = Timestamp;
-
-    fn build(row: Timestamp) -> deserialize::Result<Timestamp> {
-        Ok(row)
-    }
-}
-
 impl ToSql<sql_types::Timestamptz, Pg> for Timestamp {
     fn to_sql<'b>(
         &'b self,
@@ -55,14 +47,6 @@ impl FromSql<sql_types::Timestamptz, Pg> for Timestamp {
         let epoch =
             jiff::Timestamp::from_second(POSTGRES_EPOCH_TIMESTAMP).unwrap();
         Ok(epoch.checked_add(micros)?.to_diesel())
-    }
-}
-
-impl Queryable<sql_types::Timestamp, Pg> for DateTime {
-    type Row = DateTime;
-
-    fn build(row: DateTime) -> deserialize::Result<DateTime> {
-        Ok(row)
     }
 }
 
@@ -96,14 +80,6 @@ impl FromSql<sql_types::Timestamp, Pg> for DateTime {
     }
 }
 
-impl Queryable<sql_types::Date, Pg> for Date {
-    type Row = Date;
-
-    fn build(row: Date) -> deserialize::Result<Date> {
-        Ok(row)
-    }
-}
-
 impl ToSql<sql_types::Date, Pg> for Date {
     fn to_sql<'b>(
         &'b self,
@@ -124,14 +100,6 @@ impl FromSql<sql_types::Date, Pg> for Date {
         let PgDate(days) = FromSql::<sql_types::Date, Pg>::from_sql(bytes)?;
         let span = jiff::Span::new().try_days(days)?;
         Ok(POSTGRES_EPOCH_DATE.checked_add(span)?.to_diesel())
-    }
-}
-
-impl Queryable<sql_types::Time, Pg> for Time {
-    type Row = Time;
-
-    fn build(row: Time) -> deserialize::Result<Time> {
-        Ok(row)
     }
 }
 
@@ -158,14 +126,6 @@ impl FromSql<sql_types::Time, Pg> for Time {
         let PgTime(micros) = FromSql::<sql_types::Time, Pg>::from_sql(bytes)?;
         let micros = jiff::SignedDuration::from_micros(micros);
         Ok(MIDNIGHT.checked_add(micros)?.to_diesel())
-    }
-}
-
-impl Queryable<sql_types::Interval, Pg> for Span {
-    type Row = Span;
-
-    fn build(row: Span) -> deserialize::Result<Span> {
-        Ok(row)
     }
 }
 

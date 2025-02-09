@@ -1,5 +1,5 @@
 use diesel::{
-    deserialize::{self, FromSql, Queryable},
+    deserialize::{self, FromSql},
     serialize::{self, IsNull, Output, ToSql},
     sql_types,
     sqlite::{Sqlite, SqliteValue},
@@ -9,14 +9,6 @@ use jiff::fmt::temporal::DateTimeParser;
 use crate::{Date, DateTime, Time, Timestamp, ToDiesel};
 
 static PARSER: DateTimeParser = DateTimeParser::new();
-
-impl Queryable<sql_types::TimestamptzSqlite, Sqlite> for Timestamp {
-    type Row = Timestamp;
-
-    fn build(row: Timestamp) -> deserialize::Result<Timestamp> {
-        Ok(row)
-    }
-}
 
 impl ToSql<sql_types::TimestamptzSqlite, Sqlite> for Timestamp {
     fn to_sql<'b>(
@@ -53,14 +45,6 @@ impl FromSql<sql_types::TimestamptzSqlite, Sqlite> for Timestamp {
     }
 }
 
-impl Queryable<sql_types::Timestamp, Sqlite> for DateTime {
-    type Row = DateTime;
-
-    fn build(row: DateTime) -> deserialize::Result<DateTime> {
-        Ok(row)
-    }
-}
-
 impl ToSql<sql_types::Timestamp, Sqlite> for DateTime {
     fn to_sql<'b>(
         &'b self,
@@ -87,14 +71,6 @@ impl FromSql<sql_types::Timestamp, Sqlite> for DateTime {
     }
 }
 
-impl Queryable<sql_types::Date, Sqlite> for Date {
-    type Row = Date;
-
-    fn build(row: Date) -> deserialize::Result<Date> {
-        Ok(row)
-    }
-}
-
 impl ToSql<sql_types::Date, Sqlite> for Date {
     fn to_sql<'b>(
         &'b self,
@@ -116,14 +92,6 @@ impl FromSql<sql_types::Date, Sqlite> for Date {
             FromSql::<sql_types::Date, Sqlite>::from_sql(value)?;
         let date = PARSER.parse_date(text)?;
         Ok(date.to_diesel())
-    }
-}
-
-impl Queryable<sql_types::Time, Sqlite> for Time {
-    type Row = Time;
-
-    fn build(row: Time) -> deserialize::Result<Time> {
-        Ok(row)
     }
 }
 
