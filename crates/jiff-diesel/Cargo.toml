@@ -21,8 +21,8 @@ path = "src/lib.rs"
 
 [features]
 default = []
-mysql = ["diesel/mysql"]
-postgres = ["diesel/postgres"]
+mysql = ["diesel/mysql_backend"]
+postgres = ["diesel/postgres_backend"]
 sqlite = ["diesel/sqlite"]
 
 [dependencies]
