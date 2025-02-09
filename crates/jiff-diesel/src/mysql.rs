@@ -1,5 +1,5 @@
 use diesel::{
-    deserialize::{self, FromSql, Queryable},
+    deserialize::{self, FromSql},
     mysql::{
         data_types::{MysqlTime, MysqlTimestampType},
         Mysql, MysqlValue,
@@ -12,14 +12,6 @@ use jiff::{civil, tz};
 use crate::{Date, DateTime, Time, Timestamp, ToDiesel};
 
 static UTC: tz::TimeZone = tz::TimeZone::UTC;
-
-impl Queryable<sql_types::Datetime, Mysql> for Timestamp {
-    type Row = Timestamp;
-
-    fn build(row: Timestamp) -> deserialize::Result<Timestamp> {
-        Ok(row)
-    }
-}
 
 impl ToSql<sql_types::Datetime, Mysql> for Timestamp {
     fn to_sql<'b>(
@@ -75,14 +67,6 @@ impl FromSql<sql_types::Datetime, Mysql> for Timestamp {
     }
 }
 
-impl Queryable<sql_types::Timestamp, Mysql> for DateTime {
-    type Row = DateTime;
-
-    fn build(row: DateTime) -> deserialize::Result<DateTime> {
-        Ok(row)
-    }
-}
-
 impl ToSql<sql_types::Timestamp, Mysql> for DateTime {
     fn to_sql<'b>(
         &'b self,
@@ -134,14 +118,6 @@ impl FromSql<sql_types::Timestamp, Mysql> for DateTime {
     }
 }
 
-impl Queryable<sql_types::Date, Mysql> for Date {
-    type Row = Date;
-
-    fn build(row: Date) -> deserialize::Result<Date> {
-        Ok(row)
-    }
-}
-
 impl ToSql<sql_types::Date, Mysql> for Date {
     fn to_sql<'b>(
         &'b self,
@@ -177,14 +153,6 @@ impl FromSql<sql_types::Date, Mysql> for Date {
             mysql_time.day.try_into()?,
         )?;
         Ok(date.to_diesel())
-    }
-}
-
-impl Queryable<sql_types::Time, Mysql> for Time {
-    type Row = Time;
-
-    fn build(row: Time) -> deserialize::Result<Time> {
-        Ok(row)
     }
 }
 

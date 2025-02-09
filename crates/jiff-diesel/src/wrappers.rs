@@ -22,7 +22,17 @@ pub trait ToDiesel {
 }
 
 /// A wrapper type for [`jiff::Timestamp`].
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    diesel::deserialize::FromSqlRow,
+)]
 #[cfg_attr(
     any(feature = "mysql", feature = "postgres", feature = "sqlite"),
     derive(diesel::expression::AsExpression)
@@ -70,6 +80,7 @@ impl From<Timestamp> for jiff::Timestamp {
     PartialOrd,
     Ord,
     diesel::expression::AsExpression,
+    diesel::deserialize::FromSqlRow,
 )]
 #[diesel(sql_type = diesel::sql_types::Timestamp)]
 pub struct DateTime(jiff::civil::DateTime);
@@ -112,6 +123,7 @@ impl From<DateTime> for jiff::civil::DateTime {
     PartialOrd,
     Ord,
     diesel::expression::AsExpression,
+    diesel::deserialize::FromSqlRow,
 )]
 #[diesel(sql_type = diesel::sql_types::Date)]
 pub struct Date(jiff::civil::Date);
@@ -154,6 +166,7 @@ impl From<Date> for jiff::civil::Date {
     PartialOrd,
     Ord,
     diesel::expression::AsExpression,
+    diesel::deserialize::FromSqlRow,
 )]
 #[diesel(sql_type = diesel::sql_types::Time)]
 pub struct Time(jiff::civil::Time);
@@ -194,7 +207,7 @@ impl From<Time> for jiff::civil::Time {
 /// `Span` into a PostgreSQL interval requires a relative datetime.
 /// Therefore, users wanting to store a `Span` will need to explicitly use a
 /// [`diesel::pg::data_types::PgInterval`] at least at encoding time.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, diesel::deserialize::FromSqlRow)]
 pub struct Span(jiff::Span);
 
 impl Span {
