@@ -28,7 +28,7 @@ fn example_datetime_roundtrip(
     conn: &mut MysqlConnection,
 ) -> anyhow::Result<()> {
     diesel::table! {
-        jiffs {
+        datetimes {
             id -> Integer, // Diesel tables require an ID column.
             ts -> Datetime,
             dt -> Timestamp,
@@ -38,19 +38,20 @@ fn example_datetime_roundtrip(
     }
 
     #[derive(Debug, PartialEq, QueryableByName)]
+    #[diesel(table_name = datetimes)]
     #[diesel(check_for_backend(diesel::mysql::Mysql))]
-    struct Jiff {
+    struct Row {
         #[diesel(deserialize_as = jiff_diesel::Timestamp)]
-        pub ts: jiff::Timestamp,
+        ts: jiff::Timestamp,
         #[diesel(deserialize_as = jiff_diesel::DateTime)]
-        pub dt: jiff::civil::DateTime,
+        dt: jiff::civil::DateTime,
         #[diesel(deserialize_as = jiff_diesel::Date)]
-        pub d: jiff::civil::Date,
+        d: jiff::civil::Date,
         #[diesel(deserialize_as = jiff_diesel::Time)]
-        pub t: jiff::civil::Time,
+        t: jiff::civil::Time,
     }
 
-    let given = Jiff {
+    let given = Row {
         ts: "1970-01-01T00:00:00Z".parse()?,
         dt: civil::date(2025, 7, 20).at(0, 0, 0, 0),
         d: civil::date(1999, 1, 8),
@@ -59,7 +60,12 @@ fn example_datetime_roundtrip(
 
     // We need to name the columns as Diesel's sql_query matches fields by name.
     let got = sql_query(
-        "select CAST(? AS DATETIME) as ts, CAST(? AS DATETIME) as dt, CAST(? AS DATE) as d, CAST(? AS TIME(6)) as t",
+        "select
+            CAST(? AS DATETIME) as ts,
+            CAST(? AS DATETIME) as dt,
+            CAST(? AS DATE) as d,
+            CAST(? AS TIME(6)) as t
+        ",
     )
     .bind::<sql_types::Datetime, _>(&given.ts.to_diesel())
     .bind::<sql_types::Timestamp, _>(&given.dt.to_diesel())

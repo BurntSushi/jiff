@@ -20,7 +20,7 @@ fn main() -> anyhow::Result<()> {
 /// Performs a round-trip with all of Jiff's datetime types.
 fn example_datetime_roundtrip(conn: &mut PgConnection) -> anyhow::Result<()> {
     diesel::table! {
-        jiffs {
+        datetimes {
             id -> Integer, // Diesel tables require an ID column.
             ts -> Timestamptz,
             dt -> Timestamp,
@@ -30,19 +30,20 @@ fn example_datetime_roundtrip(conn: &mut PgConnection) -> anyhow::Result<()> {
     }
 
     #[derive(Debug, PartialEq, QueryableByName)]
+    #[diesel(table_name = datetimes)]
     #[diesel(check_for_backend(diesel::pg::Pg))]
-    struct Jiff {
+    struct Row {
         #[diesel(deserialize_as = jiff_diesel::Timestamp)]
-        pub ts: jiff::Timestamp,
+        ts: jiff::Timestamp,
         #[diesel(deserialize_as = jiff_diesel::DateTime)]
-        pub dt: jiff::civil::DateTime,
+        dt: jiff::civil::DateTime,
         #[diesel(deserialize_as = jiff_diesel::Date)]
-        pub d: jiff::civil::Date,
+        d: jiff::civil::Date,
         #[diesel(deserialize_as = jiff_diesel::Time)]
-        pub t: jiff::civil::Time,
+        t: jiff::civil::Time,
     }
 
-    let given = Jiff {
+    let given = Row {
         ts: "1970-01-01T00:00:00Z".parse()?,
         dt: civil::date(2025, 7, 20).at(0, 0, 0, 0),
         d: civil::date(1999, 1, 8),
@@ -50,12 +51,19 @@ fn example_datetime_roundtrip(conn: &mut PgConnection) -> anyhow::Result<()> {
     };
 
     // We need to name the columns as Diesel's sql_query matches fields by name.
-    let got = sql_query("select $1 as ts, $2 as dt, $3 as d, $4 as t")
-        .bind::<sql_types::Timestamptz, _>(&given.ts.to_diesel())
-        .bind::<sql_types::Timestamp, _>(&given.dt.to_diesel())
-        .bind::<sql_types::Date, _>(&given.d.to_diesel())
-        .bind::<sql_types::Time, _>(&given.t.to_diesel())
-        .get_result(conn)?;
+    let got = sql_query(
+        "select
+            $1 as ts,
+            $2 as dt,
+            $3 as d,
+            $4 as t
+        ",
+    )
+    .bind::<sql_types::Timestamptz, _>(&given.ts.to_diesel())
+    .bind::<sql_types::Timestamp, _>(&given.dt.to_diesel())
+    .bind::<sql_types::Date, _>(&given.d.to_diesel())
+    .bind::<sql_types::Time, _>(&given.t.to_diesel())
+    .get_result(conn)?;
     assert_eq!(given, got);
 
     Ok(())
