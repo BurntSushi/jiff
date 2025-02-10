@@ -1,7 +1,7 @@
 use anyhow::Context;
 use diesel::{
     connection::Connection, dsl::sql, query_dsl::RunQueryDsl, select,
-    sql_types, sqlite::SqliteConnection,
+    sql_query, sql_types, sqlite::SqliteConnection, QueryableByName,
 };
 use jiff::civil;
 use jiff_diesel::ToDiesel;
@@ -21,30 +21,52 @@ fn main() -> anyhow::Result<()> {
 fn example_datetime_roundtrip(
     conn: &mut SqliteConnection,
 ) -> anyhow::Result<()> {
-    // Integration with jiff::Timestamp
-    let ts = "1970-01-01T00:00:00Z".parse::<jiff::Timestamp>()?.to_diesel();
-    let query =
-        select(sql::<sql_types::TimestamptzSqlite>("'1970-01-01 00:00:00Z'"));
-    let got: jiff_diesel::Timestamp = query.get_result(conn)?;
-    assert_eq!(ts, got);
+    diesel::table! {
+        datetimes {
+            id -> Integer, // Diesel tables require an ID column.
+            ts -> TimestamptzSqlite,
+            dt -> Timestamp,
+            d -> Date,
+            t -> Time
+        }
+    }
 
-    // Integration with jiff::civil::DateTime
-    let dt = civil::date(2025, 7, 20).at(0, 0, 0, 0).to_diesel();
-    let query = select(sql::<sql_types::Timestamp>("'2025-07-20 00:00:00'"));
-    let got: jiff_diesel::DateTime = query.get_result(conn)?;
-    assert_eq!(dt, got);
+    #[derive(Debug, PartialEq, QueryableByName)]
+    #[diesel(table_name = datetimes)]
+    #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+    struct Row {
+        #[diesel(deserialize_as = jiff_diesel::Timestamp)]
+        ts: jiff::Timestamp,
+        #[diesel(deserialize_as = jiff_diesel::DateTime)]
+        dt: jiff::civil::DateTime,
+        #[diesel(deserialize_as = jiff_diesel::Date)]
+        d: jiff::civil::Date,
+        #[diesel(deserialize_as = jiff_diesel::Time)]
+        t: jiff::civil::Time,
+    }
 
-    // Integration with jiff::civil::Date
-    let date = civil::date(1999, 1, 8).to_diesel();
-    let query = select(sql::<sql_types::Date>("'1999-01-08'"));
-    let got: jiff_diesel::Date = query.get_result(conn)?;
-    assert_eq!(date, got);
+    let given = Row {
+        ts: "1970-01-01T00:00:00Z".parse()?,
+        dt: civil::date(2025, 7, 20).at(0, 0, 0, 0),
+        d: civil::date(1999, 1, 8),
+        t: civil::time(23, 59, 59, 999_999_000),
+    };
 
-    // Integration with jiff::civil::Time
-    let time = civil::time(23, 59, 59, 999_999_000).to_diesel();
-    let query = select(sql::<sql_types::Time>("'23:59:59.999999'"));
-    let got: jiff_diesel::Time = query.get_result(conn)?;
-    assert_eq!(time, got);
+    // We need to name the columns as Diesel's sql_query matches fields by name.
+    let got = sql_query(
+        "select
+            $1 as ts,
+            $2 as dt,
+            $3 as d,
+            $4 as t
+        ",
+    )
+    .bind::<sql_types::TimestamptzSqlite, _>(&given.ts.to_diesel())
+    .bind::<sql_types::Timestamp, _>(&given.dt.to_diesel())
+    .bind::<sql_types::Date, _>(&given.d.to_diesel())
+    .bind::<sql_types::Time, _>(&given.t.to_diesel())
+    .get_result(conn)?;
+    assert_eq!(given, got);
 
     Ok(())
 }
