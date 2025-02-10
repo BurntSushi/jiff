@@ -6,13 +6,13 @@ license = "Unlicense OR MIT"
 homepage = "https://github.com/BurntSushi/jiff/tree/master/crates/jiff-diesel"
 repository = "https://github.com/BurntSushi/jiff"
 documentation = "https://docs.rs/jiff-diesel"
-description = "Integration for Jiff in Diesel."
+description = "Integration for Jiff with Diesel."
 categories = ["date-and-time"]
 keywords = ["date", "time", "jiff", "diesel", "zone"]
 workspace = "../.."
 edition = "2021"
 rust-version = "1.70"
-include = ["/*.rs", "COPYING", "LICENSE-MIT", "UNLICENSE"]
+include = ["/src/*.rs", "COPYING", "LICENSE-MIT", "UNLICENSE"]
 
 [lib]
 name = "jiff_diesel"
@@ -26,8 +26,8 @@ postgres = ["diesel/postgres_backend"]
 sqlite = ["diesel/sqlite"]
 
 [dependencies]
-jiff = { path = "../..", default-features = false, features = ["std"] }
+jiff = { version = "0.1.29", path = "../..", default-features = false, features = ["std"] }
 diesel = { version = "2.0.0", default-features = false }
 
 [dev-dependencies]
-jiff = { path = "../..", default-features = true }
+jiff = { version = "0.1.29", path = "../..", default-features = true }
