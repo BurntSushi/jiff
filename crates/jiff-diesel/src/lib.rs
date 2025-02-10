@@ -27,6 +27,11 @@ from the wrapper type to the corresponding Jiff type.
 * There are `From` trait implementations from the wrapper type to the
 corresponding Jiff type, and vice versa.
 
+Moreover, the types with a `Nullable` prefix are meant to be wrapper types
+for optional values. For example, `NullableTimestamp` is a wrapper type for
+`Option<jiff::Timestamp>`. [Diesel requires additional wrapper types to
+express nullable values.][diesel-optional-wrapper-types]
+
 # Database support
 
 At present, MySQL, PostgreSQL and SQLite are supported.
@@ -56,13 +61,19 @@ itself.
 [examples]: https://github.com/BurntSushi/jiff/tree/master/examples
 [`chrono`]: https://docs.rs/chrono
 [`time`]: https://docs.rs/time
+[diesel-optional-wrapper-types]: https://github.com/diesel-rs/diesel/discussions/4425
 */
 #![deny(missing_docs)]
 
+pub use self::nullable::{
+    NullableDate, NullableDateTime, NullableSpan, NullableTime,
+    NullableTimestamp,
+};
 pub use self::wrappers::{Date, DateTime, Span, Time, Timestamp, ToDiesel};
 
 #[cfg(feature = "mysql")]
 mod mysql;
+mod nullable;
 #[cfg(feature = "postgres")]
 mod postgres;
 #[cfg(feature = "sqlite")]
