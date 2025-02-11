@@ -102,11 +102,6 @@ pub(crate) use span_eq;
 ///
 /// # Negative spans
 ///
-/// **WARNING:** As of nightly Rust 2024-07-26, negating spans like
-/// `-2.hours()` triggers a deny-by-default lint due to an ambiguous negative
-/// literal. However, in Jiff's case, this is a false positive. Feel free to
-/// `allow` the lint or write the span as `(-2).hours()` or `-(2.hours())`.
-///
 /// A span may be negative. All of these are equivalent:
 ///
 /// ```
@@ -548,10 +543,37 @@ pub(crate) use span_eq;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
-/// For simplicity, weeks are always considered non-uniform. And generally
-/// speaking, weeks only appear in a `Span` if they were explicitly put there
-/// by the caller or if they were explicitly requested by the caller in an API.
-/// For example:
+/// The APIs on `Span` will otherwise treat days as non-uniform unless a
+/// relative civil date is given, or there is an explicit opt-in to invariant
+/// 24-hour days. For example:
+///
+/// ```
+/// use jiff::{civil, SpanRelativeTo, ToSpan, Unit};
+///
+/// let span = 1.day();
+///
+/// // An error because days aren't always 24 hours:
+/// assert_eq!(
+///     span.total(Unit::Hour).unwrap_err().to_string(),
+///     "using unit 'day' in a span or configuration requires that either \
+///      a relative reference time be given or \
+///      `SpanRelativeTo::days_are_24_hours()` is used to indicate \
+///      invariant 24-hour days, but neither were provided",
+/// );
+/// // Opt into invariant 24 hour days without a relative date:
+/// let marker = SpanRelativeTo::days_are_24_hours();
+/// let hours = span.total((Unit::Hour, marker))?;
+/// // Or use a relative civil date, and all days are 24 hours:
+/// let date = civil::date(2020, 1, 1);
+/// let hours = span.total((Unit::Hour, date))?;
+/// assert_eq!(hours, 24.0);
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// In Jiff, all weeks are 7 days. And generally speaking, weeks only appear in
+/// a `Span` if they were explicitly put there by the caller or if they were
+/// explicitly requested by the caller in an API. For example:
 ///
 /// ```
 /// use jiff::{civil::date, ToSpan, Unit};
@@ -629,20 +651,21 @@ pub(crate) use span_eq;
 ///
 /// Note that an error will occur when converting a `Span` to a
 /// `std::time::Duration` using the `TryFrom` trait implementation with units
-/// bigger than days:
+/// bigger than hours:
 ///
 /// ```
 /// use std::time::Duration;
 ///
 /// use jiff::ToSpan;
 ///
-/// let span = 2.months().hours(10);
+/// let span = 2.days().hours(10);
 /// assert_eq!(
 ///     Duration::try_from(span).unwrap_err().to_string(),
 ///     "failed to convert span to duration without relative datetime \
-///      (must use `Span::to_duration` instead): using unit 'month' in a \
-///      span or configuration requires that a relative reference time \
-///      be given, but none was provided",
+///      (must use `Span::to_duration` instead): using unit 'day' in a \
+///      span or configuration requires that either a relative reference \
+///      time be given or `SpanRelativeTo::days_are_24_hours()` is used \
+///      to indicate invariant 24-hour days, but neither were provided",
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
