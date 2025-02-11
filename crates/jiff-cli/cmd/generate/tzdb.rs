@@ -52,7 +52,8 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
     let jiff_tzdb = config.jiff_tzdb();
 
     let mut buf = vec![];
-    let mut tzif_to_names: BTreeMap<Vec<u8>, BTreeSet<String>> = BTreeMap::new();
+    let mut tzif_to_names: BTreeMap<Vec<u8>, BTreeSet<String>> =
+        BTreeMap::new();
     for result in walkdir::WalkDir::new(zoneinfo).sort_by_file_name() {
         let dent = result.with_context(|| {
             format!(
@@ -115,7 +116,10 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
             format!("time zone name '{tzname:?}' is not valid UTF-8")
         })?;
 
-        tzif_to_names.entry(buf.clone()).or_default().insert(tzname.to_string());
+        tzif_to_names
+            .entry(buf.clone())
+            .or_default()
+            .insert(tzname.to_string());
     }
 
     let dat_path = jiff_tzdb.join("concatenated-zoneinfo.dat");
@@ -134,10 +138,7 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
             format!("could not convert buffer length {} to u32", buf.len())
         })?;
         TimeZone::tzif("dummy", &buf).with_context(|| {
-            format!(
-                "failed to parse TZif data from {representative}",
-                
-            )
+            format!("failed to parse TZif data from {representative}",)
         })?;
 
         let offset_end = offset.checked_add(len).with_context(|| {
