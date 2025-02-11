@@ -1,6 +1,6 @@
 [package]
 name = "jiff-sqlx"
-version = "0.0.1"  #:version
+version = "0.1.0"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 license = "Unlicense OR MIT"
 homepage = "https://github.com/BurntSushi/jiff/tree/master/crates/jiff-sqlx"
@@ -25,10 +25,10 @@ postgres = ["dep:sqlx-postgres"]
 sqlite = ["dep:sqlx-sqlite"]
 
 [dependencies]
-jiff = { version = "0.1.29", path = "../..", default-features = false }
+jiff = { version = "0.2.0", path = "../..", default-features = false }
 sqlx-core = { version = "0.8.0", default-features = false }
 sqlx-postgres = { version = "0.8.0", default-features = false, optional = true }
 sqlx-sqlite = { version = "0.8.0", default-features = false, optional = true }
 
 [dev-dependencies]
-jiff = { version = "0.1.29", path = "../..", default-features = true }
+jiff = { version = "0.2.0", path = "../..", default-features = true }

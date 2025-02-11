@@ -31,14 +31,17 @@ include = [
 [workspace]
 members = [
   "crates/jiff-cli",
-  "crates/jiff-diesel",
-  "crates/jiff-icu",
-  "crates/jiff-sqlx",
+  # "crates/jiff-diesel",
+  # "crates/jiff-icu",
+  # "crates/jiff-sqlx",
   "crates/jiff-tzdb",
   "crates/jiff-tzdb-platform",
   "examples/*",
 ]
 exclude = [
+  "crates/jiff-diesel",
+  "crates/jiff-icu",
+  "crates/jiff-sqlx",
   "examples/diesel-mysql",
   "examples/diesel-postgres",
   "examples/diesel-sqlite",
