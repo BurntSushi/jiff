@@ -42,7 +42,7 @@ should be able to run any of the programs in this section:
 anyhow = "1.0.81"
 chrono = "0.4.38"
 chrono-tz = { version = "0.9.0", features = ["serde"] }
-jiff = { version = "0.1.0", features = ["serde"] }
+jiff = { version = "0.2.0", features = ["serde"] }
 serde = "1.0.203"
 serde_json = "1.0.117"
 tzfile = "0.1.3"
@@ -688,7 +688,7 @@ should be able to run any of the programs in this section:
 
 ```toml
 anyhow = "1.0.81"
-jiff = { version = "0.1.0", features = ["serde"] }
+jiff = { version = "0.2.0", features = ["serde"] }
 time = { version = "0.3.36", features = ["local-offset", "macros", "parsing"] }
 ```
 
@@ -1034,7 +1034,7 @@ should be able to run any of the programs in this section:
 ```toml
 anyhow = "1.0.81"
 hifitime = "3.9.0"
-jiff = { version = "0.1.0", features = ["serde"] }
+jiff = { version = "0.2.0", features = ["serde"] }
 ```
 
 ### Time zone database integration

@@ -1,7 +1,7 @@
 # CHANGELOG
 
-0.2.0 (TBD)
-===========
+0.2.0 (2025-02-10)
+==================
 This is a new semver incompatible release of Jiff. It contains several breaking
 changes. I expect most users of Jiff to be able to upgrade without any changes.
 The fundamental API organization of Jiff has not changed.

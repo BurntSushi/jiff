@@ -21,7 +21,7 @@ path = "src/bench.rs"
 
 [dependencies]
 criterion = "0.5.1"
-jiff = { version = "0.1.0", path = ".." }
+jiff = { path = ".." }
 
 chrono = "0.4.38"
 chrono-tz = "0.9.0"

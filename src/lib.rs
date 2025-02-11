@@ -176,8 +176,8 @@ Fourth, run it with `cargo run`:
 
 ```text
 $ cargo run
-   Compiling jiff v0.1.0 (/home/andrew/rust/jiff)
-   Compiling jiff-play v0.1.0 (/home/andrew/tmp/scratch/rust/jiff-play)
+   Compiling jiff v0.2.0 (/home/andrew/rust/jiff)
+   Compiling jiff-play v0.2.0 (/home/andrew/tmp/scratch/rust/jiff-play)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.37s
      Running `target/debug/jiff-play`
 2024-07-10T19:54:20-04:00[America/New_York]
