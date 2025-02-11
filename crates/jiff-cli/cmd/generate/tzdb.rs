@@ -8,7 +8,7 @@ we can ship one binary file.
 */
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs::File,
     io::{BufWriter, Read, Seek, Write},
     ops::Range,
@@ -51,17 +51,8 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
     let zoneinfo = config.zoneinfo()?;
     let jiff_tzdb = config.jiff_tzdb();
 
-    let dat_path = jiff_tzdb.join("concatenated-zoneinfo.dat");
-    let mut dat_file =
-        BufWriter::new(File::create(&dat_path).with_context(|| {
-            format!("failed to create {}", dat_path.display())
-        })?);
-
     let mut buf = vec![];
-    let mut offset: u32 = 0;
-    // Map from ASCII lowercase TZ name to
-    // (canonical name, offset range into dat).
-    let mut tzname_to_range: BTreeMap<String, (String, Range<u32>)> =
+    let mut tzif_to_names: BTreeMap<Vec<u8>, BTreeSet<String>> =
         BTreeMap::new();
     for result in walkdir::WalkDir::new(zoneinfo).sort_by_file_name() {
         let dent = result.with_context(|| {
@@ -113,9 +104,6 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
                 path = path.display()
             )
         })?;
-        let len = u32::try_from(buf.len()).with_context(|| {
-            format!("could not convert buffer length {} to u32", buf.len())
-        })?;
 
         let tzname = path.strip_prefix(zoneinfo).with_context(|| {
             format!(
@@ -127,37 +115,53 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
         let tzname = tzname.to_str().with_context(|| {
             format!("time zone name '{tzname:?}' is not valid UTF-8")
         })?;
-        let tz = TimeZone::tzif(tzname, &buf).with_context(|| {
-            format!(
-                "failed to parse TZif data from {path}",
-                path = path.display()
-            )
+
+        tzif_to_names
+            .entry(buf.clone())
+            .or_default()
+            .insert(tzname.to_string());
+    }
+
+    let dat_path = jiff_tzdb.join("concatenated-zoneinfo.dat");
+    let mut dat_file =
+        BufWriter::new(File::create(&dat_path).with_context(|| {
+            format!("failed to create {}", dat_path.display())
+        })?);
+    let mut offset: u32 = 0;
+    // Map from ASCII lowercase TZ name to
+    // (canonical name, offset range into dat).
+    let mut tzname_to_range: BTreeMap<String, (String, Range<u32>)> =
+        BTreeMap::new();
+    for (buf, tznames) in tzif_to_names {
+        let representative = tznames.first().unwrap().clone();
+        let len = u32::try_from(buf.len()).with_context(|| {
+            format!("could not convert buffer length {} to u32", buf.len())
         })?;
-        let iana_name = tz.iana_name().expect("IANA time zone").to_string();
-        assert_eq!(tzname, iana_name);
+        TimeZone::tzif("dummy", &buf).with_context(|| {
+            format!("failed to parse TZif data from {representative}",)
+        })?;
 
         let offset_end = offset.checked_add(len).with_context(|| {
             format!(
                 "adding offset {offset} to TZif data length {len} \
-                 resulted in overflow while handling time zone {tzname}",
+                 resulted in overflow while handling time zone {representative}",
             )
         })?;
-        let iana_name_lower = iana_name.to_ascii_lowercase();
-        if tzname_to_range
-            .insert(iana_name_lower, (iana_name, offset..offset_end))
-            .is_some()
-        {
-            anyhow::bail!(
-                "found duplicate TZif file for time zone {tzname} \
-                 at file {path}",
-                path = path.display(),
-            );
+        for tzname in tznames {
+            let tzname_lower = tzname.to_ascii_lowercase();
+            if let Some((other, _)) = tzname_to_range
+                .insert(tzname_lower, (tzname.clone(), offset..offset_end))
+            {
+                anyhow::bail!(
+                    "found duplicate TZif file for time zone {tzname}: {other}"
+                );
+            }
         }
         offset = offset_end;
 
         dat_file.write_all(&buf).with_context(|| {
             format!(
-                "failed to write TZif data for '{tzname}' to {}",
+                "failed to write TZif data for '{representative}' to {}",
                 dat_path.display()
             )
         })?;
