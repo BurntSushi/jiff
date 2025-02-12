@@ -1,0 +1,32 @@
+[package]
+name = "jiff-aws"
+version = "0.1.0"  #:version
+authors = ["Andrew Gallant <jamslam@gmail.com>"]
+license = "Unlicense OR MIT"
+homepage = "https://github.com/BurntSushi/jiff/tree/master/crates/jiff-aws"
+repository = "https://github.com/BurntSushi/jiff"
+documentation = "https://docs.rs/jiff-aws"
+description = "Integration for Jiff with The AWS SDK for Rust"
+categories = ["date-and-time"]
+keywords = ["date", "time", "jiff", "aws", "zone"]
+workspace = "../.."
+edition = "2021"
+rust-version = "1.70"
+include = ["/src/*.rs", "/*.dat", "COPYING", "LICENSE-MIT", "UNLICENSE"]
+
+[lib]
+name = "jiff_aws"
+bench = false
+path = "src/lib.rs"
+
+[features]
+default = ["std"]
+std = ["alloc", "jiff/std"]
+alloc = ["jiff/alloc"]
+
+[dependencies]
+aws-smithy-types = "1.2"
+jiff = { version = "0.2.0", path = "../..", default-features = false }
+
+[dev-dependencies]
+jiff = { version = "0.2.0", path = "../..", default-features = true }

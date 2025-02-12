@@ -35,6 +35,7 @@ members = [
   "crates/jiff-icu",
   "crates/jiff-sqlx",
   "crates/jiff-static",
+  "crates/jiff-aws",
   "crates/jiff-tzdb",
   "crates/jiff-tzdb-platform",
   "examples/*",
