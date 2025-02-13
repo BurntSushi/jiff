@@ -523,6 +523,7 @@ pub(crate) trait ErrorContext {
 }
 
 impl ErrorContext for Error {
+    #[inline(always)]
     fn context(self, consequent: impl IntoError) -> Error {
         #[cfg(feature = "alloc")]
         {
@@ -543,6 +544,7 @@ impl ErrorContext for Error {
         }
     }
 
+    #[inline(always)]
     fn with_context<E: IntoError>(
         self,
         consequent: impl FnOnce() -> E,
@@ -568,10 +570,12 @@ impl ErrorContext for Error {
 }
 
 impl<T> ErrorContext for Result<T, Error> {
+    #[inline(always)]
     fn context(self, consequent: impl IntoError) -> Result<T, Error> {
         self.map_err(|err| err.context(consequent))
     }
 
+    #[inline(always)]
     fn with_context<E: IntoError>(
         self,
         consequent: impl FnOnce() -> E,

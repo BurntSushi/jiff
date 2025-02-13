@@ -166,6 +166,7 @@ where
 ///
 /// If the position is greater than the length of the slice given, then this
 /// returns `None`.
+#[inline(always)]
 pub(crate) fn split(input: &[u8], at: usize) -> Option<(&[u8], &[u8])> {
     if at > input.len() {
         None

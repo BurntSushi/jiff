@@ -496,6 +496,25 @@ impl Zoned {
         Zoned { inner }
     }
 
+    /// A crate internal constructor for building a `Zoned` from its
+    /// constituent parts.
+    ///
+    /// This should basically never be exposed, because it can be quite tricky
+    /// to get the parts correct.
+    ///
+    /// See `civil::DateTime::to_zoned` for a use case for this routine. (Why
+    /// do you think? Perf!)
+    #[inline]
+    pub(crate) fn from_parts(
+        timestamp: Timestamp,
+        time_zone: TimeZone,
+        offset: Offset,
+        datetime: DateTime,
+    ) -> Zoned {
+        let inner = ZonedInner { timestamp, datetime, offset, time_zone };
+        Zoned { inner }
+    }
+
     /// Create a builder for constructing a new `DateTime` from the fields of
     /// this datetime.
     ///
@@ -5222,7 +5241,7 @@ impl ZonedWith {
     /// ```
     /// use jiff::{civil::date, tz, Zoned};
     ///
-    /// // This datetime is unambiguous.
+    /// // This datetime is unambiguous. But `2024-03-10T02:05` is!
     /// let zdt1 = "2024-03-11T02:05[America/New_York]".parse::<Zoned>()?;
     /// assert_eq!(zdt1.offset(), tz::offset(-4));
     /// // But the same time on March 10 is ambiguous because there is a gap!

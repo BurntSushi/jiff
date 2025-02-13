@@ -210,7 +210,7 @@ pub(crate) type ZonedDayNanoseconds = ri64<
 /// appears faster.
 ///
 /// [date-algorithms]: http://howardhinnant.github.io/date_algorithms.html
-pub(crate) type UnixEpochDays = ri32<
+pub(crate) type UnixEpochDay = ri32<
     {
         (UnixSeconds::MIN + SpanZoneOffset::MIN)
             .div_euclid(SECONDS_PER_CIVIL_DAY.bound())

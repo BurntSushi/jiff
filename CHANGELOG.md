@@ -6,6 +6,11 @@ TODO
 
 Enhancements:
 
+* [#235](https://github.com/BurntSushi/jiff/discussions/235),
+  [#255](https://github.com/BurntSushi/jiff/discussions/255),
+  [#266](https://github.com/BurntSushi/jiff/pull/266):
+A massive number of performance improvements. Jiff should now generally be
+faster than `chrono` and `time`.
 * [#263](https://github.com/BurntSushi/jiff/issues/263):
 Add `Timestamp::constant` for constructing timestamps in `const` context.
 

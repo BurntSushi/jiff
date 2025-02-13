@@ -20,7 +20,9 @@ use crate::util::libm::Float;
 /// to the entire duration. That is, either _both_ the seconds and the
 /// fractional nanoseconds are negative or _neither_ are. Stated differently,
 /// it is guaranteed that the signs of [`SignedDuration::as_secs`] and
-/// [`SignedDuration::subsec_nanos`] are always the same.
+/// [`SignedDuration::subsec_nanos`] are always the same, or one component is
+/// zero. (For example, `-1 seconds` and `0 nanoseconds`, or `0 seconds` and
+/// `-1 nanoseconds`.)
 ///
 /// # Parsing and printing
 ///
@@ -929,34 +931,38 @@ impl SignedDuration {
         // we can skip the div and modulus operations.
 
         // When |nanos| exceeds 1 second, we balance the excess up to seconds.
-        if nanos >= NANOS_PER_SEC {
-            nanos -= NANOS_PER_SEC;
-            secs = match secs.checked_add(1) {
-                None => return None,
-                Some(secs) => secs,
-            };
-        } else if nanos <= -NANOS_PER_SEC {
-            nanos += NANOS_PER_SEC;
-            secs = match secs.checked_sub(1) {
-                None => return None,
-                Some(secs) => secs,
-            };
-        }
-        if secs != 0 && nanos != 0 && secs.signum() != (nanos.signum() as i64)
-        {
-            if secs < 0 {
-                debug_assert!(nanos > 0);
-                // OK because secs<0.
-                secs += 1;
-                // OK because nanos>0.
+        if nanos != 0 {
+            if nanos >= NANOS_PER_SEC {
                 nanos -= NANOS_PER_SEC;
-            } else {
-                debug_assert!(secs > 0);
-                debug_assert!(nanos < 0);
-                // OK because secs>0.
-                secs -= 1;
-                // OK because nanos<0.
+                secs = match secs.checked_add(1) {
+                    None => return None,
+                    Some(secs) => secs,
+                };
+            } else if nanos <= -NANOS_PER_SEC {
                 nanos += NANOS_PER_SEC;
+                secs = match secs.checked_sub(1) {
+                    None => return None,
+                    Some(secs) => secs,
+                };
+            }
+            if secs != 0
+                && nanos != 0
+                && secs.signum() != (nanos.signum() as i64)
+            {
+                if secs < 0 {
+                    debug_assert!(nanos > 0);
+                    // OK because secs<0.
+                    secs += 1;
+                    // OK because nanos>0.
+                    nanos -= NANOS_PER_SEC;
+                } else {
+                    debug_assert!(secs > 0);
+                    debug_assert!(nanos < 0);
+                    // OK because secs>0.
+                    secs -= 1;
+                    // OK because nanos<0.
+                    nanos += NANOS_PER_SEC;
+                }
             }
         }
         Some(SignedDuration::new_unchecked(secs, nanos))

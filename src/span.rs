@@ -709,6 +709,7 @@ pub(crate) use span_eq;
 #[derive(Clone, Copy)]
 pub struct Span {
     sign: Sign,
+    units: UnitSet,
     years: t::SpanYears,
     months: t::SpanMonths,
     weeks: t::SpanWeeks,
@@ -1557,6 +1558,13 @@ impl Span {
             self.nanoseconds =
                 self.nanoseconds.try_checked_mul("nanoseconds", rhs.abs())?;
         }
+        // N.B. We don't need to update `self.units` here since it shouldn't
+        // change. The only way it could is if a unit goes from zero to
+        // non-zero (which can't happen, because multiplication by zero is
+        // always zero), or if a unit goes from non-zero to zero. That also
+        // can't happen because we handle the case of the factor being zero
+        // specially above, and it returns a `Span` will all units zero
+        // correctly.
         Ok(self)
     }
 
@@ -2464,6 +2472,7 @@ impl Span {
         let years = years.rinto();
         let mut span = Span { years: years.abs(), ..self };
         span.sign = self.resign(years, &span);
+        span.units = span.units.set(Unit::Year, years == 0);
         span
     }
 
@@ -2475,6 +2484,7 @@ impl Span {
         let months = months.rinto();
         let mut span = Span { months: months.abs(), ..self };
         span.sign = self.resign(months, &span);
+        span.units = span.units.set(Unit::Month, months == 0);
         span
     }
 
@@ -2483,6 +2493,7 @@ impl Span {
         let weeks = weeks.rinto();
         let mut span = Span { weeks: weeks.abs(), ..self };
         span.sign = self.resign(weeks, &span);
+        span.units = span.units.set(Unit::Week, weeks == 0);
         span
     }
 
@@ -2491,6 +2502,7 @@ impl Span {
         let days = days.rinto();
         let mut span = Span { days: days.abs(), ..self };
         span.sign = self.resign(days, &span);
+        span.units = span.units.set(Unit::Day, days == 0);
         span
     }
 
@@ -2499,6 +2511,7 @@ impl Span {
         let hours = hours.rinto();
         let mut span = Span { hours: hours.abs(), ..self };
         span.sign = self.resign(hours, &span);
+        span.units = span.units.set(Unit::Hour, hours == 0);
         span
     }
 
@@ -2510,6 +2523,7 @@ impl Span {
         let minutes = minutes.rinto();
         let mut span = Span { minutes: minutes.abs(), ..self };
         span.sign = self.resign(minutes, &span);
+        span.units = span.units.set(Unit::Minute, minutes == 0);
         span
     }
 
@@ -2521,6 +2535,7 @@ impl Span {
         let seconds = seconds.rinto();
         let mut span = Span { seconds: seconds.abs(), ..self };
         span.sign = self.resign(seconds, &span);
+        span.units = span.units.set(Unit::Second, seconds == 0);
         span
     }
 
@@ -2532,6 +2547,7 @@ impl Span {
         let milliseconds = milliseconds.rinto();
         let mut span = Span { milliseconds: milliseconds.abs(), ..self };
         span.sign = self.resign(milliseconds, &span);
+        span.units = span.units.set(Unit::Millisecond, milliseconds == 0);
         span
     }
 
@@ -2543,6 +2559,7 @@ impl Span {
         let microseconds = microseconds.rinto();
         let mut span = Span { microseconds: microseconds.abs(), ..self };
         span.sign = self.resign(microseconds, &span);
+        span.units = span.units.set(Unit::Microsecond, microseconds == 0);
         span
     }
 
@@ -2554,6 +2571,7 @@ impl Span {
         let nanoseconds = nanoseconds.rinto();
         let mut span = Span { nanoseconds: nanoseconds.abs(), ..self };
         span.sign = self.resign(nanoseconds, &span);
+        span.units = span.units.set(Unit::Nanosecond, nanoseconds == 0);
         span
     }
 
@@ -3010,6 +3028,7 @@ impl Span {
         {
             span.sign = t::Sign::N::<0>();
         }
+        span.units = span.units.only_calendar();
         span
     }
 
@@ -3032,6 +3051,7 @@ impl Span {
         {
             span.sign = t::Sign::N::<0>();
         }
+        span.units = span.units.only_time();
         span
     }
 
@@ -3128,17 +3148,7 @@ impl Span {
     /// non-zero calendar units.
     #[inline]
     pub(crate) fn largest_calendar_unit(&self) -> Option<Unit> {
-        if self.days != 0 {
-            Some(Unit::Day)
-        } else if self.weeks != 0 {
-            Some(Unit::Week)
-        } else if self.months != 0 {
-            Some(Unit::Month)
-        } else if self.years != 0 {
-            Some(Unit::Year)
-        } else {
-            None
-        }
+        self.units().only_calendar().largest_unit()
     }
 
     /// Returns the largest non-zero unit in this span.
@@ -3147,27 +3157,13 @@ impl Span {
     /// returned.
     #[inline]
     pub(crate) fn largest_unit(&self) -> Unit {
-        if self.years != 0 {
-            Unit::Year
-        } else if self.months != 0 {
-            Unit::Month
-        } else if self.weeks != 0 {
-            Unit::Week
-        } else if self.days != 0 {
-            Unit::Day
-        } else if self.hours != 0 {
-            Unit::Hour
-        } else if self.minutes != 0 {
-            Unit::Minute
-        } else if self.seconds != 0 {
-            Unit::Second
-        } else if self.milliseconds != 0 {
-            Unit::Millisecond
-        } else if self.microseconds != 0 {
-            Unit::Microsecond
-        } else {
-            Unit::Nanosecond
-        }
+        self.units().largest_unit().unwrap_or(Unit::Nanosecond)
+    }
+
+    /// Returns the set of units on this `Span`.
+    #[inline]
+    pub(crate) fn units(&self) -> UnitSet {
+        self.units
     }
 
     /// Returns a string containing the value of all non-zero fields.
@@ -3177,11 +3173,12 @@ impl Span {
     /// the friendly format used there since it is much more terse.
     #[cfg(feature = "alloc")]
     #[allow(dead_code)]
-    fn debug(&self) -> alloc::string::String {
+    pub(crate) fn debug(&self) -> alloc::string::String {
         use core::fmt::Write;
 
         let mut buf = alloc::string::String::new();
-        write!(buf, "Span {{ sign: {:?}", self.sign).unwrap();
+        write!(buf, "Span {{ sign: {:?}, units: {:?}", self.sign, self.units)
+            .unwrap();
         if self.years != 0 {
             write!(buf, ", years: {:?}", self.years).unwrap();
         }
@@ -3257,6 +3254,7 @@ impl Default for Span {
     fn default() -> Span {
         Span {
             sign: ri8::N::<0>(),
+            units: UnitSet::empty(),
             years: C(0).rinto(),
             months: C(0).rinto(),
             weeks: C(0).rinto(),
@@ -4262,10 +4260,24 @@ impl Unit {
             Unit::Nanosecond => "nanoseconds",
         }
     }
-}
 
-#[cfg(test)]
-impl Unit {
+    /// A very succinct label corresponding to this unit.
+    pub(crate) fn compact(&self) -> &'static str {
+        match *self {
+            Unit::Year => "y",
+            Unit::Month => "mo",
+            Unit::Week => "w",
+            Unit::Day => "d",
+            Unit::Hour => "h",
+            Unit::Minute => "m",
+            Unit::Second => "s",
+            Unit::Millisecond => "ms",
+            Unit::Microsecond => "µs",
+            Unit::Nanosecond => "ns",
+        }
+    }
+
+    /// The inverse of `unit as usize`.
     fn from_usize(n: usize) -> Option<Unit> {
         match n {
             0 => Some(Unit::Nanosecond),
@@ -5764,6 +5776,98 @@ impl<'a> core::fmt::Display for SpanRelativeToKind<'a> {
             SpanRelativeToKind::Zoned(zdt) => core::fmt::Display::fmt(zdt, f),
             SpanRelativeToKind::DaysAre24Hours => write!(f, "TODO"),
         }
+    }
+}
+
+/// A bit set that keeps track of all non-zero units on a `Span`.
+///
+/// Because of alignment, adding this to a `Span` does not make it any bigger.
+///
+/// The benefit of this bit set is to make it extremely cheap to enable fast
+/// paths in various places. For example, doing arithmetic on a `Date` with an
+/// arbitrary `Span` is pretty involved. But if you know the `Span` only
+/// consists of non-zero units of days (and zero for all other units), then you
+/// can take a much cheaper path.
+#[derive(Clone, Copy)]
+pub(crate) struct UnitSet(u16);
+
+impl UnitSet {
+    /// Return a bit set representing all units as zero.
+    #[inline]
+    fn empty() -> UnitSet {
+        UnitSet(0)
+    }
+
+    /// Set the given `unit` to `is_zero` status in this set.
+    ///
+    /// When `is_zero` is false, the unit is added to this set. Otherwise,
+    /// the unit is removed from this set.
+    #[inline]
+    fn set(self, unit: Unit, is_zero: bool) -> UnitSet {
+        let bit = 1 << unit as usize;
+        if is_zero {
+            UnitSet(self.0 & !bit)
+        } else {
+            UnitSet(self.0 | bit)
+        }
+    }
+
+    /// Returns true if and only if no units are in this set.
+    #[inline]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns true if and only if this `Span` contains precisely one
+    /// non-zero unit corresponding to the unit given.
+    #[inline]
+    pub(crate) fn contains_only(self, unit: Unit) -> bool {
+        self.0 == (1 << unit as usize)
+    }
+
+    /// Returns this set, but with only calendar units.
+    #[inline]
+    pub(crate) fn only_calendar(self) -> UnitSet {
+        UnitSet(self.0 & 0b0000_0011_1100_0000)
+    }
+
+    /// Returns this set, but with only time units.
+    #[inline]
+    pub(crate) fn only_time(self) -> UnitSet {
+        UnitSet(self.0 & 0b0000_0000_0011_1111)
+    }
+
+    /// Returns the largest unit in this set, or `None` if none are present.
+    #[inline]
+    pub(crate) fn largest_unit(self) -> Option<Unit> {
+        let zeros = usize::try_from(self.0.leading_zeros()).ok()?;
+        15usize.checked_sub(zeros).and_then(Unit::from_usize)
+    }
+}
+
+// N.B. This `Debug` impl isn't typically used.
+//
+// This is because the `Debug` impl for `Span` just emits itself in the
+// friendly duration format, which doesn't include internal representation
+// details like this set. It is included in `Span::debug`, but this isn't
+// part of the public crate API.
+impl core::fmt::Debug for UnitSet {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{{")?;
+        let mut units = *self;
+        let mut i = 0;
+        while let Some(unit) = units.largest_unit() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            i += 1;
+            write!(f, "{}", unit.compact())?;
+            units = units.set(unit, false);
+        }
+        if i == 0 {
+            write!(f, "∅")?;
+        }
+        write!(f, "}}")
     }
 }
 

@@ -648,35 +648,58 @@ fn main() -> anyhow::Result<()> {
 }
 ```
 
-### Chrono is faster than Jiff in some cases
+### Jiff is generally faster than Chrono
 
-.. and in other cases, Jiff is a little faster than Chrono. But Chrono does
-seem to have the edge. These benchmark results were collected on `2024-07-11`.
+There are some cases where Chrono is faster than Jiff, but Jiff should
+generally be competitive for equivalent operations. It's generally not
+possible for Chrono or Jiff to always be faster than the other, since
+they each use different representations for fundamental types. This in turn
+makes some operations faster and others slower, depending on what you're
+trying to do.
 
 ```text
 $ cd bench
 $ cargo bench -- --save-baseline base
 [.. snip ..]
-$ critcmp -g '^[^/]+/(.*)$' -f '^(chrono|chrono-tzfile|jiff)/' base
-group                                         base/chrono-tzfile/                    base/chrono/                           base/jiff/
------                                         -------------------                    ------------                           ----------
-civil_datetime_to_instant_static              1.00     19.2±0.26ns        ? ?/sec    1.16     22.1±0.20ns        ? ?/sec    1.00     19.2±0.74ns        ? ?/sec
-civil_datetime_to_instant_with_tzdb_lookup    21.31     2.2±0.03µs        ? ?/sec                                           1.00    103.0±4.99ns        ? ?/sec
-instant_to_civil_datetime_offset                                                     1.00      6.9±0.02ns        ? ?/sec    3.45     23.8±1.11ns        ? ?/sec
-instant_to_civil_datetime_static              1.17     20.1±0.16ns        ? ?/sec    1.00     17.3±0.12ns        ? ?/sec    2.32     40.1±0.22ns        ? ?/sec
-offset_to_civil_datetime                                                             6.22      5.5±0.02ns        ? ?/sec    1.00      0.9±0.02ns        ? ?/sec
-offset_to_instant                                                                    3.61      1.4±0.02ns        ? ?/sec    1.00      0.4±0.00ns        ? ?/sec
-parse_civil_datetime                                                                 2.00     69.1±1.33ns        ? ?/sec    1.00     34.5±0.15ns        ? ?/sec
-parse_rfc2822                                                                        1.36     57.5±0.58ns        ? ?/sec    1.00     42.1±0.46ns        ? ?/sec
-parse_strptime                                                                       2.59    169.4±3.96ns        ? ?/sec    1.00     65.5±0.90ns        ? ?/sec
-zoned_add_time_duration                                                              1.00      5.6±0.06ns        ? ?/sec    5.85     32.8±0.25ns        ? ?/sec
+$ critcmp base -g '(.*)/(?:jiff|chrono)$'
+group                                                           base//chrono                         base//jiff
+-----                                                           ------------                         ----------
+civil_datetime/add_days/diffyear/duration                       1.00      8.3±0.07ns        ? ?/sec    1.77     14.6±0.29ns        ? ?/sec
+civil_datetime/add_days/sameyear/duration                       1.00      6.4±0.07ns        ? ?/sec    2.29     14.6±0.23ns        ? ?/sec
+civil_datetime/to_datetime_static/bundled                       1.00     22.3±0.31ns        ? ?/sec
+civil_datetime/to_datetime_static/zoneinfo                      1.12     18.2±0.33ns        ? ?/sec    1.00     16.2±0.17ns        ? ?/sec
+civil_datetime/to_timestamp_tzdb_lookup/bundled                 1.00     32.0±0.28ns        ? ?/sec
+civil_datetime/to_timestamp_tzdb_lookup/zoneinfo                52.41     2.1±0.01µs        ? ?/sec    1.00     40.7±0.17ns        ? ?/sec
+date/add_days/diffyear/duration                                 1.00      5.9±0.04ns        ? ?/sec    1.11      6.5±0.04ns        ? ?/sec
+date/add_days/sameyear/duration                                 1.00      2.1±0.03ns        ? ?/sec    3.08      6.5±0.05ns        ? ?/sec
+date/difference_days/duration                                   1.23      3.4±0.03ns        ? ?/sec    1.00      2.8±0.02ns        ? ?/sec
+date/tomorrow/diff-month                                        1.00      0.4±0.00ns        ? ?/sec    3.24      1.3±0.01ns        ? ?/sec
+date/tomorrow/diff-year                                         1.24      1.8±0.02ns        ? ?/sec    1.00      1.4±0.01ns        ? ?/sec
+date/tomorrow/same-month                                        1.00      0.4±0.02ns        ? ?/sec    1.93      0.8±0.01ns        ? ?/sec
+date/yesterday/diff-month                                       1.00      0.4±0.00ns        ? ?/sec    3.31      1.3±0.01ns        ? ?/sec
+date/yesterday/diff-year                                        1.96      2.1±0.02ns        ? ?/sec    1.00      1.1±0.01ns        ? ?/sec
+date/yesterday/same-month                                       1.00      0.4±0.00ns        ? ?/sec    1.75      0.7±0.01ns        ? ?/sec
+parse/civil_datetime                                            3.13     73.6±0.69ns        ? ?/sec    1.00     23.5±0.17ns        ? ?/sec
+parse/rfc2822                                                   2.41     62.9±0.35ns        ? ?/sec    1.00     26.1±0.30ns        ? ?/sec
+parse/strptime/oneshot                                          2.93    172.8±3.46ns        ? ?/sec    1.00     59.0±0.94ns        ? ?/sec
+parse/strptime/prebuilt                                         1.00     91.0±1.25ns        ? ?/sec
+print/civil_datetime                                            3.08    155.6±3.81ns        ? ?/sec    1.00     50.5±0.18ns        ? ?/sec
+timestamp/add_time_secs/duration                                2.14      5.8±0.04ns        ? ?/sec    1.00      2.7±0.02ns        ? ?/sec
+timestamp/add_time_subsec/duration                              1.84      5.8±0.04ns        ? ?/sec    1.00      3.1±0.05ns        ? ?/sec
+timestamp/every_hour_in_week/byhand                             15.83  1654.8±2.72ns        ? ?/sec    1.00    104.5±1.31ns        ? ?/sec
+timestamp/to_civil_datetime_offset_conversion                   1.61      7.1±0.04ns        ? ?/sec    1.00      4.4±0.04ns        ? ?/sec
+timestamp/to_civil_datetime_static/America-New-York/bundled     1.00     21.3±0.12ns        ? ?/sec
+timestamp/to_civil_datetime_static/America-New-York/zoneinfo    1.15     20.5±0.18ns        ? ?/sec    1.00     17.7±0.15ns        ? ?/sec
+timestamp/to_civil_datetime_static/Asia-Shanghai/bundled        1.00     20.8±0.21ns        ? ?/sec
+timestamp/to_civil_datetime_static/Asia-Shanghai/zoneinfo       2.60     18.7±0.09ns        ? ?/sec    1.00      7.2±0.05ns        ? ?/sec
+zoned/fixed_offset_add_time/duration                            1.00      6.0±0.03ns        ? ?/sec    3.50     20.9±0.11ns        ? ?/sec
+zoned/fixed_offset_to_civil_datetime                            5.92      5.4±0.01ns        ? ?/sec    1.00      0.9±0.02ns        ? ?/sec
+zoned/fixed_offset_to_timestamp                                 3.17      1.2±0.01ns        ? ?/sec    1.00      0.4±0.01ns        ? ?/sec
 ```
 
-It's plausible that in cases where Jiff is slower (for example,
-`zoned_add_time_duration`), users could use `Timestamp` instead of `Zoned`.
-Namely, `Zoned` has some overhead associated with it due to the fact that
-it stores a `civil::DateTime`, `Timestamp` and a `TimeZone`. Where as a
-`Timestamp` is just a 96-bit integer number of nanoseconds.
+Questions about benchmarks are
+welcome in
+[Discussions on GitHub](https://github.com/BurntSushi/jiff/discussions).
 
 ## [`time`](https://docs.rs/time) (v0.3.36)
 
@@ -991,35 +1014,51 @@ fn main() -> anyhow::Result<()> {
 }
 ```
 
-### Jiff is faster than `time` in some cases
+### Jiff is generally faster than `time`
 
-.. and in other cases, `time` is a little faster than Jiff. These benchmark
-results were collected on `2024-07-11`.
+Unlike Chrono, at least for Jiff's benchmarks, there are few cases where `time`
+is faster than Jiff.
 
 ```text
 $ cd bench
 $ cargo bench -- --save-baseline base
 [.. snip ..]
-$ critcmp -g '^[^/]+/(.*)$' -f '^(time|jiff)/' base
-group                                         base/jiff/                             base/time/
------                                         ----------                             ----------
-instant_to_civil_datetime_offset              1.65     23.8±1.11ns        ? ?/sec    1.00     14.4±0.14ns        ? ?/sec
-offset_to_civil_datetime                      1.14      0.9±0.02ns        ? ?/sec    1.00      0.8±0.00ns        ? ?/sec
-offset_to_instant                             1.00      0.4±0.00ns        ? ?/sec    6.29      2.4±0.03ns        ? ?/sec
-parse_civil_datetime                          1.00     34.5±0.15ns        ? ?/sec    1.95     67.2±1.49ns        ? ?/sec
-parse_rfc2822                                 1.00     42.1±0.46ns        ? ?/sec    1.75     73.8±0.66ns        ? ?/sec
-parse_strptime                                1.00     65.5±0.90ns        ? ?/sec    1.71    112.0±0.92ns        ? ?/sec
-zoned_add_time_duration                       1.42     32.8±0.25ns        ? ?/sec    1.00     23.1±0.15ns        ? ?/sec
+$ critcmp base -g '(.*)/(?:jiff|time)$'
+group                                                           base//time                           base//jiff
+-----                                                           ----------                           ----------
+civil_datetime/add_days/diffyear/duration                       1.11     16.2±0.14ns        ? ?/sec    1.00     14.6±0.29ns        ? ?/sec
+civil_datetime/add_days/sameyear/duration                       1.14     16.5±0.10ns        ? ?/sec    1.00     14.6±0.23ns        ? ?/sec
+date/add_days/diffyear/duration                                 1.11      7.3±0.07ns        ? ?/sec    1.00      6.5±0.04ns        ? ?/sec
+date/add_days/sameyear/duration                                 1.16      7.6±0.07ns        ? ?/sec    1.00      6.5±0.05ns        ? ?/sec
+date/days_in_month/leap/feb                                     12.53     4.9±0.34ns        ? ?/sec    1.00      0.4±0.01ns        ? ?/sec
+date/days_in_month/leap/nofeb                                   9.08      3.5±0.34ns        ? ?/sec    1.00      0.4±0.00ns        ? ?/sec
+date/days_in_month/noleap/feb                                   11.14     4.4±0.33ns        ? ?/sec    1.00      0.4±0.03ns        ? ?/sec
+date/days_in_month/noleap/nofeb                                 8.20      3.2±0.27ns        ? ?/sec    1.00      0.4±0.00ns        ? ?/sec
+date/difference_days/duration                                   1.45      4.1±0.04ns        ? ?/sec    1.00      2.8±0.02ns        ? ?/sec
+date/tomorrow/diff-month                                        1.00      0.4±0.00ns        ? ?/sec    3.23      1.3±0.01ns        ? ?/sec
+date/tomorrow/diff-year                                         1.00      0.5±0.03ns        ? ?/sec    2.90      1.4±0.01ns        ? ?/sec
+date/tomorrow/same-month                                        1.00      0.4±0.01ns        ? ?/sec    1.96      0.8±0.01ns        ? ?/sec
+date/yesterday/diff-month                                       1.00      0.4±0.00ns        ? ?/sec    3.31      1.3±0.01ns        ? ?/sec
+date/yesterday/diff-year                                        1.00      0.7±0.02ns        ? ?/sec    1.55      1.1±0.01ns        ? ?/sec
+date/yesterday/same-month                                       1.00      0.4±0.00ns        ? ?/sec    1.76      0.7±0.01ns        ? ?/sec
+parse/civil_datetime                                            1.43     33.6±0.19ns        ? ?/sec    1.00     23.5±0.17ns        ? ?/sec
+parse/rfc2822                                                   3.12     81.4±1.60ns        ? ?/sec    1.00     26.1±0.30ns        ? ?/sec
+parse/strptime/oneshot                                                                                 1.00     59.0±0.94ns        ? ?/sec
+parse/strptime/prebuilt                                         1.00    117.0±1.08ns        ? ?/sec
+print/civil_datetime                                            1.02     51.5±0.75ns        ? ?/sec    1.00     50.5±0.18ns        ? ?/sec
+timestamp/add_time_secs/duration                                7.04     19.0±0.21ns        ? ?/sec    1.00      2.7±0.02ns        ? ?/sec
+timestamp/add_time_subsec/duration                              6.06     19.1±0.25ns        ? ?/sec    1.00      3.1±0.05ns        ? ?/sec
+timestamp/every_hour_in_week/byhand                             32.29     3.4±0.04µs        ? ?/sec    1.00    104.5±1.31ns        ? ?/sec
+timestamp/to_civil_datetime_offset_conversion                   3.30     14.6±0.15ns        ? ?/sec    1.00      4.4±0.04ns        ? ?/sec
+timestamp/to_civil_datetime_offset_holistic                     4.48     18.7±0.07ns        ? ?/sec    1.00      4.2±0.02ns        ? ?/sec
+zoned/fixed_offset_add_time/duration                            1.11     23.2±0.14ns        ? ?/sec    1.00     20.9±0.11ns        ? ?/sec
+zoned/fixed_offset_to_civil_datetime                            1.05      1.0±0.02ns        ? ?/sec    1.00      0.9±0.02ns        ? ?/sec
+zoned/fixed_offset_to_timestamp                                 7.01      2.7±0.04ns        ? ?/sec    1.00      0.4±0.01ns        ? ?/sec
 ```
 
-It's plausible that in cases where Jiff is slower (for example,
-`zoned_add_time_duration`), users could use `Timestamp` instead of `Zoned`.
-Namely, `Zoned` has some overhead associated with it due to the fact that
-it stores a `civil::DateTime`, `Timestamp` and a `TimeZone`. Where as a
-`Timestamp` is just a 96-bit integer number of nanoseconds.
-
-Note that some benchmarks were omitted here since `time` does not support time
-zones.
+Questions about benchmarks are
+welcome in
+[Discussions on GitHub](https://github.com/BurntSushi/jiff/discussions).
 
 ## [`hifitime`](https://docs.rs/hifitime) (v3.9.0)
 

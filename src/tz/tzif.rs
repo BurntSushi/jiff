@@ -154,7 +154,18 @@ impl Tzif {
         } else {
             let search = self
                 .transitions
-                .binary_search_by_key(&timestamp, |t| t.timestamp);
+                // It is an optimization to compare only by the second instead
+                // of the second and the nanosecond. This works for two
+                // reasons. Firstly, the timestamps in TZif are limited to
+                // second precision. Secondly, this may result in two
+                // timestamps comparing equal when they would otherwise be
+                // unequal (for example, when a timestamp given falls on a
+                // transition, but has non-zero fractional seconds). But this
+                // is okay, because it would otherwise get an `Err(i)`, and
+                // access `i-1`. i.e., The timestamp it compared equal to.
+                .binary_search_by_key(&timestamp.as_second(), |t| {
+                    t.timestamp.as_second()
+                });
             match search {
                 // Since the first transition is always Timestamp::MIN, it's
                 // impossible for any timestamp to sort before it.
