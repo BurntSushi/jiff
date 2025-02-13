@@ -1135,7 +1135,7 @@ calendar conversions are required. To facilitate this, the
 and ICU4X data types seamless. For example, to do localization starting from
 a Jiff data type:
 
-```rust
+```text
 use icu::{
     calendar::{japanese::Japanese, DateTime},
     datetime::TypedDateTimeFormatter,

@@ -154,7 +154,10 @@ insta = "1.39.0"
 # We force `serde` to be enabled in dev mode so that the docs render and test
 # correctly. This is highly suspicious.
 jiff = { path = "./", default-features = false, features = ["serde"] }
-jiff-icu = { path = "./crates/jiff-icu" }
+# Uncomment if you want to remove `ignore` from `jiff_icu` tests in
+# `COMPARE.md`. Otherwise, this creates a circular dependency and causes
+# `jiff-icu` to get re-compiled all the time.
+# jiff-icu = { path = "./crates/jiff-icu" }
 quickcheck = { version = "1.0.3", default-features = false }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
