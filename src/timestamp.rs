@@ -364,7 +364,7 @@ impl Timestamp {
     /// As a timestamp, it corresponds to `0` nanoseconds.
     ///
     /// A timestamp is positive if and only if it is greater than the Unix
-    /// epoch. A timestamp is negative if and only of it is less than the Unix
+    /// epoch. A timestamp is negative if and only if it is less than the Unix
     /// epoch.
     pub const UNIX_EPOCH: Timestamp = Timestamp {
         second: UnixSeconds::N::<0>(),
