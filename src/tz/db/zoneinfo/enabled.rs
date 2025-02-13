@@ -222,6 +222,15 @@ impl CachedZones {
     }
 
     fn get_zone_index(&self, query: &str) -> Result<usize, usize> {
+        // The common case is that our query matches the time zone name case
+        // sensitively, so check for that first. It's a bit cheaper than doing
+        // a case insensitive search.
+        if let Ok(i) = self
+            .zones
+            .binary_search_by(|zone| zone.name.original().cmp(&query))
+        {
+            return Ok(i);
+        }
         self.zones.binary_search_by(|zone| {
             utf8::cmp_ignore_ascii_case(zone.name.lower(), query)
         })
@@ -525,6 +534,11 @@ impl ZoneInfoName {
         let inner =
             ZoneInfoNameInner { full, original: original.to_string(), lower };
         Ok(ZoneInfoName { inner: Arc::new(inner) })
+    }
+
+    /// Returns the original name of this time zone.
+    fn original(&self) -> &str {
+        &self.inner.original
     }
 
     /// Returns the lowercase name of this time zone.

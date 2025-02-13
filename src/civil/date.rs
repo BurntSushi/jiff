@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use core::time::Duration as UnsignedDuration;
 
 use crate::{
@@ -10,12 +12,9 @@ use crate::{
     },
     tz::TimeZone,
     util::{
-        common::{
-            days_in_month, days_in_month_unranged, is_leap_year,
-            saturate_day_in_month,
-        },
+        common,
         rangeint::{ri16, ri8, RFrom, RInto, TryRFrom},
-        t::{self, Constant, Day, Month, Sign, UnixEpochDays, Year, C},
+        t::{self, Constant, Day, Month, Sign, UnixEpochDay, Year, C},
     },
     RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
 };
@@ -288,7 +287,7 @@ impl Date {
         if !Month::contains(month) {
             panic!("invalid month");
         }
-        if day > days_in_month_unranged(year, month) {
+        if day > common::days_in_month(year, month) {
             panic!("invalid day");
         }
         let year = Year::new_unchecked(year);
@@ -373,9 +372,9 @@ impl Date {
                 }
             },
         );
-        days += (UnixEpochDays::rfrom(week) - C(1)) * C(7);
+        days += (UnixEpochDay::rfrom(week) - C(1)) * C(7);
         days += weekday;
-        Date::from_unix_epoch_days(days)
+        Date::from_unix_epoch_day(days)
     }
 
     /// Create a builder for constructing a `Date` from the fields of this
@@ -539,7 +538,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn weekday(self) -> Weekday {
-        weekday_from_unix_epoch_days(self.to_unix_epoch_days())
+        weekday_from_unix_epoch_days(self.to_unix_epoch_day())
     }
 
     /// Returns the ordinal day of the year that this date resides in.
@@ -563,8 +562,14 @@ impl Date {
     /// ```
     #[inline]
     pub fn day_of_year(self) -> i16 {
-        let days = C(1) + self.since_days_ranged(self.first_of_year());
-        t::DayOfYear::rfrom(days).get()
+        static DAYS_BY_MONTH_NO_LEAP: [i16; 14] =
+            [0, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365];
+        static DAYS_BY_MONTH_LEAP: [i16; 14] =
+            [0, 0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366];
+        static TABLES: [[i16; 14]; 2] =
+            [DAYS_BY_MONTH_NO_LEAP, DAYS_BY_MONTH_LEAP];
+        TABLES[self.in_leap_year() as usize][self.month() as usize]
+            + i16::from(self.day())
     }
 
     /// Returns the ordinal day of the year that this date resides in, but
@@ -620,8 +625,11 @@ impl Date {
     /// ```
     #[inline]
     pub fn first_of_month(self) -> Date {
-        Date::new_ranged(self.year_ranged(), self.month_ranged(), C(1))
-            .expect("first day of month is always valid")
+        Date::new_ranged_unchecked(
+            self.year_ranged(),
+            self.month_ranged(),
+            C(1).rinto(),
+        )
     }
 
     /// Returns the last date of the month that this date resides in.
@@ -637,8 +645,11 @@ impl Date {
     #[inline]
     pub fn last_of_month(self) -> Date {
         let max_day = self.days_in_month_ranged();
-        Date::new_ranged(self.year_ranged(), self.month_ranged(), max_day)
-            .expect("last day of month is always valid")
+        Date::new_ranged_unchecked(
+            self.year_ranged(),
+            self.month_ranged(),
+            max_day,
+        )
     }
 
     /// Returns the total number of days in the the month in which this date
@@ -678,8 +689,11 @@ impl Date {
     /// ```
     #[inline]
     pub fn first_of_year(self) -> Date {
-        Date::new_ranged(self.year_ranged(), C(1), C(1))
-            .expect("first day of year is always valid")
+        Date::new_ranged_unchecked(
+            self.year_ranged(),
+            C(1).rinto(),
+            C(1).rinto(),
+        )
     }
 
     /// Returns the last date of the year that this date resides in.
@@ -694,8 +708,11 @@ impl Date {
     /// ```
     #[inline]
     pub fn last_of_year(self) -> Date {
-        Date::new_ranged(self.year_ranged(), C(12), C(31))
-            .expect("last day of year is always valid")
+        Date::new_ranged_unchecked(
+            self.year_ranged(),
+            C(12).rinto(),
+            C(31).rinto(),
+        )
     }
 
     /// Returns the total number of days in the the year in which this date
@@ -760,9 +777,22 @@ impl Date {
     /// ```
     #[inline]
     pub fn tomorrow(self) -> Result<Date, Error> {
-        let day = self.to_unix_epoch_days();
-        let next = day.try_checked_add("days", C(1))?;
-        Ok(Date::from_unix_epoch_days(next))
+        if self.day() >= 28 && self.day() == self.days_in_month() {
+            if self.month() == 12 {
+                let year = self.year_ranged().try_checked_add("year", C(1))?;
+                let month = Month::new_unchecked(1);
+                let day = Day::new_unchecked(1);
+                return Ok(Date::new_ranged_unchecked(year, month, day));
+            }
+            let year = self.year_ranged();
+            let month = Month::new_unchecked(self.month() + 1);
+            let day = Day::new_unchecked(1);
+            return Ok(Date::new_ranged_unchecked(year, month, day));
+        }
+        let year = self.year_ranged();
+        let month = self.month_ranged();
+        let day = Day::new_unchecked(self.day() + 1);
+        Ok(Date::new_ranged_unchecked(year, month, day))
     }
 
     /// Returns the date immediately preceding this one.
@@ -786,9 +816,22 @@ impl Date {
     /// ```
     #[inline]
     pub fn yesterday(self) -> Result<Date, Error> {
-        let day = self.to_unix_epoch_days();
-        let next = day.try_checked_sub("days", C(1))?;
-        Ok(Date::from_unix_epoch_days(next))
+        if self.day() == 1 {
+            if self.month() == 1 {
+                let year = self.year_ranged().try_checked_sub("year", C(1))?;
+                let month = Month::new_unchecked(12);
+                let day = Day::new_unchecked(31);
+                return Ok(Date::new_ranged_unchecked(year, month, day));
+            }
+            let year = self.year_ranged();
+            let month = Month::new_unchecked(self.month() - 1);
+            let day = days_in_month(year, month);
+            return Ok(Date::new_ranged_unchecked(year, month, day));
+        }
+        let year = self.year_ranged();
+        let month = self.month_ranged();
+        let day = Day::new_unchecked(self.day() - 1);
+        Ok(Date::new_ranged_unchecked(year, month, day))
     }
 
     /// Returns the "nth" weekday from the beginning or end of the month in
@@ -1048,16 +1091,16 @@ impl Date {
             let nth = nth.max(C(1));
             let weekday_diff = weekday.since_ranged(self.weekday().next());
             let diff = (nth - C(1)) * C(7) + weekday_diff;
-            let start = self.tomorrow()?.to_unix_epoch_days();
+            let start = self.tomorrow()?.to_unix_epoch_day();
             let end = start.try_checked_add("days", diff)?;
-            Ok(Date::from_unix_epoch_days(end))
+            Ok(Date::from_unix_epoch_day(end))
         } else {
             let nth: t::SpanWeeks = nth.min(C(-1)).abs();
             let weekday_diff = self.weekday().previous().since_ranged(weekday);
             let diff = (nth - C(1)) * C(7) + weekday_diff;
-            let start = self.yesterday()?.to_unix_epoch_days();
+            let start = self.yesterday()?.to_unix_epoch_day();
             let end = start.try_checked_sub("days", diff)?;
-            Ok(Date::from_unix_epoch_days(end))
+            Ok(Date::from_unix_epoch_day(end))
         }
     }
 
@@ -1115,7 +1158,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn iso_week_date(self) -> ISOWeekDate {
-        let days = t::NoUnits32::rfrom(self.to_unix_epoch_days());
+        let days = t::NoUnits32::rfrom(self.to_unix_epoch_day());
         let year = t::NoUnits32::rfrom(self.year_ranged());
         let week_start = t::NoUnits32::vary([days, year], |[days, year]| {
             let mut week_start =
@@ -1135,13 +1178,13 @@ impl Date {
 
         let weekday = weekday_from_unix_epoch_days(days);
         let week = ((days - week_start) / C(7)) + C(1);
-        let year = Date::from_unix_epoch_days(
-            week_start
-                + t::NoUnits32::rfrom(
-                    Weekday::Thursday.since_ranged(Weekday::Monday),
-                ),
-        )
-        .year_ranged();
+
+        let unix_epoch_day = week_start
+            + t::NoUnits32::rfrom(
+                Weekday::Thursday.since_ranged(Weekday::Monday),
+            );
+        let year =
+            Date::from_unix_epoch_day(unix_epoch_day.rinto()).year_ranged();
         ISOWeekDate::new_ranged(year, week, weekday)
             .expect("all Dates infallibly convert to ISOWeekDates")
     }
@@ -1440,6 +1483,18 @@ impl Date {
 
     #[inline]
     fn checked_add_span(self, span: Span) -> Result<Date, Error> {
+        if span.is_zero() {
+            return Ok(self);
+        }
+        if span.units().contains_only(Unit::Day) {
+            let epoch_days = self.to_unix_epoch_day();
+            let days = epoch_days.try_checked_add(
+                "days",
+                UnixEpochDay::rfrom(span.get_days_ranged()),
+            )?;
+            return Ok(Date::from_unix_epoch_day(days));
+        }
+
         let (month, years) =
             month_add_overflowing(self.month, span.get_months_ranged());
         let year = self
@@ -1447,22 +1502,24 @@ impl Date {
             .try_checked_add("years", years)?
             .try_checked_add("years", span.get_years_ranged())?;
         let date = Date::constrain_ranged(year, month, self.day);
-        let time_days = span
-            .only_lower(Unit::Day)
-            .to_invariant_nanoseconds()
-            .div_ceil(t::NANOS_PER_CIVIL_DAY);
-        let epoch_days = date.to_unix_epoch_days();
-        let days = epoch_days
+        let epoch_days = date.to_unix_epoch_day();
+        let mut days = epoch_days
             .try_checked_add(
                 "days",
-                C(7) * UnixEpochDays::rfrom(span.get_weeks_ranged()),
+                C(7) * UnixEpochDay::rfrom(span.get_weeks_ranged()),
             )?
             .try_checked_add(
                 "days",
-                UnixEpochDays::rfrom(span.get_days_ranged()),
-            )?
-            .try_checked_add("time", time_days)?;
-        Ok(Date::from_unix_epoch_days(days))
+                UnixEpochDay::rfrom(span.get_days_ranged()),
+            )?;
+        if !span.units().only_time().is_empty() {
+            let time_days = span
+                .only_lower(Unit::Day)
+                .to_invariant_nanoseconds()
+                .div_ceil(t::NANOS_PER_CIVIL_DAY);
+            days = days.try_checked_add("time", time_days)?;
+        }
+        Ok(Date::from_unix_epoch_day(days))
     }
 
     #[inline]
@@ -1472,15 +1529,14 @@ impl Date {
     ) -> Result<Date, Error> {
         // OK because 24!={-1,0}.
         let days = duration.as_hours() / 24;
-        let days =
-            UnixEpochDays::try_new("days", days).with_context(|| {
-                err!(
-                    "{days} computed from duration {duration:?} overflows \
-                     Jiff's datetime limits",
-                )
-            })?;
-        let days = self.to_unix_epoch_days().try_checked_add("days", days)?;
-        Ok(Date::from_unix_epoch_days(days))
+        let days = UnixEpochDay::try_new("days", days).with_context(|| {
+            err!(
+                "{days} computed from duration {duration:?} overflows \
+                 Jiff's datetime limits",
+            )
+        })?;
+        let days = self.to_unix_epoch_day().try_checked_add("days", days)?;
+        Ok(Date::from_unix_epoch_day(days))
     }
 
     /// This routine is identical to [`Date::checked_add`] with the duration
@@ -2076,7 +2132,16 @@ impl Date {
         if day > max_day {
             return Err(day.to_error_with_bounds("day", 1, max_day));
         }
-        Ok(Date { year, month, day })
+        Ok(Date::new_ranged_unchecked(year, month, day))
+    }
+
+    #[inline]
+    pub(crate) fn new_ranged_unchecked(
+        year: Year,
+        month: Month,
+        day: Day,
+    ) -> Date {
+        Date { year, month, day }
     }
 
     #[inline]
@@ -2121,80 +2186,71 @@ impl Date {
         if self == other {
             return C(0).rinto();
         }
-        let start = self.to_unix_epoch_days();
-        let end = other.to_unix_epoch_days();
+        let start = self.to_unix_epoch_day();
+        let end = other.to_unix_epoch_day();
         (end - start).rinto()
     }
 
-    #[inline]
-    pub(crate) fn to_unix_epoch_days(self) -> UnixEpochDays {
-        // ref: http://howardhinnant.github.io/date_algorithms.html
-
-        let year = UnixEpochDays::rfrom(self.year);
-        let month = UnixEpochDays::rfrom(self.month);
-        let day = UnixEpochDays::rfrom(self.day);
-
-        let year = UnixEpochDays::vary([month, year], |[month, year]| {
-            if month <= 2 {
-                year - C(1)
-            } else {
-                year
+    #[inline(always)]
+    pub(crate) fn to_unix_epoch_day(self) -> UnixEpochDay {
+        #[cfg(not(debug_assertions))]
+        {
+            UnixEpochDay {
+                val: common::to_unix_epoch_day(
+                    self.year.val,
+                    self.month.val,
+                    self.day.val,
+                ),
             }
-        });
-        let month = UnixEpochDays::vary([month], |[month]| {
-            if month > 2 {
-                month - C(3)
-            } else {
-                month + C(9)
-            }
-        });
-        let era = year / C(400);
-        let year_of_era = year % C(400);
-        let day_of_year = (C(153) * month + C(2)) / C(5) + day - C(1);
-        let day_of_era = year_of_era * C(365) + year_of_era / C(4)
-            - year_of_era / C(100)
-            + day_of_year;
-        let epoch_days = era * DAYS_IN_ERA + day_of_era
-            - DAYS_FROM_0000_01_01_TO_1970_01_01;
-        epoch_days
+        }
+        #[cfg(debug_assertions)]
+        {
+            let val = common::to_unix_epoch_day(
+                self.year.val,
+                self.month.val,
+                self.day.val,
+            );
+            let min = common::to_unix_epoch_day(
+                self.year.min,
+                self.month.min,
+                self.day.min,
+            );
+            let max = common::to_unix_epoch_day(
+                self.year.max,
+                self.month.max,
+                self.day.max,
+            );
+            UnixEpochDay { val, min, max }
+        }
     }
 
-    #[inline]
-    pub(crate) fn from_unix_epoch_days(
-        days: impl RInto<UnixEpochDays>,
-    ) -> Date {
-        // ref: http://howardhinnant.github.io/date_algorithms.html
-
-        let days = days.rinto();
-        let days = days + DAYS_FROM_0000_01_01_TO_1970_01_01;
-        let era = days / DAYS_IN_ERA;
-        let day_of_era = days % DAYS_IN_ERA;
-        let year_of_era = (day_of_era - day_of_era / C(1_460)
-            + day_of_era / C(36_524)
-            - day_of_era / (DAYS_IN_ERA - C(1)))
-            / C(365);
-        let year = year_of_era + era * C(400);
-        let day_of_year = day_of_era
-            - (C(365) * year_of_era + year_of_era / C(4)
-                - year_of_era / C(100));
-        let month = (day_of_year * C(5) + C(2)) / C(153);
-        let day = day_of_year - (C(153) * month + C(2)) / C(5) + C(1);
-        let month = UnixEpochDays::vary([month], |[month]| {
-            if month < 10 {
-                month + C(3)
-            } else {
-                month - C(9)
+    #[inline(always)]
+    pub(crate) fn from_unix_epoch_day(unix_epoch_day: UnixEpochDay) -> Date {
+        #[cfg(not(debug_assertions))]
+        {
+            let (year, month, day) =
+                common::from_unix_epoch_day(unix_epoch_day.val);
+            Date {
+                year: Year { val: year },
+                month: Month { val: month },
+                day: Day { val: day },
             }
-        });
-        let year = UnixEpochDays::vary([month, year], |[month, year]| {
-            if month <= 2 {
-                year + C(1)
-            } else {
-                year
-            }
-        });
+        }
+        #[cfg(debug_assertions)]
+        {
+            let (year, month, day) =
+                common::from_unix_epoch_day(unix_epoch_day.val);
+            let (min_year, min_month, min_day) =
+                common::from_unix_epoch_day(unix_epoch_day.min);
+            let (max_year, max_month, max_day) =
+                common::from_unix_epoch_day(unix_epoch_day.max);
 
-        Date { year: year.rinto(), month: month.rinto(), day: day.rinto() }
+            let year = Year { val: year, min: min_year, max: max_year };
+            let month = Month { val: month, min: min_month, max: max_month };
+            let day = Day { val: day, min: min_day, max: max_day };
+
+            Date { year, month, day }
+        }
     }
 }
 
@@ -3573,7 +3629,7 @@ enum DateWithDay {
 /// week year given.
 ///
 /// Ref: http://howardhinnant.github.io/date_algorithms.html
-fn iso_week_start_from_year(year: impl RInto<t::ISOYear>) -> UnixEpochDays {
+fn iso_week_start_from_year(year: impl RInto<t::ISOYear>) -> UnixEpochDay {
     let year = year.rinto();
     // A week's year always corresponds to the Gregorian year in which the
     // Thursday of that week falls. Therefore, Jan 4 is *always* in the first
@@ -3585,11 +3641,11 @@ fn iso_week_start_from_year(year: impl RInto<t::ISOYear>) -> UnixEpochDays {
     // `year`.
     let diff_from_monday =
         date_in_first_week.weekday().since_ranged(Weekday::Monday);
-    date_in_first_week.to_unix_epoch_days() - diff_from_monday
+    date_in_first_week.to_unix_epoch_day() - diff_from_monday
 }
 
 /// Returns the weekday for the given number of days since the Unix epoch.
-fn weekday_from_unix_epoch_days(days: impl RInto<UnixEpochDays>) -> Weekday {
+fn weekday_from_unix_epoch_days(days: impl RInto<UnixEpochDay>) -> Weekday {
     // Based on Hinnant's approach here, although we use ISO weekday numbering
     // by default. Basically, this works by using the knowledge that 1970-01-01
     // was a Thursday.
@@ -3658,6 +3714,43 @@ fn day_of_year(year: Year, day: i16) -> Result<Date, Error> {
     Ok(end)
 }
 
+/// Returns true if and only if the given year is a leap year.
+///
+/// A leap year is a year with 366 days. Typical years have 365 days.
+#[inline]
+fn is_leap_year(year: Year) -> bool {
+    common::is_leap_year(year.get())
+}
+
+/// Saturates the given day in the month.
+///
+/// That is, if the day exceeds the maximum number of days in the given year
+/// and month, then this returns the maximum. Otherwise, it returns the day
+/// given.
+#[inline]
+fn saturate_day_in_month(year: Year, month: Month, day: Day) -> Day {
+    day.min(days_in_month(year, month))
+}
+
+/// Returns the number of days in the given year and month.
+///
+/// This correctly returns `29` when the year is a leap year and the month is
+/// February.
+#[inline]
+fn days_in_month(year: Year, month: Month) -> Day {
+    #[cfg(not(debug_assertions))]
+    {
+        Day::new_unchecked(common::days_in_month(year.get(), month.get()))
+    }
+    #[cfg(debug_assertions)]
+    {
+        let days = common::days_in_month(year.val, month.val);
+        let min_days = common::days_in_month(year.min, month.min);
+        let max_days = common::days_in_month(year.max, month.max);
+        Day { val: days, min: min_days, max: max_days }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
@@ -3705,26 +3798,25 @@ mod tests {
     #[test]
     fn all_days_to_date_roundtrip() {
         for rd in -100_000..=100_000 {
-            let rd = UnixEpochDays::new(rd).unwrap();
-            let date = Date::from_unix_epoch_days(rd);
-            let got = date.to_unix_epoch_days();
+            let rd = UnixEpochDay::new(rd).unwrap();
+            let date = Date::from_unix_epoch_day(rd);
+            let got = date.to_unix_epoch_day();
             assert_eq!(rd, got, "for date {date:?}");
         }
     }
 
     #[test]
     fn all_date_to_days_roundtrip() {
-        use crate::util::common::days_in_month;
-
         let year_range = 2000..=2500;
+        // let year_range = -9999..=9999;
         for year in year_range {
             let year = Year::new(year).unwrap();
             for month in Month::MIN_REPR..=Month::MAX_REPR {
                 let month = Month::new(month).unwrap();
                 for day in 1..=days_in_month(year, month).get() {
                     let date = date(year.get(), month.get(), day);
-                    let rd = date.to_unix_epoch_days();
-                    let got = Date::from_unix_epoch_days(rd);
+                    let rd = date.to_unix_epoch_day();
+                    let got = Date::from_unix_epoch_day(rd);
                     assert_eq!(date, got, "for date {date:?}");
                 }
             }
@@ -3733,8 +3825,6 @@ mod tests {
 
     #[test]
     fn all_date_to_iso_week_date_roundtrip() {
-        use crate::util::common::days_in_month;
-
         let year_range = 2000..=2500;
         for year in year_range {
             let year = Year::new(year).unwrap();

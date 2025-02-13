@@ -9,6 +9,7 @@ use crate::{
         temporal::{self, DEFAULT_DATETIME_PARSER},
     },
     util::{
+        common::{from_day_nanosecond, to_day_nanosecond},
         rangeint::{RFrom, RInto, TryRFrom},
         round::increment,
         t::{
@@ -734,7 +735,7 @@ impl Time {
         );
         sum = sum.wrapping_add(span.get_nanoseconds_ranged().without_bounds());
         let civil_day_nanosecond = sum % t::NANOS_PER_CIVIL_DAY;
-        Time::from_nanosecond(civil_day_nanosecond)
+        Time::from_nanosecond(civil_day_nanosecond.rinto())
     }
 
     #[inline]
@@ -742,7 +743,7 @@ impl Time {
         let start = t::NoUnits128::rfrom(self.to_nanosecond());
         let duration = t::NoUnits128::new_unchecked(duration.as_nanos());
         let end = start.wrapping_add(duration) % t::NANOS_PER_CIVIL_DAY;
-        Time::from_nanosecond(end)
+        Time::from_nanosecond(end.rinto())
     }
 
     #[inline]
@@ -756,7 +757,7 @@ impl Time {
         let duration = t::NoUnits128::new_unchecked(duration);
         let duration = duration % t::NANOS_PER_CIVIL_DAY;
         let end = start.wrapping_add(duration) % t::NANOS_PER_CIVIL_DAY;
-        Time::from_nanosecond(end)
+        Time::from_nanosecond(end.rinto())
     }
 
     /// This routine is identical to [`Time::wrapping_add`] with the duration
@@ -810,7 +811,7 @@ impl Time {
         let duration = i128::try_from(duration.as_nanos()).unwrap();
         let duration = t::NoUnits128::new_unchecked(duration);
         let end = start.wrapping_sub(duration) % t::NANOS_PER_CIVIL_DAY;
-        Time::from_nanosecond(end)
+        Time::from_nanosecond(end.rinto())
     }
 
     /// Add the given span to this time and return an error if the result would
@@ -1112,7 +1113,7 @@ impl Time {
             sum.div_floor(t::NANOS_PER_CIVIL_DAY),
         )?;
         let time_nanos = sum.rem_floor(t::NANOS_PER_CIVIL_DAY);
-        let time = Time::from_nanosecond(time_nanos);
+        let time = Time::from_nanosecond(time_nanos.rinto());
         Ok((time, Span::new().days_ranged(days)))
     }
 
@@ -1136,7 +1137,7 @@ impl Time {
             sum.div_floor(t::NANOS_PER_CIVIL_DAY),
         )?;
         let time_nanos = sum.rem_floor(t::NANOS_PER_CIVIL_DAY);
-        let time = Time::from_nanosecond(time_nanos);
+        let time = Time::from_nanosecond(time_nanos.rinto());
         // OK because of the constraint imposed by t::SpanDays.
         let hours = i64::from(days).checked_mul(24).unwrap();
         Ok((time, SignedDuration::from_hours(hours)))
@@ -1662,6 +1663,16 @@ impl Time {
         }
     }
 
+    #[inline]
+    pub(crate) fn new_ranged_unchecked(
+        hour: Hour,
+        minute: Minute,
+        second: Second,
+        subsec_nanosecond: SubsecNanosecond,
+    ) -> Time {
+        Time { hour, minute, second, subsec_nanosecond }
+    }
+
     /// Set the fractional parts of this time to the given units via ranged
     /// types.
     #[inline]
@@ -1735,35 +1746,78 @@ impl Time {
     /// `23:59:59.999999999`.
     #[inline]
     pub(crate) fn to_nanosecond(&self) -> CivilDayNanosecond {
-        let mut civil_day_nanosecond =
-            CivilDayNanosecond::rfrom(self.hour_ranged()) * t::NANOS_PER_HOUR;
-        civil_day_nanosecond +=
-            CivilDayNanosecond::rfrom(self.minute_ranged())
-                * t::NANOS_PER_MINUTE;
-        // Note that we clamp the leap second here! That's because we
-        // effectively pretend they don't exist when treating `Time` values
-        // as equal divisions in a single day.
-        civil_day_nanosecond +=
-            CivilDayNanosecond::rfrom(self.second_ranged())
-                * t::NANOS_PER_SECOND;
-        civil_day_nanosecond +=
-            CivilDayNanosecond::rfrom(self.subsec_nanosecond_ranged());
-        civil_day_nanosecond
+        #[cfg(not(debug_assertions))]
+        {
+            CivilDayNanosecond {
+                val: to_day_nanosecond(
+                    self.hour.val,
+                    self.minute.val,
+                    self.second.val,
+                    self.subsec_nanosecond.val,
+                ),
+            }
+        }
+        #[cfg(debug_assertions)]
+        {
+            let val = to_day_nanosecond(
+                self.hour.val,
+                self.minute.val,
+                self.second.val,
+                self.subsec_nanosecond.val,
+            );
+            let min = to_day_nanosecond(
+                self.hour.min,
+                self.minute.min,
+                self.second.min,
+                self.subsec_nanosecond.min,
+            );
+            let max = to_day_nanosecond(
+                self.hour.max,
+                self.minute.max,
+                self.second.max,
+                self.subsec_nanosecond.max,
+            );
+            CivilDayNanosecond { val, min, max }
+        }
     }
 
     /// Converts the given nanosecond to a time value. The nanosecond should
     /// correspond to the number of nanoseconds that have elapsed since
     /// `00:00:00.000000000`.
-    #[inline]
-    pub(crate) fn from_nanosecond(
-        nanosecond: impl RInto<CivilDayNanosecond>,
-    ) -> Time {
-        let nanosecond = nanosecond.rinto();
-        let hour = nanosecond / t::NANOS_PER_HOUR;
-        let minute = (nanosecond % t::NANOS_PER_HOUR) / t::NANOS_PER_MINUTE;
-        let second = (nanosecond % t::NANOS_PER_MINUTE) / t::NANOS_PER_SECOND;
-        let subsec_nanosecond = nanosecond % t::NANOS_PER_SECOND;
-        Time::new_ranged(hour, minute, second, subsec_nanosecond)
+    #[inline(always)]
+    pub(crate) fn from_nanosecond(nanosecond: CivilDayNanosecond) -> Time {
+        #[cfg(not(debug_assertions))]
+        {
+            let (hour, minute, second, subsec) =
+                from_day_nanosecond(nanosecond.val);
+            Time {
+                hour: Hour { val: hour },
+                minute: Minute { val: minute },
+                second: Second { val: second },
+                subsec_nanosecond: SubsecNanosecond { val: subsec },
+            }
+        }
+        #[cfg(debug_assertions)]
+        {
+            let (hour, minute, second, subsec) =
+                from_day_nanosecond(nanosecond.val);
+            let (min_hour, min_minute, min_second, min_subsec) =
+                from_day_nanosecond(nanosecond.min);
+            let (max_hour, max_minute, max_second, max_subsec) =
+                from_day_nanosecond(nanosecond.max);
+
+            let hour = Hour { val: hour, min: min_hour, max: max_hour };
+            let minute =
+                Minute { val: minute, min: min_minute, max: max_minute };
+            let second =
+                Second { val: second, min: min_second, max: max_second };
+            let subsec = SubsecNanosecond {
+                val: subsec,
+                min: min_subsec,
+                max: max_subsec,
+            };
+            Time { hour, minute, second, subsec_nanosecond: subsec }
+        }
     }
 }
 
@@ -2756,7 +2810,7 @@ impl TimeRound {
         );
         let limit =
             t::NoUnits128::rfrom(t::CivilDayNanosecond::MAX_SELF) + C(1);
-        Ok(Time::from_nanosecond(rounded % limit))
+        Ok(Time::from_nanosecond((rounded % limit).rinto()))
     }
 }
 

@@ -737,11 +737,56 @@ impl Timestamp {
     /// Of course, one should just use [`Timestamp::try_from`] for this
     /// instead. Indeed, the above example is copied almost exactly from the
     /// `TryFrom` implementation.
+    ///
+    /// # Example: out of bounds
+    ///
+    /// This example shows how some of the boundary conditions are dealt with.
+    ///
+    /// ```
+    /// use jiff::{SignedDuration, Timestamp};
+    ///
+    /// // OK, we get the minimum timestamp supported by Jiff:
+    /// let duration = SignedDuration::new(-377705023201, 0);
+    /// let ts = Timestamp::from_duration(duration)?;
+    /// assert_eq!(ts, Timestamp::MIN);
+    ///
+    /// // We use the minimum number of seconds, but even subtracting
+    /// // one more nanosecond after it will result in an error.
+    /// let duration = SignedDuration::new(-377705023201, -1);
+    /// assert_eq!(
+    ///     Timestamp::from_duration(duration).unwrap_err().to_string(),
+    ///     "parameter 'seconds and nanoseconds' with value -1 is not \
+    ///      in the required range of 0..=1000000000",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn from_duration(
         duration: SignedDuration,
     ) -> Result<Timestamp, Error> {
-        Timestamp::new(duration.as_secs(), duration.subsec_nanos())
+        // As an optimization, we don't need to go through `Timestamp::new`
+        // (or `Timestamp::new_ranged`) here. That's because a `SignedDuration`
+        // already guarantees that its seconds and nanoseconds are "coherent."
+        // That is, we know we can't have a negative second with a positive
+        // nanosecond (or vice versa).
+        let second = UnixSeconds::try_new("second", duration.as_secs())?;
+        let nanosecond = FractionalNanosecond::try_new(
+            "nanosecond",
+            duration.subsec_nanos(),
+        )?;
+        // ... but we do have to check that the *combination* of seconds and
+        // nanoseconds aren't out of bounds, which is possible even when both
+        // are, on their own, legal values.
+        if second == UnixSeconds::MIN_REPR && nanosecond < 0 {
+            return Err(Error::range(
+                "seconds and nanoseconds",
+                nanosecond,
+                0,
+                1_000_000_000,
+            ));
+        }
+        Ok(Timestamp { second, nanosecond })
     }
 
     /// Returns this timestamp as a number of seconds since the Unix epoch.
@@ -1913,7 +1958,7 @@ impl Timestamp {
     /// ```
     #[inline]
     pub fn series(self, period: Span) -> TimestampSeries {
-        TimestampSeries { start: self, period, step: 0 }
+        TimestampSeries::new(self, period)
     }
 }
 
@@ -2044,7 +2089,7 @@ impl Timestamp {
                 "seconds and nanoseconds",
                 nanosecond,
                 0,
-                0,
+                1_000_000_000,
             ));
         }
         // We now normalize our seconds and nanoseconds such that they have
@@ -2076,6 +2121,14 @@ impl Timestamp {
             second: (second + delta_second).rinto(),
             nanosecond: (nanosecond + delta_nanosecond).rinto(),
         })
+    }
+
+    #[inline]
+    pub(crate) fn new_ranged_unchecked(
+        second: UnixSeconds,
+        nanosecond: FractionalNanosecond,
+    ) -> Timestamp {
+        Timestamp { second, nanosecond }
     }
 
     #[inline]
@@ -2363,7 +2416,7 @@ impl core::ops::Add<Span> for Timestamp {
 
     #[inline]
     fn add(self, rhs: Span) -> Timestamp {
-        self.checked_add(rhs).expect("adding span to timestamp failed")
+        self.checked_add_span(rhs).expect("adding span to timestamp failed")
     }
 }
 
@@ -2391,7 +2444,8 @@ impl core::ops::Sub<Span> for Timestamp {
 
     #[inline]
     fn sub(self, rhs: Span) -> Timestamp {
-        self.checked_sub(rhs).expect("subtracting span from timestamp failed")
+        self.checked_add_span(rhs.negate())
+            .expect("subtracting span from timestamp failed")
     }
 }
 
@@ -2436,7 +2490,7 @@ impl core::ops::Add<SignedDuration> for Timestamp {
 
     #[inline]
     fn add(self, rhs: SignedDuration) -> Timestamp {
-        self.checked_add(rhs)
+        self.checked_add_duration(rhs)
             .expect("adding signed duration to timestamp overflowed")
     }
 }
@@ -2461,7 +2515,10 @@ impl core::ops::Sub<SignedDuration> for Timestamp {
 
     #[inline]
     fn sub(self, rhs: SignedDuration) -> Timestamp {
-        self.checked_sub(rhs)
+        let rhs = rhs
+            .checked_neg()
+            .expect("signed duration negation resulted in overflow");
+        self.checked_add_duration(rhs)
             .expect("subtracting signed duration from timestamp overflowed")
     }
 }
@@ -2726,9 +2783,16 @@ impl core::fmt::Display for TimestampDisplayWithOffset {
 /// [`Timestamp`] value.
 #[derive(Clone, Debug)]
 pub struct TimestampSeries {
-    start: Timestamp,
-    period: Span,
-    step: i64,
+    ts: Timestamp,
+    duration: Option<SignedDuration>,
+}
+
+impl TimestampSeries {
+    #[inline]
+    fn new(ts: Timestamp, period: Span) -> TimestampSeries {
+        let duration = SignedDuration::try_from(period).ok();
+        TimestampSeries { ts, duration }
+    }
 }
 
 impl Iterator for TimestampSeries {
@@ -2736,10 +2800,10 @@ impl Iterator for TimestampSeries {
 
     #[inline]
     fn next(&mut self) -> Option<Timestamp> {
-        let span = self.period.checked_mul(self.step).ok()?;
-        self.step = self.step.checked_add(1)?;
-        let timestamp = self.start.checked_add(span).ok()?;
-        Some(timestamp)
+        let duration = self.duration?;
+        let this = self.ts;
+        self.ts = self.ts.checked_add_duration(duration).ok()?;
+        Some(this)
     }
 }
 
@@ -3448,27 +3512,26 @@ mod tests {
     #[test]
     fn to_datetime_specific_examples() {
         let tests = [
-            // ((UnixSeconds::MIN_REPR, 0), (-9999, 1, 2, 0, 59, 59, 0)),
+            ((UnixSeconds::MIN_REPR, 0), (-9999, 1, 2, 1, 59, 59, 0)),
             (
                 (UnixSeconds::MIN_REPR + 1, -999_999_999),
                 (-9999, 1, 2, 1, 59, 59, 1),
             ),
             ((-1, 1), (1969, 12, 31, 23, 59, 59, 1)),
-            // ((UnixSeconds::MIN_REPR, 0), (-9999, 1, 1, 0, 0, 0, 0)),
-            // ((UnixSeconds::MAX_REPR - 1, 0), (9999, 12, 31, 23, 59, 58, 0)),
-            // (
-            // (UnixSeconds::MAX_REPR - 1, 999_999_999),
-            // (9999, 12, 31, 23, 59, 58, 999_999_999),
-            // ),
-            // ((UnixSeconds::MAX_REPR, 0), (9999, 12, 31, 23, 59, 59, 0)),
-            // (
-            // (UnixSeconds::MAX_REPR, 999_999_999),
-            // (9999, 12, 31, 23, 59, 59, 999_999_999),
-            // ),
-            // ((-2, -1), (1969, 12, 31, 23, 59, 57, 999_999_999)),
-            // ((-86398, -1), (1969, 12, 31, 0, 0, 1, 999_999_999)),
-            // ((-86399, -1), (1969, 12, 31, 0, 0, 0, 999_999_999)),
-            // ((-86400, -1), (1969, 12, 30, 23, 59, 59, 999_999_999)),
+            ((UnixSeconds::MAX_REPR, 0), (9999, 12, 30, 22, 0, 0, 0)),
+            ((UnixSeconds::MAX_REPR - 1, 0), (9999, 12, 30, 21, 59, 59, 0)),
+            (
+                (UnixSeconds::MAX_REPR - 1, 999_999_999),
+                (9999, 12, 30, 21, 59, 59, 999_999_999),
+            ),
+            (
+                (UnixSeconds::MAX_REPR, 999_999_999),
+                (9999, 12, 30, 22, 0, 0, 999_999_999),
+            ),
+            ((-2, -1), (1969, 12, 31, 23, 59, 57, 999_999_999)),
+            ((-86398, -1), (1969, 12, 31, 0, 0, 1, 999_999_999)),
+            ((-86399, -1), (1969, 12, 31, 0, 0, 0, 999_999_999)),
+            ((-86400, -1), (1969, 12, 30, 23, 59, 59, 999_999_999)),
         ];
         for (t, dt) in tests {
             let timestamp = mktime(t.0, t.1);
@@ -3489,12 +3552,12 @@ mod tests {
     #[test]
     fn to_datetime_many_seconds_in_some_days() {
         let days = [
-            i64::from(t::UnixEpochDays::MIN_REPR),
+            i64::from(t::UnixEpochDay::MIN_REPR),
             -1000,
             -5,
             23,
             2000,
-            i64::from(t::UnixEpochDays::MAX_REPR),
+            i64::from(t::UnixEpochDay::MAX_REPR),
         ];
         let seconds = [
             -86_400, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4,

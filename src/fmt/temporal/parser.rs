@@ -985,6 +985,10 @@ impl DateTimeParser {
         input: &'i [u8],
     ) -> Result<Parsed<'i, ParsedAnnotations<'i>>, Error> {
         const P: rfc9557::Parser = rfc9557::Parser::new();
+        if input.is_empty() || input[0] != b'[' {
+            let value = ParsedAnnotations::none();
+            return Ok(Parsed { input, value });
+        }
         P.parse(input)
     }
 

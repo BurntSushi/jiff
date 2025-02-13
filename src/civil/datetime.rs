@@ -1513,7 +1513,62 @@ impl DateTime {
     /// ```
     #[inline]
     pub fn to_zoned(self, tz: TimeZone) -> Result<Zoned, Error> {
-        tz.into_ambiguous_zoned(self).compatible()
+        use crate::tz::AmbiguousOffset;
+
+        // It's pretty disappointing that we do this instead of the
+        // simpler:
+        //
+        //     tz.into_ambiguous_zoned(self).compatible()
+        //
+        // Below, in the common case of an unambiguous datetime,
+        // we avoid doing the work to re-derive the datetime *and*
+        // offset from the timestamp we find from tzdb. In particular,
+        // `Zoned::new` does this work given a timestamp and a time
+        // zone. But we circumvent `Zoned::new` and use a special
+        // `Zoned::from_parts` crate-internal constructor to handle
+        // this case.
+        //
+        // Ideally we could do this in `AmbiguousZoned::compatible`
+        // itself, but it turns out that it doesn't always work.
+        // Namely, that API supports providing an unambiguous
+        // offset even when the civil datetime is within a
+        // DST transition. In that case, once the timestamp
+        // is resolved, the offset given might actually
+        // change. See `2024-03-11T02:02[America/New_York]`
+        // example for `AlwaysOffset` conflict resolution on
+        // `ZonedWith::disambiguation`.
+        //
+        // But the optimization works here because if we get an
+        // unambiguous offset from tzdb, then we know it isn't in a DST
+        // transition and that it won't change with the timestamp.
+        //
+        // This ends up saving a fair bit of cycles re-computing
+        // the offset (which requires another tzdb lookup) and
+        // re-generating the civil datetime from the timestamp for the
+        // re-computed offset. This helps the
+        // `civil_datetime_to_timestamp_tzdb_lookup/zoneinfo/jiff`
+        // micro-benchmark quite a bit.
+        let dt = self;
+        let amb_ts = tz.to_ambiguous_timestamp(dt);
+        let (offset, ts, dt) = match amb_ts.offset() {
+            AmbiguousOffset::Unambiguous { offset } => {
+                let ts = offset.to_timestamp(dt)?;
+                (offset, ts, dt)
+            }
+            AmbiguousOffset::Gap { before, .. } => {
+                let ts = before.to_timestamp(dt)?;
+                let offset = tz.to_offset(ts);
+                let dt = offset.to_datetime(ts);
+                (offset, ts, dt)
+            }
+            AmbiguousOffset::Fold { before, .. } => {
+                let ts = before.to_timestamp(dt)?;
+                let offset = tz.to_offset(ts);
+                let dt = offset.to_datetime(ts);
+                (offset, ts, dt)
+            }
+        };
+        Ok(Zoned::from_parts(ts, tz, offset, dt))
     }
 
     /// Add the given span of time to this datetime. If the sum would overflow
@@ -1633,21 +1688,56 @@ impl DateTime {
 
     #[inline]
     fn checked_add_span(self, span: Span) -> Result<DateTime, Error> {
-        let (date, time) = (self.date(), self.time());
+        let (old_date, old_time) = (self.date(), self.time());
+        let units = span.units();
+        match (units.only_calendar().is_empty(), units.only_time().is_empty())
+        {
+            (true, true) => Ok(self),
+            (false, true) => {
+                let new_date =
+                    old_date.checked_add(span).with_context(|| {
+                        err!("failed to add {span} to {old_date}")
+                    })?;
+                Ok(DateTime::from_parts(new_date, old_time))
+            }
+            (true, false) => {
+                let (new_time, leftovers) =
+                    old_time.overflowing_add(span).with_context(|| {
+                        err!("failed to add {span} to {old_time}")
+                    })?;
+                let new_date =
+                    old_date.checked_add(leftovers).with_context(|| {
+                        err!(
+                            "failed to add overflowing span, {leftovers}, \
+                             from adding {span} to {old_time}, \
+                             to {old_date}",
+                        )
+                    })?;
+                Ok(DateTime::from_parts(new_date, new_time))
+            }
+            (false, false) => self.checked_add_span_general(&span),
+        }
+    }
+
+    #[inline(never)]
+    #[cold]
+    fn checked_add_span_general(self, span: &Span) -> Result<DateTime, Error> {
+        let (old_date, old_time) = (self.date(), self.time());
         let span_date = span.without_lower(Unit::Day);
         let span_time = span.only_lower(Unit::Day);
 
-        let (new_time, leftovers) = time
-            .overflowing_add(span_time)
-            .with_context(|| err!("failed to add {span_time} to {time}"))?;
-        let new_date = date
-            .checked_add(span_date)
-            .with_context(|| err!("failed to add {span_date} to {date}"))?;
+        let (new_time, leftovers) =
+            old_time.overflowing_add(span_time).with_context(|| {
+                err!("failed to add {span_time} to {old_time}")
+            })?;
+        let new_date = old_date.checked_add(span_date).with_context(|| {
+            err!("failed to add {span_date} to {old_date}")
+        })?;
         let new_date = new_date.checked_add(leftovers).with_context(|| {
             err!(
                 "failed to add overflowing span, {leftovers}, \
-                 from adding {span_time} to {time}, \
-                 to {new_date}",
+                             from adding {span_time} to {old_time}, \
+                             to {new_date}",
             )
         })?;
         Ok(DateTime::from_parts(new_date, new_time))
@@ -2291,7 +2381,7 @@ impl DateTime {
     /// zone offset and where all days are exactly 24 hours long.
     #[inline]
     fn to_nanosecond(self) -> t::NoUnits128 {
-        let day_nano = self.date().to_unix_epoch_days();
+        let day_nano = self.date().to_unix_epoch_day();
         let time_nano = self.time().to_nanosecond();
         (t::NoUnits128::rfrom(day_nano) * t::NANOS_PER_CIVIL_DAY) + time_nano
     }
@@ -3439,7 +3529,7 @@ impl DateTimeRound {
         );
         let days = sign * time_rounded.div_ceil(day_length);
         let time_nanos = time_rounded.rem_ceil(day_length);
-        let time = Time::from_nanosecond(time_nanos);
+        let time = Time::from_nanosecond(time_nanos.rinto());
 
         let date_days = t::SpanDays::rfrom(dt.date().day_ranged());
         // OK because days is limited by the fact that the length of a day

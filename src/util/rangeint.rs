@@ -24,11 +24,42 @@ macro_rules! define_ranged {
     ) => {
         #[derive(Clone, Copy, Hash)]
         pub(crate) struct $name<const MIN: i128, const MAX: i128> {
-            val: $repr,
+            /// The actual value of the integer.
+            ///
+            /// Callers should not access this directly. There are some very
+            /// rare cases where algorithms are too difficult to express on
+            /// ranged integers, and it's useful to be able to reach inside and
+            /// access the raw value directly. (For example, the conversions
+            /// between Unix epoch day and Gregorian date.)
+            pub(crate) val: $repr,
+            /// The minimum possible value computed so far.
+            ///
+            /// This value is only present when `debug_assertions` are enabled.
+            /// In that case, it is used to ensure the minimum possible value
+            /// when the integer is actually observed (or converted) is still
+            /// within the legal range.
+            ///
+            /// Callers should not access this directly. There are some very
+            /// rare cases where algorithms are too difficult to express on
+            /// ranged integers, and it's useful to be able to reach inside and
+            /// access the raw value directly. (For example, the conversions
+            /// between Unix epoch day and Gregorian date.)
             #[cfg(debug_assertions)]
-            min: $repr,
+            pub(crate) min: $repr,
+            /// The maximum possible value computed so far.
+            ///
+            /// This value is only present when `debug_assertions` are enabled.
+            /// In that case, it is used to ensure the maximum possible value
+            /// when the integer is actually observed (or converted) is still
+            /// within the legal range.
+            ///
+            /// Callers should not access this directly. There are some very
+            /// rare cases where algorithms are too difficult to express on
+            /// ranged integers, and it's useful to be able to reach inside and
+            /// access the raw value directly. (For example, the conversions
+            /// between Unix epoch day and Gregorian date.)
             #[cfg(debug_assertions)]
-            max: $repr,
+            pub(crate) max: $repr,
         }
 
         impl<const MIN: i128, const MAX: i128> $name<MIN, MAX> {
