@@ -11,6 +11,13 @@ use crate::ToDiesel;
 /// This can be used when deriving [`diesel::deserialize::Queryable`]
 /// or [`diesel::deserialize::QueryableByName`] trait implementations.
 #[derive(Clone, Copy, Debug, diesel::deserialize::FromSqlRow)]
+#[cfg_attr(
+    any(feature = "mysql", feature = "postgres", feature = "sqlite"),
+    derive(diesel::expression::AsExpression)
+)]
+#[cfg_attr(feature = "mysql", diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Datetime>))]
+#[cfg_attr(feature = "postgres", diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>))]
+#[cfg_attr(feature = "sqlite", diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::TimestamptzSqlite>))]
 pub struct NullableTimestamp(Option<crate::Timestamp>);
 
 impl NullableTimestamp {
@@ -40,9 +47,49 @@ impl From<NullableTimestamp> for Option<jiff::Timestamp> {
     }
 }
 
-impl<DB: Backend, ST> ToSql<ST, DB> for NullableTimestamp
+#[cfg(feature = "mysql")]
+impl<DB: Backend>
+    ToSql<diesel::sql_types::Nullable<diesel::sql_types::Datetime>, DB>
+    for NullableTimestamp
 where
-    Option<crate::Timestamp>: ToSql<ST, DB>,
+    Option<crate::Timestamp>:
+        ToSql<diesel::sql_types::Nullable<diesel::sql_types::Datetime>, DB>,
+{
+    fn to_sql<'b>(
+        &'b self,
+        out: &mut Output<'b, '_, DB>,
+    ) -> diesel::serialize::Result {
+        self.0.to_sql(out)
+    }
+}
+
+#[cfg(feature = "postgres")]
+impl<DB: Backend>
+    ToSql<diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>, DB>
+    for NullableTimestamp
+where
+    Option<crate::Timestamp>:
+        ToSql<diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>, DB>,
+{
+    fn to_sql<'b>(
+        &'b self,
+        out: &mut Output<'b, '_, DB>,
+    ) -> diesel::serialize::Result {
+        self.0.to_sql(out)
+    }
+}
+
+#[cfg(feature = "sqlite")]
+impl<DB: Backend>
+    ToSql<
+        diesel::sql_types::Nullable<diesel::sql_types::TimestamptzSqlite>,
+        DB,
+    > for NullableTimestamp
+where
+    Option<crate::Timestamp>: ToSql<
+        diesel::sql_types::Nullable<diesel::sql_types::TimestamptzSqlite>,
+        DB,
+    >,
 {
     fn to_sql<'b>(
         &'b self,
@@ -73,7 +120,14 @@ where
 ///
 /// This can be used when deriving [`diesel::deserialize::Queryable`]
 /// or [`diesel::deserialize::QueryableByName`] trait implementations.
-#[derive(Clone, Copy, Debug, diesel::deserialize::FromSqlRow)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    diesel::expression::AsExpression,
+    diesel::deserialize::FromSqlRow,
+)]
+#[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamp>)]
 pub struct NullableDateTime(Option<crate::DateTime>);
 
 impl NullableDateTime {
@@ -103,9 +157,12 @@ impl From<NullableDateTime> for Option<jiff::civil::DateTime> {
     }
 }
 
-impl<DB: Backend, ST> ToSql<ST, DB> for NullableDateTime
+impl<DB: Backend>
+    ToSql<diesel::sql_types::Nullable<diesel::sql_types::Timestamp>, DB>
+    for NullableDateTime
 where
-    Option<crate::DateTime>: ToSql<ST, DB>,
+    Option<crate::DateTime>:
+        ToSql<diesel::sql_types::Nullable<diesel::sql_types::Timestamp>, DB>,
 {
     fn to_sql<'b>(
         &'b self,
@@ -136,7 +193,14 @@ where
 ///
 /// This can be used when deriving [`diesel::deserialize::Queryable`]
 /// or [`diesel::deserialize::QueryableByName`] trait implementations.
-#[derive(Clone, Copy, Debug, diesel::deserialize::FromSqlRow)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    diesel::expression::AsExpression,
+    diesel::deserialize::FromSqlRow,
+)]
+#[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Date>)]
 pub struct NullableDate(Option<crate::Date>);
 
 impl NullableDate {
@@ -166,9 +230,12 @@ impl From<NullableDate> for Option<jiff::civil::Date> {
     }
 }
 
-impl<DB: Backend, ST> ToSql<ST, DB> for NullableDate
+impl<DB: Backend>
+    ToSql<diesel::sql_types::Nullable<diesel::sql_types::Date>, DB>
+    for NullableDate
 where
-    Option<crate::Date>: ToSql<ST, DB>,
+    Option<crate::Date>:
+        ToSql<diesel::sql_types::Nullable<diesel::sql_types::Date>, DB>,
 {
     fn to_sql<'b>(
         &'b self,
@@ -199,7 +266,14 @@ where
 ///
 /// This can be used when deriving [`diesel::deserialize::Queryable`]
 /// or [`diesel::deserialize::QueryableByName`] trait implementations.
-#[derive(Clone, Copy, Debug, diesel::deserialize::FromSqlRow)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    diesel::expression::AsExpression,
+    diesel::deserialize::FromSqlRow,
+)]
+#[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Time>)]
 pub struct NullableTime(Option<crate::Time>);
 
 impl NullableTime {
@@ -229,9 +303,12 @@ impl From<NullableTime> for Option<jiff::civil::Time> {
     }
 }
 
-impl<DB: Backend, ST> ToSql<ST, DB> for NullableTime
+impl<DB: Backend>
+    ToSql<diesel::sql_types::Nullable<diesel::sql_types::Time>, DB>
+    for NullableTime
 where
-    Option<crate::Time>: ToSql<ST, DB>,
+    Option<crate::Time>:
+        ToSql<diesel::sql_types::Nullable<diesel::sql_types::Time>, DB>,
 {
     fn to_sql<'b>(
         &'b self,
@@ -289,18 +366,6 @@ impl From<Option<jiff::Span>> for NullableSpan {
 impl From<NullableSpan> for Option<jiff::Span> {
     fn from(x: NullableSpan) -> Self {
         x.0.map(Into::into)
-    }
-}
-
-impl<DB: Backend, ST> ToSql<ST, DB> for NullableSpan
-where
-    Option<crate::Span>: ToSql<ST, DB>,
-{
-    fn to_sql<'b>(
-        &'b self,
-        out: &mut Output<'b, '_, DB>,
-    ) -> diesel::serialize::Result {
-        self.0.to_sql(out)
     }
 }
 
