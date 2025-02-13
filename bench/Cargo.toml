@@ -20,14 +20,14 @@ harness = false
 path = "src/bench.rs"
 
 [dependencies]
-criterion = "0.5.1"
+criterion = { version = "0.5.1", default-features = false }
 jiff = { path = ".." }
 
 chrono = "0.4.38"
 chrono-tz = "0.9.0"
 tzfile = "0.1.3"
 
-time = { version = "0.3.36", features = ["macros", "parsing"] }
+time = { version = "0.3.36", features = ["formatting", "macros", "parsing"] }
 
 humantime = "2.1.0"
 
