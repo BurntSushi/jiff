@@ -416,7 +416,7 @@ impl Timestamp {
     /// # Errors
     ///
     /// This returns an error if the given components would correspond to
-    /// an instant outside the support ranged. Also, `nanosecond` is limited
+    /// an instant outside the supported range. Also, `nanosecond` is limited
     /// to the range `-999,999,999..=999,999,999`.
     ///
     /// # Example
@@ -493,6 +493,60 @@ impl Timestamp {
             UnixSeconds::try_new("second", second)?,
             FractionalNanosecond::try_new("nanosecond", nanosecond)?,
         )
+    }
+
+    /// Creates a new `Timestamp` value in a `const` context.
+    ///
+    /// # Panics
+    ///
+    /// This routine panics when [`Timestamp::new`] would return an error.
+    /// That is, when the given components would correspond to
+    /// an instant outside the supported range. Also, `nanosecond` is limited
+    /// to the range `-999,999,999..=999,999,999`.
+    ///
+    /// # Example
+    ///
+    /// This example shows the instant in time 123,456,789 seconds after the
+    /// Unix epoch:
+    ///
+    /// ```
+    /// use jiff::Timestamp;
+    ///
+    /// assert_eq!(
+    ///     Timestamp::constant(123_456_789, 0).to_string(),
+    ///     "1973-11-29T21:33:09Z",
+    /// );
+    /// ```
+    #[inline]
+    pub const fn constant(mut second: i64, mut nanosecond: i32) -> Timestamp {
+        if second == UnixSeconds::MIN_REPR && nanosecond < 0 {
+            panic!("nanoseconds must be >=0 when seconds are minimal");
+        }
+        // We now normalize our seconds and nanoseconds such that they have
+        // the same sign (or where one is zero). So for example, when given
+        // `-1s 1ns`, then we should turn that into `-999,999,999ns`.
+        //
+        // But first, if we're already normalized, we're done!
+        if second.signum() as i8 == nanosecond.signum() as i8
+            || second == 0
+            || nanosecond == 0
+        {
+            return Timestamp {
+                second: UnixSeconds::new_unchecked(second),
+                nanosecond: FractionalNanosecond::new_unchecked(nanosecond),
+            };
+        }
+        if second < 0 && nanosecond > 0 {
+            second += 1;
+            nanosecond -= t::NANOS_PER_SECOND.value() as i32;
+        } else if second > 0 && nanosecond < 0 {
+            second -= 1;
+            nanosecond += t::NANOS_PER_SECOND.value() as i32;
+        }
+        Timestamp {
+            second: UnixSeconds::new_unchecked(second),
+            nanosecond: FractionalNanosecond::new_unchecked(nanosecond),
+        }
     }
 
     /// Creates a new instant in time from the number of seconds elapsed since
@@ -3545,6 +3599,22 @@ mod tests {
             let nanos = t.as_nanosecond();
             let got = Timestamp::from_nanosecond(nanos).unwrap();
             t == got
+        }
+
+        fn timestamp_constant_and_new_are_same1(t: Timestamp) -> bool {
+            let got = Timestamp::constant(t.as_second(), t.subsec_nanosecond());
+            t == got
+        }
+
+        fn timestamp_constant_and_new_are_same2(
+            secs: i64,
+            nanos: i32
+        ) -> quickcheck::TestResult {
+            let Ok(ts) = Timestamp::new(secs, nanos) else {
+                return quickcheck::TestResult::discard();
+            };
+            let got = Timestamp::constant(secs, nanos);
+            quickcheck::TestResult::from_bool(ts == got)
         }
     }
 
