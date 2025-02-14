@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.2.1 (TBD)
+===========
+TODO
+
+Enhancements:
+
+* [#263](https://github.com/BurntSushi/jiff/issues/263):
+Add `Timestamp::constant` for constructing timestamps in `const` context.
+
+
 0.2.0 (2025-02-10)
 ==================
 This is a new semver incompatible release of Jiff. It contains several breaking
