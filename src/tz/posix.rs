@@ -83,7 +83,7 @@ use crate::{
     error::{err, Error, ErrorContext},
     timestamp::Timestamp,
     tz::{
-        AmbiguousOffset, Dst, Offset, TimeZoneAbbreviation,
+        timezone::TimeZoneAbbreviation, AmbiguousOffset, Dst, Offset,
         TimeZoneOffsetInfo, TimeZoneTransition,
     },
     util::{
