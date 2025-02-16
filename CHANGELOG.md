@@ -1,8 +1,11 @@
 # CHANGELOG
 
-0.2.1 (TBD)
-===========
-TODO
+0.2.1 (2025-02-16)
+==================
+This release includes a massive number of optimizations that significantly
+improves performance in some cases. If you had a workload whose performance
+with Jiff was underwhelming, please give it a try. I welcome questions via
+[Discussions on GitHub].
 
 Enhancements:
 
@@ -933,3 +936,4 @@ The initial release of Jiff.
 [ICU4X project]: https://github.com/unicode-org/icu4x
 [SQLx]: https://github.com/launchbadge/sqlx
 [Diesel]: https://github.com/diesel-rs/diesel
+[Discussions on GitHub]: https://github.com/BurntSushi/jiff/discussions
