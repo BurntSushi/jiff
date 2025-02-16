@@ -18,8 +18,8 @@ use crate::{
     timestamp::Timestamp,
     tz::{
         posix::{IanaTz, ReasonablePosixTimeZone},
-        AmbiguousOffset, Dst, Offset, TimeZoneAbbreviation,
-        TimeZoneOffsetInfo, TimeZoneTransition,
+        timezone::TimeZoneAbbreviation,
+        AmbiguousOffset, Dst, Offset, TimeZoneOffsetInfo, TimeZoneTransition,
     },
     util::{
         crc32,
