@@ -7,6 +7,9 @@ improves performance in some cases. If you had a workload whose performance
 with Jiff was underwhelming, please give it a try. I welcome questions via
 [Discussions on GitHub].
 
+This release also provides a new API, `Timestamp::constant`, for constructing
+`Timestamp` values in a `const` context.
+
 Enhancements:
 
 * [#235](https://github.com/BurntSushi/jiff/discussions/235),
