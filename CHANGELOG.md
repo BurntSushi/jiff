@@ -1,5 +1,16 @@
 # CHANGELOG
 
+0.2.2 (TBD)
+===========
+TODO
+
+Bug fixes:
+
+* [#261](https://github.com/BurntSushi/jiff/issues/261):
+Improve the documentation for `ZonedWith::nanosecond` and
+`ZonedWith::subsec_nanosecond`.
+
+
 0.2.1 (2025-02-16)
 ==================
 This release includes a massive number of optimizations that significantly

@@ -4887,6 +4887,11 @@ impl ZonedWith {
     ///
     /// This overrides any previous millisecond settings.
     ///
+    /// Note that this only sets the millisecond component. It does
+    /// not change the microsecond or nanosecond components. To set
+    /// the fractional second component to nanosecond precision, use
+    /// [`ZonedWith::subsec_nanosecond`].
+    ///
     /// # Errors
     ///
     /// This returns an error when [`ZonedWith::build`] is called if the
@@ -4920,6 +4925,11 @@ impl ZonedWith {
     /// One can access this value via [`Zoned::microsecond`].
     ///
     /// This overrides any previous microsecond settings.
+    ///
+    /// Note that this only sets the microsecond component. It does
+    /// not change the millisecond or nanosecond components. To set
+    /// the fractional second component to nanosecond precision, use
+    /// [`ZonedWith::subsec_nanosecond`].
     ///
     /// # Errors
     ///
@@ -4955,6 +4965,11 @@ impl ZonedWith {
     ///
     /// This overrides any previous nanosecond settings.
     ///
+    /// Note that this only sets the nanosecond component. It does
+    /// not change the millisecond or microsecond components. To set
+    /// the fractional second component to nanosecond precision, use
+    /// [`ZonedWith::subsec_nanosecond`].
+    ///
     /// # Errors
     ///
     /// This returns an error when [`ZonedWith::build`] is called if the
@@ -4989,6 +5004,12 @@ impl ZonedWith {
     /// [`Zoned::subsec_nanosecond`].
     ///
     /// This overrides any previous subsecond nanosecond settings.
+    ///
+    /// Note that this sets the entire fractional second component to
+    /// nanosecond precision, and overrides any individual millisecond,
+    /// microsecond or nanosecond settings. To set individual components,
+    /// use [`ZonedWith::millisecond`], [`ZonedWith::microsecond`] or
+    /// [`ZonedWith::nanosecond`].
     ///
     /// # Errors
     ///

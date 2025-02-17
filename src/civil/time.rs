@@ -3093,6 +3093,11 @@ impl TimeWith {
     ///
     /// This overrides any previous millisecond settings.
     ///
+    /// Note that this only sets the millisecond component. It does
+    /// not change the microsecond or nanosecond components. To set
+    /// the fractional second component to nanosecond precision, use
+    /// [`TimeWith::subsec_nanosecond`].
+    ///
     /// # Errors
     ///
     /// This returns an error when [`TimeWith::build`] is called if the given
@@ -3122,6 +3127,11 @@ impl TimeWith {
     /// One can access this value via [`Time::microsecond`].
     ///
     /// This overrides any previous microsecond settings.
+    ///
+    /// Note that this only sets the microsecond component. It does
+    /// not change the millisecond or nanosecond components. To set
+    /// the fractional second component to nanosecond precision, use
+    /// [`TimeWith::subsec_nanosecond`].
     ///
     /// # Errors
     ///
@@ -3153,6 +3163,11 @@ impl TimeWith {
     ///
     /// This overrides any previous nanosecond settings.
     ///
+    /// Note that this only sets the nanosecond component. It does
+    /// not change the millisecond or microsecond components. To set
+    /// the fractional second component to nanosecond precision, use
+    /// [`TimeWith::subsec_nanosecond`].
+    ///
     /// # Errors
     ///
     /// This returns an error when [`TimeWith::build`] is called if the given
@@ -3183,6 +3198,12 @@ impl TimeWith {
     /// [`Time::subsec_nanosecond`].
     ///
     /// This overrides any previous subsecond nanosecond settings.
+    ///
+    /// Note that this sets the entire fractional second component to
+    /// nanosecond precision, and overrides any individual millisecond,
+    /// microsecond or nanosecond settings. To set individual components,
+    /// use [`TimeWith::millisecond`], [`TimeWith::microsecond`] or
+    /// [`TimeWith::nanosecond`].
     ///
     /// # Errors
     ///
