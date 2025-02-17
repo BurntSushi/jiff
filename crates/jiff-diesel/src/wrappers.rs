@@ -37,9 +37,18 @@ pub trait ToDiesel {
     any(feature = "mysql", feature = "postgres", feature = "sqlite"),
     derive(diesel::expression::AsExpression)
 )]
-#[cfg_attr(feature = "mysql", diesel(sql_type = diesel::sql_types::Datetime))]
-#[cfg_attr(feature = "postgres", diesel(sql_type = diesel::sql_types::Timestamptz))]
-#[cfg_attr(feature = "sqlite", diesel(sql_type = diesel::sql_types::TimestamptzSqlite))]
+#[cfg_attr(
+    feature = "mysql",
+    diesel(sql_type = diesel::sql_types::Datetime),
+)]
+#[cfg_attr(
+    feature = "postgres",
+    diesel(sql_type = diesel::sql_types::Timestamptz),
+)]
+#[cfg_attr(
+    feature = "sqlite",
+    diesel(sql_type = diesel::sql_types::TimestamptzSqlite),
+)]
 pub struct Timestamp(jiff::Timestamp);
 
 impl Timestamp {
