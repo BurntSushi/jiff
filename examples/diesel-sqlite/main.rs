@@ -1,4 +1,3 @@
-use anyhow::Context;
 use diesel::{
     connection::Connection, dsl::sql, query_dsl::RunQueryDsl, select,
     sql_query, sql_types, sqlite::SqliteConnection, QueryableByName,
@@ -6,12 +5,58 @@ use diesel::{
 use jiff::civil;
 use jiff_diesel::ToDiesel;
 
+mod schema {
+    diesel::table! {
+        datetimes {
+            id -> Integer, // Diesel tables require an ID column.
+            ts -> TimestamptzSqlite,
+            dt -> Timestamp,
+            d -> Date,
+            t -> Time,
+        }
+    }
+
+    diesel::table! {
+        nullable_datetimes {
+            id -> Integer, // Diesel tables require an ID column.
+            ts -> Nullable<TimestamptzSqlite>,
+            dt -> Nullable<Timestamp>,
+            d -> Nullable<Date>,
+            t -> Nullable<Time>,
+        }
+    }
+}
+
 fn main() -> anyhow::Result<()> {
-    let tmpfile = tempfile::NamedTempFile::new()?;
-    let path = tmpfile.path().to_str().context("invalid temporary file")?;
-    let mut conn = SqliteConnection::establish(path)?;
+    let mut conn = SqliteConnection::establish(":memory:")?;
+
+    sql_query(
+        "CREATE TEMPORARY TABLE IF NOT EXISTS datetimes (
+            id integer primary key,
+            ts timestamptz not null,
+            dt timestamp not null,
+            d date not null,
+            t time not null
+        )",
+    )
+    .execute(&mut conn)
+    .unwrap();
+
+    sql_query(
+        "CREATE TEMPORARY TABLE IF NOT EXISTS nullable_datetimes (
+            id integer primary key,
+            ts timestamptz,
+            dt timestamp,
+            d date,
+            t time
+        )",
+    )
+    .execute(&mut conn)
+    .unwrap();
 
     example_datetime_roundtrip(&mut conn)?;
+    example_nullable_datetime_roundtrip(&mut conn)?;
+    example_datetime_sql_query_roundtrip(&mut conn)?;
     example_timestamp_julian(&mut conn)?;
 
     Ok(())
@@ -21,27 +66,139 @@ fn main() -> anyhow::Result<()> {
 fn example_datetime_roundtrip(
     conn: &mut SqliteConnection,
 ) -> anyhow::Result<()> {
-    diesel::table! {
-        datetimes {
-            id -> Integer, // Diesel tables require an ID column.
-            ts -> TimestamptzSqlite,
-            dt -> Timestamp,
-            d -> Date,
-            t -> Time
-        }
-    }
+    use diesel::prelude::*;
 
-    #[derive(Debug, PartialEq, QueryableByName)]
-    #[diesel(table_name = datetimes)]
+    #[derive(
+        Clone, Copy, Debug, PartialEq, Queryable, Insertable, Selectable,
+    )]
+    #[diesel(table_name = schema::datetimes)]
     #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
     struct Row {
-        #[diesel(deserialize_as = jiff_diesel::Timestamp)]
+        #[diesel(
+            serialize_as = jiff_diesel::Timestamp,
+            deserialize_as = jiff_diesel::Timestamp
+        )]
         ts: jiff::Timestamp,
-        #[diesel(deserialize_as = jiff_diesel::DateTime)]
+        #[diesel(
+            serialize_as = jiff_diesel::DateTime,
+            deserialize_as = jiff_diesel::DateTime
+        )]
         dt: jiff::civil::DateTime,
-        #[diesel(deserialize_as = jiff_diesel::Date)]
+        #[diesel(
+            serialize_as = jiff_diesel::Date,
+            deserialize_as = jiff_diesel::Date
+        )]
         d: jiff::civil::Date,
-        #[diesel(deserialize_as = jiff_diesel::Time)]
+        #[diesel(
+            serialize_as = jiff_diesel::Time,
+            deserialize_as = jiff_diesel::Time
+        )]
+        t: jiff::civil::Time,
+    }
+
+    let given = Row {
+        ts: "1970-01-01T00:00:00Z".parse()?,
+        dt: civil::date(2025, 7, 20).at(0, 0, 0, 0),
+        d: civil::date(1999, 1, 8),
+        t: civil::time(23, 59, 59, 999_999_000),
+    };
+
+    let got = diesel::insert_into(schema::datetimes::table)
+        .values(given)
+        .returning(Row::as_returning())
+        .get_result(conn)?;
+
+    assert_eq!(given, got);
+
+    Ok(())
+}
+
+/// Performs a round-trip with all of Jiff's nullable datetime types.
+fn example_nullable_datetime_roundtrip(
+    conn: &mut SqliteConnection,
+) -> anyhow::Result<()> {
+    use diesel::prelude::*;
+
+    #[derive(
+        Clone, Copy, Debug, PartialEq, Queryable, Insertable, Selectable,
+    )]
+    #[diesel(table_name = schema::nullable_datetimes)]
+    #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+    struct Row {
+        #[diesel(
+            serialize_as = jiff_diesel::NullableTimestamp,
+            deserialize_as = jiff_diesel::NullableTimestamp
+        )]
+        ts: Option<jiff::Timestamp>,
+        #[diesel(
+            serialize_as = jiff_diesel::NullableDateTime,
+            deserialize_as = jiff_diesel::NullableDateTime
+        )]
+        dt: Option<jiff::civil::DateTime>,
+        #[diesel(
+            serialize_as = jiff_diesel::NullableDate,
+            deserialize_as = jiff_diesel::NullableDate
+        )]
+        d: Option<jiff::civil::Date>,
+        #[diesel(
+            serialize_as = jiff_diesel::NullableTime,
+            deserialize_as = jiff_diesel::NullableTime
+        )]
+        t: Option<jiff::civil::Time>,
+    }
+
+    let given = Row {
+        ts: Some("1970-01-01T00:00:00Z".parse()?),
+        dt: Some(civil::date(2025, 7, 20).at(0, 0, 0, 0)),
+        d: Some(civil::date(1999, 1, 8)),
+        t: Some(civil::time(23, 59, 59, 999_999_000)),
+    };
+
+    let got = diesel::insert_into(schema::nullable_datetimes::table)
+        .values(given)
+        .returning(Row::as_returning())
+        .get_result(conn)?;
+
+    assert_eq!(given, got);
+
+    let given = Row { ts: None, dt: None, d: None, t: None };
+
+    let got = diesel::insert_into(schema::nullable_datetimes::table)
+        .values(given)
+        .returning(Row::as_returning())
+        .get_result(conn)?;
+
+    assert_eq!(given, got);
+
+    Ok(())
+}
+
+fn example_datetime_sql_query_roundtrip(
+    conn: &mut SqliteConnection,
+) -> anyhow::Result<()> {
+    #[derive(Clone, Copy, Debug, PartialEq, QueryableByName)]
+    #[diesel(table_name = schema::datetimes)]
+    #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+    struct Row {
+        #[diesel(
+            serialize_as = jiff_diesel::Timestamp,
+            deserialize_as = jiff_diesel::Timestamp
+        )]
+        ts: jiff::Timestamp,
+        #[diesel(
+            serialize_as = jiff_diesel::DateTime,
+            deserialize_as = jiff_diesel::DateTime
+        )]
+        dt: jiff::civil::DateTime,
+        #[diesel(
+            serialize_as = jiff_diesel::Date,
+            deserialize_as = jiff_diesel::Date
+        )]
+        d: jiff::civil::Date,
+        #[diesel(
+            serialize_as = jiff_diesel::Time,
+            deserialize_as = jiff_diesel::Time
+        )]
         t: jiff::civil::Time,
     }
 
