@@ -1,6 +1,6 @@
 [package]
 name = "jiff-diesel"
-version = "0.1.0"  #:version
+version = "0.1.1"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 license = "Unlicense OR MIT"
 homepage = "https://github.com/BurntSushi/jiff/tree/master/crates/jiff-diesel"
