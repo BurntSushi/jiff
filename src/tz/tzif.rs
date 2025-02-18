@@ -17,8 +17,7 @@ use crate::{
     error::{err, Error, ErrorContext},
     timestamp::Timestamp,
     tz::{
-        posix::{IanaTz, ReasonablePosixTimeZone},
-        timezone::TimeZoneAbbreviation,
+        posix::ReasonablePosixTimeZone, timezone::TimeZoneAbbreviation,
         AmbiguousOffset, Dst, Offset, TimeZoneOffsetInfo, TimeZoneTransition,
     },
     util::{
@@ -854,8 +853,7 @@ impl Tzif {
             // that the GNU tooling allow it via the `TZ` environment variable
             // even though POSIX doesn't specify it. This all seems okay to me
             // because the V3+ extension is a strict superset of functionality.
-            let iana_tz = IanaTz::parse_v3plus(bytes)?;
-            self.posix_tz = Some(iana_tz.into_tz());
+            self.posix_tz = Some(ReasonablePosixTimeZone::parse(bytes)?);
         }
         Ok(&rest[1..])
     }

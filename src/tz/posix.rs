@@ -122,7 +122,7 @@ type PosixWeek = ri8<1, 5>;
 /// returned by parsing this type and layer their own semantics on top.
 #[cfg(feature = "tz-system")]
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum PosixTz {
+pub(crate) enum PosixTzEnv {
     /// A valid POSIX time zone with an optional DST transition rule.
     Rule(PosixTimeZone),
     /// An implementation defined string. This occurs when the `TZ` value
@@ -131,9 +131,9 @@ pub(crate) enum PosixTz {
 }
 
 #[cfg(feature = "tz-system")]
-impl PosixTz {
+impl PosixTzEnv {
     /// Parse a POSIX `TZ` environment variable string from the given bytes.
-    pub(crate) fn parse(bytes: impl AsRef<[u8]>) -> Result<PosixTz, Error> {
+    fn parse(bytes: impl AsRef<[u8]>) -> Result<PosixTzEnv, Error> {
         let bytes = bytes.as_ref();
         if bytes.get(0) == Some(&b':') {
             let Ok(string) = core::str::from_utf8(&bytes[1..]) else {
@@ -143,91 +143,27 @@ impl PosixTz {
                     Bytes(&bytes[1..]),
                 ));
             };
-            Ok(PosixTz::Implementation(string.into()))
+            Ok(PosixTzEnv::Implementation(string.into()))
         } else {
-            PosixTimeZone::parse(bytes).map(PosixTz::Rule)
+            PosixTimeZone::parse(bytes).map(PosixTzEnv::Rule)
         }
     }
 
     /// Parse a POSIX `TZ` environment variable string from the given `OsStr`.
     pub(crate) fn parse_os_str(
         osstr: impl AsRef<std::ffi::OsStr>,
-    ) -> Result<PosixTz, Error> {
-        PosixTz::parse(parse::os_str_bytes(osstr.as_ref())?)
+    ) -> Result<PosixTzEnv, Error> {
+        PosixTzEnv::parse(parse::os_str_bytes(osstr.as_ref())?)
     }
 }
 
 #[cfg(feature = "tz-system")]
-impl core::fmt::Display for PosixTz {
+impl core::fmt::Display for PosixTzEnv {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match *self {
-            PosixTz::Rule(ref tz) => write!(f, "{tz}"),
-            PosixTz::Implementation(ref imp) => write!(f, ":{imp}"),
+            PosixTzEnv::Rule(ref tz) => write!(f, "{tz}"),
+            PosixTzEnv::Implementation(ref imp) => write!(f, ":{imp}"),
         }
-    }
-}
-
-/// The result of parsing a V2 or V3+ `TZ` string from IANA `tzfile` data.
-///
-/// A V2 `TZ` string is precisely identical to a POSIX `TZ` environment
-/// variable string. A V3 `TZ` string however supports signed DST transition
-/// times, and hours in the range `0..=167`.
-///
-/// We also specifically require that IANA `TZ` strings are "reasonable." That
-/// is, if DST exists, then it must have a corresponding rule.
-#[derive(Debug, Eq, PartialEq)]
-pub(crate) struct IanaTz(ReasonablePosixTimeZone);
-
-impl IanaTz {
-    /// Parse a IANA tzfile v3+ `TZ` string from the given bytes.
-    pub(crate) fn parse_v3plus(
-        bytes: impl AsRef<[u8]>,
-    ) -> Result<IanaTz, Error> {
-        let bytes = bytes.as_ref();
-        let posix_tz = PosixTimeZone::parse(bytes).map_err(|e| {
-            e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
-        })?;
-        let Ok(reasonable) = posix_tz.reasonable() else {
-            return Err(err!(
-                "TZ string {:?} in v3+ tzfile has DST but no transition rules",
-                Bytes(bytes),
-            ));
-        };
-        Ok(IanaTz(reasonable))
-    }
-
-    /// Like `parse_v3plus`, but parses a POSIX TZ string from a prefix of the
-    /// given input. And remaining input is returned.
-    pub(crate) fn parse_v3plus_prefix<'b, B: AsRef<[u8]> + ?Sized + 'b>(
-        bytes: &'b B,
-    ) -> Result<(IanaTz, &'b [u8]), Error> {
-        let bytes = bytes.as_ref();
-        let (posix_tz, remaining) = PosixTimeZone::parse_prefix(bytes)
-            .map_err(|e| {
-                e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
-            })?;
-        let Ok(reasonable) = posix_tz.reasonable() else {
-            return Err(err!(
-                "TZ string {:?} in v3+ tzfile has DST but no transition rules",
-                Bytes(bytes),
-            ));
-        };
-        Ok((IanaTz(reasonable), remaining))
-    }
-
-    /// Return ownership of the underlying "reasonable" POSIX time zone value.
-    ///
-    /// If this was parsed as an IANA v3+ `TZ` string, then the DST transition
-    /// rules can extend beyond `00:00:00..=24:59:59`, and instead are in the
-    /// range `-167:59:59..=167:59:59`.
-    pub(crate) fn into_tz(self) -> ReasonablePosixTimeZone {
-        self.0
-    }
-}
-
-impl core::fmt::Display for IanaTz {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{}", self.0)
     }
 }
 
@@ -245,7 +181,16 @@ impl core::fmt::Display for IanaTz {
 /// [GNU C Library]'s treatment of the `TZ` variable: it only documents support
 /// for reasonable POSIX time zone strings.
 ///
+/// Note that a V2 `TZ` string is precisely identical to a POSIX `TZ`
+/// environment variable string. A V3 `TZ` string however supports signed DST
+/// transition times, and hours in the range `0..=167`. The V2 and V3 here
+/// reference how `TZ` strings are defined in the TZif format specified by [RFC
+/// 9636]. V2 is the original version of it straight from POSIX, where as V3+
+/// corresponds to an extension added to V3 (and newer versions) of the TZif
+/// format.
+///
 /// [GNU C Library]: https://www.gnu.org/software/libc/manual/2.25/html_node/TZ-Variable.html
+/// [RFC 9636]: https://datatracker.ietf.org/doc/rfc9636/
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ReasonablePosixTimeZone {
     std_abbrev: Abbreviation,
@@ -254,6 +199,42 @@ pub(crate) struct ReasonablePosixTimeZone {
 }
 
 impl ReasonablePosixTimeZone {
+    /// Parse a IANA tzfile v3+ `TZ` string from the given bytes.
+    pub(crate) fn parse(
+        bytes: impl AsRef<[u8]>,
+    ) -> Result<ReasonablePosixTimeZone, Error> {
+        let bytes = bytes.as_ref();
+        let posix_tz = PosixTimeZone::parse(bytes).map_err(|e| {
+            e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
+        })?;
+        let Ok(reasonable) = posix_tz.reasonable() else {
+            return Err(err!(
+                "TZ string {:?} in v3+ tzfile has DST but no transition rules",
+                Bytes(bytes),
+            ));
+        };
+        Ok(reasonable)
+    }
+
+    /// Like `parse`, but parses a POSIX TZ string from a prefix of the
+    /// given input. And remaining input is returned.
+    pub(crate) fn parse_prefix<'b, B: AsRef<[u8]> + ?Sized + 'b>(
+        bytes: &'b B,
+    ) -> Result<(ReasonablePosixTimeZone, &'b [u8]), Error> {
+        let bytes = bytes.as_ref();
+        let (posix_tz, remaining) = PosixTimeZone::parse_prefix(bytes)
+            .map_err(|e| {
+                e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
+            })?;
+        let Ok(reasonable) = posix_tz.reasonable() else {
+            return Err(err!(
+                "TZ string {:?} in v3+ tzfile has DST but no transition rules",
+                Bytes(bytes),
+            ));
+        };
+        Ok((reasonable, remaining))
+    }
+
     /// Returns the appropriate time zone offset to use for the given
     /// timestamp.
     ///
@@ -622,6 +603,17 @@ impl core::fmt::Display for ReasonablePosixDst {
 }
 
 /// A POSIX time zone.
+///
+/// This is effectively identical to a `ReasonablePosixTimeZone`, except if it
+/// has a DST time zone abbreviation provided, then it _may_ be missing the
+/// corresponding transition rule. This is seemingly allowed by POSIX, but Jiff
+/// in practice considers POSIX time zones with a DST time zone abbreviation
+/// but without a DST transition rule to be invalid.
+///
+/// This type generally shouldn't be used. It's only exported (to the rest of
+/// the crate) for use with `PosixTzEnv`. The only thing you can do with a
+/// `PosixTimeZone` is attempt to convert it a `ReasonablePosixTimeZone`. Jiff
+/// will emit helpful log messages when this conversion fails.
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) struct PosixTimeZone {
     std_abbrev: Abbreviation,
@@ -1866,7 +1858,7 @@ mod tests {
         input: impl AsRef<[u8]>,
     ) -> ReasonablePosixTimeZone {
         let input = core::str::from_utf8(input.as_ref()).unwrap();
-        let tz = IanaTz::parse_v3plus(input).unwrap().into_tz();
+        let tz = ReasonablePosixTimeZone::parse(input).unwrap();
         // While we're here, assert that converting the TZ back
         // to a string matches what we got. This isn't guaranteed
         // in all cases, but good enough for what we test I think.
@@ -2227,10 +2219,10 @@ mod tests {
     #[cfg(feature = "tz-system")]
     #[test]
     fn parse_posix_tz() {
-        let tz = PosixTz::parse("EST5EDT").unwrap();
+        let tz = PosixTzEnv::parse("EST5EDT").unwrap();
         assert_eq!(
             tz,
-            PosixTz::Rule(PosixTimeZone {
+            PosixTzEnv::Rule(PosixTimeZone {
                 std_abbrev: "EST".into(),
                 std_offset: PosixOffset {
                     sign: None,
@@ -2246,21 +2238,22 @@ mod tests {
             },)
         );
 
-        let tz = PosixTz::parse(":EST5EDT").unwrap();
-        assert_eq!(tz, PosixTz::Implementation("EST5EDT".into()));
+        let tz = PosixTzEnv::parse(":EST5EDT").unwrap();
+        assert_eq!(tz, PosixTzEnv::Implementation("EST5EDT".into()));
 
         // We require implementation strings to be UTF-8, because we're
         // sensible.
-        assert!(PosixTz::parse(b":EST5\xFFEDT").is_err());
+        assert!(PosixTzEnv::parse(b":EST5\xFFEDT").is_err());
     }
 
     #[test]
     fn parse_iana() {
         // Ref: https://github.com/chronotope/chrono/issues/1153
-        let p = IanaTz::parse_v3plus("CRAZY5SHORT,M12.5.0/50,0/2").unwrap();
+        let p = ReasonablePosixTimeZone::parse("CRAZY5SHORT,M12.5.0/50,0/2")
+            .unwrap();
         assert_eq!(
             p,
-            IanaTz(ReasonablePosixTimeZone {
+            ReasonablePosixTimeZone {
                 std_abbrev: "CRAZY".into(),
                 std_offset: PosixOffset {
                     sign: None,
@@ -2298,7 +2291,7 @@ mod tests {
                         },
                     },
                 }),
-            }),
+            },
         );
 
         let p = Parser::new("America/New_York");

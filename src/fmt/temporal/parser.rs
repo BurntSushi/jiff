@@ -530,9 +530,11 @@ impl DateTimeParser {
         }
         #[cfg(feature = "alloc")]
         {
-            match crate::tz::posix::IanaTz::parse_v3plus_prefix(consumed) {
-                Ok((iana_tz, input)) => {
-                    let kind = ParsedTimeZoneKind::Posix(iana_tz.into_tz());
+            use crate::tz::posix::ReasonablePosixTimeZone;
+
+            match ReasonablePosixTimeZone::parse_prefix(consumed) {
+                Ok((posix_tz, input)) => {
+                    let kind = ParsedTimeZoneKind::Posix(posix_tz);
                     let value = ParsedTimeZone { input: original, kind };
                     Ok(Parsed { value, input })
                 }
