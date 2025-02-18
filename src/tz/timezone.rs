@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[cfg(feature = "alloc")]
-use crate::tz::posix::{IanaTz, ReasonablePosixTimeZone};
+use crate::tz::posix::ReasonablePosixTimeZone;
 
 /// A representation of a [time zone].
 ///
@@ -494,9 +494,8 @@ impl TimeZone {
     /// ```
     #[cfg(feature = "alloc")]
     pub fn posix(posix_tz_string: &str) -> Result<TimeZone, Error> {
-        let iana_tz = IanaTz::parse_v3plus(posix_tz_string)?;
-        let reasonable = iana_tz.into_tz();
-        Ok(TimeZone::from_reasonable_posix_tz(reasonable))
+        let posix_tz = ReasonablePosixTimeZone::parse(posix_tz_string)?;
+        Ok(TimeZone::from_reasonable_posix_tz(posix_tz))
     }
 
     /// Creates a time zone from a POSIX tz. Expose so that other parts of Jiff
