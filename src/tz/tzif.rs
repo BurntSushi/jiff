@@ -1421,6 +1421,7 @@ fn try_split_at<'b>(
 mod tests {
     use alloc::string::ToString;
 
+    #[cfg(not(miri))]
     use crate::tz::testdata::TZIF_TEST_FILES;
 
     use super::*;
@@ -1532,6 +1533,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn tzif_parse_v2plus() {
         for tzif_test in TZIF_TEST_FILES {
@@ -1542,6 +1544,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn tzif_parse_v1() {
         for tzif_test in TZIF_TEST_FILES {
@@ -1557,6 +1560,7 @@ mod tests {
     /// do much with it other than to ensure we don't panic or return an error.
     /// That is, we check that we can parse each file, but not that we do so
     /// correctly.
+    #[cfg(not(miri))]
     #[cfg(feature = "tzdb-zoneinfo")]
     #[cfg(target_os = "linux")]
     #[test]

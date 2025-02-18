@@ -1117,6 +1117,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(miri))]
     fn read_all_time_zones() {
         let db = ConcatenatedTzif::open(ANDROID_CONCATENATED_TZIF).unwrap();
         let available = db.available(&mut alloc::vec![]).unwrap();

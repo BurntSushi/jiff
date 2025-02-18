@@ -93,6 +93,7 @@ impl TzifTestFile {
     }
 
     /// Parse this test TZif data into a structured representation.
+    #[cfg(not(miri))]
     pub(crate) fn parse(self) -> Tzif {
         let name = Some(self.name.to_string());
         Tzif::parse(name, self.data).unwrap_or_else(|err| {
@@ -101,6 +102,7 @@ impl TzifTestFile {
     }
 
     /// Parse this test TZif data as if it were V1.
+    #[cfg(not(miri))]
     pub(crate) fn parse_v1(self) -> Tzif {
         let name = Some(self.name.to_string());
         let mut data = self.data.to_vec();

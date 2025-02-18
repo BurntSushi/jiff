@@ -3309,6 +3309,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(miri))]
     quickcheck::quickcheck! {
         fn prop_ordering_same_as_civil_nanosecond(
             civil_nanosecond1: CivilDayNanosecond,
