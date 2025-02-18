@@ -3796,6 +3796,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(miri))]
     fn all_days_to_date_roundtrip() {
         for rd in -100_000..=100_000 {
             let rd = UnixEpochDay::new(rd).unwrap();
@@ -3806,6 +3807,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(miri))]
     fn all_date_to_days_roundtrip() {
         let year_range = 2000..=2500;
         // let year_range = -9999..=9999;
@@ -3824,6 +3826,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(miri))]
     fn all_date_to_iso_week_date_roundtrip() {
         let year_range = 2000..=2500;
         for year in year_range {
@@ -4052,6 +4055,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(miri))]
     quickcheck::quickcheck! {
         fn prop_checked_add_then_sub(
             d1: Date,

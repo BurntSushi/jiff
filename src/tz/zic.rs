@@ -1592,6 +1592,7 @@ mod tests {
         assert_eq!(wall, date(2024, 3, 10).at(2, 0, 0, 0));
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn parse_zic_man1() {
         // An example from `man zic`.
@@ -1608,6 +1609,7 @@ mod tests {
         insta::assert_debug_snapshot!(zic);
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn parse_zic_man2() {
         // An example from `man zic`.
@@ -1690,6 +1692,7 @@ mod tests {
         assert!(ZicP::default().parse(data).is_err());
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn parse_rule_ok() {
         let rule: RuleP = RuleP::parse(&[
@@ -1749,6 +1752,7 @@ mod tests {
         .is_err());
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn parse_zone_first_ok() {
         let zone: ZoneFirstP =
@@ -1830,6 +1834,7 @@ mod tests {
         .is_err());
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn parse_zone_continuation_ok() {
         let zone: ZoneContinuationP =

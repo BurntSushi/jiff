@@ -841,6 +841,7 @@ fn is_long_year(year: ISOYear) -> bool {
         || (last.in_leap_year() && weekday == Weekday::Friday)
 }
 
+#[cfg(not(miri))]
 #[cfg(test)]
 mod tests {
     use super::*;
