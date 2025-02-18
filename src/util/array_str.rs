@@ -28,22 +28,22 @@ impl<const N: usize> ArrayStr<N> {
     ///
     /// If the given string exceeds `N` bytes, then this returns
     /// `None`.
-    pub(crate) fn new(s: &str) -> Option<ArrayStr<N>> {
+    pub(crate) const fn new(s: &str) -> Option<ArrayStr<N>> {
         let len = s.len();
         if len > N {
             return None;
         }
         let mut bytes = [0; N];
-        bytes[..len].copy_from_slice(s.as_bytes());
+        let mut i = 0;
+        while i < s.as_bytes().len() {
+            bytes[i] = s.as_bytes()[i];
+            i += 1;
+        }
         // OK because we don't ever use anything bigger than u8::MAX for `N`.
         // And we probably shouldn't, because that would be a pretty chunky
         // array. If such a thing is needed, please file an issue to discuss.
-        debug_assert!(
-            N <= usize::from(u8::MAX),
-            "size of ArrayStr is too big"
-        );
-        let len = u8::try_from(len).unwrap();
-        Some(ArrayStr { bytes, len })
+        debug_assert!(N <= u8::MAX as usize, "size of ArrayStr is too big");
+        Some(ArrayStr { bytes, len: len as u8 })
     }
 
     /// Returns the capacity of this fixed string.
