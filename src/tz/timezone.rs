@@ -1534,7 +1534,7 @@ impl core::fmt::Display for TimeZonePosix {
 #[cfg(feature = "alloc")]
 #[derive(Eq, PartialEq)]
 struct TimeZoneTzif {
-    tzif: crate::tz::tzif::Tzif,
+    tzif: crate::tz::tzif::TzifOwned,
 }
 
 #[cfg(feature = "alloc")]

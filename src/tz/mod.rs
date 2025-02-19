@@ -101,15 +101,13 @@ mod ambiguous;
 mod concatenated;
 mod db;
 mod offset;
-#[cfg(feature = "alloc")]
 pub(crate) mod posix;
 #[cfg(feature = "tz-system")]
 mod system;
 #[cfg(all(test, feature = "alloc"))]
 mod testdata;
 mod timezone;
-#[cfg(feature = "alloc")]
-mod tzif;
+pub(crate) mod tzif;
 // See module comment for WIP status. :-(
 #[cfg(test)]
 mod zic;

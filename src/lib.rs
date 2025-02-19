@@ -731,6 +731,8 @@ mod error;
 pub mod fmt;
 #[cfg(feature = "std")]
 mod now;
+#[doc(hidden)]
+pub mod shared;
 mod signed_duration;
 mod span;
 mod timestamp;
