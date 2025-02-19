@@ -90,7 +90,7 @@ use crate::{
         array_str::Abbreviation,
         escape::{Byte, Bytes},
         parse,
-        rangeint::{ri16, ri8, RFrom, RInto},
+        rangeint::{ri16, ri32, ri8, RFrom, RInto},
         t::{self, Minute, Month, Second, Sign, SpanZoneOffset, Year, C},
     },
     SignedDuration,
@@ -104,6 +104,7 @@ type IanaHour = ri16<0, 167>;
 type PosixJulianDayNoLeap = ri16<1, 365>;
 type PosixJulianDayWithLeap = ri16<0, 365>;
 type PosixWeek = ri8<1, 5>;
+type PosixTimeSeconds = ri32<{ -604799 }, 604799>;
 
 /// The result of parsing the POSIX `TZ` environment variable.
 ///
@@ -238,9 +239,10 @@ impl ReasonablePosixTimeZone {
     /// Returns the appropriate time zone offset to use for the given
     /// timestamp.
     ///
-    /// This also includes whether the offset returned should be considered
-    /// to be "DST" or not, along with the time zone abbreviation (e.g., EST
-    /// for standard time in New York, and EDT for DST in New York).
+    /// If you need information like whether the offset is in
+    /// DST or not, or the time zone abbreviation, then use
+    /// `ReasonablePosixTimeZone::to_offset_info`. But that API may be more
+    /// expensive to use, so only use it if you need the additional data.
     pub(crate) fn to_offset(&self, timestamp: Timestamp) -> Offset {
         if self.dst.is_none() {
             return self.std_offset();
@@ -314,7 +316,7 @@ impl ReasonablePosixTimeZone {
         let Some(dst_info) = self.dst_info_wall(year) else {
             return AmbiguousOffset::Unambiguous { offset: std_offset };
         };
-        let diff = dst_info.offset - std_offset;
+        let diff = dst_info.offset.duration_since(std_offset);
         // When the difference between DST and standard is positive, that means
         // STD->DST results in a gap while DST->STD results in a fold. However,
         // when the difference is negative, that means STD->DST results in a
@@ -329,7 +331,7 @@ impl ReasonablePosixTimeZone {
         // zero case is strictly redundant. Both the diff < 0 and diff > 0
         // cases handle the zero case correctly. But we write it out for
         // clarity.)
-        if diff.get_seconds_ranged() == 0 {
+        if diff.as_secs() == 0 {
             debug_assert_eq!(std_offset, dst_info.offset);
             AmbiguousOffset::Unambiguous { offset: std_offset }
         } else if diff.is_negative() {
@@ -447,7 +449,7 @@ impl ReasonablePosixTimeZone {
 
     /// Returns the offset for standard time in this POSIX time zone.
     fn std_offset(&self) -> Offset {
-        self.std_offset.to_offset()
+        self.std_offset.offset()
     }
 
     /// Returns the range in which DST occurs.
@@ -457,8 +459,8 @@ impl ReasonablePosixTimeZone {
     fn dst_info_utc(&self, year: impl RInto<Year>) -> Option<DstInfo<'_>> {
         let year = year.rinto();
         let dst = self.dst.as_ref()?;
-        let std_offset = self.std_offset.to_offset();
-        let dst_offset = dst.posix_offset(&self.std_offset).to_offset();
+        let std_offset = self.std_offset.offset();
+        let dst_offset = dst.offset.offset();
         // DST time starts with respect to standard time, so offset it by the
         // standard offset.
         let start = dst.rule.start.to_datetime(year, std_offset);
@@ -476,7 +478,7 @@ impl ReasonablePosixTimeZone {
     fn dst_info_wall(&self, year: impl RInto<Year>) -> Option<DstInfo<'_>> {
         let year = year.rinto();
         let dst = self.dst.as_ref()?;
-        let dst_offset = dst.posix_offset(&self.std_offset).to_offset();
+        let dst_offset = dst.offset.offset();
         // POSIX time zones express their DST transitions in terms of wall
         // clock time. Since this method specifically is returning wall
         // clock times, we don't want to offset our datetimes at all.
@@ -502,7 +504,7 @@ impl core::fmt::Display for ReasonablePosixTimeZone {
             self.std_offset
         )?;
         if let Some(ref dst) = self.dst {
-            write!(f, "{dst}")?;
+            dst.display(self.std_offset, f)?;
         }
         Ok(())
     }
@@ -567,35 +569,25 @@ impl<'a> DstInfo<'a> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ReasonablePosixDst {
     abbrev: Abbreviation,
-    offset: Option<PosixOffset>,
+    offset: PosixOffset,
     /// This is the principal change. A "reasonable" DST must include a rule.
     rule: Rule,
 }
 
 impl ReasonablePosixDst {
-    /// Returns the offset for this DST zone.
-    ///
-    /// If one wasn't explicity given, then this returns an offset equivalent
-    /// to one hour east of the given standard time offset.
-    fn posix_offset(&self, std_offset: &PosixOffset) -> PosixOffset {
-        if let Some(ref offset) = self.offset {
-            return *offset;
-        }
-        // When no offset is specified, we default to an offset one hour
-        // east for DST. We subtract one because POSIX time offsets are
-        // backwards.
-        PosixOffset {
-            hour: std_offset.hour - (std_offset.sign() * C(1)),
-            ..*std_offset
-        }
-    }
-}
-
-impl core::fmt::Display for ReasonablePosixDst {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+    fn display(
+        &self,
+        std_offset: PosixOffset,
+        f: &mut core::fmt::Formatter,
+    ) -> core::fmt::Result {
         write!(f, "{}", AbbreviationDisplay(self.abbrev))?;
-        if let Some(offset) = self.offset {
-            write!(f, "{offset}")?;
+        // The overwhelming common case is that DST is exactly one hour ahead
+        // of standard time. So common that this is the default. So don't write
+        // the offset if we don't need to.
+        let default =
+            PosixOffset { offset: std_offset.offset + t::SECONDS_PER_HOUR };
+        if self.offset != default {
+            write!(f, "{}", self.offset)?;
         }
         write!(f, ",{}", self.rule)?;
         Ok(())
@@ -695,7 +687,7 @@ impl core::fmt::Display for PosixTimeZone {
             self.std_offset
         )?;
         if let Some(ref dst) = self.dst {
-            write!(f, "{dst}")?;
+            dst.display(self.std_offset, f)?;
         }
         Ok(())
     }
@@ -705,15 +697,24 @@ impl core::fmt::Display for PosixTimeZone {
 #[derive(Debug, Eq, PartialEq)]
 struct PosixDst {
     abbrev: Abbreviation,
-    offset: Option<PosixOffset>,
+    offset: PosixOffset,
     rule: Option<Rule>,
 }
 
-impl core::fmt::Display for PosixDst {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl PosixDst {
+    fn display(
+        &self,
+        std_offset: PosixOffset,
+        f: &mut core::fmt::Formatter,
+    ) -> core::fmt::Result {
         write!(f, "{}", AbbreviationDisplay(self.abbrev))?;
-        if let Some(offset) = self.offset {
-            write!(f, "{offset}")?;
+        // The overwhelming common case is that DST is exactly one hour ahead
+        // of standard time. So common that this is the default. So don't write
+        // the offset if we don't need to.
+        let default =
+            PosixOffset { offset: std_offset.offset + t::SECONDS_PER_HOUR };
+        if self.offset != default {
+            write!(f, "{}", self.offset)?;
         }
         if let Some(rule) = self.rule {
             write!(f, ",{rule}")?;
@@ -726,63 +727,42 @@ impl core::fmt::Display for PosixDst {
 /// time zone.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct PosixOffset {
-    sign: Option<Sign>,
-    hour: PosixHour,
-    minute: Option<Minute>,
-    second: Option<Second>,
+    offset: SpanZoneOffset,
 }
 
 impl PosixOffset {
-    /// Converts this offset to the standard time zone offset used in this
-    /// crate. This flips the underlying sign to follow `jiff::tz::Offset`'s
-    /// convention (which is the convention that pretty much everyon, except
-    /// of course POSIX, uses).
-    ///
-    /// The sign is flipped because POSIX time zones use negative offsets for
-    /// zones east of the prime meridian. But the much more common convention
-    /// nowadays is to use negative offsets for zones west of the prime
-    /// meridian. In other words, a POSIX time zone like `EST5` corresponds to
-    /// an offset of `-05:00:00`.
-    fn to_offset(&self) -> Offset {
-        let sign = SpanZoneOffset::rfrom(-self.sign());
-        let hour = SpanZoneOffset::rfrom(self.hour);
-        let minute =
-            SpanZoneOffset::rfrom(self.minute.unwrap_or(C(0).rinto()));
-        let second =
-            SpanZoneOffset::rfrom(self.second.unwrap_or(C(0).rinto()));
-        let seconds = (hour * t::SECONDS_PER_HOUR)
-            + (minute * t::SECONDS_PER_MINUTE)
-            + second;
-        Offset::from_seconds_ranged(sign * seconds)
-    }
-
-    /// Returns the sign for this offset, defaulting to positive if one wasn't
-    /// explicitly given.
-    ///
-    /// Note that the sign for a POSIX offset is backwards. EST5, for example,
-    /// corresponds to UTC-05.
-    fn sign(&self) -> Sign {
-        self.sign.unwrap_or(Sign::N::<1>())
+    fn offset(&self) -> Offset {
+        Offset::from_seconds_ranged(self.offset)
     }
 }
 
 impl core::fmt::Display for PosixOffset {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        if let Some(sign) = self.sign {
-            if sign < 0 {
-                write!(f, "-")?;
-            } else {
-                write!(f, "+")?;
-            }
+        let offset = self.offset();
+        // Yes, this is backwards. Blame POSIX.
+        // N.B. `+` is the default, so we don't
+        // need to write that out.
+        if offset.seconds() > 0 {
+            write!(f, "-")?;
         }
-        write!(f, "{}", self.hour)?;
-        if let Some(minute) = self.minute {
-            write!(f, ":{minute:02}")?;
-            if let Some(second) = self.second {
-                write!(f, ":{second:02}")?;
+        let h = offset.part_hours_ranged().get().unsigned_abs();
+        let m = offset.part_minutes_ranged().get().unsigned_abs();
+        let s = offset.part_seconds_ranged().get().unsigned_abs();
+        write!(f, "{h}")?;
+        if m != 0 || s != 0 {
+            write!(f, ":{m:02}")?;
+            if s != 0 {
+                write!(f, ":{s:02}")?;
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+impl From<Offset> for PosixOffset {
+    fn from(offset: Offset) -> PosixOffset {
+        PosixOffset { offset: offset.seconds_ranged() }
     }
 }
 
@@ -804,7 +784,7 @@ impl core::fmt::Display for Rule {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct PosixDateTimeSpec {
     date: PosixDateSpec,
-    time: Option<PosixTimeSpec>,
+    time: PosixTimeSpec,
 }
 
 impl PosixDateTimeSpec {
@@ -832,20 +812,12 @@ impl PosixDateTimeSpec {
 
         let Some(date) = self.date.to_civil_date(year) else { return mkmax() };
         let mut dt = date.to_datetime(Time::MIN);
-        let dur_transition = self.time().to_duration();
-        let dur_offset = SignedDuration::from(offset);
-        dt = dt.checked_add(dur_transition).unwrap_or_else(|_| {
-            if dur_transition.is_negative() {
+        let dur = self.time().to_duration() - SignedDuration::from(offset);
+        dt = dt.checked_add(dur).unwrap_or_else(|_| {
+            if dur.is_negative() {
                 mkmin()
             } else {
                 mkmax()
-            }
-        });
-        dt = dt.checked_sub(dur_offset).unwrap_or_else(|_| {
-            if dur_transition.is_negative() {
-                mkmax()
-            } else {
-                mkmin()
             }
         });
         if dt.date().year() < year {
@@ -860,21 +832,17 @@ impl PosixDateTimeSpec {
     /// Returns the time for this spec, falling back to the default of 2:00:00
     /// as specified by POSIX.
     fn time(self) -> PosixTimeSpec {
-        const DEFAULT: PosixTimeSpec = PosixTimeSpec {
-            sign: None,
-            hour: IanaHour::N::<2>(),
-            minute: None,
-            second: None,
-        };
-        self.time.unwrap_or(DEFAULT)
+        self.time
     }
 }
 
 impl core::fmt::Display for PosixDateTimeSpec {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "{}", self.date)?;
-        if let Some(time) = self.time {
-            write!(f, "/{time}")?;
+        // This is the default time, so don't write it if we
+        // don't need to.
+        if self.time != PosixTimeSpec::DEFAULT {
+            write!(f, "/{}", self.time)?;
         }
         Ok(())
     }
@@ -1021,46 +989,35 @@ impl core::fmt::Display for WeekdayOfMonth {
 /// IANA tzfile v3+ format expands the range to `-167..=167`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct PosixTimeSpec {
-    sign: Option<Sign>,
-    /// The hour component of this time specification. When IANA V3+ parsing
-    /// is enabled, then this can be in any value in the range `0..=167`. But
-    /// otherwise, it is limited to `0..=24`.
-    hour: IanaHour,
-    minute: Option<Minute>,
-    second: Option<Second>,
+    duration: PosixTimeSeconds,
 }
 
 impl PosixTimeSpec {
-    /// Returns this time specification as a duration of time.
-    fn to_duration(&self) -> SignedDuration {
-        let sign = i64::from(self.sign());
-        let hour = sign * i64::from(self.hour);
-        let minute = sign * i64::from(self.minute.unwrap_or(C(0).rinto()));
-        let second = sign * i64::from(self.second.unwrap_or(C(0).rinto()));
-        SignedDuration::from_secs(second + (60 * minute) + (60 * 60 * hour))
-    }
+    const DEFAULT: PosixTimeSpec = PosixTimeSpec {
+        duration: PosixTimeSeconds::new_unchecked(2 * 60 * 60),
+    };
 
-    /// Returns the sign for this time sepc, defaulting to positive if one
-    /// wasn't explicitly given.
-    fn sign(&self) -> Sign {
-        self.sign.unwrap_or(Sign::N::<1>())
+    fn to_duration(&self) -> SignedDuration {
+        SignedDuration::from_secs(self.duration.get().into())
     }
 }
 
 impl core::fmt::Display for PosixTimeSpec {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        if let Some(sign) = self.sign {
-            if sign < 0 {
-                write!(f, "-")?;
-            } else {
-                write!(f, "+")?;
-            }
+        let duration = self.to_duration();
+        if duration.is_negative() {
+            write!(f, "-")?;
+            // The default is positive, so when
+            // positive, we write nothing.
         }
-        write!(f, "{}", self.hour)?;
-        if let Some(minute) = self.minute {
-            write!(f, ":{minute:02}")?;
-            if let Some(second) = self.second {
-                write!(f, ":{second:02}")?;
+        let h = duration.as_hours().unsigned_abs();
+        let m = duration.as_mins().unsigned_abs() % 60;
+        let s = duration.as_secs().unsigned_abs() % 60;
+        write!(f, "{h}")?;
+        if m != 0 || s != 0 {
+            write!(f, ":{m:02}")?;
+            if s != 0 {
+                write!(f, ":{s:02}")?;
             }
         }
         Ok(())
@@ -1132,7 +1089,7 @@ impl<'s> Parser<'s> {
         if !self.is_done()
             && (self.byte().is_ascii_alphabetic() || self.byte() == b'<')
         {
-            dst = Some(self.parse_posix_dst()?);
+            dst = Some(self.parse_posix_dst(std_offset)?);
         }
         Ok(PosixTimeZone { std_abbrev, std_offset, dst })
     }
@@ -1145,19 +1102,26 @@ impl<'s> Parser<'s> {
     /// Upon success, the parser will be positioned immediately after the end
     /// of the DST transition rule (which might just be the abbreviation, but
     /// might also include explicit start/end datetime specifications).
-    fn parse_posix_dst(&self) -> Result<PosixDst, Error> {
+    fn parse_posix_dst(
+        &self,
+        std_offset: PosixOffset,
+    ) -> Result<PosixDst, Error> {
         let abbrev = self
             .parse_abbreviation()
             .map_err(|e| e.context("failed to parse DST abbreviation"))?;
-        let mut dst = PosixDst { abbrev, offset: None, rule: None };
+        // This is the default: one hour ahead of standard time. We may
+        // override this if the DST portion specifies an offset. (But it
+        // usually doesn't.)
+        let offset =
+            PosixOffset { offset: std_offset.offset + t::SECONDS_PER_HOUR };
+        let mut dst = PosixDst { abbrev, offset, rule: None };
         if self.is_done() {
             return Ok(dst);
         }
         if self.byte() != b',' {
-            dst.offset = Some(
-                self.parse_posix_offset()
-                    .map_err(|e| e.context("failed to parse DST offset"))?,
-            );
+            dst.offset = self
+                .parse_posix_offset()
+                .map_err(|e| e.context("failed to parse DST offset"))?;
             if self.is_done() {
                 return Ok(dst);
             }
@@ -1331,33 +1295,40 @@ impl<'s> Parser<'s> {
     /// Upon success, the parser will be positioned immediately after the end
     /// of the offset.
     fn parse_posix_offset(&self) -> Result<PosixOffset, Error> {
-        let sign = self.parse_optional_sign().map_err(|e| {
-            e.context(
-                "failed to parse sign for time offset \
-                 in POSIX time zone string",
-            )
-        })?;
+        let sign = self
+            .parse_optional_sign()
+            .map_err(|e| {
+                e.context(
+                    "failed to parse sign for time offset \
+                     in POSIX time zone string",
+                )
+            })?
+            .unwrap_or(Sign::N::<1>());
         let hour = self.parse_hour_posix()?;
-        let offset = PosixOffset { sign, hour, minute: None, second: None };
-        if self.maybe_byte() != Some(b':') {
-            return Ok(offset);
+        let (mut minute, mut second) = (Minute::N::<0>(), Second::N::<0>());
+        if self.maybe_byte() == Some(b':') {
+            if !self.bump() {
+                return Err(err!(
+                    "incomplete time in POSIX timezone (missing minutes)",
+                ));
+            }
+            minute = self.parse_minute()?;
+            if self.maybe_byte() == Some(b':') {
+                if !self.bump() {
+                    return Err(err!(
+                        "incomplete time in POSIX timezone (missing seconds)",
+                    ));
+                }
+                second = self.parse_second()?;
+            }
         }
-        if !self.bump() {
-            return Err(err!(
-                "incomplete time in POSIX timezone (missing minutes)",
-            ));
-        }
-        let minute = Some(self.parse_minute()?);
-        if self.maybe_byte() != Some(b':') {
-            return Ok(PosixOffset { sign, hour, minute, second: None });
-        }
-        if !self.bump() {
-            return Err(err!(
-                "incomplete time in POSIX timezone (missing seconds)",
-            ));
-        }
-        let second = Some(self.parse_second()?);
-        Ok(PosixOffset { sign, hour, minute, second })
+        let mut seconds = SpanZoneOffset::N::<0>();
+        seconds += t::SpanZoneOffset::rfrom(hour) * t::SECONDS_PER_HOUR;
+        seconds += t::SpanZoneOffset::rfrom(minute) * t::SECONDS_PER_MINUTE;
+        seconds += t::SpanZoneOffset::rfrom(second);
+        // Yes, we flip the sign, because POSIX is backwards.
+        // For example, `EST5` corresponds to `-05:00`.
+        Ok(PosixOffset { offset: seconds * -sign })
     }
 
     /// Parses a POSIX DST transition rule.
@@ -1395,7 +1366,8 @@ impl<'s> Parser<'s> {
     /// it's present, the time part of the specification.
     fn parse_posix_datetime_spec(&self) -> Result<PosixDateTimeSpec, Error> {
         let date = self.parse_posix_date_spec()?;
-        let mut spec = PosixDateTimeSpec { date, time: None };
+        let time = PosixTimeSpec::DEFAULT;
+        let mut spec = PosixDateTimeSpec { date, time };
         if self.maybe_byte() != Some(b'/') {
             return Ok(spec);
         }
@@ -1405,7 +1377,7 @@ impl<'s> Parser<'s> {
                  specification in a POSIX time zone DST transition rule",
             ));
         }
-        spec.time = Some(self.parse_posix_time_spec()?);
+        spec.time = self.parse_posix_time_spec()?;
         Ok(spec)
     }
 
@@ -1537,39 +1509,44 @@ impl<'s> Parser<'s> {
     /// following the end of the time specification.
     fn parse_posix_time_spec(&self) -> Result<PosixTimeSpec, Error> {
         let (sign, hour) = if self.ianav3plus {
-            let sign = self.parse_optional_sign().map_err(|e| {
-                e.context(
-                    "failed to parse sign for transition time \
+            let sign = self
+                .parse_optional_sign()
+                .map_err(|e| {
+                    e.context(
+                        "failed to parse sign for transition time \
                      in POSIX time zone string",
-                )
-            })?;
+                    )
+                })?
+                .unwrap_or(Sign::N::<1>());
             let hour = self.parse_hour_ianav3plus()?;
             (sign, hour)
         } else {
-            (None, self.parse_hour_posix()?.rinto())
+            (Sign::N::<1>(), self.parse_hour_posix()?.rinto())
         };
-        let spec = PosixTimeSpec { sign, hour, minute: None, second: None };
-        if self.maybe_byte() != Some(b':') {
-            return Ok(spec);
+        let (mut minute, mut second) = (Minute::N::<0>(), Second::N::<0>());
+        if self.maybe_byte() == Some(b':') {
+            if !self.bump() {
+                return Err(err!(
+                    "incomplete transition time in \
+                     POSIX time zone string (missing minutes)",
+                ));
+            }
+            minute = self.parse_minute()?;
+            if self.maybe_byte() == Some(b':') {
+                if !self.bump() {
+                    return Err(err!(
+                        "incomplete transition time in \
+                         POSIX time zone string (missing seconds)",
+                    ));
+                }
+                second = self.parse_second()?;
+            }
         }
-        if !self.bump() {
-            return Err(err!(
-                "incomplete transition time in \
-                 POSIX time zone string (missing minutes)",
-            ));
-        }
-        let minute = Some(self.parse_minute()?);
-        if self.maybe_byte() != Some(b':') {
-            return Ok(PosixTimeSpec { sign, hour, minute, second: None });
-        }
-        if !self.bump() {
-            return Err(err!(
-                "incomplete transition time in \
-                 POSIX time zone string (missing seconds)",
-            ));
-        }
-        let second = Some(self.parse_second()?);
-        Ok(PosixTimeSpec { sign, hour, minute, second })
+        let mut seconds = PosixTimeSeconds::rfrom(hour) * t::SECONDS_PER_HOUR;
+        seconds += PosixTimeSeconds::rfrom(minute) * t::SECONDS_PER_MINUTE;
+        seconds += second;
+        seconds *= sign;
+        Ok(PosixTimeSpec { duration: seconds })
     }
 
     /// Parses a month.
@@ -1850,7 +1827,7 @@ impl core::fmt::Display for AbbreviationDisplay {
 mod tests {
     use std::string::ToString;
 
-    use crate::civil::date;
+    use crate::{civil::date, tz::offset};
 
     use super::*;
 
@@ -1860,9 +1837,19 @@ mod tests {
         let input = core::str::from_utf8(input.as_ref()).unwrap();
         let tz = ReasonablePosixTimeZone::parse(input).unwrap();
         // While we're here, assert that converting the TZ back
-        // to a string matches what we got. This isn't guaranteed
-        // in all cases, but good enough for what we test I think.
-        assert_eq!(tz.to_string(), input);
+        // to a string matches what we got. In the original version
+        // of the POSIX TZ parser, we were very meticulous about
+        // capturing the exact AST of the time zone. But I've
+        // since simplified the data structure considerably such
+        // that it is lossy in terms of what was actually parsed
+        // (but of course, not lossy in terms of the semantic
+        // meaning of the time zone).
+        //
+        // So to account for this, we serialize to a string and
+        // then parse it back. We should get what we started with.
+        let reparsed = ReasonablePosixTimeZone::parse(tz.to_string()).unwrap();
+        assert_eq!(tz, reparsed);
+        assert_eq!(tz.to_string(), reparsed.to_string());
         tz
     }
 
@@ -1952,23 +1939,18 @@ mod tests {
             tz,
             ReasonablePosixTimeZone {
                 std_abbrev: "EST".into(),
-                std_offset: PosixOffset {
-                    sign: None,
-                    hour: C(24).rinto(),
-                    minute: None,
-                    second: None,
-                },
+                std_offset: offset(-24).into(),
                 dst: Some(ReasonablePosixDst {
                     abbrev: "EDT".into(),
-                    offset: None,
+                    offset: offset(-23).into(),
                     rule: Rule {
                         start: PosixDateTimeSpec {
                             date: PosixDateSpec::JulianOne(C(1).rinto()),
-                            time: None,
+                            time: PosixTimeSpec::DEFAULT,
                         },
                         end: PosixDateTimeSpec {
                             date: PosixDateSpec::JulianOne(C(365).rinto()),
-                            time: None,
+                            time: PosixTimeSpec::DEFAULT,
                         },
                     },
                 }),
@@ -1980,23 +1962,18 @@ mod tests {
             tz,
             ReasonablePosixTimeZone {
                 std_abbrev: "EST".into(),
-                std_offset: PosixOffset {
-                    sign: Some(C(-1).rinto()),
-                    hour: C(24).rinto(),
-                    minute: None,
-                    second: None,
-                },
+                std_offset: offset(24).into(),
                 dst: Some(ReasonablePosixDst {
                     abbrev: "EDT".into(),
-                    offset: None,
+                    offset: offset(25).into(),
                     rule: Rule {
                         start: PosixDateTimeSpec {
                             date: PosixDateSpec::JulianOne(C(1).rinto()),
-                            time: None,
+                            time: PosixTimeSpec::DEFAULT,
                         },
                         end: PosixDateTimeSpec {
                             date: PosixDateSpec::JulianOne(C(365).rinto()),
-                            time: None,
+                            time: PosixTimeSpec::DEFAULT,
                         },
                     },
                 }),
@@ -2089,22 +2066,12 @@ mod tests {
     #[test]
     fn posix_date_time_spec_time() {
         let tz = reasonable_posix_time_zone("EST5EDT,J1,J365/5:12:34");
-        assert_eq!(
-            tz.rule().start.time(),
-            PosixTimeSpec {
-                sign: None,
-                hour: C(2).rinto(),
-                minute: None,
-                second: None,
-            },
-        );
+        assert_eq!(tz.rule().start.time(), PosixTimeSpec::DEFAULT,);
         assert_eq!(
             tz.rule().end.time(),
             PosixTimeSpec {
-                sign: None,
-                hour: C(5).rinto(),
-                minute: Some(C(12).rinto()),
-                second: Some(C(34).rinto()),
+                duration: PosixTimeSeconds::new(5 * 60 * 60 + 12 * 60 + 34)
+                    .unwrap(),
             },
         );
     }
@@ -2224,15 +2191,10 @@ mod tests {
             tz,
             PosixTzEnv::Rule(PosixTimeZone {
                 std_abbrev: "EST".into(),
-                std_offset: PosixOffset {
-                    sign: None,
-                    hour: C(5).rinto(),
-                    minute: None,
-                    second: None,
-                },
+                std_offset: offset(-5).into(),
                 dst: Some(PosixDst {
                     abbrev: "EDT".into(),
-                    offset: None,
+                    offset: offset(-4).into(),
                     rule: None,
                 }),
             },)
@@ -2255,15 +2217,10 @@ mod tests {
             p,
             ReasonablePosixTimeZone {
                 std_abbrev: "CRAZY".into(),
-                std_offset: PosixOffset {
-                    sign: None,
-                    hour: C(5).rinto(),
-                    minute: None,
-                    second: None,
-                },
+                std_offset: offset(-5).into(),
                 dst: Some(ReasonablePosixDst {
                     abbrev: "SHORT".into(),
-                    offset: None,
+                    offset: offset(-4).into(),
                     rule: Rule {
                         start: PosixDateTimeSpec {
                             date: PosixDateSpec::WeekdayOfMonth(
@@ -2273,21 +2230,17 @@ mod tests {
                                     weekday: Weekday::Sunday,
                                 },
                             ),
-                            time: Some(PosixTimeSpec {
-                                sign: None,
-                                hour: C(50).rinto(),
-                                minute: None,
-                                second: None,
-                            },),
+                            time: PosixTimeSpec {
+                                duration: PosixTimeSeconds::new(50 * 60 * 60)
+                                    .unwrap(),
+                            },
                         },
                         end: PosixDateTimeSpec {
                             date: PosixDateSpec::JulianZero(C(0).rinto()),
-                            time: Some(PosixTimeSpec {
-                                sign: None,
-                                hour: C(2).rinto(),
-                                minute: None,
-                                second: None,
-                            },),
+                            time: PosixTimeSpec {
+                                duration: PosixTimeSeconds::new(2 * 60 * 60)
+                                    .unwrap(),
+                            },
                         },
                     },
                 }),
@@ -2308,23 +2261,18 @@ mod tests {
             p.parse().unwrap(),
             PosixTimeZone {
                 std_abbrev: "NZST".into(),
-                std_offset: PosixOffset {
-                    sign: Some(Sign::N::<-1>()),
-                    hour: C(12).rinto(),
-                    minute: None,
-                    second: None,
-                },
+                std_offset: offset(12).into(),
                 dst: Some(PosixDst {
                     abbrev: "NZDT".into(),
-                    offset: None,
+                    offset: offset(13).into(),
                     rule: Some(Rule {
                         start: PosixDateTimeSpec {
                             date: PosixDateSpec::JulianOne(C(60).rinto()),
-                            time: None,
+                            time: PosixTimeSpec::DEFAULT,
                         },
                         end: PosixDateTimeSpec {
                             date: PosixDateSpec::JulianOne(C(300).rinto()),
-                            time: None,
+                            time: PosixTimeSpec::DEFAULT,
                         },
                     }),
                 }),
@@ -2342,15 +2290,10 @@ mod tests {
             p.parse_posix_time_zone().unwrap(),
             PosixTimeZone {
                 std_abbrev: "NZST".into(),
-                std_offset: PosixOffset {
-                    sign: Some(Sign::N::<-1>()),
-                    hour: C(12).rinto(),
-                    minute: None,
-                    second: None,
-                },
+                std_offset: offset(12).into(),
                 dst: Some(PosixDst {
                     abbrev: "NZDT".into(),
-                    offset: None,
+                    offset: offset(13).into(),
                     rule: Some(Rule {
                         start: PosixDateTimeSpec {
                             date: PosixDateSpec::WeekdayOfMonth(
@@ -2360,7 +2303,7 @@ mod tests {
                                     weekday: Weekday::Sunday,
                                 }
                             ),
-                            time: None,
+                            time: PosixTimeSpec::DEFAULT,
                         },
                         end: PosixDateTimeSpec {
                             date: PosixDateSpec::WeekdayOfMonth(
@@ -2370,12 +2313,10 @@ mod tests {
                                     weekday: Weekday::Sunday,
                                 }
                             ),
-                            time: Some(PosixTimeSpec {
-                                sign: None,
-                                hour: C(3).rinto(),
-                                minute: None,
-                                second: None,
-                            }),
+                            time: PosixTimeSpec {
+                                duration: PosixTimeSeconds::new(3 * 60 * 60)
+                                    .unwrap(),
+                            },
                         },
                     })
                 }),
@@ -2387,15 +2328,10 @@ mod tests {
             p.parse_posix_time_zone().unwrap(),
             PosixTimeZone {
                 std_abbrev: "NZST".into(),
-                std_offset: PosixOffset {
-                    sign: Some(Sign::N::<-1>()),
-                    hour: C(12).rinto(),
-                    minute: None,
-                    second: None,
-                },
+                std_offset: offset(12).into(),
                 dst: Some(PosixDst {
                     abbrev: "NZDT".into(),
-                    offset: None,
+                    offset: offset(13).into(),
                     rule: Some(Rule {
                         start: PosixDateTimeSpec {
                             date: PosixDateSpec::WeekdayOfMonth(
@@ -2405,7 +2341,7 @@ mod tests {
                                     weekday: Weekday::Sunday,
                                 }
                             ),
-                            time: None,
+                            time: PosixTimeSpec::DEFAULT,
                         },
                         end: PosixDateTimeSpec {
                             date: PosixDateSpec::WeekdayOfMonth(
@@ -2415,12 +2351,10 @@ mod tests {
                                     weekday: Weekday::Sunday,
                                 }
                             ),
-                            time: Some(PosixTimeSpec {
-                                sign: None,
-                                hour: C(3).rinto(),
-                                minute: None,
-                                second: None,
-                            }),
+                            time: PosixTimeSpec {
+                                duration: PosixTimeSeconds::new(3 * 60 * 60)
+                                    .unwrap(),
+                            },
                         },
                     })
                 }),
@@ -2432,23 +2366,18 @@ mod tests {
             p.parse_posix_time_zone().unwrap(),
             PosixTimeZone {
                 std_abbrev: "NZST".into(),
-                std_offset: PosixOffset {
-                    sign: Some(Sign::N::<-1>()),
-                    hour: C(12).rinto(),
-                    minute: None,
-                    second: None,
-                },
+                std_offset: offset(12).into(),
                 dst: Some(PosixDst {
                     abbrev: "NZDT".into(),
-                    offset: None,
+                    offset: offset(13).into(),
                     rule: Some(Rule {
                         start: PosixDateTimeSpec {
                             date: PosixDateSpec::JulianOne(C(60).rinto()),
-                            time: None,
+                            time: PosixTimeSpec::DEFAULT,
                         },
                         end: PosixDateTimeSpec {
                             date: PosixDateSpec::JulianOne(C(300).rinto()),
-                            time: None,
+                            time: PosixTimeSpec::DEFAULT,
                         },
                     }),
                 }),
@@ -2460,23 +2389,18 @@ mod tests {
             p.parse_posix_time_zone().unwrap(),
             PosixTimeZone {
                 std_abbrev: "NZST".into(),
-                std_offset: PosixOffset {
-                    sign: Some(Sign::N::<-1>()),
-                    hour: C(12).rinto(),
-                    minute: None,
-                    second: None,
-                },
+                std_offset: offset(12).into(),
                 dst: Some(PosixDst {
                     abbrev: "NZDT".into(),
-                    offset: None,
+                    offset: offset(13).into(),
                     rule: Some(Rule {
                         start: PosixDateTimeSpec {
                             date: PosixDateSpec::JulianOne(C(60).rinto()),
-                            time: None,
+                            time: PosixTimeSpec::DEFAULT,
                         },
                         end: PosixDateTimeSpec {
                             date: PosixDateSpec::JulianOne(C(300).rinto()),
-                            time: None,
+                            time: PosixTimeSpec::DEFAULT,
                         },
                     }),
                 }),
@@ -2486,12 +2410,13 @@ mod tests {
 
     #[test]
     fn parse_posix_dst() {
+        let std_offset = PosixOffset::from(offset(12));
         let p = Parser::new("NZDT,M9.5.0,M4.1.0/3");
         assert_eq!(
-            p.parse_posix_dst().unwrap(),
+            p.parse_posix_dst(std_offset).unwrap(),
             PosixDst {
                 abbrev: "NZDT".into(),
-                offset: None,
+                offset: offset(13).into(),
                 rule: Some(Rule {
                     start: PosixDateTimeSpec {
                         date: PosixDateSpec::WeekdayOfMonth(WeekdayOfMonth {
@@ -2499,7 +2424,7 @@ mod tests {
                             week: C(5).rinto(),
                             weekday: Weekday::Sunday,
                         }),
-                        time: None,
+                        time: PosixTimeSpec::DEFAULT,
                     },
                     end: PosixDateTimeSpec {
                         date: PosixDateSpec::WeekdayOfMonth(WeekdayOfMonth {
@@ -2507,12 +2432,10 @@ mod tests {
                             week: C(1).rinto(),
                             weekday: Weekday::Sunday,
                         }),
-                        time: Some(PosixTimeSpec {
-                            sign: None,
-                            hour: C(3).rinto(),
-                            minute: None,
-                            second: None,
-                        }),
+                        time: PosixTimeSpec {
+                            duration: PosixTimeSeconds::new(3 * 60 * 60)
+                                .unwrap(),
+                        },
                     },
                 }),
             },
@@ -2520,18 +2443,18 @@ mod tests {
 
         let p = Parser::new("NZDT,J60,J300");
         assert_eq!(
-            p.parse_posix_dst().unwrap(),
+            p.parse_posix_dst(std_offset).unwrap(),
             PosixDst {
                 abbrev: "NZDT".into(),
-                offset: None,
+                offset: offset(13).into(),
                 rule: Some(Rule {
                     start: PosixDateTimeSpec {
                         date: PosixDateSpec::JulianOne(C(60).rinto()),
-                        time: None,
+                        time: PosixTimeSpec::DEFAULT,
                     },
                     end: PosixDateTimeSpec {
                         date: PosixDateSpec::JulianOne(C(300).rinto()),
-                        time: None,
+                        time: PosixTimeSpec::DEFAULT,
                     },
                 }),
             },
@@ -2539,23 +2462,18 @@ mod tests {
 
         let p = Parser::new("NZDT-7,J60,J300");
         assert_eq!(
-            p.parse_posix_dst().unwrap(),
+            p.parse_posix_dst(std_offset).unwrap(),
             PosixDst {
                 abbrev: "NZDT".into(),
-                offset: Some(PosixOffset {
-                    sign: Some(Sign::N::<-1>()),
-                    hour: C(7).rinto(),
-                    minute: None,
-                    second: None,
-                }),
+                offset: offset(7).into(),
                 rule: Some(Rule {
                     start: PosixDateTimeSpec {
                         date: PosixDateSpec::JulianOne(C(60).rinto()),
-                        time: None,
+                        time: PosixTimeSpec::DEFAULT,
                     },
                     end: PosixDateTimeSpec {
                         date: PosixDateSpec::JulianOne(C(300).rinto()),
-                        time: None,
+                        time: PosixTimeSpec::DEFAULT,
                     },
                 }),
             },
@@ -2563,23 +2481,18 @@ mod tests {
 
         let p = Parser::new("NZDT+7,J60,J300");
         assert_eq!(
-            p.parse_posix_dst().unwrap(),
+            p.parse_posix_dst(std_offset).unwrap(),
             PosixDst {
                 abbrev: "NZDT".into(),
-                offset: Some(PosixOffset {
-                    sign: Some(Sign::N::<1>()),
-                    hour: C(7).rinto(),
-                    minute: None,
-                    second: None,
-                }),
+                offset: offset(-7).into(),
                 rule: Some(Rule {
                     start: PosixDateTimeSpec {
                         date: PosixDateSpec::JulianOne(C(60).rinto()),
-                        time: None,
+                        time: PosixTimeSpec::DEFAULT,
                     },
                     end: PosixDateTimeSpec {
                         date: PosixDateSpec::JulianOne(C(300).rinto()),
-                        time: None,
+                        time: PosixTimeSpec::DEFAULT,
                     },
                 }),
             },
@@ -2587,33 +2500,28 @@ mod tests {
 
         let p = Parser::new("NZDT7,J60,J300");
         assert_eq!(
-            p.parse_posix_dst().unwrap(),
+            p.parse_posix_dst(std_offset).unwrap(),
             PosixDst {
                 abbrev: "NZDT".into(),
-                offset: Some(PosixOffset {
-                    sign: None,
-                    hour: C(7).rinto(),
-                    minute: None,
-                    second: None,
-                }),
+                offset: offset(-7).into(),
                 rule: Some(Rule {
                     start: PosixDateTimeSpec {
                         date: PosixDateSpec::JulianOne(C(60).rinto()),
-                        time: None,
+                        time: PosixTimeSpec::DEFAULT,
                     },
                     end: PosixDateTimeSpec {
                         date: PosixDateSpec::JulianOne(C(300).rinto()),
-                        time: None,
+                        time: PosixTimeSpec::DEFAULT,
                     },
                 }),
             },
         );
 
         let p = Parser::new("NZDT7,");
-        assert!(p.parse_posix_dst().is_err());
+        assert!(p.parse_posix_dst(std_offset).is_err());
 
         let p = Parser::new("NZDT7!");
-        assert!(p.parse_posix_dst().is_err());
+        assert!(p.parse_posix_dst(std_offset).is_err());
     }
 
     #[test]
@@ -2720,47 +2628,20 @@ mod tests {
     #[test]
     fn parse_posix_offset() {
         let p = Parser::new("5");
-        assert_eq!(
-            p.parse_posix_offset().unwrap(),
-            PosixOffset {
-                sign: None,
-                hour: C(5).rinto(),
-                minute: None,
-                second: None,
-            },
-        );
+        assert_eq!(p.parse_posix_offset().unwrap(), offset(-5).into(),);
 
         let p = Parser::new("+5");
-        assert_eq!(
-            p.parse_posix_offset().unwrap(),
-            PosixOffset {
-                sign: Some(Sign::N::<1>()),
-                hour: C(5).rinto(),
-                minute: None,
-                second: None,
-            },
-        );
+        assert_eq!(p.parse_posix_offset().unwrap(), offset(-5).into(),);
 
         let p = Parser::new("-5");
-        assert_eq!(
-            p.parse_posix_offset().unwrap(),
-            PosixOffset {
-                sign: Some(Sign::N::<-1>()),
-                hour: C(5).rinto(),
-                minute: None,
-                second: None,
-            },
-        );
+        assert_eq!(p.parse_posix_offset().unwrap(), offset(5).into(),);
 
         let p = Parser::new("-12:34:56");
         assert_eq!(
             p.parse_posix_offset().unwrap(),
-            PosixOffset {
-                sign: Some(Sign::N::<-1>()),
-                hour: C(12).rinto(),
-                minute: Some(C(34).rinto()),
-                second: Some(C(56).rinto()),
-            },
+            PosixOffset::from(
+                Offset::from_seconds(12 * 60 * 60 + 34 * 60 + 56).unwrap()
+            ),
         );
 
         let p = Parser::new("a");
@@ -2811,7 +2692,7 @@ mod tests {
                         week: C(5).rinto(),
                         weekday: Weekday::Sunday,
                     }),
-                    time: None,
+                    time: PosixTimeSpec::DEFAULT,
                 },
                 end: PosixDateTimeSpec {
                     date: PosixDateSpec::WeekdayOfMonth(WeekdayOfMonth {
@@ -2819,12 +2700,9 @@ mod tests {
                         week: C(1).rinto(),
                         weekday: Weekday::Sunday,
                     }),
-                    time: Some(PosixTimeSpec {
-                        sign: None,
-                        hour: C(3).rinto(),
-                        minute: None,
-                        second: None,
-                    }),
+                    time: PosixTimeSpec {
+                        duration: PosixTimeSeconds::new(3 * 60 * 60).unwrap(),
+                    },
                 },
             },
         );
@@ -2849,7 +2727,7 @@ mod tests {
             p.parse_posix_datetime_spec().unwrap(),
             PosixDateTimeSpec {
                 date: PosixDateSpec::JulianOne(C(1).rinto()),
-                time: None,
+                time: PosixTimeSpec::DEFAULT,
             },
         );
 
@@ -2858,12 +2736,9 @@ mod tests {
             p.parse_posix_datetime_spec().unwrap(),
             PosixDateTimeSpec {
                 date: PosixDateSpec::JulianOne(C(1).rinto()),
-                time: Some(PosixTimeSpec {
-                    sign: None,
-                    hour: C(3).rinto(),
-                    minute: None,
-                    second: None,
-                }),
+                time: PosixTimeSpec {
+                    duration: PosixTimeSeconds::new(3 * 60 * 60).unwrap(),
+                },
             },
         );
 
@@ -2876,12 +2751,9 @@ mod tests {
                     week: C(1).rinto(),
                     weekday: Weekday::Sunday,
                 }),
-                time: Some(PosixTimeSpec {
-                    sign: None,
-                    hour: C(3).rinto(),
-                    minute: None,
-                    second: None,
-                }),
+                time: PosixTimeSpec {
+                    duration: PosixTimeSeconds::new(3 * 60 * 60).unwrap(),
+                },
             },
         );
 
@@ -2890,12 +2762,10 @@ mod tests {
             p.parse_posix_datetime_spec().unwrap(),
             PosixDateTimeSpec {
                 date: PosixDateSpec::JulianZero(C(1).rinto()),
-                time: Some(PosixTimeSpec {
-                    sign: None,
-                    hour: C(3).rinto(),
-                    minute: Some(C(45).rinto()),
-                    second: Some(C(5).rinto()),
-                }),
+                time: PosixTimeSpec {
+                    duration: PosixTimeSeconds::new(3 * 60 * 60 + 45 * 60 + 5)
+                        .unwrap(),
+                },
             },
         );
 
@@ -3105,110 +2975,89 @@ mod tests {
         assert_eq!(
             p.parse_posix_time_spec().unwrap(),
             PosixTimeSpec {
-                sign: None,
-                hour: C(5).rinto(),
-                minute: None,
-                second: None
-            }
+                duration: PosixTimeSeconds::new(5 * 60 * 60).unwrap()
+            },
         );
 
         let p = Parser::new("22");
         assert_eq!(
             p.parse_posix_time_spec().unwrap(),
             PosixTimeSpec {
-                sign: None,
-                hour: C(22).rinto(),
-                minute: None,
-                second: None
-            }
+                duration: PosixTimeSeconds::new(22 * 60 * 60).unwrap()
+            },
         );
 
         let p = Parser::new("02");
         assert_eq!(
             p.parse_posix_time_spec().unwrap(),
             PosixTimeSpec {
-                sign: None,
-                hour: C(2).rinto(),
-                minute: None,
-                second: None
-            }
+                duration: PosixTimeSeconds::new(2 * 60 * 60).unwrap()
+            },
         );
 
         let p = Parser::new("5:45");
         assert_eq!(
             p.parse_posix_time_spec().unwrap(),
             PosixTimeSpec {
-                sign: None,
-                hour: C(5).rinto(),
-                minute: Some(C(45).rinto()),
-                second: None
-            }
+                duration: PosixTimeSeconds::new(5 * 60 * 60 + 45 * 60)
+                    .unwrap()
+            },
         );
 
         let p = Parser::new("5:45:12");
         assert_eq!(
             p.parse_posix_time_spec().unwrap(),
             PosixTimeSpec {
-                sign: None,
-                hour: C(5).rinto(),
-                minute: Some(C(45).rinto()),
-                second: Some(C(12).rinto()),
-            }
+                duration: PosixTimeSeconds::new(5 * 60 * 60 + 45 * 60 + 12)
+                    .unwrap()
+            },
         );
 
         let p = Parser::new("5:45:129");
         assert_eq!(
             p.parse_posix_time_spec().unwrap(),
             PosixTimeSpec {
-                sign: None,
-                hour: C(5).rinto(),
-                minute: Some(C(45).rinto()),
-                second: Some(C(12).rinto()),
-            }
+                duration: PosixTimeSeconds::new(5 * 60 * 60 + 45 * 60 + 12)
+                    .unwrap()
+            },
         );
 
         let p = Parser::new("5:45:12:");
         assert_eq!(
             p.parse_posix_time_spec().unwrap(),
             PosixTimeSpec {
-                sign: None,
-                hour: C(5).rinto(),
-                minute: Some(C(45).rinto()),
-                second: Some(C(12).rinto()),
-            }
+                duration: PosixTimeSeconds::new(5 * 60 * 60 + 45 * 60 + 12)
+                    .unwrap()
+            },
         );
 
         let p = Parser { ianav3plus: true, ..Parser::new("+5:45:12") };
         assert_eq!(
             p.parse_posix_time_spec().unwrap(),
             PosixTimeSpec {
-                sign: Some(C(1).rinto()),
-                hour: C(5).rinto(),
-                minute: Some(C(45).rinto()),
-                second: Some(C(12).rinto()),
-            }
+                duration: PosixTimeSeconds::new(5 * 60 * 60 + 45 * 60 + 12)
+                    .unwrap()
+            },
         );
 
         let p = Parser { ianav3plus: true, ..Parser::new("-5:45:12") };
         assert_eq!(
             p.parse_posix_time_spec().unwrap(),
             PosixTimeSpec {
-                sign: Some(C(-1).rinto()),
-                hour: C(5).rinto(),
-                minute: Some(C(45).rinto()),
-                second: Some(C(12).rinto()),
-            }
+                duration: PosixTimeSeconds::new(-(5 * 60 * 60 + 45 * 60 + 12))
+                    .unwrap()
+            },
         );
 
         let p = Parser { ianav3plus: true, ..Parser::new("-167:45:12") };
         assert_eq!(
             p.parse_posix_time_spec().unwrap(),
             PosixTimeSpec {
-                sign: Some(C(-1).rinto()),
-                hour: C(167).rinto(),
-                minute: Some(C(45).rinto()),
-                second: Some(C(12).rinto()),
-            }
+                duration: PosixTimeSeconds::new(
+                    -(167 * 60 * 60 + 45 * 60 + 12)
+                )
+                .unwrap()
+            },
         );
 
         let p = Parser::new("25");

@@ -175,6 +175,10 @@ pub(crate) type Nanosecond = ri16<0, 999>;
 /// The range of possible nanosecond values.
 pub(crate) type SubsecNanosecond = ri32<0, { NANOS_PER_SECOND.bound() - 1 }>;
 
+/// A range representing each possible second in a single civil day.
+pub(crate) type CivilDaySecond =
+    ri32<0, { SECONDS_PER_CIVIL_DAY.bound() - 1 }>;
+
 /// A range representing each possible nanosecond in a single civil day.
 pub(crate) type CivilDayNanosecond =
     ri64<0, { NANOS_PER_CIVIL_DAY.bound() - 1 }>;

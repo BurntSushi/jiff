@@ -114,6 +114,31 @@ pub(crate) fn from_unix_epoch_day(days: i32) -> (i16, i8, i8) {
     (year, month, day)
 }
 
+/// Converts `HH:MM:SS` to a second in a single civil day.
+#[inline(always)]
+pub(crate) fn to_day_second(hour: i8, minute: i8, second: i8) -> i32 {
+    let mut seconds: i32 = 0;
+    seconds += i32::from(hour) * (t::SECONDS_PER_HOUR.value() as i32);
+    seconds += i32::from(minute) * (t::SECONDS_PER_MINUTE.value() as i32);
+    seconds += i32::from(second);
+    seconds
+}
+
+/// Converts a second in a single civil day to `HH:MM::SS`.
+#[inline(always)]
+pub(crate) fn from_day_second(mut seconds: i32) -> (i8, i8, i8) {
+    let (mut hour, mut minute, mut second) = (0, 0, 0);
+    if seconds != 0 {
+        hour = (seconds / t::SECONDS_PER_HOUR.value() as i32) as i8;
+        seconds %= t::SECONDS_PER_HOUR.value() as i32;
+        if seconds != 0 {
+            minute = (seconds / t::SECONDS_PER_MINUTE.value() as i32) as i8;
+            second = (seconds % t::SECONDS_PER_MINUTE.value() as i32) as i8;
+        }
+    }
+    (hour, minute, second)
+}
+
 /// Converts `HH:MM:SS.nnnnnnnnn` to a nanosecond in a single civil day.
 #[inline(always)]
 pub(crate) fn to_day_nanosecond(
