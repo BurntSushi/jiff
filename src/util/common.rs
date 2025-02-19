@@ -55,7 +55,7 @@ pub(crate) const fn days_in_month(year: i16, month: i8) -> i8 {
 /// Ref: https://github.com/cassioneri/eaf/blob/684d3cc32d14eee371d0abe4f683d6d6a49ed5c1/algorithms/neri_schneider.hpp#L83
 #[inline(always)]
 #[allow(non_upper_case_globals, non_snake_case)]
-pub(crate) fn to_unix_epoch_day(year: i16, month: i8, day: i8) -> i32 {
+pub(crate) const fn to_unix_epoch_day(year: i16, month: i8, day: i8) -> i32 {
     const s: u32 = 82;
     const K: u32 = 719468 + 146097 * s;
     const L: u32 = 400 * s;
@@ -85,7 +85,7 @@ pub(crate) fn to_unix_epoch_day(year: i16, month: i8, day: i8) -> i32 {
 /// Ref: <https://github.com/cassioneri/eaf/blob/684d3cc32d14eee371d0abe4f683d6d6a49ed5c1/algorithms/neri_schneider.hpp#L40C3-L40C34>
 #[inline(always)]
 #[allow(non_upper_case_globals, non_snake_case)]
-pub(crate) fn from_unix_epoch_day(days: i32) -> (i16, i8, i8) {
+pub(crate) const fn from_unix_epoch_day(days: i32) -> (i16, i8, i8) {
     const s: u32 = 82;
     const K: u32 = 719468 + 146097 * s;
     const L: u32 = 400 * s;
@@ -98,7 +98,7 @@ pub(crate) fn from_unix_epoch_day(days: i32) -> (i16, i8, i8) {
     let N_C = (N_1 % 146097) / 4;
 
     let N_2 = 4 * N_C + 3;
-    let P_2 = 2939745 * u64::from(N_2);
+    let P_2 = 2939745 * (N_2 as u64);
     let Z = (P_2 / 4294967296) as u32;
     let N_Y = (P_2 % 4294967296) as u32 / 2939745 / 4;
     let Y = 100 * C + Z;
@@ -176,12 +176,12 @@ pub(crate) fn from_day_nanosecond(mut nanos: i64) -> (i8, i8, i8, i32) {
 
 /// Converts a Unix timestamp with an offset to a Gregorian datetime.
 #[inline(always)]
-pub(crate) fn timestamp_to_datetime_zulu(
+pub(crate) const fn timestamp_to_datetime_zulu(
     mut secs: i64,
     mut subsec: i32,
     offset: i32,
 ) -> (i16, i8, i8, i8, i8, i8, i32) {
-    secs += i64::from(offset);
+    secs += offset as i64;
     let mut days = secs.div_euclid(86_400) as i32;
     secs = secs.rem_euclid(86_400);
     if subsec < 0 {
@@ -205,7 +205,7 @@ pub(crate) fn timestamp_to_datetime_zulu(
 
 /// Converts a Gregorian datetime and its offset to a Unix timestamp.
 #[inline(always)]
-pub(crate) fn datetime_zulu_to_timestamp(
+pub(crate) const fn datetime_zulu_to_timestamp(
     year: i16,
     month: i8,
     day: i8,
@@ -216,11 +216,11 @@ pub(crate) fn datetime_zulu_to_timestamp(
     offset: i32,
 ) -> (i64, i32) {
     let day = to_unix_epoch_day(year, month, day);
-    let mut secs = i64::from(day) * t::SECONDS_PER_CIVIL_DAY.value();
-    secs += i64::from(hour) * t::SECONDS_PER_HOUR.value();
-    secs += i64::from(minute) * t::SECONDS_PER_MINUTE.value();
-    secs += i64::from(second);
-    secs -= i64::from(offset);
+    let mut secs = (day as i64) * t::SECONDS_PER_CIVIL_DAY.value();
+    secs += (hour as i64) * t::SECONDS_PER_HOUR.value();
+    secs += (minute as i64) * t::SECONDS_PER_MINUTE.value();
+    secs += second as i64;
+    secs -= offset as i64;
     if day < 0 && subsec != 0 {
         secs += 1;
         subsec -= 1_000_000_000;
