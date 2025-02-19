@@ -138,6 +138,26 @@ macro_rules! define_ranged {
                 }
             }
 
+            /// Like `new`, but monomorphic and works in a `const` context.
+            #[inline]
+            pub(crate) const fn new_const(val: $repr) -> Option<Self> {
+                if !Self::contains(val) {
+                    return None;
+                }
+                #[cfg(not(debug_assertions))]
+                {
+                    Some(Self { val })
+                }
+                #[cfg(debug_assertions)]
+                {
+                    Some(Self {
+                        val,
+                        min: Self::MIN_REPR,
+                        max: Self::MAX_REPR,
+                    })
+                }
+            }
+
             #[inline]
             pub(crate) fn try_new(
                 what: &'static str,
