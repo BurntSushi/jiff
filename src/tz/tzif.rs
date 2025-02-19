@@ -52,7 +52,6 @@ pub(crate) struct Tzif {
     transitions: Vec<Transition>,
     types: Vec<LocalTimeType>,
     designations: String,
-    leap_seconds: Vec<LeapSecond>,
     posix_tz: Option<ReasonablePosixTimeZone>,
 }
 
@@ -413,7 +412,6 @@ impl Tzif {
             transitions: vec![],
             types: vec![],
             designations: String::new(),
-            leap_seconds: vec![],
             posix_tz: None,
         };
         let rest = tzif.parse_transitions(&header32, bytes)?;
@@ -446,7 +444,6 @@ impl Tzif {
             transitions: vec![],
             types: vec![],
             designations: String::new(),
-            leap_seconds: vec![],
             posix_tz: None,
         };
         let rest = tzif.parse_transitions(&header64, rest)?;
@@ -699,6 +696,10 @@ impl Tzif {
         Ok(rest)
     }
 
+    /// This parses the leap second corrections in the TZif data.
+    ///
+    /// Note that we only parse and verify them. We don't actually use them.
+    /// Jiff effectively ignores leap seconds.
     fn parse_leap_seconds<'b>(
         &mut self,
         header: &Header,
@@ -715,21 +716,18 @@ impl Tzif {
             .expect("time_size plus 4 fits in usize");
         let mut it = bytes.chunks_exact(chunk_len);
         while let Some(chunk) = it.next() {
-            let (occur_bytes, corr_bytes) = chunk.split_at(header.time_size);
+            let (occur_bytes, _corr_bytes) = chunk.split_at(header.time_size);
             let occur_seconds = if header.is_32bit() {
                 i64::from(from_be_bytes_i32(occur_bytes))
             } else {
                 from_be_bytes_i64(occur_bytes)
             };
-            let occurrence =
-                Timestamp::from_second(occur_seconds).map_err(|e| {
-                    err!(
-                        "leap second occurrence {occur_seconds} \
+            let _ = Timestamp::from_second(occur_seconds).map_err(|e| {
+                err!(
+                    "leap second occurrence {occur_seconds} \
                          is out of range: {e}"
-                    )
-                })?;
-            let correction = from_be_bytes_i32(corr_bytes);
-            self.leap_seconds.push(LeapSecond { occurrence, correction });
+                )
+            })?;
         }
         assert!(it.remainder().is_empty());
         Ok(rest)
@@ -1121,15 +1119,6 @@ impl core::fmt::Display for Indicator {
     }
 }
 
-/// A leap second "correction" record.
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct LeapSecond {
-    /// The Unix leap time at which the leap second occurred.
-    occurrence: Timestamp,
-    /// The leap second offset. Usually +1 or -1.
-    correction: i32,
-}
-
 /// The header for a TZif formatted file.
 ///
 /// V2+ TZif format have two headers: one for V1 data, and then a second
@@ -1491,14 +1480,6 @@ mod tests {
                     dst = if typ.is_dst.is_dst() { "dst" } else { "" },
                 )
                 .unwrap();
-            }
-        }
-        if !tzif.leap_seconds.is_empty() {
-            writeln!(out, "LEAP SECONDS").unwrap();
-            for ls in tzif.leap_seconds.iter() {
-                let dt = Offset::UTC.to_datetime(ls.occurrence);
-                let c = ls.correction;
-                writeln!(out, "  {dt:?}\tcorrection={c}").unwrap();
             }
         }
         if let Some(ref posix_tz) = tzif.posix_tz {
