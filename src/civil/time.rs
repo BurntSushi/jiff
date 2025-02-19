@@ -9,12 +9,12 @@ use crate::{
         temporal::{self, DEFAULT_DATETIME_PARSER},
     },
     util::{
-        common::{from_day_nanosecond, to_day_nanosecond},
+        common,
         rangeint::{RFrom, RInto, TryRFrom},
         round::increment,
         t::{
-            self, CivilDayNanosecond, Hour, Microsecond, Millisecond, Minute,
-            Nanosecond, Second, SubsecNanosecond, C,
+            self, CivilDayNanosecond, CivilDaySecond, Hour, Microsecond,
+            Millisecond, Minute, Nanosecond, Second, SubsecNanosecond, C,
         },
     },
     RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
@@ -1126,6 +1126,38 @@ impl Time {
         self,
         duration: SignedDuration,
     ) -> Result<(Time, SignedDuration), Error> {
+        if self.subsec_nanosecond() != 0 || duration.subsec_nanos() != 0 {
+            return self.overflowing_add_duration_general(duration);
+        }
+        let start = t::NoUnits::rfrom(self.to_second());
+        let duration_secs = t::NoUnits::new_unchecked(duration.as_secs());
+        // This can fail if the duration is near its min or max values, and
+        // thus we fall back to the more general (but slower) implementation
+        // that uses 128-bit integers.
+        let Some(sum) = start.checked_add(duration_secs) else {
+            return self.overflowing_add_duration_general(duration);
+        };
+        let days = t::SpanDays::try_new(
+            "overflowing-days",
+            sum.div_floor(t::SECONDS_PER_CIVIL_DAY),
+        )?;
+        let time_secs = sum.rem_floor(t::SECONDS_PER_CIVIL_DAY);
+        let time = Time::from_second(time_secs.rinto());
+        // OK because of the constraint imposed by t::SpanDays.
+        let hours = i64::from(days).checked_mul(24).unwrap();
+        Ok((time, SignedDuration::from_hours(hours)))
+    }
+
+    /// Like `overflowing_add`, but with `SignedDuration`.
+    ///
+    /// This is used for datetime arithmetic, when adding to the time
+    /// component overflows into days (always 24 hours).
+    #[inline(never)]
+    #[cold]
+    fn overflowing_add_duration_general(
+        self,
+        duration: SignedDuration,
+    ) -> Result<(Time, SignedDuration), Error> {
         let start = t::NoUnits128::rfrom(self.to_nanosecond());
         let duration = t::NoUnits96::new_unchecked(duration.as_nanos());
         // This can never fail because the maximum duration fits into a
@@ -1739,6 +1771,81 @@ impl Time {
         t2 - t1
     }
 
+    /// Converts this time value to the number of seconds that has elapsed
+    /// since `00:00:00`. This completely ignores seconds. Callers should
+    /// likely ensure that the fractional second component is zero.
+    ///
+    /// The maximum possible value that can be returned represents the time
+    /// `23:59:59`.
+    #[inline]
+    pub(crate) fn to_second(&self) -> CivilDaySecond {
+        #[cfg(not(debug_assertions))]
+        {
+            CivilDaySecond {
+                val: common::to_day_second(
+                    self.hour.val,
+                    self.minute.val,
+                    self.second.val,
+                ),
+            }
+        }
+        #[cfg(debug_assertions)]
+        {
+            let val = common::to_day_second(
+                self.hour.val,
+                self.minute.val,
+                self.second.val,
+            );
+            let min = common::to_day_second(
+                self.hour.min,
+                self.minute.min,
+                self.second.min,
+            );
+            let max = common::to_day_second(
+                self.hour.max,
+                self.minute.max,
+                self.second.max,
+            );
+            CivilDaySecond { val, min, max }
+        }
+    }
+
+    /// Converts the given second to a time value. The second should correspond
+    /// to the number of seconds that have elapsed since `00:00:00`. The
+    /// fractional second component of the `Time` returned is always `0`.
+    #[inline(always)]
+    pub(crate) fn from_second(second: CivilDaySecond) -> Time {
+        #[cfg(not(debug_assertions))]
+        {
+            let (hour, minute, second) = common::from_day_second(second.val);
+            Time {
+                hour: Hour { val: hour },
+                minute: Minute { val: minute },
+                second: Second { val: second },
+                subsec_nanosecond: SubsecNanosecond { val: 0 },
+            }
+        }
+        #[cfg(debug_assertions)]
+        {
+            let (hour, minute, sec) = common::from_day_second(second.val);
+            let (min_hour, min_minute, min_sec) =
+                common::from_day_second(second.min);
+            let (max_hour, max_minute, max_sec) =
+                common::from_day_second(second.max);
+
+            let hour = Hour { val: hour, min: min_hour, max: max_hour };
+            let minute =
+                Minute { val: minute, min: min_minute, max: max_minute };
+            let second = Second { val: sec, min: min_sec, max: max_sec };
+            Time {
+                hour,
+                minute,
+                second,
+                subsec_nanosecond: SubsecNanosecond::N::<0>(),
+            }
+        }
+    }
+
     /// Converts this time value to the number of nanoseconds that has elapsed
     /// since `00:00:00.000000000`.
     ///
@@ -1749,7 +1856,7 @@ impl Time {
         #[cfg(not(debug_assertions))]
         {
             CivilDayNanosecond {
-                val: to_day_nanosecond(
+                val: common::to_day_nanosecond(
                     self.hour.val,
                     self.minute.val,
                     self.second.val,
@@ -1759,19 +1866,19 @@ impl Time {
         }
         #[cfg(debug_assertions)]
         {
-            let val = to_day_nanosecond(
+            let val = common::to_day_nanosecond(
                 self.hour.val,
                 self.minute.val,
                 self.second.val,
                 self.subsec_nanosecond.val,
             );
-            let min = to_day_nanosecond(
+            let min = common::to_day_nanosecond(
                 self.hour.min,
                 self.minute.min,
                 self.second.min,
                 self.subsec_nanosecond.min,
             );
-            let max = to_day_nanosecond(
+            let max = common::to_day_nanosecond(
                 self.hour.max,
                 self.minute.max,
                 self.second.max,
@@ -1789,7 +1896,7 @@ impl Time {
         #[cfg(not(debug_assertions))]
         {
             let (hour, minute, second, subsec) =
-                from_day_nanosecond(nanosecond.val);
+                common::from_day_nanosecond(nanosecond.val);
             Time {
                 hour: Hour { val: hour },
                 minute: Minute { val: minute },
@@ -1800,11 +1907,11 @@ impl Time {
         #[cfg(debug_assertions)]
         {
             let (hour, minute, second, subsec) =
-                from_day_nanosecond(nanosecond.val);
+                common::from_day_nanosecond(nanosecond.val);
             let (min_hour, min_minute, min_second, min_subsec) =
-                from_day_nanosecond(nanosecond.min);
+                common::from_day_nanosecond(nanosecond.min);
             let (max_hour, max_minute, max_second, max_subsec) =
-                from_day_nanosecond(nanosecond.max);
+                common::from_day_nanosecond(nanosecond.max);
 
             let hour = Hour { val: hour, min: min_hour, max: max_hour };
             let minute =
