@@ -1487,12 +1487,19 @@ impl Date {
             return Ok(self);
         }
         if span.units().contains_only(Unit::Day) {
-            let epoch_days = self.to_unix_epoch_day();
-            let days = epoch_days.try_checked_add(
-                "days",
-                UnixEpochDay::rfrom(span.get_days_ranged()),
-            )?;
-            return Ok(Date::from_unix_epoch_day(days));
+            let span_days = span.get_days_ranged();
+            return if span_days == -1 {
+                self.yesterday()
+            } else if span_days == 1 {
+                self.tomorrow()
+            } else {
+                let epoch_days = self.to_unix_epoch_day();
+                let days = epoch_days.try_checked_add(
+                    "days",
+                    UnixEpochDay::rfrom(span.get_days_ranged()),
+                )?;
+                Ok(Date::from_unix_epoch_day(days))
+            };
         }
 
         let (month, years) =
@@ -1528,15 +1535,24 @@ impl Date {
         duration: SignedDuration,
     ) -> Result<Date, Error> {
         // OK because 24!={-1,0}.
-        let days = duration.as_hours() / 24;
-        let days = UnixEpochDay::try_new("days", days).with_context(|| {
-            err!(
-                "{days} computed from duration {duration:?} overflows \
-                 Jiff's datetime limits",
-            )
-        })?;
-        let days = self.to_unix_epoch_day().try_checked_add("days", days)?;
-        Ok(Date::from_unix_epoch_day(days))
+        match duration.as_hours() / 24 {
+            0 => Ok(self),
+            -1 => self.yesterday(),
+            1 => self.tomorrow(),
+            days => {
+                let days = UnixEpochDay::try_new("days", days).with_context(
+                    || {
+                        err!(
+                            "{days} computed from duration {duration:?} \
+                             overflows Jiff's datetime limits",
+                        )
+                    },
+                )?;
+                let days =
+                    self.to_unix_epoch_day().try_checked_add("days", days)?;
+                Ok(Date::from_unix_epoch_day(days))
+            }
+        }
     }
 
     /// This routine is identical to [`Date::checked_add`] with the duration
@@ -2128,9 +2144,11 @@ impl Date {
         day: impl RInto<Day>,
     ) -> Result<Date, Error> {
         let (year, month, day) = (year.rinto(), month.rinto(), day.rinto());
-        let max_day = days_in_month(year, month);
-        if day > max_day {
-            return Err(day.to_error_with_bounds("day", 1, max_day));
+        if day > 28 {
+            let max_day = days_in_month(year, month);
+            if day > max_day {
+                return Err(day.to_error_with_bounds("day", 1, max_day));
+            }
         }
         Ok(Date::new_ranged_unchecked(year, month, day))
     }
