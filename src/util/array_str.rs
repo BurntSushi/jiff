@@ -46,11 +46,6 @@ impl<const N: usize> ArrayStr<N> {
         Some(ArrayStr { bytes, len: len as u8 })
     }
 
-    /// Returns the capacity of this fixed string.
-    pub(crate) const fn capacity() -> usize {
-        N
-    }
-
     /// Append the bytes given to the end of this string.
     ///
     /// If the capacity would be exceeded, then this is a no-op and `false`

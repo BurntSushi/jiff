@@ -10,22 +10,27 @@ These binary files are the ones commonly found in Unix distributions in the
 
 use core::ops::Range;
 
-use alloc::{string::String, vec, vec::Vec};
+#[cfg(feature = "alloc")]
+use alloc::{string::String, vec::Vec};
 
 use crate::{
     civil::DateTime,
-    error::{err, Error, ErrorContext},
+    error::Error,
+    shared,
     timestamp::Timestamp,
     tz::{
         posix::ReasonablePosixTimeZone, timezone::TimeZoneAbbreviation,
         AmbiguousOffset, Dst, Offset, TimeZoneOffsetInfo, TimeZoneTransition,
     },
-    util::{
-        crc32,
-        escape::{Byte, Bytes},
-        t::UnixSeconds,
-    },
 };
+
+/// The owned variant of `Tzif`.
+#[cfg(feature = "alloc")]
+pub(crate) type TzifOwned = Tzif<String, Vec<LocalTimeType>, Vec<Transition>>;
+
+/// The static variant of `Tzif`.
+pub(crate) type TzifStatic =
+    Tzif<&'static str, &'static [LocalTimeType], &'static [Transition]>;
 
 /// A time zone based on IANA TZif formatted data.
 ///
@@ -39,8 +44,9 @@ use crate::{
 /// contents of TZif formatted data in memory, and turning it into a data type
 /// that can be used as a time zone.
 #[derive(Debug)]
-pub(crate) struct Tzif {
-    name: Option<String>,
+#[doc(hidden)] // not part of Jiff's public API
+pub struct Tzif<STRING, TYPES, TRANS> {
+    name: Option<STRING>,
     /// An ASCII byte corresponding to the version number. So, 0x50 is '2'.
     ///
     /// This is unused. It's only used in `test` compilation for emitting
@@ -49,13 +55,93 @@ pub(crate) struct Tzif {
     #[allow(dead_code)]
     version: u8,
     checksum: u32,
-    transitions: Vec<Transition>,
-    types: Vec<LocalTimeType>,
-    designations: String,
+    designations: STRING,
     posix_tz: Option<ReasonablePosixTimeZone>,
+    types: TYPES,
+    transitions: TRANS,
 }
 
-impl Tzif {
+impl TzifStatic {
+    /// Converts from the shared-but-internal API for use in proc macros.
+    ///
+    /// This specifically works in a `const` context. And it requires that
+    /// caller to pass in the parsed `Tzif` in its fixed form along with the
+    /// variable length local time types and transitions. (Technically, the
+    /// TZ identifier and the designations are also variable length despite
+    /// being parsed of `TzifFixed`, but in practice they can be handled just
+    /// fine via `&'static str`.)
+    ///
+    /// Notice that the `types` and `transitions` are *not* from the `shared`
+    /// API, but rather, from the types defined in this module. They have to
+    /// be this way because there's a conversion step that occurs. In practice,
+    /// this sort of thing is embedded as a literal in source code via a proc
+    /// macro. Like this:
+    ///
+    /// ```text
+    /// static TZIF: Tzif<&str, &[LocalTimeType], &[Transition]> =
+    ///     Tzif::from_shared_const(
+    ///         shared::TzifFixed {
+    ///             name: Some("America/New_York"),
+    ///             version: b'3',
+    ///             checksum: 0xDEADBEEF,
+    ///             designations: "ESTEDT",
+    ///             posix_tz: None,
+    ///         },
+    ///         &[
+    ///             shared::TzifLocalTimeType {
+    ///                 offset: -5 * 60 * 60,
+    ///                 is_dst: false,
+    ///                 designation: 0..3,
+    ///                 indicator: shared::TzifIndicator::LocalWall,
+    ///             }.to_jiff(),
+    ///         ],
+    ///         &[
+    ///             shared::TzifTransition {
+    ///                 timestamp: 123456789,
+    ///                 type_index: 0,
+    ///             }.to_jiff(-5, -5),
+    ///         ],
+    ///     );
+    /// ```
+    ///
+    /// Or something like that anyway. The point is, our `static` slices are
+    /// variable length and they need to be the right types. At least, I
+    /// couldn't see a simpler way to arrange this.
+    pub(crate) const fn from_shared_const(
+        sh: &shared::TzifFixed<&'static str>,
+        types: &'static [LocalTimeType],
+        transitions: &'static [Transition],
+    ) -> TzifStatic {
+        let name = sh.name;
+        let version = sh.version;
+        let checksum = sh.checksum;
+        let designations = sh.designations;
+        let posix_tz = match sh.posix_tz {
+            None => None,
+            Some(ref tz) => Some(tz.to_jiff()),
+        };
+        // Unlike in the owned case, we specifically do not check that the
+        // POSIX time zone is consistent with the last transition. This is
+        // because it would require making a lot of code in Jiff `const`
+        // that is difficult to make `const`. Moreover, this constructor is
+        // generally only used with the `jiff-tz-static` proc-macros, and those
+        // go through the owned APIs at compile time. And thus, it is already
+        // validated that the POSIX time zone is consistent with the last
+        // transition.
+        Tzif {
+            name,
+            version,
+            checksum,
+            designations,
+            posix_tz,
+            types,
+            transitions,
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl TzifOwned {
     /// Parses the given data as a TZif formatted file.
     ///
     /// The name given is attached to the `Tzif` value returned, but is
@@ -73,28 +159,63 @@ impl Tzif {
     pub(crate) fn parse(
         name: Option<String>,
         bytes: &[u8],
-    ) -> Result<Tzif, Error> {
-        let original = bytes;
-        let name = name.into();
-        let (header32, rest) = Header::parse(4, bytes)
-            .map_err(|e| e.context("failed to parse 32-bit header"))?;
-        let (mut tzif, rest) = if header32.version == 0 {
-            Tzif::parse32(name, header32, rest)?
-        } else {
-            Tzif::parse64(name, header32, rest)?
-        };
-        // Compute the checksum using the entire contents of the TZif data.
-        let tzif_raw_len = (rest.as_ptr() as usize)
-            .checked_sub(original.as_ptr() as usize)
-            .unwrap();
-        let tzif_raw_bytes = &original[..tzif_raw_len];
-        tzif.checksum = crc32::sum(tzif_raw_bytes);
+    ) -> Result<Self, Error> {
+        let sh =
+            shared::TzifOwned::parse(name, bytes).map_err(Error::adhoc)?;
+        let tzif = TzifOwned::from_shared_owned(&sh);
         Ok(tzif)
     }
 
+    /// Converts from the shared-but-internal API for use in proc macros.
+    ///
+    /// This is not `const` since it accepts owned `String` and `Vec` values
+    /// for variable length data inside `Tzif`.
+    pub(crate) fn from_shared_owned(sh: &shared::TzifOwned) -> TzifOwned {
+        let name = sh.fixed.name.clone();
+        let version = sh.fixed.version;
+        let checksum = sh.fixed.checksum;
+        let designations = sh.fixed.designations.clone();
+        let posix_tz = match sh.fixed.posix_tz {
+            None => None,
+            Some(ref tz) => {
+                let tz =
+                    crate::tz::posix::PosixTimeZone::from_shared_owned(tz);
+                // OK because `shared::tzif` returns an error otherwise.
+                Some(tz.reasonable().unwrap())
+            }
+        };
+        let types: Vec<LocalTimeType> =
+            sh.types.iter().map(shared::TzifLocalTimeType::to_jiff).collect();
+        let mut transitions = Vec::with_capacity(sh.transitions.len());
+        for (i, this) in sh.transitions.iter().enumerate() {
+            let prev = &sh.transitions[i.saturating_sub(1)];
+            let prev_offset = sh.types[usize::from(prev.type_index)].offset;
+            let this_offset = sh.types[usize::from(this.type_index)].offset;
+            transitions.push(this.to_jiff(prev_offset, this_offset));
+        }
+        // TODO: We need to add back the POSIX time zone consistency check,
+        // and make this routine falllible.
+        Tzif {
+            name,
+            version,
+            checksum,
+            designations,
+            posix_tz,
+            types,
+            transitions,
+        }
+    }
+}
+
+impl<
+        STRING: AsRef<str>,
+        TYPES: AsRef<[LocalTimeType]>,
+        TRANS: AsRef<[Transition]>,
+    > Tzif<STRING, TYPES, TRANS>
+{
     /// Returns the name given to this TZif data in its constructor.
     pub(crate) fn name(&self) -> Option<&str> {
-        self.name.as_deref()
+        self.name.as_ref().map(|n| n.as_ref())
     }
 
     /// Returns the appropriate time zone offset to use for the given
@@ -146,12 +267,13 @@ impl Tzif {
         //
         // The result of the dummy transition is that the code below is simpler
         // with fewer special cases.
-        assert!(!self.transitions.is_empty(), "transitions is non-empty");
-        let index = if timestamp > self.transitions.last().unwrap().timestamp {
-            self.transitions.len() - 1
+        assert!(!self.transitions().is_empty(), "transitions is non-empty");
+        let index = if timestamp > self.transitions().last().unwrap().timestamp
+        {
+            self.transitions().len() - 1
         } else {
             let search = self
-                .transitions
+                .transitions()
                 // It is an optimization to compare only by the second instead
                 // of the second and the nanosecond. This works for two
                 // reasons. Firstly, the timestamps in TZif are limited to
@@ -181,16 +303,16 @@ impl Tzif {
         // binary search returns an Err(len) for a time greater than the
         // maximum transition. But we account for that above by converting
         // Err(len) to Err(len-1).
-        assert!(index < self.transitions.len());
+        assert!(index < self.transitions().len());
         // RFC 8536 says: "Local time for timestamps on or after the last
         // transition is specified by the TZ string in the footer (Section 3.3)
         // if present and nonempty; otherwise, it is unspecified."
         //
         // Subtracting 1 is OK because we know self.transitions is not empty.
-        let t = if index < self.transitions.len() - 1 {
+        let t = if index < self.transitions().len() - 1 {
             // This is the typical case in "fat" TZif files: we found a
             // matching transition.
-            &self.transitions[index]
+            &self.transitions()[index]
         } else {
             match self.posix_tz.as_ref() {
                 // This is the typical case in "slim" TZif files, where the
@@ -207,7 +329,7 @@ impl Tzif {
                 // This case is technically unspecified, but I think the
                 // typical thing to do is to just use the last transition.
                 // I'm not 100% sure on this one.
-                None => &self.transitions[index],
+                None => &self.transitions()[index],
             }
         };
         Ok(self.local_time_type(t))
@@ -231,17 +353,17 @@ impl Tzif {
         // of timestamps. And in particular, each transition begins with a
         // possibly ambiguous range of wall clock times corresponding to either
         // a "gap" or "fold" in time.
-        assert!(!self.transitions.is_empty(), "transitions is non-empty");
+        assert!(!self.transitions().is_empty(), "transitions is non-empty");
         let search =
-            self.transitions.binary_search_by_key(&dt, |t| t.wall.start());
+            self.transitions().binary_search_by_key(&dt, |t| t.wall.start());
         let this_index = match search {
             Err(0) => unreachable!("impossible to come before DateTime::MIN"),
             Ok(i) => i,
             Err(i) => i.checked_sub(1).expect("i is non-zero"),
         };
-        assert!(this_index < self.transitions.len());
+        assert!(this_index < self.transitions().len());
 
-        let this = &self.transitions[this_index];
+        let this = &self.transitions()[this_index];
         let this_offset = self.local_time_type(this).offset;
         // This is a little tricky, but we need to check for ambiguous civil
         // datetimes before possibly using the POSIX TZ string. Namely, a
@@ -254,7 +376,7 @@ impl Tzif {
                 // A gap/fold can only appear when there exists a previous
                 // transition.
                 let prev_index = this_index.checked_sub(1).unwrap();
-                let prev = &self.transitions[prev_index];
+                let prev = &self.transitions()[prev_index];
                 let prev_offset = self.local_time_type(prev).offset;
                 return AmbiguousOffset::Gap {
                     before: prev_offset,
@@ -265,7 +387,7 @@ impl Tzif {
                 // A gap/fold can only appear when there exists a previous
                 // transition.
                 let prev_index = this_index.checked_sub(1).unwrap();
-                let prev = &self.transitions[prev_index];
+                let prev = &self.transitions()[prev_index];
                 let prev_offset = self.local_time_type(prev).offset;
                 return AmbiguousOffset::Fold {
                     before: prev_offset,
@@ -278,7 +400,7 @@ impl Tzif {
         // transitions in the TZif data. But, if we matched at or after the
         // last transition, then we need to use the POSIX TZ string (which
         // could still return an ambiguous offset).
-        if this_index == self.transitions.len() - 1 {
+        if this_index == self.transitions().len() - 1 {
             if let Some(tz) = self.posix_tz.as_ref() {
                 return tz.to_ambiguous_kind(dt);
             }
@@ -300,9 +422,9 @@ impl Tzif {
         &self,
         ts: Timestamp,
     ) -> Option<TimeZoneTransition> {
-        assert!(!self.transitions.is_empty(), "transitions is non-empty");
+        assert!(!self.transitions().is_empty(), "transitions is non-empty");
         let search =
-            self.transitions.binary_search_by_key(&ts, |t| t.timestamp);
+            self.transitions().binary_search_by_key(&ts, |t| t.timestamp);
         let index = match search {
             Ok(i) | Err(i) => i.checked_sub(1)?,
         };
@@ -310,7 +432,7 @@ impl Tzif {
             // The first transition is a dummy that we insert, so if we land on
             // it here, treat it as if it doesn't exist.
             return None;
-        } else if index == self.transitions.len() - 1 {
+        } else if index == self.transitions().len() - 1 {
             if let Some(ref posix_tz) = self.posix_tz {
                 // Since the POSIX TZ must be consistent with the last
                 // transition, it must be the case that tzif_last <=
@@ -322,11 +444,11 @@ impl Tzif {
                 // of the TZif format if it does.
                 return posix_tz.previous_transition(ts);
             }
-            &self.transitions[index]
+            &self.transitions()[index]
         } else {
-            &self.transitions[index]
+            &self.transitions()[index]
         };
-        let typ = &self.types[usize::from(trans.type_index)];
+        let typ = &self.types()[usize::from(trans.type_index)];
         Some(TimeZoneTransition {
             timestamp: trans.timestamp,
             offset: typ.offset,
@@ -341,9 +463,9 @@ impl Tzif {
         &self,
         ts: Timestamp,
     ) -> Option<TimeZoneTransition> {
-        assert!(!self.transitions.is_empty(), "transitions is non-empty");
+        assert!(!self.transitions().is_empty(), "transitions is non-empty");
         let search =
-            self.transitions.binary_search_by_key(&ts, |t| t.timestamp);
+            self.transitions().binary_search_by_key(&ts, |t| t.timestamp);
         let index = match search {
             Ok(i) => i.checked_add(1)?,
             Err(i) => i,
@@ -352,7 +474,7 @@ impl Tzif {
             // The first transition is a dummy that we insert, so if we land on
             // it here, treat it as if it doesn't exist.
             return None;
-        } else if index >= self.transitions.len() - 1 {
+        } else if index >= self.transitions().len() - 1 {
             if let Some(ref posix_tz) = self.posix_tz {
                 // Since the POSIX TZ must be consistent with the last
                 // transition, it must be the case that next.timestamp <=
@@ -364,11 +486,11 @@ impl Tzif {
                 // of the TZif format if it does.
                 return posix_tz.next_transition(ts);
             }
-            self.transitions.last().expect("last transition")
+            self.transitions().last().expect("last transition")
         } else {
-            &self.transitions[index]
+            &self.transitions()[index]
         };
-        let typ = &self.types[usize::from(trans.type_index)];
+        let typ = &self.types()[usize::from(trans.type_index)];
         Some(TimeZoneTransition {
             timestamp: trans.timestamp,
             offset: typ.offset,
@@ -380,538 +502,44 @@ impl Tzif {
     fn designation(&self, typ: &LocalTimeType) -> &str {
         // OK because we verify that the designation range on every local
         // time type is a valid range into `self.designations`.
-        &self.designations[typ.designation()]
+        &self.designations()[typ.designation()]
     }
 
     fn local_time_type(&self, transition: &Transition) -> &LocalTimeType {
         // OK because we require that `type_index` always points to a valid
         // local time type.
-        &self.types[usize::from(transition.type_index)]
+        &self.types()[usize::from(transition.type_index)]
     }
 
-    fn first_transition(&self) -> &Transition {
-        // OK because we know we have at least one transition. This isn't
-        // true generally of the TZif format, since it does actually permit 0
-        // transitions. But as part of parsing, we always add a "dummy" first
-        // transition corresponding to the minimum possible Jiff timestamp.
-        // This makes some logic for transition lookups a little simpler by
-        // reducing special cases.
-        self.transitions.first().unwrap()
+    fn designations(&self) -> &str {
+        self.designations.as_ref()
     }
 
-    fn parse32<'b>(
-        name: Option<String>,
-        header32: Header,
-        bytes: &'b [u8],
-    ) -> Result<(Tzif, &'b [u8]), Error> {
-        let mut tzif = Tzif {
-            name,
-            version: header32.version,
-            // filled in later
-            checksum: 0,
-            transitions: vec![],
-            types: vec![],
-            designations: String::new(),
-            posix_tz: None,
-        };
-        let rest = tzif.parse_transitions(&header32, bytes)?;
-        let rest = tzif.parse_transition_types(&header32, rest)?;
-        let rest = tzif.parse_local_time_types(&header32, rest)?;
-        let rest = tzif.parse_time_zone_designations(&header32, rest)?;
-        let rest = tzif.parse_leap_seconds(&header32, rest)?;
-        let rest = tzif.parse_indicators(&header32, rest)?;
-        tzif.set_wall_datetimes();
-        Ok((tzif, rest))
+    fn types(&self) -> &[LocalTimeType] {
+        self.types.as_ref()
     }
 
-    fn parse64<'b>(
-        name: Option<String>,
-        header32: Header,
-        bytes: &'b [u8],
-    ) -> Result<(Tzif, &'b [u8]), Error> {
-        let (_, rest) = try_split_at(
-            "V1 TZif data block",
-            bytes,
-            header32.data_block_len()?,
-        )?;
-        let (header64, rest) = Header::parse(8, rest)
-            .map_err(|e| e.context("failed to parse 64-bit header"))?;
-        let mut tzif = Tzif {
-            name,
-            version: header64.version,
-            // filled in later
-            checksum: 0,
-            transitions: vec![],
-            types: vec![],
-            designations: String::new(),
-            posix_tz: None,
-        };
-        let rest = tzif.parse_transitions(&header64, rest)?;
-        let rest = tzif.parse_transition_types(&header64, rest)?;
-        let rest = tzif.parse_local_time_types(&header64, rest)?;
-        let rest = tzif.parse_time_zone_designations(&header64, rest)?;
-        let rest = tzif.parse_leap_seconds(&header64, rest)?;
-        let rest = tzif.parse_indicators(&header64, rest)?;
-        let rest = tzif.parse_footer(&header64, rest)?;
-        // Validates that the POSIX TZ string we parsed (if one exists) is
-        // consistent with the last transition in this time zone. This is
-        // required by RFC 8536.
-        //
-        // RFC 8536 says, "If the string is nonempty and one or more
-        // transitions appear in the version 2+ data, the string MUST be
-        // consistent with the last version 2+ transition."
-        //
-        // We need to be a little careful, since we always have at least one
-        // transition (accounting for the dummy `Timestamp::MIN` transition).
-        // So if we only have 1 transition and a POSIX TZ string, then we
-        // should not validate it since it's equivalent to the case of 0
-        // transitions and a POSIX TZ string.
-        if tzif.transitions.len() > 1 {
-            if let Some(ref tz) = tzif.posix_tz {
-                let last = tzif.transitions.last().expect("last transition");
-                let typ = tzif.local_time_type(last);
-                let info = tz.to_offset_info(last.timestamp);
-                if info.offset() != typ.offset {
-                    return Err(err!(
-                        "expected last transition to have DST offset \
-                         of {}, but got {} according to POSIX TZ \
-                         string {}",
-                        typ.offset,
-                        info.offset(),
-                        tz,
-                    ));
-                }
-                if info.dst() != typ.is_dst {
-                    return Err(err!(
-                        "expected last transition to have is_dst={}, \
-                         but got is_dst={} according to POSIX TZ \
-                         string {}",
-                        typ.is_dst.is_dst(),
-                        info.dst().is_dst(),
-                        tz,
-                    ));
-                }
-                if info.abbreviation() != tzif.designation(&typ) {
-                    return Err(err!(
-                        "expected last transition to have \
-                         designation={}, \
-                         but got designation={} according to POSIX TZ \
-                         string {}",
-                        info.abbreviation(),
-                        tzif.designation(&typ),
-                        tz,
-                    ));
-                }
-            }
-        }
-        tzif.set_wall_datetimes();
-        // N.B. We don't check that the TZif data is fully valid. It
-        // is possible for it to contain superfluous information. For
-        // example, a non-zero local time type that is never referenced
-        // by a transition.
-        Ok((tzif, rest))
-    }
-
-    fn parse_transitions<'b>(
-        &mut self,
-        header: &Header,
-        bytes: &'b [u8],
-    ) -> Result<&'b [u8], Error> {
-        let (bytes, rest) = try_split_at(
-            "transition times data block",
-            bytes,
-            header.transition_times_len()?,
-        )?;
-        let mut it = bytes.chunks_exact(header.time_size);
-        // RFC 8536 says: "If there are no transitions, local time for all
-        // timestamps is specified by the TZ string in the footer if present
-        // and nonempty; otherwise, it is specified by time type 0."
-        //
-        // RFC 8536 also says: "Local time for timestamps before the first
-        // transition is specified by the first time type (time type
-        // 0)."
-        //
-        // So if there are no transitions, pushing this dummy one will result
-        // in the desired behavior even when it's the only transition.
-        // Similarly, since this is the minimum timestamp value, it will
-        // trigger for any times before the first transition found in the TZif
-        // data.
-        self.transitions.push(Transition {
-            timestamp: Timestamp::MIN,
-            wall: TransitionWall::Unambiguous { start: DateTime::MIN },
-            type_index: 0,
-        });
-        while let Some(chunk) = it.next() {
-            let seconds = if header.is_32bit() {
-                i64::from(from_be_bytes_i32(chunk))
-            } else {
-                from_be_bytes_i64(chunk)
-            };
-            let timestamp =
-                Timestamp::from_second(seconds).unwrap_or_else(|_| {
-                    // We really shouldn't error here just because the Unix
-                    // timestamp is outside what Jiff supports. Since what Jiff
-                    // supports is _somewhat_ arbitrary. But Jiff's supported
-                    // range is good enough for all realistic purposes, so we
-                    // just clamp an out-of-range Unix timestamp to the Jiff
-                    // min or max value.
-                    //
-                    // This can't result in the sorting order being wrong, but
-                    // it can result in a transition that is duplicative with
-                    // the dummy transition we inserted above. This should be
-                    // fine.
-                    let clamped = seconds
-                        .clamp(UnixSeconds::MIN_REPR, UnixSeconds::MAX_REPR);
-                    warn!(
-                        "found Unix timestamp {seconds} that is outside \
-                         Jiff's supported range, clamping to {clamped}",
-                    );
-                    // Guaranteed to succeed since we clamped `seconds` such
-                    // that it is in the supported range of `Timestamp`.
-                    Timestamp::from_second(clamped).unwrap()
-                });
-            self.transitions.push(Transition {
-                timestamp,
-                // We can't compute the wall clock times until we know the
-                // actual offset for the transition prior to this one. We don't
-                // know that until we parse the local time types.
-                wall: TransitionWall::Unambiguous {
-                    start: DateTime::default(),
-                },
-                // We can't fill in the type index either. We fill this in
-                // later when we parse the transition types.
-                type_index: 0,
-            });
-        }
-        assert!(it.remainder().is_empty());
-        Ok(rest)
-    }
-
-    fn parse_transition_types<'b>(
-        &mut self,
-        header: &Header,
-        bytes: &'b [u8],
-    ) -> Result<&'b [u8], Error> {
-        let (bytes, rest) = try_split_at(
-            "transition types data block",
-            bytes,
-            header.transition_types_len()?,
-        )?;
-        // We start our transition indices at 1 because we always insert a
-        // dummy first transition corresponding to `Timestamp::MIN`. Its type
-        // index is always 0, so there's no need to change it here.
-        for (transition_index, &type_index) in (1..).zip(bytes) {
-            if usize::from(type_index) >= header.tzh_typecnt {
-                return Err(err!(
-                    "found transition type index {type_index},
-                     but there are only {} local time types",
-                    header.tzh_typecnt,
-                ));
-            }
-            self.transitions[transition_index].type_index = type_index;
-        }
-        Ok(rest)
-    }
-
-    fn parse_local_time_types<'b>(
-        &mut self,
-        header: &Header,
-        bytes: &'b [u8],
-    ) -> Result<&'b [u8], Error> {
-        let (bytes, rest) = try_split_at(
-            "local time types data block",
-            bytes,
-            header.local_time_types_len()?,
-        )?;
-        let mut it = bytes.chunks_exact(6);
-        while let Some(chunk) = it.next() {
-            let offset_seconds = from_be_bytes_i32(&chunk[..4]);
-            let offset =
-                Offset::from_seconds(offset_seconds).map_err(|e| {
-                    err!(
-                        "found local time type with out-of-bounds offset: {e}"
-                    )
-                })?;
-            let is_dst = Dst::from(chunk[4] == 1);
-            let designation = chunk[5]..chunk[5];
-            self.types.push(LocalTimeType {
-                offset,
-                is_dst,
-                designation,
-                indicator: Indicator::LocalWall,
-            });
-        }
-        assert!(it.remainder().is_empty());
-        Ok(rest)
-    }
-
-    fn parse_time_zone_designations<'b>(
-        &mut self,
-        header: &Header,
-        bytes: &'b [u8],
-    ) -> Result<&'b [u8], Error> {
-        let (bytes, rest) = try_split_at(
-            "time zone designations data block",
-            bytes,
-            header.time_zone_designations_len()?,
-        )?;
-        self.designations =
-            String::from_utf8(bytes.to_vec()).map_err(|_| {
-                err!(
-                    "time zone designations are not valid UTF-8: {:?}",
-                    Bytes(bytes),
-                )
-            })?;
-        // Holy hell, this is brutal. The boundary conditions are crazy.
-        for (i, typ) in self.types.iter_mut().enumerate() {
-            let start = usize::from(typ.designation.start);
-            let Some(suffix) = self.designations.get(start..) else {
-                return Err(err!(
-                    "local time type {i} has designation index of {start}, \
-                     but cannot be more than {}",
-                    self.designations.len(),
-                ));
-            };
-            let Some(len) = suffix.find('\x00') else {
-                return Err(err!(
-                    "local time type {i} has designation index of {start}, \
-                     but could not find NUL terminator after it in \
-                     designations: {:?}",
-                    self.designations,
-                ));
-            };
-            let Some(end) = start.checked_add(len) else {
-                return Err(err!(
-                    "local time type {i} has designation index of {start}, \
-                     but its length {len} is too big",
-                ));
-            };
-            typ.designation.end = u8::try_from(end).map_err(|_| {
-                err!(
-                    "local time type {i} has designation range of \
-                     {start}..{end}, but end is too big",
-                )
-            })?;
-        }
-        Ok(rest)
-    }
-
-    /// This parses the leap second corrections in the TZif data.
-    ///
-    /// Note that we only parse and verify them. We don't actually use them.
-    /// Jiff effectively ignores leap seconds.
-    fn parse_leap_seconds<'b>(
-        &mut self,
-        header: &Header,
-        bytes: &'b [u8],
-    ) -> Result<&'b [u8], Error> {
-        let (bytes, rest) = try_split_at(
-            "leap seconds data block",
-            bytes,
-            header.leap_second_len()?,
-        )?;
-        let chunk_len = header
-            .time_size
-            .checked_add(4)
-            .expect("time_size plus 4 fits in usize");
-        let mut it = bytes.chunks_exact(chunk_len);
-        while let Some(chunk) = it.next() {
-            let (occur_bytes, _corr_bytes) = chunk.split_at(header.time_size);
-            let occur_seconds = if header.is_32bit() {
-                i64::from(from_be_bytes_i32(occur_bytes))
-            } else {
-                from_be_bytes_i64(occur_bytes)
-            };
-            let _ = Timestamp::from_second(occur_seconds).map_err(|e| {
-                err!(
-                    "leap second occurrence {occur_seconds} \
-                         is out of range: {e}"
-                )
-            })?;
-        }
-        assert!(it.remainder().is_empty());
-        Ok(rest)
-    }
-
-    fn parse_indicators<'b>(
-        &mut self,
-        header: &Header,
-        bytes: &'b [u8],
-    ) -> Result<&'b [u8], Error> {
-        let (std_wall_bytes, rest) = try_split_at(
-            "standard/wall indicators data block",
-            bytes,
-            header.standard_wall_len()?,
-        )?;
-        let (ut_local_bytes, rest) = try_split_at(
-            "UT/local indicators data block",
-            rest,
-            header.ut_local_len()?,
-        )?;
-        if std_wall_bytes.is_empty() && !ut_local_bytes.is_empty() {
-            // This is a weird case, but technically possible only if all
-            // UT/local indicators are 0. If any are 1, then it's an error,
-            // because it would require the corresponding std/wall indicator
-            // to be 1 too. Which it can't be, because there aren't any. So
-            // we just check that they're all zeros.
-            for (i, &byte) in ut_local_bytes.iter().enumerate() {
-                if byte != 0 {
-                    return Err(err!(
-                        "found UT/local indicator '{byte}' for local time \
-                         type {i}, but it must be 0 since all std/wall \
-                         indicators are 0",
-                    ));
-                }
-            }
-        } else if !std_wall_bytes.is_empty() && ut_local_bytes.is_empty() {
-            for (i, &byte) in std_wall_bytes.iter().enumerate() {
-                // Indexing is OK because Header guarantees that the number of
-                // indicators is 0 or equal to the number of types.
-                self.types[i].indicator = if byte == 0 {
-                    Indicator::LocalWall
-                } else if byte == 1 {
-                    Indicator::LocalStandard
-                } else {
-                    return Err(err!(
-                        "found invalid std/wall indicator '{byte}' for \
-                         local time type {i}, it must be 0 or 1",
-                    ));
-                };
-            }
-        } else if !std_wall_bytes.is_empty() && !ut_local_bytes.is_empty() {
-            assert_eq!(std_wall_bytes.len(), ut_local_bytes.len());
-            let it = std_wall_bytes.iter().zip(ut_local_bytes);
-            for (i, (&stdwall, &utlocal)) in it.enumerate() {
-                // Indexing is OK because Header guarantees that the number of
-                // indicators is 0 or equal to the number of types.
-                self.types[i].indicator = match (stdwall, utlocal) {
-                    (0, 0) => Indicator::LocalWall,
-                    (1, 0) => Indicator::LocalStandard,
-                    (1, 1) => Indicator::UTStandard,
-                    (0, 1) => {
-                        return Err(err!(
-                            "found illegal ut-wall combination for \
-                         local time type {i}, only local-wall, local-standard \
-                         and ut-standard are allowed",
-                        ))
-                    }
-                    _ => {
-                        return Err(err!(
-                            "found illegal std/wall or ut/local value for \
-                         local time type {i}, each must be 0 or 1",
-                        ))
-                    }
-                };
-            }
-        } else {
-            // If they're both empty then we don't need to do anything. Every
-            // local time type record already has the correct default for this
-            // case set.
-            debug_assert!(std_wall_bytes.is_empty());
-            debug_assert!(ut_local_bytes.is_empty());
-        }
-        Ok(rest)
-    }
-
-    fn parse_footer<'b>(
-        &mut self,
-        _header: &Header,
-        bytes: &'b [u8],
-    ) -> Result<&'b [u8], Error> {
-        if bytes.is_empty() {
-            return Err(err!(
-                "invalid V2+ TZif footer, expected \\n, \
-                 but found unexpected end of data",
-            ));
-        }
-        if bytes[0] != b'\n' {
-            return Err(err!(
-                "invalid V2+ TZif footer, expected {:?}, but found {:?}",
-                Byte(b'\n'),
-                Byte(bytes[0]),
-            ));
-        }
-        let bytes = &bytes[1..];
-        // Only scan up to 1KB for a NUL terminator in case we somehow got
-        // passed a huge block of bytes.
-        let toscan = &bytes[..bytes.len().min(1024)];
-        let Some(nlat) = toscan.iter().position(|&b| b == b'\n') else {
-            return Err(err!(
-                "invalid V2 TZif footer, could not find {:?} \
-                 terminator in: {:?}",
-                Byte(b'\n'),
-                Bytes(toscan),
-            ));
-        };
-        let (bytes, rest) = bytes.split_at(nlat);
-        if !bytes.is_empty() {
-            // We could in theory limit TZ strings to their strict POSIX
-            // definition here for TZif V2, but I don't think there is any
-            // harm in allowing the extensions in V2 formatted TZif data. Note
-            // that the GNU tooling allow it via the `TZ` environment variable
-            // even though POSIX doesn't specify it. This all seems okay to me
-            // because the V3+ extension is a strict superset of functionality.
-            self.posix_tz = Some(ReasonablePosixTimeZone::parse(bytes)?);
-        }
-        Ok(&rest[1..])
-    }
-
-    /// This sets the wall clock times for each transition.
-    ///
-    /// The wall clock time corresponds to time on the clock that the
-    /// transition begins. That is, it is the time offset by the previous
-    /// transition's offset.
-    ///
-    /// This also computes whether there is a gap or fold or neither between
-    /// each transition. This is used to resolve ambiguous timestamps when
-    /// given a civil datetime.
-    fn set_wall_datetimes(&mut self) {
-        let mut prev = self.local_time_type(self.first_transition()).offset;
-        // We iterate over indices instead of `transitions.iter_mut()` because
-        // of the borrow checker breaking composition.
-        for i in 0..self.transitions.len() {
-            let this = self.local_time_type(&self.transitions[i]).offset;
-            let t = &mut self.transitions[i];
-            t.wall = if prev == this {
-                // Equivalent offsets means there can never be any ambiguity.
-                let start = prev.to_datetime(t.timestamp);
-                TransitionWall::Unambiguous { start }
-            } else if prev < this {
-                // When the offset of the previous transition is less, that
-                // means there is some non-zero amount of time that is
-                // "skipped" when moving to the next transition. Thus, we have
-                // a gap. The start of the gap is the offset which gets us the
-                // earliest time, i.e., the smaller of the two offsets.
-                let start = prev.to_datetime(t.timestamp);
-                let end = this.to_datetime(t.timestamp);
-                TransitionWall::Gap { start, end }
-            } else {
-                // When the offset of the previous transition is greater, that
-                // means there is some non-zero amount of time that will be
-                // replayed on a wall clock in this time zone. Thus, we have
-                // a fold. The start of the gold is the offset which gets us
-                // the earliest time, i.e., the smaller of the two offsets.
-                assert!(prev > this);
-                let start = this.to_datetime(t.timestamp);
-                let end = prev.to_datetime(t.timestamp);
-                TransitionWall::Fold { start, end }
-            };
-            prev = this;
-        }
+    fn transitions(&self) -> &[Transition] {
+        self.transitions.as_ref()
     }
 }
 
-impl Eq for Tzif {}
+impl<STRING: AsRef<str>, TYPES, TRANS> Eq for Tzif<STRING, TYPES, TRANS> {}
 
-impl PartialEq for Tzif {
-    fn eq(&self, rhs: &Tzif) -> bool {
-        self.name == rhs.name && self.checksum == rhs.checksum
+impl<STRING: AsRef<str>, TYPES, TRANS> PartialEq
+    for Tzif<STRING, TYPES, TRANS>
+{
+    fn eq(&self, rhs: &Self) -> bool {
+        self.name.as_ref().map(|n| n.as_ref())
+            == rhs.name.as_ref().map(|n| n.as_ref())
+            && self.checksum == rhs.checksum
     }
 }
 
 /// A transition to a different offset.
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct Transition {
+#[doc(hidden)] // not part of Jiff's public API
+pub struct Transition {
     /// The UNIX leap time at which the transition starts. The transition
     /// continues up to and _not_ including the next transition.
     timestamp: Timestamp,
@@ -923,6 +551,20 @@ struct Transition {
     /// provides the correct offset (from UTC) that is active beginning at
     /// this transition.
     type_index: u8,
+}
+
+impl Transition {
+    /// Converts from the shared-but-internal API for use in proc macros.
+    pub(crate) const fn from_shared(
+        sh: &shared::TzifTransition,
+        prev_offset: i32,
+        this_offset: i32,
+    ) -> Transition {
+        let timestamp = Timestamp::constant(sh.timestamp, 0);
+        let wall = TransitionWall::new(sh.timestamp, prev_offset, this_offset);
+        let type_index = sh.type_index;
+        Transition { timestamp, wall, type_index }
+    }
 }
 
 /// The wall clock time for when a transition begins.
@@ -1015,6 +657,54 @@ enum TransitionWall {
 }
 
 impl TransitionWall {
+    /// Creates transition data based on wall-clock time.
+    ///
+    /// This data isn't directly part of TZif, but can be derived from it.
+    /// It is principally done so that TZ lookups for civil datetime are
+    /// faster. That is, we pre-compute whatever we can here.
+    ///
+    /// `timestamp` corresponds to the timestamp of the respective transition.
+    /// `this_offset` is the offset associated with that transition (via the
+    /// corresponding local time type), and `prev_offset` is the offset of the
+    /// previous transition (also through its corresponding local time type).
+    const fn new(
+        timestamp: i64,
+        prev_offset: i32,
+        this_offset: i32,
+    ) -> TransitionWall {
+        const fn to_datetime(timestamp: i64, offset: i32) -> DateTime {
+            use crate::util::common::timestamp_to_datetime_zulu;
+            let (y, mo, d, h, m, s, n) =
+                timestamp_to_datetime_zulu(timestamp, 0, offset);
+            DateTime::constant(y, mo, d, h, m, s, n)
+        }
+
+        if prev_offset == this_offset {
+            // Equivalent offsets means there can never be any ambiguity.
+            let start = to_datetime(timestamp, prev_offset);
+            TransitionWall::Unambiguous { start }
+        } else if prev_offset < this_offset {
+            // When the offset of the previous transition is less, that
+            // means there is some non-zero amount of time that is
+            // "skipped" when moving to the next transition. Thus, we have
+            // a gap. The start of the gap is the offset which gets us the
+            // earliest time, i.e., the smaller of the two offsets.
+            let start = to_datetime(timestamp, prev_offset);
+            let end = to_datetime(timestamp, this_offset);
+            TransitionWall::Gap { start, end }
+        } else {
+            // When the offset of the previous transition is greater, that
+            // means there is some non-zero amount of time that will be
+            // replayed on a wall clock in this time zone. Thus, we have
+            // a fold. The start of the gold is the offset which gets us
+            // the earliest time, i.e., the smaller of the two offsets.
+            assert!(prev_offset > this_offset);
+            let start = to_datetime(timestamp, this_offset);
+            let end = to_datetime(timestamp, prev_offset);
+            TransitionWall::Fold { start, end }
+        }
+    }
+
     fn start(&self) -> DateTime {
         match *self {
             TransitionWall::Unambiguous { start } => start,
@@ -1031,7 +721,8 @@ impl TransitionWall {
 /// abbreviation. (There is also an "indicator," but I have no clue what it
 /// means. See the `Indicator` type for a rant.)
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct LocalTimeType {
+#[doc(hidden)] // not part of Jiff's public API
+pub struct LocalTimeType {
     offset: Offset,
     is_dst: Dst,
     designation: Range<u8>,
@@ -1039,6 +730,17 @@ struct LocalTimeType {
 }
 
 impl LocalTimeType {
+    /// Converts from the shared-but-internal API for use in proc macros.
+    pub(crate) const fn from_shared(
+        sh: &shared::TzifLocalTimeType,
+    ) -> LocalTimeType {
+        let offset = Offset::constant_seconds(sh.offset);
+        let is_dst = if sh.is_dst { Dst::Yes } else { Dst::No };
+        let designation = sh.designation.0..sh.designation.1;
+        let indicator = Indicator::from_shared(&sh.indicator);
+        LocalTimeType { offset, is_dst, designation, indicator }
+    }
+
     fn designation(&self) -> Range<usize> {
         usize::from(self.designation.start)..usize::from(self.designation.end)
     }
@@ -1109,6 +811,17 @@ enum Indicator {
     UTStandard,
 }
 
+impl Indicator {
+    /// Converts from the shared-but-internal API for use in proc macros.
+    pub(crate) const fn from_shared(sh: &shared::TzifIndicator) -> Indicator {
+        match *sh {
+            shared::TzifIndicator::LocalWall => Indicator::LocalWall,
+            shared::TzifIndicator::LocalStandard => Indicator::LocalStandard,
+            shared::TzifIndicator::UTStandard => Indicator::UTStandard,
+        }
+    }
+}
+
 impl core::fmt::Display for Indicator {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match *self {
@@ -1116,210 +829,6 @@ impl core::fmt::Display for Indicator {
             Indicator::LocalStandard => write!(f, "local/std"),
             Indicator::UTStandard => write!(f, "ut/std"),
         }
-    }
-}
-
-/// The header for a TZif formatted file.
-///
-/// V2+ TZif format have two headers: one for V1 data, and then a second
-/// following the V1 data block that describes another data block which uses
-/// 64-bit timestamps. The two headers both have the same format and both
-/// use 32-bit big-endian encoded integers.
-#[derive(Debug)]
-struct Header {
-    /// The size of the timestamps encoded in the data block.
-    ///
-    /// This is guaranteed to be either 4 (for V1) or 8 (for the 64-bit header
-    /// block in V2+).
-    time_size: usize,
-    /// The file format version.
-    ///
-    /// Note that this is either a NUL byte (for version 1), or an ASCII byte
-    /// corresponding to the version number. That is, `0x32` for `2`, `0x33`
-    /// for `3` or `0x34` for `4`. Note also that just because zoneinfo might
-    /// have been recently generated does not mean it uses the latest format
-    /// version. It seems like newer versions are only compiled by `zic` when
-    /// they are needed. For example, `America/New_York` on my system (as of
-    /// `2024-03-25`) has version `0x32`, but `Asia/Jerusalem` has version
-    /// `0x33`.
-    version: u8,
-    /// Number of UT/local indicators stored in the file.
-    ///
-    /// This is checked to be either equal to `0` or equal to `tzh_typecnt`.
-    tzh_ttisutcnt: usize,
-    /// The number of standard/wall indicators stored in the file.
-    ///
-    /// This is checked to be either equal to `0` or equal to `tzh_typecnt`.
-    tzh_ttisstdcnt: usize,
-    /// The number of leap seconds for which data entries are stored in the
-    /// file.
-    tzh_leapcnt: usize,
-    /// The number of transition times for which data entries are stored in
-    /// the file.
-    tzh_timecnt: usize,
-    /// The number of local time types for which data entries are stored in the
-    /// file.
-    ///
-    /// This is checked to be at least `1`.
-    tzh_typecnt: usize,
-    /// The number of bytes of time zone abbreviation strings stored in the
-    /// file.
-    ///
-    /// This is checked to be at least `1`.
-    tzh_charcnt: usize,
-}
-
-impl Header {
-    /// Parse the header record from the given bytes.
-    ///
-    /// Upon success, return the header and all bytes after the header.
-    ///
-    /// The given `time_size` must be 4 or 8, corresponding to either the
-    /// V1 header block or the V2+ header block, respectively.
-    fn parse(
-        time_size: usize,
-        bytes: &[u8],
-    ) -> Result<(Header, &[u8]), Error> {
-        assert!(time_size == 4 || time_size == 8, "time size must be 4 or 8");
-        if bytes.len() < 44 {
-            return Err(err!("invalid header: too short"));
-        }
-        let (magic, rest) = bytes.split_at(4);
-        if magic != b"TZif" {
-            return Err(err!("invalid header: magic bytes mismatch"));
-        }
-        let (version, rest) = rest.split_at(1);
-        let (_reserved, rest) = rest.split_at(15);
-
-        let (tzh_ttisutcnt_bytes, rest) = rest.split_at(4);
-        let (tzh_ttisstdcnt_bytes, rest) = rest.split_at(4);
-        let (tzh_leapcnt_bytes, rest) = rest.split_at(4);
-        let (tzh_timecnt_bytes, rest) = rest.split_at(4);
-        let (tzh_typecnt_bytes, rest) = rest.split_at(4);
-        let (tzh_charcnt_bytes, rest) = rest.split_at(4);
-
-        let tzh_ttisutcnt = from_be_bytes_u32_to_usize(tzh_ttisutcnt_bytes)
-            .map_err(|e| e.context("failed to parse tzh_ttisutcnt"))?;
-        let tzh_ttisstdcnt = from_be_bytes_u32_to_usize(tzh_ttisstdcnt_bytes)
-            .map_err(|e| e.context("failed to parse tzh_ttisstdcnt"))?;
-        let tzh_leapcnt = from_be_bytes_u32_to_usize(tzh_leapcnt_bytes)
-            .map_err(|e| e.context("failed to parse tzh_leapcnt"))?;
-        let tzh_timecnt = from_be_bytes_u32_to_usize(tzh_timecnt_bytes)
-            .map_err(|e| e.context("failed to parse tzh_timecnt"))?;
-        let tzh_typecnt = from_be_bytes_u32_to_usize(tzh_typecnt_bytes)
-            .map_err(|e| e.context("failed to parse tzh_typecnt"))?;
-        let tzh_charcnt = from_be_bytes_u32_to_usize(tzh_charcnt_bytes)
-            .map_err(|e| e.context("failed to parse tzh_charcnt"))?;
-
-        if tzh_ttisutcnt != 0 && tzh_ttisutcnt != tzh_typecnt {
-            return Err(err!(
-                "expected tzh_ttisutcnt={tzh_ttisutcnt} to be zero \
-                 or equal to tzh_typecnt={tzh_typecnt}",
-            ));
-        }
-        if tzh_ttisstdcnt != 0 && tzh_ttisstdcnt != tzh_typecnt {
-            return Err(err!(
-                "expected tzh_ttisstdcnt={tzh_ttisstdcnt} to be zero \
-                 or equal to tzh_typecnt={tzh_typecnt}",
-            ));
-        }
-        if tzh_typecnt < 1 {
-            return Err(err!(
-                "expected tzh_typecnt={tzh_typecnt} to be at least 1",
-            ));
-        }
-        if tzh_charcnt < 1 {
-            return Err(err!(
-                "expected tzh_charcnt={tzh_charcnt} to be at least 1",
-            ));
-        }
-
-        let header = Header {
-            time_size,
-            version: version[0],
-            tzh_ttisutcnt,
-            tzh_ttisstdcnt,
-            tzh_leapcnt,
-            tzh_timecnt,
-            tzh_typecnt,
-            tzh_charcnt,
-        };
-        Ok((header, rest))
-    }
-
-    /// Returns true if this header is for a 32-bit data block.
-    ///
-    /// When false, it is guaranteed that this header is for a 64-bit data
-    /// block.
-    fn is_32bit(&self) -> bool {
-        self.time_size == 4
-    }
-
-    /// Returns the size of the data block, in bytes, for this header.
-    ///
-    /// This returns an error if the arithmetic required to compute the
-    /// length would overflow.
-    ///
-    /// This is useful for, e.g., skipping over the 32-bit V1 data block in
-    /// V2+ TZif formatted files.
-    fn data_block_len(&self) -> Result<usize, Error> {
-        let a = self.transition_times_len()?;
-        let b = self.transition_types_len()?;
-        let c = self.local_time_types_len()?;
-        let d = self.time_zone_designations_len()?;
-        let e = self.leap_second_len()?;
-        let f = self.standard_wall_len()?;
-        let g = self.ut_local_len()?;
-        a.checked_add(b)
-            .and_then(|z| z.checked_add(c))
-            .and_then(|z| z.checked_add(d))
-            .and_then(|z| z.checked_add(e))
-            .and_then(|z| z.checked_add(f))
-            .and_then(|z| z.checked_add(g))
-            .ok_or_else(|| {
-                err!(
-                    "length of data block in V{} tzfile is too big",
-                    self.version
-                )
-            })
-    }
-
-    fn transition_times_len(&self) -> Result<usize, Error> {
-        self.tzh_timecnt.checked_mul(self.time_size).ok_or_else(|| {
-            err!("tzh_timecnt value {} is too big", self.tzh_timecnt)
-        })
-    }
-
-    fn transition_types_len(&self) -> Result<usize, Error> {
-        Ok(self.tzh_timecnt)
-    }
-
-    fn local_time_types_len(&self) -> Result<usize, Error> {
-        self.tzh_typecnt.checked_mul(6).ok_or_else(|| {
-            err!("tzh_typecnt value {} is too big", self.tzh_typecnt)
-        })
-    }
-
-    fn time_zone_designations_len(&self) -> Result<usize, Error> {
-        Ok(self.tzh_charcnt)
-    }
-
-    fn leap_second_len(&self) -> Result<usize, Error> {
-        let record_len = self
-            .time_size
-            .checked_add(4)
-            .expect("4-or-8 plus 4 always fits in usize");
-        self.tzh_leapcnt.checked_mul(record_len).ok_or_else(|| {
-            err!("tzh_leapcnt value {} is too big", self.tzh_leapcnt)
-        })
-    }
-
-    fn standard_wall_len(&self) -> Result<usize, Error> {
-        Ok(self.tzh_ttisstdcnt)
-    }
-
-    fn ut_local_len(&self) -> Result<usize, Error> {
-        Ok(self.tzh_ttisutcnt)
     }
 }
 
@@ -1334,81 +843,9 @@ pub(crate) fn is_possibly_tzif(data: &[u8]) -> bool {
     data.starts_with(b"TZif")
 }
 
-/// Interprets the given slice as an unsigned 32-bit big endian integer,
-/// attempts to convert it to a `usize` and returns it.
-///
-/// # Panics
-///
-/// When `bytes.len() != 4`.
-///
-/// # Errors
-///
-/// This errors if the `u32` parsed from the given bytes cannot fit in a
-/// `usize`.
-fn from_be_bytes_u32_to_usize(bytes: &[u8]) -> Result<usize, Error> {
-    let n = from_be_bytes_u32(bytes);
-    usize::try_from(n).map_err(|_| {
-        err!(
-            "failed to parse integer {n} (too big, max allowed is {}",
-            usize::MAX
-        )
-    })
-}
-
-/// Interprets the given slice as an unsigned 32-bit big endian integer and
-/// returns it.
-///
-/// # Panics
-///
-/// When `bytes.len() != 4`.
-fn from_be_bytes_u32(bytes: &[u8]) -> u32 {
-    u32::from_be_bytes(bytes.try_into().unwrap())
-}
-
-/// Interprets the given slice as a signed 32-bit big endian integer and
-/// returns it.
-///
-/// # Panics
-///
-/// When `bytes.len() != 4`.
-fn from_be_bytes_i32(bytes: &[u8]) -> i32 {
-    i32::from_be_bytes(bytes.try_into().unwrap())
-}
-
-/// Interprets the given slice as a signed 64-bit big endian integer and
-/// returns it.
-///
-/// # Panics
-///
-/// When `bytes.len() != 8`.
-fn from_be_bytes_i64(bytes: &[u8]) -> i64 {
-    i64::from_be_bytes(bytes.try_into().unwrap())
-}
-
-/// Splits the given slice of bytes at the index given.
-///
-/// If the index is out of range (greater than `bytes.len()`) then an error is
-/// returned. The error message will include the `what` string given, which is
-/// meant to describe the thing being split.
-fn try_split_at<'b>(
-    what: &'static str,
-    bytes: &'b [u8],
-    at: usize,
-) -> Result<(&'b [u8], &'b [u8]), Error> {
-    if at > bytes.len() {
-        Err(err!(
-            "expected at least {at} bytes for {what}, \
-             but found only {} bytes",
-            bytes.len(),
-        ))
-    } else {
-        Ok(bytes.split_at(at))
-    }
-}
-
-#[cfg(test)]
+#[cfg(all(test, feature = "alloc"))]
 mod tests {
-    use alloc::string::ToString;
+    use alloc::{string::ToString, vec};
 
     #[cfg(not(miri))]
     use crate::tz::testdata::TZIF_TEST_FILES;
@@ -1424,7 +861,7 @@ mod tests {
     ///
     /// For this to work, we make sure everything in a `Tzif` value is
     /// represented in some way in this output.
-    fn tzif_to_human_readable(tzif: &Tzif) -> String {
+    fn tzif_to_human_readable(tzif: &TzifOwned) -> String {
         use std::io::Write;
 
         let mut out = tabwriter::TabWriter::new(vec![])
