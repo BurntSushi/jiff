@@ -95,6 +95,7 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
             mapping_path.display()
         )
     })?;
+    super::rustfmt(&mapping_path)?;
 
     Ok(())
 }
