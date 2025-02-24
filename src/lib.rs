@@ -658,7 +658,18 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
   environment variables (with sensible default fallbacks) are used to construct
   candidate paths to look for this database. For more on this, see the
   [Android section of the platform support documentation](crate::_documentation::platform#android).
+* **static** -
+  When enabled, new procedural macros will be added to the `tz` sub-module for
+  creating static `TimeZone` values at compile-time. This adds a dependency on
+  [`jiff-static`] and [`jiff-tzdb`]. `jiff-static` defines the macros, and Jiff
+  re-exports them. This also enables `static-tz`.
+* **static-tz** -
+  When enabled, a `jiff::tz::include` procedural macro will become available.
+  This takes a TZif file path, like `/usr/share/zoneinfo/Israel`, as input and
+  returns a `TimeZone` value at compile time.
 
+[`jiff-static`]: https://docs.rs/jiff-static
+[`jiff-tzdb`]: https://docs.rs/jiff-tzdb
 [Concatenated Time Zone Database]: https://android.googlesource.com/platform/libcore/+/jb-mr2-release/luni/src/main/java/libcore/util/ZoneInfoDB.java
 */
 

@@ -78,7 +78,46 @@ are not supported by Jiff.)
 Moreover, Jiff supports reading the `TZ` environment variable, as specified
 by POSIX, on all systems.
 
-TO get the system's default time zone, use [`TimeZone::system`].
+To get the system's default time zone, use [`TimeZone::system`].
+
+# Core-only environments
+
+By default, Jiff attempts to read time zone rules from `/usr/share/zoneinfo`
+on Unix and a bundled database on other platforms (like on Windows). This happens
+at runtime, and aside from requiring APIs to interact with the file system
+on Unix, it also requires dynamic memory allocation.
+
+For core-only environments that don't have file system APIs or dynamic
+memory allocation, Jiff provides a way to construct `TimeZone` values at
+compile time by compiling time zone rules into your binary. This does mean
+that your program will need to be re-compiled if the time zone rules change
+(in contrast to Jiff's default behavior of reading `/usr/share/zoneinfo` at
+runtime on Unix), but sometimes there isn't a practical alternative.
+
+With the `static` crate feature enabled, the [`jiff::tz::get`](crate::tz::get)
+macro becomes available in this module. This example shows how use it to build
+a `TimeZone` at compile time. Here, we find the next DST transition from a
+particular timestamp in `Europe/Zurich`, and then print that in local time for
+Zurich:
+
+```
+use jiff::{tz::{self, TimeZone}, Timestamp};
+
+static TZ: TimeZone = tz::get!("Europe/Zurich");
+
+let ts: Timestamp = "2025-02-25T00:00Z".parse()?;
+let Some(next_transition) = TZ.following(ts).next() else {
+    return Err("no time zone transitions".into());
+};
+let zdt = next_transition.timestamp().to_zoned(TZ.clone());
+assert_eq!(zdt.to_string(), "2025-03-30T03:00:00+02:00[Europe/Zurich]");
+
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The above example does not require dynamic memory allocation or access to file
+system APIs. It also _only_ embeds the `Europe/Zurich` time zone into your
+compiled binary.
 
 [IANA Time Zone Database]: https://en.wikipedia.org/wiki/Tz_database
 [`GetDynamicTimeZoneInformation`]: https://learn.microsoft.com/en-us/windows/win32/api/timezoneapi/nf-timezoneapi-getdynamictimezoneinformation
@@ -111,6 +150,175 @@ pub(crate) mod tzif;
 // See module comment for WIP status. :-(
 #[cfg(test)]
 mod zic;
+
+/// Create a `TimeZone` value from TZif data in [`jiff-tzdb`] at compile time.
+///
+/// This reads the data for the time zone with the IANA identifier given from
+/// [`jiff-tzdb`], parses it as TZif specified by [RFC 9636], and constructs a
+/// `TimeZone` value for use in a `const` context. This enables using IANA time
+/// zones with Jiff in core-only environments. No dynamic memory allocation is
+/// used.
+///
+/// # Input
+///
+/// This macro takes one positional parameter that must be a literal string.
+/// The string should be an IANA time zone identifier, e.g.,
+/// `America/New_York`.
+///
+/// # Return type
+///
+/// This macro returns a value with type `TimeZone`. To get a `&'static
+/// TimeZone`, simply use `&include("...")`.
+///
+/// # Usage
+///
+/// Callers should only call this macro once for each unique IANA time zone
+/// identifier you need. Otherwise, multiple copies of the same embedded
+/// time zone data could appear in your binary. There are no correctness
+/// issues with this, but it could make your binary bigger than it needs to be.
+///
+/// # When should I use this?
+///
+/// Users should only use this macro if they have a _specific need_ for it
+/// (like using a time zone on an embedded device). In particular, this will
+/// embed the time zone transition rules into your binary. If the time zone
+/// rules change, your program will need to be re-compiled.
+///
+/// In contrast, Jiff's default configuration on Unix is to read from
+/// `/usr/share/zoneinfo` at runtime. This means your application will
+/// automatically use time zone updates and doesn't need to be re-compiled.
+///
+/// Using a static `TimeZone` may also be faster in some cases. In particular,
+/// a `TimeZone` created at runtime from a `/usr/share/zoneinfo` uses
+/// automic reference counting internally. In contrast, a `TimeZone` created
+/// with this macro does not.
+///
+/// # Example
+///
+/// This example shows how to find the next DST transition from a particular
+/// timestamp in `Europe/Zurich`, and then print that in local time for Zurich:
+///
+/// ```
+/// use jiff::{tz::{self, TimeZone}, Timestamp};
+///
+/// static TZ: TimeZone = tz::get!("Europe/Zurich");
+///
+/// let ts: Timestamp = "2025-02-25T00:00Z".parse()?;
+/// let Some(next_transition) = TZ.following(ts).next() else {
+///     return Err("no time zone transitions".into());
+/// };
+/// let zdt = next_transition.timestamp().to_zoned(TZ.clone());
+/// assert_eq!(zdt.to_string(), "2025-03-30T03:00:00+02:00[Europe/Zurich]");
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// [RFC 9636]: https://datatracker.ietf.org/doc/rfc9636/
+/// [`jiff-tzdb`]: https://docs.rs/jiff-tzdb
+#[cfg(feature = "static")]
+pub use jiff_static::get;
+
+/// Create a `TimeZone` value from TZif data in a file at compile time.
+///
+/// This reads the data in the file path given, parses it as TZif specified by
+/// [RFC 9636], and constructs a `TimeZone` value for use in a `const` context.
+/// This enables using IANA time zones with Jiff in core-only environments. No
+/// dynamic memory allocation is used.
+///
+/// Unlike [`jiff::tz::get`](get), this reads TZif data from a file.
+/// `jiff::tz::get`, in contrast, reads TZif data from the [`jiff-tzdb`] crate.
+/// `jiff::tz::get` is more convenient and doesn't require using managing TZif
+/// files, but it comes at the cost of a dependency on `jiff-tzdb` and being
+/// forced to use whatever data is in `jiff-tzdb`.
+///
+/// # Input
+///
+/// This macro takes two positional parameters that must be literal strings.
+///
+/// The first is required and is a path to a file containing TZif data. For
+/// example, `/usr/share/zoneinfo/America/New_York`.
+///
+/// The second parameter is an IANA time zone identifier, e.g.,
+/// `America/New_York`, and is required only when an IANA time zone identifier
+/// could not be determined from the file path. The macro will automatically
+/// infer an IANA time zone identifier as anything after the last occurrence
+/// of the literal `zoneinfo/` in the file path.
+///
+/// # Return type
+///
+/// This macro returns a value with type `TimeZone`. To get a `&'static
+/// TimeZone`, simply use `&include("...")`.
+///
+/// # Usage
+///
+/// Callers should only call this macro once for each unique IANA time zone
+/// identifier you need. Otherwise, multiple copies of the same embedded
+/// time zone data could appear in your binary. There are no correctness
+/// issues with this, but it could make your binary bigger than it needs to be.
+///
+/// # When should I use this?
+///
+/// Users should only use this macro if they have a _specific need_ for it
+/// (like using a time zone on an embedded device). In particular, this will
+/// embed the time zone transition rules into your binary. If the time zone
+/// rules change, your program will need to be re-compiled.
+///
+/// In contrast, Jiff's default configuration on Unix is to read from
+/// `/usr/share/zoneinfo` at runtime. This means your application will
+/// automatically use time zone updates and doesn't need to be re-compiled.
+///
+/// Using a static `TimeZone` may also be faster in some cases. In particular,
+/// a `TimeZone` created at runtime from a `/usr/share/zoneinfo` uses
+/// automic reference counting internally. In contrast, a `TimeZone` created
+/// with this macro does not.
+///
+/// # Example
+///
+/// This example shows how to find the next DST transition from a particular
+/// timestamp in `Europe/Zurich`, and then print that in local time for Zurich:
+///
+/// ```ignore
+/// use jiff::{tz::{self, TimeZone}, Timestamp};
+///
+/// static TZ: TimeZone = tz::include!("/usr/share/zoneinfo/Europe/Zurich");
+///
+/// let ts: Timestamp = "2025-02-25T00:00Z".parse()?;
+/// let Some(next_transition) = TZ.following(ts).next() else {
+///     return Err("no time zone transitions".into());
+/// };
+/// let zdt = next_transition.timestamp().to_zoned(TZ.clone());
+/// assert_eq!(zdt.to_string(), "2025-03-30T03:00:00+02:00[Europe/Zurich]");
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// # Example: using `/etc/localtime`
+///
+/// On most Unix systems, `/etc/localtime` is a symbolic link to a file in
+/// your `/usr/share/zoneinfo` directory. This means it is a valid input to
+/// this macro. However, Jiff currently does not detect the IANA time zone
+/// identifier, so you'll need to provide it yourself:
+///
+/// ```ignore
+/// use jiff::{tz::{self, TimeZone}, Timestamp};
+///
+/// static TZ: TimeZone = tz::include!("/etc/localtime", "America/New_York");
+///
+/// let ts: Timestamp = "2025-02-25T00:00Z".parse()?;
+/// let zdt = ts.to_zoned(TZ.clone());
+/// assert_eq!(zdt.to_string(), "2025-02-24T19:00:00-05:00[America/New_York]");
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// Note that this is reading `/etc/localtime` _at compile time_, which means
+/// that the program will only use the time zone on the system in which it
+/// was compiled. It will _not_ use the time zone of the system running it.
+///
+/// [RFC 9636]: https://datatracker.ietf.org/doc/rfc9636/
+/// [`jiff-tzdb`]: https://docs.rs/jiff-tzdb
+#[cfg(feature = "static-tz")]
+pub use jiff_static::include;
 
 /// Creates a new time zone offset in a `const` context from a given number
 /// of hours.

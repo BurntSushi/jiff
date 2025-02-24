@@ -34,6 +34,7 @@ members = [
   "crates/jiff-diesel",
   "crates/jiff-icu",
   "crates/jiff-sqlx",
+  "crates/jiff-static",
   "crates/jiff-tzdb",
   "crates/jiff-tzdb-platform",
   "examples/*",
@@ -67,6 +68,31 @@ logging = ["dep:log"]
 # very platform specific and heuristic oriented. On some platforms, this may
 # require extra dependencies. (For example, `windows-sys` on Windows.)
 tz-system = ["std", "dep:windows-sys"]
+
+# When enabled, the `jiff::tz::get` and `jiff::tz::include` proc-macros
+# become available. These proc macros enable creating `TimeZone` values in a
+# `const` context for use in `core`-only environments.
+#
+# Users should generally prefer using Jiff's default zoneinfo integration at
+# runtime. On Unix systems, this will enable applications using Jiff to get
+# automatic tzdb updates when `/usr/share/zoneinfo` is updated without needing
+# to re-compile the application.
+#
+# Note that this introduces a build-time dependency on `jiff-tzdb`.
+static = ["static-tz", "jiff-static?/tzdb"]
+
+# When enabled, the `jiff::tz::include` macro becomes available.
+#
+# This proc-macro parses the TZif data (from a file) at compile time and
+# generates a special static structure that can be used by Jiff at runtime
+# to do tzdb lookups. This effectively provides a way to use time zones in
+# core-only environments without dynamic memory allocation.
+#
+# This is a subset of the functionality provided by `static`. Namely, this
+# doesn't result in a dependency on `jiff-tzdb`. It requires users to include
+# the time zone they want as a file, where as enabling `static` (which also
+# enables this feature, by necessity) permits using Jiff's bundled tzdb.
+static-tz = ["dep:jiff-static"]
 
 # This conditionally bundles tzdb into the binary depending on which platform
 # Jiff is being built for.
@@ -110,9 +136,25 @@ tzdb-concatenated = ["std"]
 js = ["dep:wasm-bindgen", "dep:js-sys"]
 
 [dependencies]
+jiff-static = { version = "=0.2.1", path = "crates/jiff-static", optional = true }
 jiff-tzdb = { version = "0.1.2", path = "crates/jiff-tzdb", optional = true }
 log = { version = "0.4.21", optional = true, default-features = false }
 serde = { version = "1.0.203", optional = true, default-features = false }
+
+# This ensures that `jiff-static` is always used with a compatible version
+# of `jiff`. Namely, since `jiff-static` emits code that relies on internal
+# Jiff APIs that aren't covered by semver, we only guarantee compatibility for
+# one version of Jiff for each release of `jiff-static`.
+#
+# (This is the same pattern that `serde` and `serde_derive` use as of
+# 2025-02-22.)
+#
+# This also helps with compilation, although in Jiff's case, we don't use
+# `syn` so this is less of a problem.
+#
+# See: https://github.com/matklad/macro-dep-test
+[target.'cfg(any())'.dependencies]
+jiff-static = { version = "=0.2.1", path = "crates/jiff-static" }
 
 # Note that the `cfg` gate for the `tzdb-bundle-platform` must repeat the
 # target gate on this dependency. The intent is that `tzdb-bundle-platform`
@@ -152,8 +194,8 @@ humantime = "2.1.0"
 icu = { version = "1.5.0", features = ["std"] }
 insta = "1.39.0"
 # We force `serde` to be enabled in dev mode so that the docs render and test
-# correctly. This is highly suspicious.
-jiff = { path = "./", default-features = false, features = ["serde"] }
+# correctly. We also enable `static` so that we can test our proc macros.
+jiff = { path = "./", default-features = false, features = ["serde", "static"] }
 # Uncomment if you want to remove `ignore` from `jiff_icu` tests in
 # `COMPARE.md`. Otherwise, this creates a circular dependency and causes
 # `jiff-icu` to get re-compiled all the time.
