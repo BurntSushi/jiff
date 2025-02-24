@@ -232,7 +232,7 @@ impl Offset {
     // warrant its existence. And I think I'd rather `Offset::hms` be const and
     // exported instead of this monstrosity.
     #[inline]
-    const fn constant_seconds(seconds: i32) -> Offset {
+    pub(crate) const fn constant_seconds(seconds: i32) -> Offset {
         if !t::SpanZoneOffset::contains(seconds) {
             panic!("invalid time zone offset seconds")
         }

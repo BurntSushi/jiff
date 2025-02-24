@@ -1,6 +1,13 @@
 /*!
 Provides a parser for [POSIX's `TZ` environment variable][posix-env].
 
+NOTE: Sadly, at time of writing, the actual parser is in `src/shared/posix.rs`.
+This is so it can be shared (via simple code copying) with proc macros like
+the one found in `jiff-tzdb-static`. The parser populates a "lowest common
+denominator" data type. In normal use in Jiff, this type is converted into
+the types defined below. This module still does provide the various time zone
+operations. Only the parsing is written elsewhere.
+
 The `TZ` environment variable is most commonly used to set a time zone. For
 example, `TZ=America/New_York`. But it can also be used to tersely define DST
 transitions. Moreover, the format is not just used as an environment variable,
@@ -47,12 +54,13 @@ other programs do in practice (for example, GNU date).
 
 This module works just fine in `no_std` mode. It also generally works fine
 without `alloc` too, modulo some APIs for parsing from an environment variable
-(which need `std` anyway). The main problem is that the type defined here takes
-up a lot of space (100+ bytes). A good chunk of that comes from representing
-time zone abbreviations inline. In theory, only 6-10 bytes are needed for
-simple cases like `TZ=EST5EDT,M3.2.0,M11.1.0`, but we make room for 30 byte
-length abbreviations (times two). Plus, there's a much of room made for the
-rule representation.
+(which need `std` anyway) and the POSIX TZ parser using `String` to represent
+abbreviations. (The latter could be fixed if necessary.) The main problem is
+that the type defined here takes up a lot of space (100+ bytes). A good chunk
+of that comes from representing time zone abbreviations inline. In theory, only
+6-10 bytes are needed for simple cases like `TZ=EST5EDT,M3.2.0,M11.1.0`, but we
+make room for 30 byte length abbreviations (times two). Plus, there's a much of
+room made for the rule representation.
 
 When you then stuff this inside a `TimeZone` which cannot use heap allocation
 to force an indirection, you wind up with a very chunky `TimeZone`. And this in
@@ -71,16 +79,21 @@ thinking about adding an `Unzoned` type that is just like `Zoned`, but requires
 the caller to pass in a `&TimeZone` for every API call. Less convenient for
 sure, but you get a more flexible type.
 
+ADDENDUM: The above is still mostly true, but it looks like we are going to
+allow static `TimeZone` values via a proc-macro. And this also requires
+parsing POSIX time zones and building them at compile time. In order to make
+this work well with `TimeZone` without indirection, we'll use pointer tagging.
+This should help save `Zoned` in core-only environments.
+
 [posix-env]: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap08.html#tag_08_03
 [iana-env]: https://data.iana.org/time-zones/tzdb-2024a/theory.html#functions
 [musl-env]: https://wiki.musl-libc.org/environment-variables
 */
 
-use core::cell::Cell;
-
 use crate::{
     civil::{Date, DateTime, Time, Weekday},
     error::{err, Error, ErrorContext},
+    shared,
     timestamp::Timestamp,
     tz::{
         timezone::TimeZoneAbbreviation, AmbiguousOffset, Dst, Offset,
@@ -88,19 +101,14 @@ use crate::{
     },
     util::{
         array_str::Abbreviation,
-        escape::{Byte, Bytes},
+        escape::Bytes,
         parse,
-        rangeint::{ri16, ri32, ri8, RFrom, RInto},
-        t::{self, Minute, Month, Second, Sign, SpanZoneOffset, Year, C},
+        rangeint::{ri16, ri32, ri8, RInto},
+        t::{self, Month, SpanZoneOffset, Year, C},
     },
     SignedDuration,
 };
 
-/// POSIX says the hour must be in the range `0..=24`, but that the default
-/// hour for DST is one hour more than standard time. Therefore, the actual
-/// allowed range is `0..=25`. (Although we require `0..=24` during parsing.)
-type PosixHour = ri8<0, 25>;
-type IanaHour = ri16<0, 167>;
 type PosixJulianDayNoLeap = ri16<1, 365>;
 type PosixJulianDayWithLeap = ri16<0, 365>;
 type PosixWeek = ri8<1, 5>;
@@ -168,6 +176,13 @@ impl core::fmt::Display for PosixTzEnv {
     }
 }
 
+// BREADCRUMBS: For a proc macro to work, we need to provide a way to
+// introduce and eliminate a `ReasonablePosixTimeZone` in a `const` context.
+// I really do not want to make nearly every type in this module completely
+// `pub`, and would prefer to just expose a new type. But it's kind of a pain
+// because of how nested this type is. Short of writing a parser that works
+// in a `const` context, I don't really see a better way.
+
 /// A "reasonable" POSIX time zone.
 ///
 /// This is the same as a regular POSIX time zone, but requires that if a DST
@@ -193,7 +208,8 @@ impl core::fmt::Display for PosixTzEnv {
 /// [GNU C Library]: https://www.gnu.org/software/libc/manual/2.25/html_node/TZ-Variable.html
 /// [RFC 9636]: https://datatracker.ietf.org/doc/rfc9636/
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ReasonablePosixTimeZone {
+#[doc(hidden)] // NOT part of Jiff's public API
+pub struct ReasonablePosixTimeZone {
     std_abbrev: Abbreviation,
     std_offset: PosixOffset,
     dst: Option<ReasonablePosixDst>,
@@ -201,6 +217,7 @@ pub(crate) struct ReasonablePosixTimeZone {
 
 impl ReasonablePosixTimeZone {
     /// Parse a IANA tzfile v3+ `TZ` string from the given bytes.
+    #[cfg(feature = "alloc")]
     pub(crate) fn parse(
         bytes: impl AsRef<[u8]>,
     ) -> Result<ReasonablePosixTimeZone, Error> {
@@ -219,6 +236,7 @@ impl ReasonablePosixTimeZone {
 
     /// Like `parse`, but parses a POSIX TZ string from a prefix of the
     /// given input. And remaining input is returned.
+    #[cfg(feature = "alloc")]
     pub(crate) fn parse_prefix<'b, B: AsRef<[u8]> + ?Sized + 'b>(
         bytes: &'b B,
     ) -> Result<(ReasonablePosixTimeZone, &'b [u8]), Error> {
@@ -234,6 +252,33 @@ impl ReasonablePosixTimeZone {
             ));
         };
         Ok((reasonable, remaining))
+    }
+
+    /// Converts from the shared-but-internal API for use in proc macros.
+    ///
+    /// This works in a `const` context by requiring that the time zone
+    /// abbreviations are `static` strings. This is used when converting
+    /// code generated by a proc macro to this Jiff internal type.
+    pub(crate) const fn from_shared_const(
+        sh: &shared::PosixTimeZone<&'static str>,
+    ) -> ReasonablePosixTimeZone {
+        use crate::util::constant::unwrap;
+
+        let std_abbrev = unwrap!(
+            Abbreviation::new(sh.std_abbrev),
+            "expected short enough std tz abbreviation"
+        );
+        let std_offset = PosixOffset {
+            offset: unwrap!(
+                SpanZoneOffset::new_const(sh.std_offset),
+                "expected std offset in range",
+            ),
+        };
+        let dst = match sh.dst {
+            None => None,
+            Some(ref dst) => Some(ReasonablePosixDst::from_shared_const(dst)),
+        };
+        ReasonablePosixTimeZone { std_abbrev, std_offset, dst }
     }
 
     /// Returns the appropriate time zone offset to use for the given
@@ -575,6 +620,35 @@ struct ReasonablePosixDst {
 }
 
 impl ReasonablePosixDst {
+    /// Converts from the shared-but-internal API for use in proc macros.
+    ///
+    /// This works in a `const` context by requiring that the time zone
+    /// abbreviations are `static` strings. This is used when converting
+    /// code generated by a proc macro to this Jiff internal type.
+    const fn from_shared_const(
+        sh: &shared::PosixDst<&'static str>,
+    ) -> ReasonablePosixDst {
+        use crate::util::constant::unwrap;
+
+        let abbrev = unwrap!(
+            Abbreviation::new(sh.abbrev),
+            "expected short enough dst tz abbreviation"
+        );
+        let offset = PosixOffset {
+            offset: unwrap!(
+                SpanZoneOffset::new_const(sh.offset),
+                "expected dst offset in range",
+            ),
+        };
+        let rule = match sh.rule {
+            None => {
+                panic!("expected reasonable POSIX time zone (DST has a rule)")
+            }
+            Some(ref rule) => Rule::from_shared(rule),
+        };
+        ReasonablePosixDst { abbrev, offset, rule }
+    }
+
     fn display(
         &self,
         std_offset: PosixOffset,
@@ -616,25 +690,46 @@ pub(crate) struct PosixTimeZone {
 impl PosixTimeZone {
     /// Parse a POSIX `TZ` environment variable, assuming it's a rule and not
     /// an implementation defined value, from the given bytes.
+    #[cfg(feature = "alloc")]
     fn parse(bytes: impl AsRef<[u8]>) -> Result<PosixTimeZone, Error> {
-        // We enable the IANA v3+ extensions here. (Namely, that the time
-        // specification hour value has the range `-167..=167` instead of
-        // `0..=24`.) Requiring strict POSIX rules doesn't seem necessary
-        // since the extension is a strict superset. Plus, GNU tooling
-        // seems to accept the extension.
-        let parser =
-            Parser { ianav3plus: true, ..Parser::new(bytes.as_ref()) };
-        parser.parse()
+        let shared_tz = crate::shared::PosixTimeZone::parse(bytes.as_ref())
+            .map_err(Error::adhoc)?;
+        let jiff_tz = PosixTimeZone::from_shared_owned(&shared_tz);
+        Ok(jiff_tz)
     }
 
     /// Like parse, but parses a prefix of the input given and returns whatever
     /// is remaining.
+    #[cfg(feature = "alloc")]
     fn parse_prefix<'b, B: AsRef<[u8]> + ?Sized + 'b>(
         bytes: &'b B,
     ) -> Result<(PosixTimeZone, &'b [u8]), Error> {
-        let parser =
-            Parser { ianav3plus: true, ..Parser::new(bytes.as_ref()) };
-        parser.parse_prefix()
+        let (shared_tz, remaining) =
+            crate::shared::PosixTimeZone::parse_prefix(bytes.as_ref())
+                .map_err(Error::adhoc)?;
+        let jiff_tz = PosixTimeZone::from_shared_owned(&shared_tz);
+        Ok((jiff_tz, remaining))
+    }
+
+    /// Converts from the shared-but-internal API for use in proc macros.
+    ///
+    /// This is not `const` since it accepts an owned `String` as a time zone
+    /// abbreviation. This is used when parsing POSIX time zones at runtime.
+    #[cfg(feature = "alloc")]
+    pub(crate) fn from_shared_owned(
+        sh: &shared::PosixTimeZone<alloc::string::String>,
+    ) -> PosixTimeZone {
+        let std_abbrev = Abbreviation::new(&sh.std_abbrev)
+            .expect("expected short enough std tz abbreviation");
+        let std_offset = PosixOffset {
+            offset: SpanZoneOffset::new(sh.std_offset)
+                .expect("expected std offset in range"),
+        };
+        let dst = match sh.dst {
+            None => None,
+            Some(ref dst) => Some(PosixDst::from_shared_owned(dst)),
+        };
+        PosixTimeZone { std_abbrev, std_offset, dst }
     }
 
     /// Transforms this POSIX time zone into a "reasonable" time zone.
@@ -702,6 +797,27 @@ struct PosixDst {
 }
 
 impl PosixDst {
+    /// Converts from the shared-but-internal API for use in proc macros.
+    ///
+    /// This is not `const` since it accepts an owned `String` as a time zone
+    /// abbreviation. This is used when parsing POSIX time zones at runtime.
+    #[cfg(feature = "alloc")]
+    fn from_shared_owned(
+        sh: &shared::PosixDst<alloc::string::String>,
+    ) -> PosixDst {
+        let abbrev = Abbreviation::new(&sh.abbrev)
+            .expect("expected short enough dst tz abbreviation");
+        let offset = PosixOffset {
+            offset: SpanZoneOffset::new(sh.offset)
+                .expect("expected dst offset in range"),
+        };
+        let rule = match sh.rule {
+            None => None,
+            Some(ref rule) => Some(Rule::from_shared(rule)),
+        };
+        PosixDst { abbrev, offset, rule }
+    }
+
     fn display(
         &self,
         std_offset: PosixOffset,
@@ -773,6 +889,15 @@ struct Rule {
     end: PosixDateTimeSpec,
 }
 
+impl Rule {
+    /// Converts from the shared-but-internal API for use in proc macros.
+    const fn from_shared(sh: &shared::PosixRule) -> Rule {
+        let start = PosixDateTimeSpec::from_shared(&sh.start);
+        let end = PosixDateTimeSpec::from_shared(&sh.end);
+        Rule { start, end }
+    }
+}
+
 impl core::fmt::Display for Rule {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "{},{}", self.start, self.end)
@@ -788,6 +913,14 @@ struct PosixDateTimeSpec {
 }
 
 impl PosixDateTimeSpec {
+    /// Converts from the shared-but-internal API for use in proc macros.
+    const fn from_shared(sh: &shared::PosixDayTime) -> PosixDateTimeSpec {
+        PosixDateTimeSpec {
+            date: PosixDateSpec::from_shared(&sh.date),
+            time: PosixTimeSpec::from_shared(sh.time),
+        }
+    }
+
     /// Turns this POSIX datetime spec into a civil datetime in the year given
     /// with the given offset. The datetimes returned are offset by the given
     /// offset. For wall clock time, an offset of `0` should be given. For
@@ -868,6 +1001,53 @@ enum PosixDateSpec {
 }
 
 impl PosixDateSpec {
+    /// Converts from the shared-but-internal API for use in proc macros.
+    const fn from_shared(sh: &shared::PosixDay) -> PosixDateSpec {
+        use crate::util::constant::unwrap;
+
+        match *sh {
+            shared::PosixDay::JulianOne(doy) => {
+                let doy = unwrap!(
+                    PosixJulianDayNoLeap::new_const(doy),
+                    "expected 1-based Julian day in range"
+                );
+                PosixDateSpec::JulianOne(doy)
+            }
+            shared::PosixDay::JulianZero(doy) => {
+                let doy = unwrap!(
+                    PosixJulianDayWithLeap::new_const(doy),
+                    "expected 0-based Julian day in range"
+                );
+                PosixDateSpec::JulianZero(doy)
+            }
+            shared::PosixDay::WeekdayOfMonth { month, week, weekday } => {
+                let month = unwrap!(
+                    Month::new_const(month),
+                    "expected weekday-of-month month in range"
+                );
+                let week = unwrap!(
+                    PosixWeek::new_const(week),
+                    "expected weekday-of-month week in range"
+                );
+                let weekday = match weekday {
+                    0 => Weekday::Sunday,
+                    1 => Weekday::Monday,
+                    2 => Weekday::Tuesday,
+                    3 => Weekday::Wednesday,
+                    4 => Weekday::Thursday,
+                    5 => Weekday::Friday,
+                    6 => Weekday::Saturday,
+                    _ => panic!("expected weekday-of-month weekday in range"),
+                };
+                PosixDateSpec::WeekdayOfMonth(WeekdayOfMonth {
+                    month,
+                    week,
+                    weekday,
+                })
+            }
+        }
+    }
+
     /// Convert this date specification to a civil date in the year given.
     ///
     /// If this date specification couldn't be turned into a date in the year
@@ -997,6 +1177,15 @@ impl PosixTimeSpec {
         duration: PosixTimeSeconds::new_unchecked(2 * 60 * 60),
     };
 
+    /// Converts from the shared-but-internal API for use in proc macros.
+    const fn from_shared(seconds: i32) -> PosixTimeSpec {
+        let duration = crate::util::constant::unwrap!(
+            PosixTimeSeconds::new_const(seconds),
+            "expected POSIX time spec seconds in range",
+        );
+        PosixTimeSpec { duration }
+    }
+
     fn to_duration(&self) -> SignedDuration {
         SignedDuration::from_secs(self.duration.get().into())
     }
@@ -1024,785 +1213,6 @@ impl core::fmt::Display for PosixTimeSpec {
     }
 }
 
-#[derive(Debug)]
-struct Parser<'s> {
-    /// The `TZ` string that we're parsing.
-    tz: &'s [u8],
-    /// The parser's current position in `tz`.
-    pos: Cell<usize>,
-    /// Whether to use IANA rules, i.e., when parsing a TZ string in a TZif
-    /// file of version 3 or greater. From `tzfile(5)`:
-    ///
-    /// > First, the hours part of its transition times may be signed and range
-    /// > from `-167` through `167` instead of the POSIX-required unsigned
-    /// > values from `0` through `24`. Second, DST is in effect all year if
-    /// > it starts January 1 at 00:00 and ends December 31 at 24:00 plus the
-    /// > difference between daylight saving and standard time.
-    ///
-    /// At time of writing, I don't think I understand the significance of
-    /// the second part above. (RFC 8536 elaborates that it is meant to be an
-    /// explicit clarification of something that POSIX itself implies.) But the
-    /// first part is clear: it permits the hours to be a bigger range.
-    ianav3plus: bool,
-}
-
-impl<'s> Parser<'s> {
-    fn new<B: ?Sized + AsRef<[u8]>>(tz: &'s B) -> Parser<'s> {
-        Parser { tz: tz.as_ref(), pos: Cell::new(0), ianav3plus: false }
-    }
-
-    /// Parses a POSIX time zone from the current position of the parser and
-    /// ensures that the entire TZ string corresponds to a single valid POSIX
-    /// time zone.
-    fn parse(&self) -> Result<PosixTimeZone, Error> {
-        let (time_zone, remaining) = self.parse_prefix()?;
-        if !remaining.is_empty() {
-            return Err(err!(
-                "expected entire TZ string to be a valid POSIX \
-                 time zone, but found '{}' after what would otherwise \
-                 be a valid POSIX TZ string",
-                Bytes(remaining),
-            ));
-        }
-        Ok(time_zone)
-    }
-
-    /// Parses a POSIX time zone from the current position of the parser and
-    /// returns the remaining input.
-    fn parse_prefix(&self) -> Result<(PosixTimeZone, &'s [u8]), Error> {
-        let time_zone = self.parse_posix_time_zone()?;
-        Ok((time_zone, self.remaining()))
-    }
-
-    /// Parse a POSIX time zone from the current position of the parser.
-    ///
-    /// Upon success, the parser will be positioned immediately following the
-    /// TZ string.
-    fn parse_posix_time_zone(&self) -> Result<PosixTimeZone, Error> {
-        let std_abbrev = self
-            .parse_abbreviation()
-            .map_err(|e| e.context("failed to parse standard abbreviation"))?;
-        let std_offset = self
-            .parse_posix_offset()
-            .map_err(|e| e.context("failed to parse standard offset"))?;
-        let mut dst = None;
-        if !self.is_done()
-            && (self.byte().is_ascii_alphabetic() || self.byte() == b'<')
-        {
-            dst = Some(self.parse_posix_dst(std_offset)?);
-        }
-        Ok(PosixTimeZone { std_abbrev, std_offset, dst })
-    }
-
-    /// Parse a DST zone with an optional explicit transition rule.
-    ///
-    /// This assumes the parser is positioned at the first byte of the DST
-    /// abbreviation.
-    ///
-    /// Upon success, the parser will be positioned immediately after the end
-    /// of the DST transition rule (which might just be the abbreviation, but
-    /// might also include explicit start/end datetime specifications).
-    fn parse_posix_dst(
-        &self,
-        std_offset: PosixOffset,
-    ) -> Result<PosixDst, Error> {
-        let abbrev = self
-            .parse_abbreviation()
-            .map_err(|e| e.context("failed to parse DST abbreviation"))?;
-        // This is the default: one hour ahead of standard time. We may
-        // override this if the DST portion specifies an offset. (But it
-        // usually doesn't.)
-        let offset =
-            PosixOffset { offset: std_offset.offset + t::SECONDS_PER_HOUR };
-        let mut dst = PosixDst { abbrev, offset, rule: None };
-        if self.is_done() {
-            return Ok(dst);
-        }
-        if self.byte() != b',' {
-            dst.offset = self
-                .parse_posix_offset()
-                .map_err(|e| e.context("failed to parse DST offset"))?;
-            if self.is_done() {
-                return Ok(dst);
-            }
-        }
-        if self.byte() != b',' {
-            return Err(err!(
-                "after parsing DST offset in POSIX time zone string, \
-                 found '{}' but expected a ','",
-                Byte(self.byte()),
-            ));
-        }
-        if !self.bump() {
-            return Err(err!(
-                "after parsing DST offset in POSIX time zone string, \
-                 found end of string after a trailing ','",
-            ));
-        }
-        dst.rule = Some(self.parse_rule()?);
-        Ok(dst)
-    }
-
-    /// Parse a time zone abbreviation.
-    ///
-    /// This assumes the parser is positioned at the first byte of the
-    /// abbreviation. This is either the first character in the abbreviation,
-    /// or the opening quote of a quoted abbreviation.
-    ///
-    /// Upon success, the parser will be positioned immediately following the
-    /// abbreviation name.
-    fn parse_abbreviation(&self) -> Result<Abbreviation, Error> {
-        if self.byte() == b'<' {
-            if !self.bump() {
-                return Err(err!(
-                    "found opening '<' quote for abbreviation in \
-                     POSIX time zone string, and expected a name \
-                     following it, but found the end of string instead"
-                ));
-            }
-            self.parse_quoted_abbreviation()
-        } else {
-            self.parse_unquoted_abbreviation()
-        }
-    }
-
-    /// Parses an unquoted time zone abbreviation.
-    ///
-    /// This assumes the parser is position at the first byte in the
-    /// abbreviation.
-    ///
-    /// Upon success, the parser will be positioned immediately after the
-    /// last byte in the abbreviation.
-    fn parse_unquoted_abbreviation(&self) -> Result<Abbreviation, Error> {
-        let start = self.pos();
-        for i in 0.. {
-            if !self.byte().is_ascii_alphabetic() {
-                break;
-            }
-            if i >= Abbreviation::capacity() {
-                return Err(err!(
-                    "expected abbreviation with at most {} bytes, \
-                     but found a longer abbreviation beginning with '{}'",
-                    Abbreviation::capacity(),
-                    Bytes(&self.tz[start..i]),
-                ));
-            }
-            if !self.bump() {
-                break;
-            }
-        }
-        let end = self.pos();
-        let abbrev =
-            core::str::from_utf8(&self.tz[start..end]).map_err(|_| {
-                // NOTE: I believe this error is technically impossible since
-                // the loop above restricts letters in an abbreviation to
-                // ASCII. So everything from `start` to `end` is ASCII and
-                // thus should be UTF-8. But it doesn't cost us anything to
-                // report an error here in case the code above evolves somehow.
-                err!(
-                    "found abbreviation '{}', but it is not valid UTF-8",
-                    Bytes(&self.tz[start..end]),
-                )
-            })?;
-        if abbrev.len() < 3 {
-            return Err(err!(
-                "expected abbreviation with 3 or more bytes, but found \
-                 abbreviation {:?} with {} bytes",
-                abbrev,
-                abbrev.len(),
-            ));
-        }
-        // OK because we verified above that the abbreviation
-        // does not exceed `Abbreviation::capacity`.
-        Ok(Abbreviation::new(abbrev).unwrap())
-    }
-
-    /// Parses a quoted time zone abbreviation.
-    ///
-    /// This assumes the parser is positioned immediately after the opening
-    /// `<` quote. That is, at the first byte in the abbreviation.
-    ///
-    /// Upon success, the parser will be positioned immediately after the
-    /// closing `>` quote.
-    fn parse_quoted_abbreviation(&self) -> Result<Abbreviation, Error> {
-        let start = self.pos();
-        for i in 0.. {
-            if !self.byte().is_ascii_alphanumeric()
-                && self.byte() != b'+'
-                && self.byte() != b'-'
-            {
-                break;
-            }
-            if i >= Abbreviation::capacity() {
-                return Err(err!(
-                    "expected abbreviation with at most {} bytes, \
-                     but found a longer abbreviation beginning with '{}'",
-                    Abbreviation::capacity(),
-                    Bytes(&self.tz[start..i]),
-                ));
-            }
-            if !self.bump() {
-                break;
-            }
-        }
-        let end = self.pos();
-        let abbrev =
-            core::str::from_utf8(&self.tz[start..end]).map_err(|_| {
-                // NOTE: I believe this error is technically impossible since
-                // the loop above restricts letters in an abbreviation to
-                // ASCII. So everything from `start` to `end` is ASCII and
-                // thus should be UTF-8. But it doesn't cost us anything to
-                // report an error here in case the code above evolves somehow.
-                err!(
-                    "found abbreviation '{}', but it is not valid UTF-8",
-                    Bytes(&self.tz[start..end]),
-                )
-            })?;
-        if self.is_done() {
-            return Err(err!(
-                "found non-empty quoted abbreviation {abbrev:?}, but \
-                 did not find expected end-of-quoted abbreviation \
-                 '>' character",
-            ));
-        }
-        if self.byte() != b'>' {
-            return Err(err!(
-                "found non-empty quoted abbreviation {abbrev:?}, but \
-                 found '{}' instead of end-of-quoted abbreviation '>' \
-                 character",
-                Byte(self.byte()),
-            ));
-        }
-        self.bump();
-        if abbrev.len() < 3 {
-            return Err(err!(
-                "expected abbreviation with 3 or more bytes, but found \
-                 abbreviation {abbrev:?} with {} bytes",
-                abbrev.len(),
-            ));
-        }
-        // OK because we verified above that the abbreviation
-        // does not exceed `Abbreviation::capacity()`.
-        Ok(Abbreviation::new(abbrev).unwrap())
-    }
-
-    /// Parse a POSIX time offset.
-    ///
-    /// This assumes the parser is positioned at the first byte of the offset.
-    /// This can either be a digit (for a positive offset) or the sign of the
-    /// offset (which must be either `-` or `+`).
-    ///
-    /// Upon success, the parser will be positioned immediately after the end
-    /// of the offset.
-    fn parse_posix_offset(&self) -> Result<PosixOffset, Error> {
-        let sign = self
-            .parse_optional_sign()
-            .map_err(|e| {
-                e.context(
-                    "failed to parse sign for time offset \
-                     in POSIX time zone string",
-                )
-            })?
-            .unwrap_or(Sign::N::<1>());
-        let hour = self.parse_hour_posix()?;
-        let (mut minute, mut second) = (Minute::N::<0>(), Second::N::<0>());
-        if self.maybe_byte() == Some(b':') {
-            if !self.bump() {
-                return Err(err!(
-                    "incomplete time in POSIX timezone (missing minutes)",
-                ));
-            }
-            minute = self.parse_minute()?;
-            if self.maybe_byte() == Some(b':') {
-                if !self.bump() {
-                    return Err(err!(
-                        "incomplete time in POSIX timezone (missing seconds)",
-                    ));
-                }
-                second = self.parse_second()?;
-            }
-        }
-        let mut seconds = SpanZoneOffset::N::<0>();
-        seconds += t::SpanZoneOffset::rfrom(hour) * t::SECONDS_PER_HOUR;
-        seconds += t::SpanZoneOffset::rfrom(minute) * t::SECONDS_PER_MINUTE;
-        seconds += t::SpanZoneOffset::rfrom(second);
-        // Yes, we flip the sign, because POSIX is backwards.
-        // For example, `EST5` corresponds to `-05:00`.
-        Ok(PosixOffset { offset: seconds * -sign })
-    }
-
-    /// Parses a POSIX DST transition rule.
-    ///
-    /// This assumes the parser is positioned at the first byte in the rule.
-    /// That is, it comes immediately after the DST abbreviation or its
-    /// optional offset.
-    ///
-    /// Upon success, the parser will be positioned immediately after the
-    /// DST transition rule. In typical cases, this corresponds to the end of
-    /// the TZ string.
-    fn parse_rule(&self) -> Result<Rule, Error> {
-        let start = self.parse_posix_datetime_spec().map_err(|e| {
-            e.context("failed to parse start of DST transition rule")
-        })?;
-        if self.maybe_byte() != Some(b',') || !self.bump() {
-            return Err(err!(
-                "expected end of DST rule after parsing the start \
-                 of the DST rule"
-            ));
-        }
-        let end = self.parse_posix_datetime_spec().map_err(|e| {
-            e.context("failed to parse end of DST transition rule")
-        })?;
-        Ok(Rule { start, end })
-    }
-
-    /// Parses a POSIX datetime specification.
-    ///
-    /// This assumes the parser is position at the first byte where a datetime
-    /// specification is expected to occur.
-    ///
-    /// Upon success, the parser will be positioned after the datetime
-    /// specification. This will either be immediately after the date, or if
-    /// it's present, the time part of the specification.
-    fn parse_posix_datetime_spec(&self) -> Result<PosixDateTimeSpec, Error> {
-        let date = self.parse_posix_date_spec()?;
-        let time = PosixTimeSpec::DEFAULT;
-        let mut spec = PosixDateTimeSpec { date, time };
-        if self.maybe_byte() != Some(b'/') {
-            return Ok(spec);
-        }
-        if !self.bump() {
-            return Err(err!(
-                "expected time specification after '/' following a date
-                 specification in a POSIX time zone DST transition rule",
-            ));
-        }
-        spec.time = self.parse_posix_time_spec()?;
-        Ok(spec)
-    }
-
-    /// Parses a POSIX date specification.
-    ///
-    /// This assumes the parser is positioned at the first byte of the date
-    /// specification. This can be `J` (for one based Julian day without leap
-    /// days), `M` (for "weekday of month") or a digit starting the zero based
-    /// Julian day with leap days. This routine will validate that the position
-    /// points to one of these possible values. That is, the caller doesn't
-    /// need to parse the `M` or the `J` or the leading digit. The caller
-    /// should just call this routine when it *expect* a date specification to
-    /// follow.
-    ///
-    /// Upon success, the parser will be positioned immediately after the date
-    /// specification.
-    fn parse_posix_date_spec(&self) -> Result<PosixDateSpec, Error> {
-        match self.byte() {
-            b'J' => {
-                if !self.bump() {
-                    return Err(err!(
-                        "expected one-based Julian day after 'J' in date \
-                         specification of a POSIX time zone DST transition \
-                         rule, but got the end of the string instead"
-                    ));
-                }
-                Ok(PosixDateSpec::JulianOne(
-                    self.parse_posix_julian_day_no_leap()?,
-                ))
-            }
-            b'0'..=b'9' => Ok(PosixDateSpec::JulianZero(
-                self.parse_posix_julian_day_with_leap()?,
-            )),
-            b'M' => {
-                if !self.bump() {
-                    return Err(err!(
-                        "expected month-week-weekday after 'M' in date \
-                         specification of a POSIX time zone DST transition \
-                         rule, but got the end of the string instead"
-                    ));
-                }
-                Ok(PosixDateSpec::WeekdayOfMonth(
-                    self.parse_weekday_of_month()?,
-                ))
-            }
-            _ => Err(err!(
-                "expected 'J', a digit or 'M' at the beginning of a date \
-                 specification of a POSIX time zone DST transition rule, \
-                 but got '{}' instead",
-                Byte(self.byte()),
-            )),
-        }
-    }
-
-    /// Parses a POSIX Julian day that does not include leap days
-    /// (`1 <= n <= 365`).
-    ///
-    /// This assumes the parser is positioned just after the `J` and at the
-    /// first digit of the Julian day. Upon success, the parser will be
-    /// positioned immediately following the day number.
-    fn parse_posix_julian_day_no_leap(
-        &self,
-    ) -> Result<PosixJulianDayNoLeap, Error> {
-        let number = self
-            .parse_number_with_upto_n_digits(3)
-            .map_err(|e| e.context("invalid one based Julian day"))?;
-        let day = PosixJulianDayNoLeap::new(number).ok_or_else(|| {
-            err!("invalid one based Julian day (must be in range 1..=365")
-        })?;
-        Ok(day)
-    }
-
-    /// Parses a POSIX Julian day that includes leap days (`0 <= n <= 365`).
-    ///
-    /// This assumes the parser is positioned at the first digit of the Julian
-    /// day. Upon success, the parser will be positioned immediately following
-    /// the day number.
-    fn parse_posix_julian_day_with_leap(
-        &self,
-    ) -> Result<PosixJulianDayWithLeap, Error> {
-        let number = self
-            .parse_number_with_upto_n_digits(3)
-            .map_err(|e| e.context("invalid zero based Julian day"))?;
-        let day = PosixJulianDayWithLeap::new(number).ok_or_else(|| {
-            err!("invalid zero based Julian day (must be in range 0..=365")
-        })?;
-        Ok(day)
-    }
-
-    /// Parses a POSIX "weekday of month" specification.
-    ///
-    /// This assumes the parser is positioned just after the `M` byte and
-    /// at the first digit of the month. Upon success, the parser will be
-    /// positioned immediately following the "weekday of the month" that was
-    /// parsed.
-    fn parse_weekday_of_month(&self) -> Result<WeekdayOfMonth, Error> {
-        let month = self.parse_month()?;
-        if self.maybe_byte() != Some(b'.') {
-            return Err(err!(
-                "expected '.' after month '{month}' in POSIX time zone rule"
-            ));
-        }
-        if !self.bump() {
-            return Err(err!(
-                "expected week after month '{month}' in POSIX time zone rule"
-            ));
-        }
-        let week = self.parse_week()?;
-        if self.maybe_byte() != Some(b'.') {
-            return Err(err!(
-                "expected '.' after week '{week}' in POSIX time zone rule"
-            ));
-        }
-        if !self.bump() {
-            return Err(err!(
-                "expected day-of-week after week '{week}' in \
-                 POSIX time zone rule"
-            ));
-        }
-        let weekday = self.parse_weekday()?;
-        Ok(WeekdayOfMonth { month, week, weekday })
-    }
-
-    /// This parses a POSIX time specification in the format
-    /// `[+/-]hh?[:mm[:ss]]`.
-    ///
-    /// This assumes the parser is positioned at the first `h` (or the sign,
-    /// if present). Upon success, the parser will be positioned immediately
-    /// following the end of the time specification.
-    fn parse_posix_time_spec(&self) -> Result<PosixTimeSpec, Error> {
-        let (sign, hour) = if self.ianav3plus {
-            let sign = self
-                .parse_optional_sign()
-                .map_err(|e| {
-                    e.context(
-                        "failed to parse sign for transition time \
-                     in POSIX time zone string",
-                    )
-                })?
-                .unwrap_or(Sign::N::<1>());
-            let hour = self.parse_hour_ianav3plus()?;
-            (sign, hour)
-        } else {
-            (Sign::N::<1>(), self.parse_hour_posix()?.rinto())
-        };
-        let (mut minute, mut second) = (Minute::N::<0>(), Second::N::<0>());
-        if self.maybe_byte() == Some(b':') {
-            if !self.bump() {
-                return Err(err!(
-                    "incomplete transition time in \
-                     POSIX time zone string (missing minutes)",
-                ));
-            }
-            minute = self.parse_minute()?;
-            if self.maybe_byte() == Some(b':') {
-                if !self.bump() {
-                    return Err(err!(
-                        "incomplete transition time in \
-                         POSIX time zone string (missing seconds)",
-                    ));
-                }
-                second = self.parse_second()?;
-            }
-        }
-        let mut seconds = PosixTimeSeconds::rfrom(hour) * t::SECONDS_PER_HOUR;
-        seconds += PosixTimeSeconds::rfrom(minute) * t::SECONDS_PER_MINUTE;
-        seconds += second;
-        seconds *= sign;
-        Ok(PosixTimeSpec { duration: seconds })
-    }
-
-    /// Parses a month.
-    ///
-    /// This is expected to be positioned at the first digit. Upon success,
-    /// the parser will be positioned after the month (which may contain two
-    /// digits).
-    fn parse_month(&self) -> Result<Month, Error> {
-        let number = self.parse_number_with_upto_n_digits(2)?;
-        let month = Month::new(number).ok_or_else(|| {
-            err!("month in POSIX time zone must be in range 1..=12")
-        })?;
-        Ok(month)
-    }
-
-    /// Parses a week-of-month number.
-    ///
-    /// This is expected to be positioned at the first digit. Upon success,
-    /// the parser will be positioned after the week digit.
-    fn parse_week(&self) -> Result<PosixWeek, Error> {
-        let number = self.parse_number_with_exactly_n_digits(1)?;
-        let week = PosixWeek::new(number).ok_or_else(|| {
-            err!("week in POSIX time zone must be in range 1..=5")
-        })?;
-        Ok(week)
-    }
-
-    /// Parses a week-of-month number.
-    ///
-    /// This is expected to be positioned at the first digit. Upon success,
-    /// the parser will be positioned after the week digit.
-    fn parse_weekday(&self) -> Result<Weekday, Error> {
-        let number = self.parse_number_with_exactly_n_digits(1)?;
-        let number8 = i8::try_from(number).map_err(|_| {
-            err!(
-                "weekday '{number}' in POSIX time zone \
-                 does not fit into 8-bit integer"
-            )
-        })?;
-        let weekday =
-            Weekday::from_sunday_zero_offset(number8).map_err(|_| {
-                err!(
-                    "weekday in POSIX time zone must be in range 0..=6 \
-                     (with 0 corresponding to Sunday), but got {number8}",
-                )
-            })?;
-        Ok(weekday)
-    }
-
-    /// Parses an hour from a POSIX time specification with the IANA v3+
-    /// extension. That is, the hour may be in the range `0..=167`. (Callers
-    /// should parse an optional sign preceding the hour digits when IANA V3+
-    /// parsing is enabled.)
-    ///
-    /// The hour is allowed to be a single digit (unlike minutes or seconds).
-    ///
-    /// This assumes the parser is positioned at the position where the first
-    /// hour digit should occur. Upon success, the parser will be positioned
-    /// immediately after the last hour digit.
-    fn parse_hour_ianav3plus(&self) -> Result<IanaHour, Error> {
-        // Callers should only be using this method when IANA v3+ parsing is
-        // enabled.
-        assert!(self.ianav3plus);
-        let number = self
-            .parse_number_with_upto_n_digits(3)
-            .map_err(|e| e.context("invalid hour digits"))?;
-        let hour = IanaHour::new(number).ok_or_else(|| {
-            err!(
-                "hour in POSIX (IANA v3+ style) \
-                     time zone must be in range -167..=167"
-            )
-        })?;
-        Ok(hour)
-    }
-
-    /// Parses an hour from a POSIX time specification, with the allowed range
-    /// being `0..=24`.
-    ///
-    /// The hour is allowed to be a single digit (unlike minutes or seconds).
-    ///
-    /// This assumes the parser is positioned at the position where the first
-    /// hour digit should occur. Upon success, the parser will be positioned
-    /// immediately after the last hour digit.
-    fn parse_hour_posix(&self) -> Result<PosixHour, Error> {
-        type PosixHour24 = ri8<0, 24>;
-
-        let number = self
-            .parse_number_with_upto_n_digits(2)
-            .map_err(|e| e.context("invalid hour digits"))?;
-        let hour = PosixHour24::new(number).ok_or_else(|| {
-            err!("hour in POSIX time zone must be in range 0..=24")
-        })?;
-        Ok(hour.rinto())
-    }
-
-    /// Parses a minute from a POSIX time specification.
-    ///
-    /// The minute must be exactly two digits.
-    ///
-    /// This assumes the parser is positioned at the position where the first
-    /// minute digit should occur. Upon success, the parser will be positioned
-    /// immediately after the second minute digit.
-    fn parse_minute(&self) -> Result<Minute, Error> {
-        let number = self
-            .parse_number_with_exactly_n_digits(2)
-            .map_err(|e| e.context("invalid minute digits"))?;
-        let minute = Minute::new(number).ok_or_else(|| {
-            err!("minute in POSIX time zone must be in range 0..=59")
-        })?;
-        Ok(minute)
-    }
-
-    /// Parses a second from a POSIX time specification.
-    ///
-    /// The second must be exactly two digits.
-    ///
-    /// This assumes the parser is positioned at the position where the first
-    /// second digit should occur. Upon success, the parser will be positioned
-    /// immediately after the second second digit.
-    fn parse_second(&self) -> Result<Second, Error> {
-        let number = self
-            .parse_number_with_exactly_n_digits(2)
-            .map_err(|e| e.context("invalid second digits"))?;
-        let second = Second::new(number).ok_or_else(|| {
-            err!("second in POSIX time zone must be in range 0..=59")
-        })?;
-        Ok(second)
-    }
-
-    /// Parses a signed 64-bit integer expressed in exactly `n` digits.
-    ///
-    /// If `n` digits could not be found (or if the `TZ` string ends before
-    /// `n` digits could be found), then this returns an error.
-    ///
-    /// This assumes that `n >= 1` and that the parser is positioned at the
-    /// first digit. Upon success, the parser is positioned immediately after
-    /// the `n`th digit.
-    fn parse_number_with_exactly_n_digits(
-        &self,
-        n: usize,
-    ) -> Result<i64, Error> {
-        assert!(n >= 1, "numbers must have at least 1 digit");
-        let start = self.pos();
-        for i in 0..n {
-            if self.is_done() {
-                return Err(err!("expected {n} digits, but found {i}"));
-            }
-            if !self.byte().is_ascii_digit() {
-                return Err(err!("invalid digit '{}'", Byte(self.byte())));
-            }
-            self.bump();
-        }
-        let end = self.pos();
-        parse::i64(&self.tz[start..end])
-    }
-
-    /// Parses a signed 64-bit integer expressed with up to `n` digits and at
-    /// least 1 digit.
-    ///
-    /// This assumes that `n >= 1` and that the parser is positioned at the
-    /// first digit. Upon success, the parser is position immediately after the
-    /// last digit (which can be at most `n`).
-    fn parse_number_with_upto_n_digits(&self, n: usize) -> Result<i64, Error> {
-        assert!(n >= 1, "numbers must have at least 1 digit");
-        let start = self.pos();
-        for _ in 0..n {
-            if self.is_done() || !self.byte().is_ascii_digit() {
-                break;
-            }
-            self.bump();
-        }
-        let end = self.pos();
-        parse::i64(&self.tz[start..end])
-    }
-
-    /// Parses an optional sign.
-    ///
-    /// This assumes the parser is positioned at the position where a positive
-    /// or negative sign is permitted. If one exists, then it is consumed and
-    /// returned. Moreover, if one exists, then this guarantees that it is not
-    /// the last byte in the input. That is, upon success, it is valid to call
-    /// `self.byte()`.
-    fn parse_optional_sign(&self) -> Result<Option<Sign>, Error> {
-        if self.is_done() {
-            return Ok(None);
-        }
-        Ok(match self.byte() {
-            b'-' => {
-                if !self.bump() {
-                    return Err(err!(
-                        "expected digit after '-' sign, but got end of input",
-                    ));
-                }
-                Some(Sign::N::<-1>())
-            }
-            b'+' => {
-                if !self.bump() {
-                    return Err(err!(
-                        "expected digit after '+' sign, but got end of input",
-                    ));
-                }
-                Some(Sign::N::<1>())
-            }
-            _ => None,
-        })
-    }
-}
-
-/// Helper routines for parsing a POSIX `TZ` string.
-impl<'s> Parser<'s> {
-    /// Bump the parser to the next byte.
-    ///
-    /// If the end of the input has been reached, then `false` is returned.
-    fn bump(&self) -> bool {
-        if self.is_done() {
-            return false;
-        }
-        self.pos.set(
-            self.pos().checked_add(1).expect("pos cannot overflow usize"),
-        );
-        !self.is_done()
-    }
-
-    /// Returns true if the next call to `bump` would return false.
-    fn is_done(&self) -> bool {
-        self.pos() == self.tz.len()
-    }
-
-    /// Return the byte at the current position of the parser.
-    ///
-    /// This panics if the parser is positioned at the end of the TZ string.
-    fn byte(&self) -> u8 {
-        self.tz[self.pos()]
-    }
-
-    /// Return the byte at the current position of the parser. If the TZ string
-    /// has been exhausted, then this returns `None`.
-    fn maybe_byte(&self) -> Option<u8> {
-        self.tz.get(self.pos()).copied()
-    }
-
-    /// Return the current byte offset of the parser.
-    ///
-    /// The offset starts at `0` from the beginning of the TZ string.
-    fn pos(&self) -> usize {
-        self.pos.get()
-    }
-
-    /// Returns the remaining bytes of the TZ string.
-    ///
-    /// This includes `self.byte()`. It may be empty.
-    fn remaining(&self) -> &'s [u8] {
-        &self.tz[self.pos()..]
-    }
-}
-
 /// A helper type for formatting a time zone abbreviation.
 ///
 /// Basically, this will write the `<` and `>` quotes if necessary, and
@@ -1821,11 +1231,11 @@ impl core::fmt::Display for AbbreviationDisplay {
     }
 }
 
-// Note that most of the tests below are for the parsing. For the actual time
-// zone transition logic, that's unit tested in tz/mod.rs.
+// The tests below all require parsing which requires alloc.
+#[cfg(feature = "alloc")]
 #[cfg(test)]
 mod tests {
-    use std::string::ToString;
+    use alloc::string::ToString;
 
     use crate::{civil::date, tz::offset};
 
@@ -1853,42 +1263,6 @@ mod tests {
         tz
     }
 
-    /// DEBUG COMMAND
-    ///
-    /// Takes environment variable `JIFF_DEBUG_POSIX_TZ` as input, and prints
-    /// the Rust (extended) debug representation of it after parsing it as a
-    /// POSIX TZ string.
-    #[cfg(feature = "std")]
-    #[test]
-    fn debug_posix_tz() -> anyhow::Result<()> {
-        const ENV: &str = "JIFF_DEBUG_POSIX_TZ";
-        let Some(val) = std::env::var_os(ENV) else { return Ok(()) };
-        let val = val
-            .to_str()
-            .ok_or_else(|| err!("{ENV} contains invalid UTF-8"))?;
-        let tz = Parser::new(val).parse()?;
-        std::eprintln!("{tz:#?}");
-        Ok(())
-    }
-
-    /// DEBUG COMMAND
-    ///
-    /// Takes environment variable `JIFF_DEBUG_IANA_TZ` as input, and prints
-    /// the Rust (extended) debug representation of it after parsing it as a
-    /// POSIX TZ string with IANA tzfile v3+ extensions.
-    #[cfg(feature = "std")]
-    #[test]
-    fn debug_iana_tz() -> anyhow::Result<()> {
-        const ENV: &str = "JIFF_DEBUG_IANA_TZ";
-        let Some(val) = std::env::var_os(ENV) else { return Ok(()) };
-        let val = val
-            .to_str()
-            .ok_or_else(|| err!("{ENV} contains invalid UTF-8"))?;
-        let tz = Parser { ianav3plus: true, ..Parser::new(val) }.parse()?;
-        std::eprintln!("{tz:#?}");
-        Ok(())
-    }
-
     #[test]
     fn reasonable_to_dst_civil_datetime_utc_range() {
         let tz = reasonable_posix_time_zone("WART4WARST,J1/-3,J365/20");
@@ -1897,7 +1271,7 @@ mod tests {
             // out here, and I didn't adopt snapshot testing until I had
             // written out these tests by hand. ¯\_(ツ)_/¯
             dst: tz.dst.as_ref().unwrap(),
-            offset: crate::tz::offset(-3),
+            offset: offset(-3),
             start: date(2024, 1, 1).at(1, 0, 0, 0),
             end: date(2024, 12, 31).at(23, 0, 0, 0),
         };
@@ -1906,7 +1280,7 @@ mod tests {
         let tz = reasonable_posix_time_zone("WART4WARST,J1/-4,J365/21");
         let dst_info = DstInfo {
             dst: tz.dst.as_ref().unwrap(),
-            offset: crate::tz::offset(-3),
+            offset: offset(-3),
             start: date(2024, 1, 1).at(0, 0, 0, 0),
             end: date(2024, 12, 31).at(23, 59, 59, 999_999_999),
         };
@@ -1915,7 +1289,7 @@ mod tests {
         let tz = reasonable_posix_time_zone("EST5EDT,M3.2.0,M11.1.0");
         let dst_info = DstInfo {
             dst: tz.dst.as_ref().unwrap(),
-            offset: crate::tz::offset(-4),
+            offset: offset(-4),
             start: date(2024, 3, 10).at(7, 0, 0, 0),
             end: date(2024, 11, 3).at(6, 0, 0, 0),
         };
@@ -2247,1078 +1621,7 @@ mod tests {
             },
         );
 
-        let p = Parser::new("America/New_York");
-        assert!(p.parse().is_err());
-
-        let p = Parser::new(":America/New_York");
-        assert!(p.parse().is_err());
-    }
-
-    #[test]
-    fn parse() {
-        let p = Parser::new("NZST-12NZDT,J60,J300");
-        assert_eq!(
-            p.parse().unwrap(),
-            PosixTimeZone {
-                std_abbrev: "NZST".into(),
-                std_offset: offset(12).into(),
-                dst: Some(PosixDst {
-                    abbrev: "NZDT".into(),
-                    offset: offset(13).into(),
-                    rule: Some(Rule {
-                        start: PosixDateTimeSpec {
-                            date: PosixDateSpec::JulianOne(C(60).rinto()),
-                            time: PosixTimeSpec::DEFAULT,
-                        },
-                        end: PosixDateTimeSpec {
-                            date: PosixDateSpec::JulianOne(C(300).rinto()),
-                            time: PosixTimeSpec::DEFAULT,
-                        },
-                    }),
-                }),
-            },
-        );
-
-        let p = Parser::new("NZST-12NZDT,J60,J300WAT");
-        assert!(p.parse().is_err());
-    }
-
-    #[test]
-    fn parse_posix_time_zone() {
-        let p = Parser::new("NZST-12NZDT,M9.5.0,M4.1.0/3");
-        assert_eq!(
-            p.parse_posix_time_zone().unwrap(),
-            PosixTimeZone {
-                std_abbrev: "NZST".into(),
-                std_offset: offset(12).into(),
-                dst: Some(PosixDst {
-                    abbrev: "NZDT".into(),
-                    offset: offset(13).into(),
-                    rule: Some(Rule {
-                        start: PosixDateTimeSpec {
-                            date: PosixDateSpec::WeekdayOfMonth(
-                                WeekdayOfMonth {
-                                    month: C(9).rinto(),
-                                    week: C(5).rinto(),
-                                    weekday: Weekday::Sunday,
-                                }
-                            ),
-                            time: PosixTimeSpec::DEFAULT,
-                        },
-                        end: PosixDateTimeSpec {
-                            date: PosixDateSpec::WeekdayOfMonth(
-                                WeekdayOfMonth {
-                                    month: C(4).rinto(),
-                                    week: C(1).rinto(),
-                                    weekday: Weekday::Sunday,
-                                }
-                            ),
-                            time: PosixTimeSpec {
-                                duration: PosixTimeSeconds::new(3 * 60 * 60)
-                                    .unwrap(),
-                            },
-                        },
-                    })
-                }),
-            },
-        );
-
-        let p = Parser::new("NZST-12NZDT,M9.5.0,M4.1.0/3WAT");
-        assert_eq!(
-            p.parse_posix_time_zone().unwrap(),
-            PosixTimeZone {
-                std_abbrev: "NZST".into(),
-                std_offset: offset(12).into(),
-                dst: Some(PosixDst {
-                    abbrev: "NZDT".into(),
-                    offset: offset(13).into(),
-                    rule: Some(Rule {
-                        start: PosixDateTimeSpec {
-                            date: PosixDateSpec::WeekdayOfMonth(
-                                WeekdayOfMonth {
-                                    month: C(9).rinto(),
-                                    week: C(5).rinto(),
-                                    weekday: Weekday::Sunday,
-                                }
-                            ),
-                            time: PosixTimeSpec::DEFAULT,
-                        },
-                        end: PosixDateTimeSpec {
-                            date: PosixDateSpec::WeekdayOfMonth(
-                                WeekdayOfMonth {
-                                    month: C(4).rinto(),
-                                    week: C(1).rinto(),
-                                    weekday: Weekday::Sunday,
-                                }
-                            ),
-                            time: PosixTimeSpec {
-                                duration: PosixTimeSeconds::new(3 * 60 * 60)
-                                    .unwrap(),
-                            },
-                        },
-                    })
-                }),
-            },
-        );
-
-        let p = Parser::new("NZST-12NZDT,J60,J300");
-        assert_eq!(
-            p.parse_posix_time_zone().unwrap(),
-            PosixTimeZone {
-                std_abbrev: "NZST".into(),
-                std_offset: offset(12).into(),
-                dst: Some(PosixDst {
-                    abbrev: "NZDT".into(),
-                    offset: offset(13).into(),
-                    rule: Some(Rule {
-                        start: PosixDateTimeSpec {
-                            date: PosixDateSpec::JulianOne(C(60).rinto()),
-                            time: PosixTimeSpec::DEFAULT,
-                        },
-                        end: PosixDateTimeSpec {
-                            date: PosixDateSpec::JulianOne(C(300).rinto()),
-                            time: PosixTimeSpec::DEFAULT,
-                        },
-                    }),
-                }),
-            },
-        );
-
-        let p = Parser::new("NZST-12NZDT,J60,J300WAT");
-        assert_eq!(
-            p.parse_posix_time_zone().unwrap(),
-            PosixTimeZone {
-                std_abbrev: "NZST".into(),
-                std_offset: offset(12).into(),
-                dst: Some(PosixDst {
-                    abbrev: "NZDT".into(),
-                    offset: offset(13).into(),
-                    rule: Some(Rule {
-                        start: PosixDateTimeSpec {
-                            date: PosixDateSpec::JulianOne(C(60).rinto()),
-                            time: PosixTimeSpec::DEFAULT,
-                        },
-                        end: PosixDateTimeSpec {
-                            date: PosixDateSpec::JulianOne(C(300).rinto()),
-                            time: PosixTimeSpec::DEFAULT,
-                        },
-                    }),
-                }),
-            },
-        );
-    }
-
-    #[test]
-    fn parse_posix_dst() {
-        let std_offset = PosixOffset::from(offset(12));
-        let p = Parser::new("NZDT,M9.5.0,M4.1.0/3");
-        assert_eq!(
-            p.parse_posix_dst(std_offset).unwrap(),
-            PosixDst {
-                abbrev: "NZDT".into(),
-                offset: offset(13).into(),
-                rule: Some(Rule {
-                    start: PosixDateTimeSpec {
-                        date: PosixDateSpec::WeekdayOfMonth(WeekdayOfMonth {
-                            month: C(9).rinto(),
-                            week: C(5).rinto(),
-                            weekday: Weekday::Sunday,
-                        }),
-                        time: PosixTimeSpec::DEFAULT,
-                    },
-                    end: PosixDateTimeSpec {
-                        date: PosixDateSpec::WeekdayOfMonth(WeekdayOfMonth {
-                            month: C(4).rinto(),
-                            week: C(1).rinto(),
-                            weekday: Weekday::Sunday,
-                        }),
-                        time: PosixTimeSpec {
-                            duration: PosixTimeSeconds::new(3 * 60 * 60)
-                                .unwrap(),
-                        },
-                    },
-                }),
-            },
-        );
-
-        let p = Parser::new("NZDT,J60,J300");
-        assert_eq!(
-            p.parse_posix_dst(std_offset).unwrap(),
-            PosixDst {
-                abbrev: "NZDT".into(),
-                offset: offset(13).into(),
-                rule: Some(Rule {
-                    start: PosixDateTimeSpec {
-                        date: PosixDateSpec::JulianOne(C(60).rinto()),
-                        time: PosixTimeSpec::DEFAULT,
-                    },
-                    end: PosixDateTimeSpec {
-                        date: PosixDateSpec::JulianOne(C(300).rinto()),
-                        time: PosixTimeSpec::DEFAULT,
-                    },
-                }),
-            },
-        );
-
-        let p = Parser::new("NZDT-7,J60,J300");
-        assert_eq!(
-            p.parse_posix_dst(std_offset).unwrap(),
-            PosixDst {
-                abbrev: "NZDT".into(),
-                offset: offset(7).into(),
-                rule: Some(Rule {
-                    start: PosixDateTimeSpec {
-                        date: PosixDateSpec::JulianOne(C(60).rinto()),
-                        time: PosixTimeSpec::DEFAULT,
-                    },
-                    end: PosixDateTimeSpec {
-                        date: PosixDateSpec::JulianOne(C(300).rinto()),
-                        time: PosixTimeSpec::DEFAULT,
-                    },
-                }),
-            },
-        );
-
-        let p = Parser::new("NZDT+7,J60,J300");
-        assert_eq!(
-            p.parse_posix_dst(std_offset).unwrap(),
-            PosixDst {
-                abbrev: "NZDT".into(),
-                offset: offset(-7).into(),
-                rule: Some(Rule {
-                    start: PosixDateTimeSpec {
-                        date: PosixDateSpec::JulianOne(C(60).rinto()),
-                        time: PosixTimeSpec::DEFAULT,
-                    },
-                    end: PosixDateTimeSpec {
-                        date: PosixDateSpec::JulianOne(C(300).rinto()),
-                        time: PosixTimeSpec::DEFAULT,
-                    },
-                }),
-            },
-        );
-
-        let p = Parser::new("NZDT7,J60,J300");
-        assert_eq!(
-            p.parse_posix_dst(std_offset).unwrap(),
-            PosixDst {
-                abbrev: "NZDT".into(),
-                offset: offset(-7).into(),
-                rule: Some(Rule {
-                    start: PosixDateTimeSpec {
-                        date: PosixDateSpec::JulianOne(C(60).rinto()),
-                        time: PosixTimeSpec::DEFAULT,
-                    },
-                    end: PosixDateTimeSpec {
-                        date: PosixDateSpec::JulianOne(C(300).rinto()),
-                        time: PosixTimeSpec::DEFAULT,
-                    },
-                }),
-            },
-        );
-
-        let p = Parser::new("NZDT7,");
-        assert!(p.parse_posix_dst(std_offset).is_err());
-
-        let p = Parser::new("NZDT7!");
-        assert!(p.parse_posix_dst(std_offset).is_err());
-    }
-
-    #[test]
-    fn parse_abbreviation() {
-        let p = Parser::new("ABC");
-        assert_eq!(p.parse_abbreviation().unwrap(), "ABC");
-
-        let p = Parser::new("<ABC>");
-        assert_eq!(p.parse_abbreviation().unwrap(), "ABC");
-
-        let p = Parser::new("<+09>");
-        assert_eq!(p.parse_abbreviation().unwrap(), "+09");
-
-        let p = Parser::new("+09");
-        assert!(p.parse_abbreviation().is_err());
-    }
-
-    #[test]
-    fn parse_unquoted_abbreviation() {
-        let p = Parser::new("ABC");
-        assert_eq!(p.parse_unquoted_abbreviation().unwrap(), "ABC");
-
-        let p = Parser::new("ABCXYZ");
-        assert_eq!(p.parse_unquoted_abbreviation().unwrap(), "ABCXYZ");
-
-        let p = Parser::new("ABC123");
-        assert_eq!(p.parse_unquoted_abbreviation().unwrap(), "ABC");
-
-        let tz = "a".repeat(30);
-        let p = Parser::new(&tz);
-        assert_eq!(p.parse_unquoted_abbreviation().unwrap(), &*tz);
-
-        let p = Parser::new("a");
-        assert!(p.parse_unquoted_abbreviation().is_err());
-
-        let p = Parser::new("ab");
-        assert!(p.parse_unquoted_abbreviation().is_err());
-
-        let p = Parser::new("ab1");
-        assert!(p.parse_unquoted_abbreviation().is_err());
-
-        let tz = "a".repeat(31);
-        let p = Parser::new(&tz);
-        assert!(p.parse_unquoted_abbreviation().is_err());
-
-        let p = Parser::new(b"ab\xFFcd");
-        assert!(p.parse_unquoted_abbreviation().is_err());
-    }
-
-    #[test]
-    fn parse_quoted_abbreviation() {
-        // The inputs look a little funny here, but that's because
-        // 'parse_quoted_abbreviation' starts after the opening quote
-        // has been parsed.
-
-        let p = Parser::new("ABC>");
-        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "ABC");
-
-        let p = Parser::new("ABCXYZ>");
-        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "ABCXYZ");
-
-        let p = Parser::new("ABC>123");
-        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "ABC");
-
-        let p = Parser::new("ABC123>");
-        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "ABC123");
-
-        let p = Parser::new("ab1>");
-        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "ab1");
-
-        let p = Parser::new("+09>");
-        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "+09");
-
-        let p = Parser::new("-09>");
-        assert_eq!(p.parse_quoted_abbreviation().unwrap(), "-09");
-
-        let tz = alloc::format!("{}>", "a".repeat(30));
-        let p = Parser::new(&tz);
-        assert_eq!(
-            p.parse_quoted_abbreviation().unwrap(),
-            tz.trim_end_matches(">")
-        );
-
-        let p = Parser::new("a>");
-        assert!(p.parse_quoted_abbreviation().is_err());
-
-        let p = Parser::new("ab>");
-        assert!(p.parse_quoted_abbreviation().is_err());
-
-        let tz = alloc::format!("{}>", "a".repeat(31));
-        let p = Parser::new(&tz);
-        assert!(p.parse_quoted_abbreviation().is_err());
-
-        let p = Parser::new(b"ab\xFFcd>");
-        assert!(p.parse_quoted_abbreviation().is_err());
-
-        let p = Parser::new("ABC");
-        assert!(p.parse_quoted_abbreviation().is_err());
-
-        let p = Parser::new("ABC!>");
-        assert!(p.parse_quoted_abbreviation().is_err());
-    }
-
-    #[test]
-    fn parse_posix_offset() {
-        let p = Parser::new("5");
-        assert_eq!(p.parse_posix_offset().unwrap(), offset(-5).into(),);
-
-        let p = Parser::new("+5");
-        assert_eq!(p.parse_posix_offset().unwrap(), offset(-5).into(),);
-
-        let p = Parser::new("-5");
-        assert_eq!(p.parse_posix_offset().unwrap(), offset(5).into(),);
-
-        let p = Parser::new("-12:34:56");
-        assert_eq!(
-            p.parse_posix_offset().unwrap(),
-            PosixOffset::from(
-                Offset::from_seconds(12 * 60 * 60 + 34 * 60 + 56).unwrap()
-            ),
-        );
-
-        let p = Parser::new("a");
-        assert!(p.parse_posix_offset().is_err());
-
-        let p = Parser::new("-");
-        assert!(p.parse_posix_offset().is_err());
-
-        let p = Parser::new("+");
-        assert!(p.parse_posix_offset().is_err());
-
-        let p = Parser::new("-a");
-        assert!(p.parse_posix_offset().is_err());
-
-        let p = Parser::new("+a");
-        assert!(p.parse_posix_offset().is_err());
-
-        let p = Parser::new("-25");
-        assert!(p.parse_posix_offset().is_err());
-
-        let p = Parser::new("+25");
-        assert!(p.parse_posix_offset().is_err());
-
-        // This checks that we don't accidentally permit IANA rules for
-        // offset parsing. Namely, the IANA tzfile v3+ extension only applies
-        // to transition times. But since POSIX says that the "time" for the
-        // offset and transition is the same format, it would be an easy
-        // implementation mistake to implement the more flexible rule for
-        // IANA and have it accidentally also apply to the offset. So we check
-        // that it doesn't here.
-        let p = Parser { ianav3plus: true, ..Parser::new("25") };
-        assert!(p.parse_posix_offset().is_err());
-        let p = Parser { ianav3plus: true, ..Parser::new("+25") };
-        assert!(p.parse_posix_offset().is_err());
-        let p = Parser { ianav3plus: true, ..Parser::new("-25") };
-        assert!(p.parse_posix_offset().is_err());
-    }
-
-    #[test]
-    fn parse_rule() {
-        let p = Parser::new("M9.5.0,M4.1.0/3");
-        assert_eq!(
-            p.parse_rule().unwrap(),
-            Rule {
-                start: PosixDateTimeSpec {
-                    date: PosixDateSpec::WeekdayOfMonth(WeekdayOfMonth {
-                        month: C(9).rinto(),
-                        week: C(5).rinto(),
-                        weekday: Weekday::Sunday,
-                    }),
-                    time: PosixTimeSpec::DEFAULT,
-                },
-                end: PosixDateTimeSpec {
-                    date: PosixDateSpec::WeekdayOfMonth(WeekdayOfMonth {
-                        month: C(4).rinto(),
-                        week: C(1).rinto(),
-                        weekday: Weekday::Sunday,
-                    }),
-                    time: PosixTimeSpec {
-                        duration: PosixTimeSeconds::new(3 * 60 * 60).unwrap(),
-                    },
-                },
-            },
-        );
-
-        let p = Parser::new("M9.5.0");
-        assert!(p.parse_rule().is_err());
-
-        let p = Parser::new(",M9.5.0,M4.1.0/3");
-        assert!(p.parse_rule().is_err());
-
-        let p = Parser::new("M9.5.0/");
-        assert!(p.parse_rule().is_err());
-
-        let p = Parser::new("M9.5.0,M4.1.0/");
-        assert!(p.parse_rule().is_err());
-    }
-
-    #[test]
-    fn parse_posix_datetime_spec() {
-        let p = Parser::new("J1");
-        assert_eq!(
-            p.parse_posix_datetime_spec().unwrap(),
-            PosixDateTimeSpec {
-                date: PosixDateSpec::JulianOne(C(1).rinto()),
-                time: PosixTimeSpec::DEFAULT,
-            },
-        );
-
-        let p = Parser::new("J1/3");
-        assert_eq!(
-            p.parse_posix_datetime_spec().unwrap(),
-            PosixDateTimeSpec {
-                date: PosixDateSpec::JulianOne(C(1).rinto()),
-                time: PosixTimeSpec {
-                    duration: PosixTimeSeconds::new(3 * 60 * 60).unwrap(),
-                },
-            },
-        );
-
-        let p = Parser::new("M4.1.0/3");
-        assert_eq!(
-            p.parse_posix_datetime_spec().unwrap(),
-            PosixDateTimeSpec {
-                date: PosixDateSpec::WeekdayOfMonth(WeekdayOfMonth {
-                    month: C(4).rinto(),
-                    week: C(1).rinto(),
-                    weekday: Weekday::Sunday,
-                }),
-                time: PosixTimeSpec {
-                    duration: PosixTimeSeconds::new(3 * 60 * 60).unwrap(),
-                },
-            },
-        );
-
-        let p = Parser::new("1/3:45:05");
-        assert_eq!(
-            p.parse_posix_datetime_spec().unwrap(),
-            PosixDateTimeSpec {
-                date: PosixDateSpec::JulianZero(C(1).rinto()),
-                time: PosixTimeSpec {
-                    duration: PosixTimeSeconds::new(3 * 60 * 60 + 45 * 60 + 5)
-                        .unwrap(),
-                },
-            },
-        );
-
-        let p = Parser::new("a");
-        assert!(p.parse_posix_datetime_spec().is_err());
-
-        let p = Parser::new("J1/");
-        assert!(p.parse_posix_datetime_spec().is_err());
-
-        let p = Parser::new("1/");
-        assert!(p.parse_posix_datetime_spec().is_err());
-
-        let p = Parser::new("M4.1.0/");
-        assert!(p.parse_posix_datetime_spec().is_err());
-    }
-
-    #[test]
-    fn parse_posix_date_spec() {
-        let p = Parser::new("J1");
-        assert_eq!(
-            p.parse_posix_date_spec().unwrap(),
-            PosixDateSpec::JulianOne(C(1).rinto())
-        );
-        let p = Parser::new("J365");
-        assert_eq!(
-            p.parse_posix_date_spec().unwrap(),
-            PosixDateSpec::JulianOne(C(365).rinto())
-        );
-
-        let p = Parser::new("0");
-        assert_eq!(
-            p.parse_posix_date_spec().unwrap(),
-            PosixDateSpec::JulianZero(C(0).rinto())
-        );
-        let p = Parser::new("1");
-        assert_eq!(
-            p.parse_posix_date_spec().unwrap(),
-            PosixDateSpec::JulianZero(C(1).rinto())
-        );
-        let p = Parser::new("365");
-        assert_eq!(
-            p.parse_posix_date_spec().unwrap(),
-            PosixDateSpec::JulianZero(C(365).rinto())
-        );
-
-        let p = Parser::new("M9.5.0");
-        assert_eq!(
-            p.parse_posix_date_spec().unwrap(),
-            PosixDateSpec::WeekdayOfMonth(WeekdayOfMonth {
-                month: C(9).rinto(),
-                week: C(5).rinto(),
-                weekday: Weekday::Sunday,
-            }),
-        );
-        let p = Parser::new("M9.5.6");
-        assert_eq!(
-            p.parse_posix_date_spec().unwrap(),
-            PosixDateSpec::WeekdayOfMonth(WeekdayOfMonth {
-                month: C(9).rinto(),
-                week: C(5).rinto(),
-                weekday: Weekday::Saturday,
-            }),
-        );
-        let p = Parser::new("M09.5.6");
-        assert_eq!(
-            p.parse_posix_date_spec().unwrap(),
-            PosixDateSpec::WeekdayOfMonth(WeekdayOfMonth {
-                month: C(9).rinto(),
-                week: C(5).rinto(),
-                weekday: Weekday::Saturday,
-            }),
-        );
-        let p = Parser::new("M12.1.1");
-        assert_eq!(
-            p.parse_posix_date_spec().unwrap(),
-            PosixDateSpec::WeekdayOfMonth(WeekdayOfMonth {
-                month: C(12).rinto(),
-                week: C(1).rinto(),
-                weekday: Weekday::Monday,
-            }),
-        );
-
-        let p = Parser::new("a");
-        assert!(p.parse_posix_date_spec().is_err());
-
-        let p = Parser::new("j");
-        assert!(p.parse_posix_date_spec().is_err());
-
-        let p = Parser::new("m");
-        assert!(p.parse_posix_date_spec().is_err());
-
-        let p = Parser::new("n");
-        assert!(p.parse_posix_date_spec().is_err());
-
-        let p = Parser::new("J366");
-        assert!(p.parse_posix_date_spec().is_err());
-
-        let p = Parser::new("366");
-        assert!(p.parse_posix_date_spec().is_err());
-    }
-
-    #[test]
-    fn parse_posix_julian_day_no_leap() {
-        let p = Parser::new("1");
-        assert_eq!(p.parse_posix_julian_day_no_leap().unwrap(), 1);
-
-        let p = Parser::new("001");
-        assert_eq!(p.parse_posix_julian_day_no_leap().unwrap(), 1);
-
-        let p = Parser::new("365");
-        assert_eq!(p.parse_posix_julian_day_no_leap().unwrap(), 365);
-
-        let p = Parser::new("3655");
-        assert_eq!(p.parse_posix_julian_day_no_leap().unwrap(), 365);
-
-        let p = Parser::new("0");
-        assert!(p.parse_posix_julian_day_no_leap().is_err());
-
-        let p = Parser::new("366");
-        assert!(p.parse_posix_julian_day_no_leap().is_err());
-    }
-
-    #[test]
-    fn parse_posix_julian_day_with_leap() {
-        let p = Parser::new("0");
-        assert_eq!(p.parse_posix_julian_day_with_leap().unwrap(), 0);
-
-        let p = Parser::new("1");
-        assert_eq!(p.parse_posix_julian_day_with_leap().unwrap(), 1);
-
-        let p = Parser::new("001");
-        assert_eq!(p.parse_posix_julian_day_with_leap().unwrap(), 1);
-
-        let p = Parser::new("365");
-        assert_eq!(p.parse_posix_julian_day_with_leap().unwrap(), 365);
-
-        let p = Parser::new("3655");
-        assert_eq!(p.parse_posix_julian_day_with_leap().unwrap(), 365);
-
-        let p = Parser::new("366");
-        assert!(p.parse_posix_julian_day_with_leap().is_err());
-    }
-
-    #[test]
-    fn parse_weekday_of_month() {
-        let p = Parser::new("9.5.0");
-        assert_eq!(
-            p.parse_weekday_of_month().unwrap(),
-            WeekdayOfMonth {
-                month: C(9).rinto(),
-                week: C(5).rinto(),
-                weekday: Weekday::Sunday,
-            },
-        );
-
-        let p = Parser::new("9.1.6");
-        assert_eq!(
-            p.parse_weekday_of_month().unwrap(),
-            WeekdayOfMonth {
-                month: C(9).rinto(),
-                week: C(1).rinto(),
-                weekday: Weekday::Saturday,
-            },
-        );
-
-        let p = Parser::new("09.1.6");
-        assert_eq!(
-            p.parse_weekday_of_month().unwrap(),
-            WeekdayOfMonth {
-                month: C(9).rinto(),
-                week: C(1).rinto(),
-                weekday: Weekday::Saturday,
-            },
-        );
-
-        let p = Parser::new("9");
-        assert!(p.parse_weekday_of_month().is_err());
-
-        let p = Parser::new("9.");
-        assert!(p.parse_weekday_of_month().is_err());
-
-        let p = Parser::new("9.5");
-        assert!(p.parse_weekday_of_month().is_err());
-
-        let p = Parser::new("9.5.");
-        assert!(p.parse_weekday_of_month().is_err());
-
-        let p = Parser::new("0.5.0");
-        assert!(p.parse_weekday_of_month().is_err());
-
-        let p = Parser::new("13.5.0");
-        assert!(p.parse_weekday_of_month().is_err());
-
-        let p = Parser::new("9.0.0");
-        assert!(p.parse_weekday_of_month().is_err());
-
-        let p = Parser::new("9.6.0");
-        assert!(p.parse_weekday_of_month().is_err());
-
-        let p = Parser::new("9.5.7");
-        assert!(p.parse_weekday_of_month().is_err());
-    }
-
-    #[test]
-    fn parse_posix_time_spec() {
-        let p = Parser::new("5");
-        assert_eq!(
-            p.parse_posix_time_spec().unwrap(),
-            PosixTimeSpec {
-                duration: PosixTimeSeconds::new(5 * 60 * 60).unwrap()
-            },
-        );
-
-        let p = Parser::new("22");
-        assert_eq!(
-            p.parse_posix_time_spec().unwrap(),
-            PosixTimeSpec {
-                duration: PosixTimeSeconds::new(22 * 60 * 60).unwrap()
-            },
-        );
-
-        let p = Parser::new("02");
-        assert_eq!(
-            p.parse_posix_time_spec().unwrap(),
-            PosixTimeSpec {
-                duration: PosixTimeSeconds::new(2 * 60 * 60).unwrap()
-            },
-        );
-
-        let p = Parser::new("5:45");
-        assert_eq!(
-            p.parse_posix_time_spec().unwrap(),
-            PosixTimeSpec {
-                duration: PosixTimeSeconds::new(5 * 60 * 60 + 45 * 60)
-                    .unwrap()
-            },
-        );
-
-        let p = Parser::new("5:45:12");
-        assert_eq!(
-            p.parse_posix_time_spec().unwrap(),
-            PosixTimeSpec {
-                duration: PosixTimeSeconds::new(5 * 60 * 60 + 45 * 60 + 12)
-                    .unwrap()
-            },
-        );
-
-        let p = Parser::new("5:45:129");
-        assert_eq!(
-            p.parse_posix_time_spec().unwrap(),
-            PosixTimeSpec {
-                duration: PosixTimeSeconds::new(5 * 60 * 60 + 45 * 60 + 12)
-                    .unwrap()
-            },
-        );
-
-        let p = Parser::new("5:45:12:");
-        assert_eq!(
-            p.parse_posix_time_spec().unwrap(),
-            PosixTimeSpec {
-                duration: PosixTimeSeconds::new(5 * 60 * 60 + 45 * 60 + 12)
-                    .unwrap()
-            },
-        );
-
-        let p = Parser { ianav3plus: true, ..Parser::new("+5:45:12") };
-        assert_eq!(
-            p.parse_posix_time_spec().unwrap(),
-            PosixTimeSpec {
-                duration: PosixTimeSeconds::new(5 * 60 * 60 + 45 * 60 + 12)
-                    .unwrap()
-            },
-        );
-
-        let p = Parser { ianav3plus: true, ..Parser::new("-5:45:12") };
-        assert_eq!(
-            p.parse_posix_time_spec().unwrap(),
-            PosixTimeSpec {
-                duration: PosixTimeSeconds::new(-(5 * 60 * 60 + 45 * 60 + 12))
-                    .unwrap()
-            },
-        );
-
-        let p = Parser { ianav3plus: true, ..Parser::new("-167:45:12") };
-        assert_eq!(
-            p.parse_posix_time_spec().unwrap(),
-            PosixTimeSpec {
-                duration: PosixTimeSeconds::new(
-                    -(167 * 60 * 60 + 45 * 60 + 12)
-                )
-                .unwrap()
-            },
-        );
-
-        let p = Parser::new("25");
-        assert!(p.parse_posix_time_spec().is_err());
-
-        let p = Parser::new("12:2");
-        assert!(p.parse_posix_time_spec().is_err());
-
-        let p = Parser::new("12:");
-        assert!(p.parse_posix_time_spec().is_err());
-
-        let p = Parser::new("12:23:5");
-        assert!(p.parse_posix_time_spec().is_err());
-
-        let p = Parser::new("12:23:");
-        assert!(p.parse_posix_time_spec().is_err());
-
-        let p = Parser { ianav3plus: true, ..Parser::new("168") };
-        assert!(p.parse_posix_time_spec().is_err());
-
-        let p = Parser { ianav3plus: true, ..Parser::new("-168") };
-        assert!(p.parse_posix_time_spec().is_err());
-
-        let p = Parser { ianav3plus: true, ..Parser::new("+168") };
-        assert!(p.parse_posix_time_spec().is_err());
-    }
-
-    #[test]
-    fn parse_month() {
-        let p = Parser::new("1");
-        assert_eq!(p.parse_month().unwrap(), 1);
-
-        // Should this be allowed? POSIX spec is unclear.
-        // We allow it because our parse does stop at 2
-        // digits, so this seems harmless. Namely, '001'
-        // results in an error.
-        let p = Parser::new("01");
-        assert_eq!(p.parse_month().unwrap(), 1);
-
-        let p = Parser::new("12");
-        assert_eq!(p.parse_month().unwrap(), 12);
-
-        let p = Parser::new("0");
-        assert!(p.parse_month().is_err());
-
-        let p = Parser::new("00");
-        assert!(p.parse_month().is_err());
-
-        let p = Parser::new("001");
-        assert!(p.parse_month().is_err());
-
-        let p = Parser::new("13");
-        assert!(p.parse_month().is_err());
-    }
-
-    #[test]
-    fn parse_week() {
-        let p = Parser::new("1");
-        assert_eq!(p.parse_week().unwrap(), 1);
-
-        let p = Parser::new("5");
-        assert_eq!(p.parse_week().unwrap(), 5);
-
-        let p = Parser::new("55");
-        assert_eq!(p.parse_week().unwrap(), 5);
-
-        let p = Parser::new("0");
-        assert!(p.parse_week().is_err());
-
-        let p = Parser::new("6");
-        assert!(p.parse_week().is_err());
-
-        let p = Parser::new("00");
-        assert!(p.parse_week().is_err());
-
-        let p = Parser::new("01");
-        assert!(p.parse_week().is_err());
-
-        let p = Parser::new("05");
-        assert!(p.parse_week().is_err());
-    }
-
-    #[test]
-    fn parse_weekday() {
-        let p = Parser::new("0");
-        assert_eq!(p.parse_weekday().unwrap(), Weekday::Sunday);
-
-        let p = Parser::new("1");
-        assert_eq!(p.parse_weekday().unwrap(), Weekday::Monday);
-
-        let p = Parser::new("6");
-        assert_eq!(p.parse_weekday().unwrap(), Weekday::Saturday);
-
-        let p = Parser::new("00");
-        assert_eq!(p.parse_weekday().unwrap(), Weekday::Sunday);
-
-        let p = Parser::new("06");
-        assert_eq!(p.parse_weekday().unwrap(), Weekday::Sunday);
-
-        let p = Parser::new("60");
-        assert_eq!(p.parse_weekday().unwrap(), Weekday::Saturday);
-
-        let p = Parser::new("7");
-        assert!(p.parse_weekday().is_err());
-    }
-
-    #[test]
-    fn parse_hour_posix() {
-        let p = Parser::new("5");
-        assert_eq!(p.parse_hour_posix().unwrap(), 5);
-
-        let p = Parser::new("0");
-        assert_eq!(p.parse_hour_posix().unwrap(), 0);
-
-        let p = Parser::new("00");
-        assert_eq!(p.parse_hour_posix().unwrap(), 0);
-
-        let p = Parser::new("24");
-        assert_eq!(p.parse_hour_posix().unwrap(), 24);
-
-        let p = Parser::new("100");
-        assert_eq!(p.parse_hour_posix().unwrap(), 10);
-
-        let p = Parser::new("25");
-        assert!(p.parse_hour_posix().is_err());
-
-        let p = Parser::new("99");
-        assert!(p.parse_hour_posix().is_err());
-    }
-
-    #[test]
-    fn parse_hour_ianav3plus() {
-        let new = |input| Parser { ianav3plus: true, ..Parser::new(input) };
-
-        let p = new("5");
-        assert_eq!(p.parse_hour_ianav3plus().unwrap(), 5);
-
-        let p = new("0");
-        assert_eq!(p.parse_hour_ianav3plus().unwrap(), 0);
-
-        let p = new("00");
-        assert_eq!(p.parse_hour_ianav3plus().unwrap(), 0);
-
-        let p = new("000");
-        assert_eq!(p.parse_hour_ianav3plus().unwrap(), 0);
-
-        let p = new("24");
-        assert_eq!(p.parse_hour_ianav3plus().unwrap(), 24);
-
-        let p = new("100");
-        assert_eq!(p.parse_hour_ianav3plus().unwrap(), 100);
-
-        let p = new("1000");
-        assert_eq!(p.parse_hour_ianav3plus().unwrap(), 100);
-
-        let p = new("167");
-        assert_eq!(p.parse_hour_ianav3plus().unwrap(), 167);
-
-        let p = new("168");
-        assert!(p.parse_hour_ianav3plus().is_err());
-
-        let p = new("999");
-        assert!(p.parse_hour_ianav3plus().is_err());
-    }
-
-    #[test]
-    fn parse_minute() {
-        let p = Parser::new("00");
-        assert_eq!(p.parse_minute().unwrap(), 0);
-
-        let p = Parser::new("24");
-        assert_eq!(p.parse_minute().unwrap(), 24);
-
-        let p = Parser::new("59");
-        assert_eq!(p.parse_minute().unwrap(), 59);
-
-        let p = Parser::new("599");
-        assert_eq!(p.parse_minute().unwrap(), 59);
-
-        let p = Parser::new("0");
-        assert!(p.parse_minute().is_err());
-
-        let p = Parser::new("1");
-        assert!(p.parse_minute().is_err());
-
-        let p = Parser::new("9");
-        assert!(p.parse_minute().is_err());
-
-        let p = Parser::new("60");
-        assert!(p.parse_minute().is_err());
-    }
-
-    #[test]
-    fn parse_second() {
-        let p = Parser::new("00");
-        assert_eq!(p.parse_second().unwrap(), 0);
-
-        let p = Parser::new("24");
-        assert_eq!(p.parse_second().unwrap(), 24);
-
-        let p = Parser::new("59");
-        assert_eq!(p.parse_second().unwrap(), 59);
-
-        let p = Parser::new("599");
-        assert_eq!(p.parse_second().unwrap(), 59);
-
-        let p = Parser::new("0");
-        assert!(p.parse_second().is_err());
-
-        let p = Parser::new("1");
-        assert!(p.parse_second().is_err());
-
-        let p = Parser::new("9");
-        assert!(p.parse_second().is_err());
-
-        let p = Parser::new("60");
-        assert!(p.parse_second().is_err());
-    }
-
-    #[test]
-    fn parse_number_with_exactly_n_digits() {
-        let p = Parser::new("1");
-        assert_eq!(p.parse_number_with_exactly_n_digits(1).unwrap(), 1);
-
-        let p = Parser::new("12");
-        assert_eq!(p.parse_number_with_exactly_n_digits(2).unwrap(), 12);
-
-        let p = Parser::new("123");
-        assert_eq!(p.parse_number_with_exactly_n_digits(2).unwrap(), 12);
-
-        let p = Parser::new("");
-        assert!(p.parse_number_with_exactly_n_digits(1).is_err());
-
-        let p = Parser::new("1");
-        assert!(p.parse_number_with_exactly_n_digits(2).is_err());
-
-        let p = Parser::new("12");
-        assert!(p.parse_number_with_exactly_n_digits(3).is_err());
-    }
-
-    #[test]
-    fn parse_number_with_upto_n_digits() {
-        let p = Parser::new("1");
-        assert_eq!(p.parse_number_with_upto_n_digits(1).unwrap(), 1);
-
-        let p = Parser::new("1");
-        assert_eq!(p.parse_number_with_upto_n_digits(2).unwrap(), 1);
-
-        let p = Parser::new("12");
-        assert_eq!(p.parse_number_with_upto_n_digits(2).unwrap(), 12);
-
-        let p = Parser::new("12");
-        assert_eq!(p.parse_number_with_upto_n_digits(3).unwrap(), 12);
-
-        let p = Parser::new("123");
-        assert_eq!(p.parse_number_with_upto_n_digits(2).unwrap(), 12);
-
-        let p = Parser::new("");
-        assert!(p.parse_number_with_upto_n_digits(1).is_err());
-
-        let p = Parser::new("a");
-        assert!(p.parse_number_with_upto_n_digits(1).is_err());
+        assert!(ReasonablePosixTimeZone::parse("America/New_York").is_err());
+        assert!(ReasonablePosixTimeZone::parse(":America/New_York").is_err());
     }
 }

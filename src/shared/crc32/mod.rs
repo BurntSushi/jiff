@@ -1,4 +1,4 @@
-use crate::util::crc32::table::{TABLE, TABLE16};
+use self::table::{TABLE, TABLE16};
 
 mod table;
 
