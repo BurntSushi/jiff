@@ -47,6 +47,7 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
     write_match(&path).with_context(|| {
         format!("failed to write `match` expression to {}", path.display())
     })?;
+    super::rustfmt(&path)?;
 
     Ok(())
 }

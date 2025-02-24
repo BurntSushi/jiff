@@ -188,6 +188,7 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
                 tzname_path.display()
             )
         })?;
+    super::rustfmt(&tzname_path)?;
 
     Ok(())
 }
