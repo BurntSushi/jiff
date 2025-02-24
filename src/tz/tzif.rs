@@ -124,7 +124,7 @@ impl TzifStatic {
         // POSIX time zone is consistent with the last transition. This is
         // because it would require making a lot of code in Jiff `const`
         // that is difficult to make `const`. Moreover, this constructor is
-        // generally only used with the `jiff-tz-static` proc-macros, and those
+        // generally only used with the `jiff-static` proc-macros, and those
         // go through the owned APIs at compile time. And thus, it is already
         // validated that the POSIX time zone is consistent with the last
         // transition.

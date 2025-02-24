@@ -1390,6 +1390,19 @@ impl TimeZone {
     }
 }
 
+// Exposed APIs for Jiff's time zone proc macro.
+//
+// These are NOT part of Jiff's public API. There are *zero* semver guarantees
+// for them.
+#[doc(hidden)]
+impl TimeZone {
+    pub const fn __internal_from_tzif(
+        _tzif: &'static crate::tz::tzif::TzifStatic,
+    ) -> TimeZone {
+        TimeZone::UTC
+    }
+}
+
 impl core::fmt::Debug for TimeZone {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -1534,7 +1547,7 @@ impl core::fmt::Display for TimeZonePosix {
 #[cfg(feature = "alloc")]
 #[derive(Eq, PartialEq)]
 struct TimeZoneTzif {
-    tzif: crate::tz::tzif::Tzif,
+    tzif: crate::tz::tzif::TzifOwned,
 }
 
 #[cfg(feature = "alloc")]

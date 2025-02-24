@@ -1,5 +1,5 @@
 /*!
-A command for copying shared code from Jiff to the `jiff-tz-static` proc-macro.
+A command for copying shared code from Jiff to the `jiff-static` proc-macro.
 */
 
 #![allow(warnings)]
@@ -20,7 +20,7 @@ use regex_lite::Regex;
 use crate::args::{self, Usage};
 
 const USAGE: &'static str = r#"
-Copy shared code from Jiff to the `jiff-tz-static` proc-macro.
+Copy shared code from Jiff to the `jiff-static` proc-macro.
 
 USAGE:
     jiff-cli generate shared [<jiff-dir>]
@@ -29,13 +29,13 @@ While unfortunate, this copies code inside of Jiff into the proc-macro so that
 it can be used in both places. Specifically, this includes a handful of
 shared types, as well as a POSIX time zone and TZif parser.
 
-Doing things this way permits Jiff to depend on and re-export `jiff-tz-static`.
+Doing things this way permits Jiff to depend on and re-export `jiff-static`.
 This obviously comes at the cost of a little more compilation time, but
 the amount of code copied is pretty small (<2,000 SLOC at time of writing,
-2025-02-22). An alternative design would have `jiff-tz-static` depend on
+2025-02-22). An alternative design would have `jiff-static` depend on
 `jiff`, and `jiff` could expose (without making it part of the semver API)
 the necessary parsing routines. But then Jiff couldn't re-export the macro
-and users would need to specifically deal with `jiff-tz-static` explicitly.
+and users would need to specifically deal with `jiff-static` explicitly.
 "#;
 
 pub fn run(p: &mut Parser) -> anyhow::Result<()> {
@@ -44,7 +44,7 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
 
     let jiff = config.jiff();
     let jiff_dir = jiff.join("src");
-    let macro_dir = jiff.join("crates/jiff-tz-static");
+    let macro_dir = jiff.join("crates/jiff-static");
     let dir = Path::new("shared");
     copy(&jiff_dir, &macro_dir, dir)?;
 

@@ -112,6 +112,11 @@ pub(crate) mod tzif;
 #[cfg(test)]
 mod zic;
 
+#[cfg(feature = "static")]
+pub use jiff_static::get;
+#[cfg(feature = "static-tz")]
+pub use jiff_static::include;
+
 /// Creates a new time zone offset in a `const` context from a given number
 /// of hours.
 ///
