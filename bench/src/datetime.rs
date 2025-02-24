@@ -111,7 +111,7 @@ fn add_years_months_days(c: &mut Criterion) {
 /// This is useful when you have a known time zone already and want to get
 /// a specific instant for many distinct civil datetimes in that time zone.
 fn to_timestamp_static(c: &mut Criterion) {
-    const NAME: &str = "civil_datetime/to_datetime_static";
+    const NAME: &str = "civil_datetime/to_timestamp_static";
     const TZNAME: &str = "America/New_York";
     const STAMP: i64 = 1719755160;
     const DATETIME: civil::DateTime = civil::date(2024, 6, 30).at(9, 46, 0, 0);
