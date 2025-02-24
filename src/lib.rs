@@ -731,6 +731,8 @@ mod error;
 pub mod fmt;
 #[cfg(feature = "std")]
 mod now;
+#[doc(hidden)]
+pub mod shared;
 mod signed_duration;
 mod span;
 mod timestamp;
@@ -765,7 +767,7 @@ mod tests {
 
     #[cfg(feature = "std")]
     #[test]
-    fn topscratch() {
+    fn ranges() {
         use crate::util::t;
 
         dbg!((t::SpanYears::MIN, t::SpanYears::MAX));
