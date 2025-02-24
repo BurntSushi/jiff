@@ -19,7 +19,7 @@ USAGE:
 COMMANDS:
     crc32                  Generate CRC32 data tables.
     jiff-tzdb              Generate Rust source code from TZif data for jiff-tzdb
-    shared                 Copy shared code from Jiff to jiff-tz-static proc macro
+    shared                 Copy shared code from Jiff to jiff-static proc macro
     unit-designator-match  Generate Rust `match` expression for parsing unit labels
     windows-zones          Generate mapping Windows TZ names to IANA names.
     zoneinfo               Generate TZif data for jiff-tzdb

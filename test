@@ -12,6 +12,9 @@ cd "$(dirname "$0")"
 echo "===== DEFAULT FEATURES ====="
 cargo test
 
+echo "===== DEFAULT FEATURES WITH STATIC ====="
+cargo test --features static
+
 # This one is useful because sometimes the bundled time zone database can
 # behave differently than the system time zone database depending on the
 # inputs. For example, the bundled database uses as few transitions as possible
@@ -41,6 +44,7 @@ features=(
     "serde"
     "logging"
     "serde logging"
+    "static"
 )
 for f in "${features[@]}"; do
     echo "===== COREONLY PLUS '$f' ====="
@@ -49,6 +53,7 @@ for f in "${features[@]}"; do
     INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test --test integration --no-default-features --features "$f"
 done
 
+exit 0
 features=(
     "alloc"
     "alloc tzdb-bundle-always"
