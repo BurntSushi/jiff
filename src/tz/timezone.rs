@@ -12,6 +12,8 @@ use crate::{
 #[cfg(feature = "alloc")]
 use crate::tz::posix::ReasonablePosixTimeZone;
 
+use self::repr::Repr;
+
 /// A representation of a [time zone].
 ///
 /// A time zone is a set of rules for determining the civil time, via an offset
@@ -247,14 +249,14 @@ use crate::tz::posix::ReasonablePosixTimeZone;
 /// [`with` attribute]: https://serde.rs/field-attrs.html#with
 #[derive(Clone, Eq, PartialEq)]
 pub struct TimeZone {
-    kind: Option<Arc<TimeZoneKind>>,
+    repr: Repr,
 }
 
 impl TimeZone {
     /// The UTC time zone.
     ///
     /// The offset of this time is `0` and never has any transitions.
-    pub const UTC: TimeZone = TimeZone { kind: None };
+    pub const UTC: TimeZone = TimeZone { repr: Repr::utc() };
 
     /// Returns the system configured time zone, if available.
     ///
@@ -444,13 +446,13 @@ impl TimeZone {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn fixed(offset: Offset) -> TimeZone {
-        if offset == Offset::UTC {
+    pub const fn fixed(offset: Offset) -> TimeZone {
+        // Not doing `offset == Offset::UTC` because of `const`.
+        if offset.seconds_ranged().val == 0 {
             return TimeZone::UTC;
         }
-        let fixed = TimeZoneFixed::new(offset);
-        let kind = TimeZoneKind::Fixed(fixed);
-        TimeZone { kind: Some(Arc::new(kind)) }
+        let repr = Repr::fixed(offset);
+        TimeZone { repr }
     }
 
     /// Creates a time zone from a [POSIX TZ] rule string.
@@ -504,9 +506,8 @@ impl TimeZone {
     pub(crate) fn from_reasonable_posix_tz(
         posix: ReasonablePosixTimeZone,
     ) -> TimeZone {
-        let posix = TimeZonePosix { posix };
-        let kind = TimeZoneKind::Posix(posix);
-        TimeZone { kind: Some(Arc::new(kind)) }
+        let repr = Repr::arc_posix(Arc::new(posix));
+        TimeZone { repr }
     }
 
     /// Creates a time zone from TZif binary data, whose format is specified
@@ -530,9 +531,10 @@ impl TimeZone {
     pub fn tzif(name: &str, data: &[u8]) -> Result<TimeZone, Error> {
         use alloc::string::ToString;
 
-        let tzif = TimeZoneTzif::new(Some(name.to_string()), data)?;
-        let kind = TimeZoneKind::Tzif(tzif);
-        Ok(TimeZone { kind: Some(Arc::new(kind)) })
+        let name = name.to_string();
+        let tzif = crate::tz::tzif::Tzif::parse(Some(name), data)?;
+        let repr = Repr::arc_tzif(Arc::new(tzif));
+        Ok(TimeZone { repr })
     }
 
     /// Returns a `TimeZone` that is specifially marked as "unknown."
@@ -572,9 +574,9 @@ impl TimeZone {
     /// can use `TimeZone::try_system().unwrap_or(TimeZone::UTC)` instead of
     /// `TimeZone::system`. (Where the latter falls back to the "unknown" time
     /// zone when a system configured time zone could not be found.)
-    pub fn unknown() -> TimeZone {
-        let kind = TimeZoneKind::Unknown;
-        TimeZone { kind: Some(Arc::new(kind)) }
+    pub const fn unknown() -> TimeZone {
+        let repr = Repr::unknown();
+        TimeZone { repr }
     }
 
     /// This creates an unnamed TZif-backed `TimeZone`.
@@ -608,9 +610,9 @@ impl TimeZone {
     /// This returns an error if the given TZif data is invalid.
     #[cfg(feature = "tz-system")]
     pub(crate) fn tzif_system(data: &[u8]) -> Result<TimeZone, Error> {
-        let tzif = TimeZoneTzif::new(None, data)?;
-        let kind = TimeZoneKind::Tzif(tzif);
-        Ok(TimeZone { kind: Some(Arc::new(kind)) })
+        let tzif = crate::tz::tzif::Tzif::parse(None, data)?;
+        let repr = Repr::arc_tzif(Arc::new(tzif));
+        Ok(TimeZone { repr })
     }
 
     #[inline]
@@ -623,19 +625,18 @@ impl TimeZone {
     ///
     /// Basically, this is only `false` when this `TimeZone` was created from
     /// a `/etc/localtime` for which a valid IANA time zone identifier could
-    /// not be extracted. It is also `false` when [`TimeZone::is_unknown`]
-    /// is `true`.
+    /// not be extracted.
     #[cfg(feature = "serde")]
     #[inline]
     pub(crate) fn has_succinct_serialization(&self) -> bool {
-        let Some(ref kind) = self.kind else { return true };
-        match **kind {
-            TimeZoneKind::Unknown => true,
-            TimeZoneKind::Fixed(_) => true,
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Posix(_) => true,
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Tzif(ref tz) => tz.name().is_some(),
+        repr::each! {
+            &self.repr,
+            UTC => true,
+            UNKNOWN => true,
+            FIXED(_offset) => true,
+            STATIC_TZIF(tzif) => tzif.name().is_some(),
+            ARC_TZIF(tzif) => tzif.name().is_some(),
+            ARC_POSIX(_posix) => true,
         }
     }
 
@@ -654,15 +655,18 @@ impl TimeZone {
     /// ```
     #[inline]
     pub fn iana_name(&self) -> Option<&str> {
-        let Some(ref kind) = self.kind else { return Some("UTC") };
-        match **kind {
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Tzif(ref tz) => tz.name(),
+        repr::each! {
+            &self.repr,
+            UTC => Some("UTC"),
             // Note that while `Etc/Unknown` looks like an IANA time zone
             // identifier, it is specifically and explicitly NOT an IANA time
             // zone identifier. So we do not return it here if we have an
             // unknown time zone identifier.
-            _ => None,
+            UNKNOWN => None,
+            FIXED(_offset) => None,
+            STATIC_TZIF(tzif) => tzif.name(),
+            ARC_TZIF(tzif) => tzif.name(),
+            ARC_POSIX(_posix) => None,
         }
     }
 
@@ -690,8 +694,7 @@ impl TimeZone {
     /// ```
     #[inline]
     pub fn is_unknown(&self) -> bool {
-        let Some(ref kind) = self.kind else { return false };
-        matches!(**kind, TimeZoneKind::Unknown)
+        self.repr.is_unknown()
     }
 
     /// When this time zone is a POSIX time zone, return it.
@@ -703,11 +706,14 @@ impl TimeZone {
     #[cfg(feature = "alloc")]
     #[inline]
     pub(crate) fn posix_tz(&self) -> Option<&ReasonablePosixTimeZone> {
-        let Some(ref kind) = self.kind else { return None };
-        match **kind {
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Posix(ref tz) => Some(&tz.posix),
-            _ => None,
+        repr::each! {
+            &self.repr,
+            UTC => None,
+            UNKNOWN => None,
+            FIXED(_offset) => None,
+            STATIC_TZIF(_tzif) => None,
+            ARC_TZIF(_tzif) => None,
+            ARC_POSIX(posix) => Some(posix),
         }
     }
 
@@ -787,17 +793,15 @@ impl TimeZone {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_offset(&self, _timestamp: Timestamp) -> Offset {
-        let Some(ref kind) = self.kind else {
-            return Offset::UTC;
-        };
-        match **kind {
-            TimeZoneKind::Unknown => Offset::UTC,
-            TimeZoneKind::Fixed(ref tz) => tz.to_offset(),
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Posix(ref tz) => tz.to_offset(_timestamp),
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Tzif(ref tz) => tz.to_offset(_timestamp),
+    pub fn to_offset(&self, timestamp: Timestamp) -> Offset {
+        repr::each! {
+            &self.repr,
+            UTC => Offset::UTC,
+            UNKNOWN => Offset::UTC,
+            FIXED(offset) => offset,
+            STATIC_TZIF(tzif) => tzif.to_offset(timestamp),
+            ARC_TZIF(tzif) => tzif.to_offset(timestamp),
+            ARC_POSIX(posix) => posix.to_offset(timestamp),
         }
     }
 
@@ -843,32 +847,36 @@ impl TimeZone {
     #[inline]
     pub fn to_offset_info<'t>(
         &'t self,
-        _timestamp: Timestamp,
+        timestamp: Timestamp,
     ) -> TimeZoneOffsetInfo<'t> {
-        let Some(ref kind) = self.kind else {
-            return TimeZoneOffsetInfo {
+        repr::each! {
+            &self.repr,
+            UTC => TimeZoneOffsetInfo {
                 offset: Offset::UTC,
                 dst: Dst::No,
                 abbreviation: TimeZoneAbbreviation::Borrowed("UTC"),
-            };
-        };
-        match **kind {
-            TimeZoneKind::Unknown => {
+            },
+            UNKNOWN => TimeZoneOffsetInfo {
+                offset: Offset::UTC,
+                dst: Dst::No,
+                // It'd be kinda nice if this were just `ERR` to
+                // indicate an error, but I can't find any precedent
+                // for that. And CLDR says `Etc/Unknown` should behave
+                // like UTC, so... I guess we use UTC here.
+                abbreviation: TimeZoneAbbreviation::Borrowed("UTC"),
+            },
+            FIXED(offset) => {
+                let abbreviation =
+                    TimeZoneAbbreviation::Owned(offset.to_array_str());
                 TimeZoneOffsetInfo {
-                    offset: Offset::UTC,
+                    offset,
                     dst: Dst::No,
-                    // It'd be kinda nice if this were just `ERR` to
-                    // indicate an error, but I can't find any precedent
-                    // for that. And CLDR says `Etc/Unknown` should behave
-                    // like UTC, so... I guess we use UTC here.
-                    abbreviation: TimeZoneAbbreviation::Borrowed("UTC"),
+                    abbreviation,
                 }
-            }
-            TimeZoneKind::Fixed(ref tz) => tz.to_offset_info(),
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Posix(ref tz) => tz.to_offset_info(_timestamp),
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Tzif(ref tz) => tz.to_offset_info(_timestamp),
+            },
+            STATIC_TZIF(tzif) => tzif.to_offset_info(timestamp),
+            ARC_TZIF(tzif) => tzif.to_offset_info(timestamp),
+            ARC_POSIX(posix) => posix.to_offset_info(timestamp),
         }
     }
 
@@ -917,17 +925,21 @@ impl TimeZone {
     /// ```
     #[inline]
     pub fn to_fixed_offset(&self) -> Result<Offset, Error> {
-        let Some(ref kind) = self.kind else { return Ok(Offset::UTC) };
-        #[allow(irrefutable_let_patterns)]
-        match **kind {
-            TimeZoneKind::Unknown => Ok(Offset::UTC),
-            TimeZoneKind::Fixed(ref tz) => Ok(tz.to_offset()),
-            #[cfg(feature = "alloc")]
-            _ => Err(err!(
+        let mkerr = || {
+            err!(
                 "cannot convert non-fixed {kind} time zone to offset \
                  without timestamp or civil datetime",
                 kind = self.kind_description(),
-            )),
+            )
+        };
+        repr::each! {
+            &self.repr,
+            UTC => Ok(Offset::UTC),
+            UNKNOWN => Ok(Offset::UTC),
+            FIXED(offset) => Ok(offset),
+            STATIC_TZIF(_tzif) => Err(mkerr()),
+            ARC_TZIF(_tzif) => Err(mkerr()),
+            ARC_POSIX(_posix) => Err(mkerr()),
         }
     }
 
@@ -1162,20 +1174,14 @@ impl TimeZone {
     /// ```
     #[inline]
     pub fn to_ambiguous_timestamp(&self, dt: DateTime) -> AmbiguousTimestamp {
-        let ambiguous_kind = match self.kind {
-            None => AmbiguousOffset::Unambiguous { offset: Offset::UTC },
-            Some(ref kind) => match **kind {
-                TimeZoneKind::Unknown => {
-                    AmbiguousOffset::Unambiguous { offset: Offset::UTC }
-                }
-                TimeZoneKind::Fixed(ref tz) => {
-                    AmbiguousOffset::Unambiguous { offset: tz.to_offset() }
-                }
-                #[cfg(feature = "alloc")]
-                TimeZoneKind::Posix(ref tz) => tz.to_ambiguous_kind(dt),
-                #[cfg(feature = "alloc")]
-                TimeZoneKind::Tzif(ref tz) => tz.to_ambiguous_kind(dt),
-            },
+        let ambiguous_kind = repr::each! {
+            &self.repr,
+            UTC => AmbiguousOffset::Unambiguous { offset: Offset::UTC },
+            UNKNOWN => AmbiguousOffset::Unambiguous { offset: Offset::UTC },
+            FIXED(offset) => AmbiguousOffset::Unambiguous { offset },
+            STATIC_TZIF(tzif) => tzif.to_ambiguous_kind(dt),
+            ARC_TZIF(tzif) => tzif.to_ambiguous_kind(dt),
+            ARC_POSIX(posix) => posix.to_ambiguous_kind(dt),
         };
         AmbiguousTimestamp::new(dt, ambiguous_kind)
     }
@@ -1344,15 +1350,16 @@ impl TimeZone {
     #[inline]
     fn previous_transition(
         &self,
-        _timestamp: Timestamp,
+        timestamp: Timestamp,
     ) -> Option<TimeZoneTransition> {
-        match **self.kind.as_ref()? {
-            TimeZoneKind::Unknown => None,
-            TimeZoneKind::Fixed(_) => None,
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Posix(ref tz) => tz.previous_transition(_timestamp),
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Tzif(ref tz) => tz.previous_transition(_timestamp),
+        repr::each! {
+            &self.repr,
+            UTC => None,
+            UNKNOWN => None,
+            FIXED(_offset) => None,
+            STATIC_TZIF(tzif) => tzif.previous_transition(timestamp),
+            ARC_TZIF(tzif) => tzif.previous_transition(timestamp),
+            ARC_POSIX(posix) => posix.previous_transition(timestamp),
         }
     }
 
@@ -1360,15 +1367,16 @@ impl TimeZone {
     #[inline]
     fn next_transition(
         &self,
-        _timestamp: Timestamp,
+        timestamp: Timestamp,
     ) -> Option<TimeZoneTransition> {
-        match **self.kind.as_ref()? {
-            TimeZoneKind::Unknown => None,
-            TimeZoneKind::Fixed(_) => None,
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Posix(ref tz) => tz.next_transition(_timestamp),
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Tzif(ref tz) => tz.next_transition(_timestamp),
+        repr::each! {
+            &self.repr,
+            UTC => None,
+            UNKNOWN => None,
+            FIXED(_offset) => None,
+            STATIC_TZIF(tzif) => tzif.next_transition(timestamp),
+            ARC_TZIF(tzif) => tzif.next_transition(timestamp),
+            ARC_POSIX(posix) => posix.next_transition(timestamp),
         }
     }
 
@@ -1376,16 +1384,14 @@ impl TimeZone {
     ///
     /// This is useful in error messages.
     fn kind_description(&self) -> &str {
-        let Some(ref kind) = self.kind else {
-            return "UTC";
-        };
-        match **kind {
-            TimeZoneKind::Unknown => "Etc/Unknown",
-            TimeZoneKind::Fixed(_) => "fixed",
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Posix(_) => "POSIX",
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Tzif(_) => "IANA",
+        repr::each! {
+            &self.repr,
+            UTC => "UTC",
+            UNKNOWN => "Etc/Unknown",
+            FIXED(_offset) => "fixed",
+            STATIC_TZIF(_tzif) => "IANA",
+            ARC_TZIF(_tzif) => "IANA",
+            ARC_POSIX(_posix) => "POSIX",
         }
     }
 }
@@ -1397,214 +1403,34 @@ impl TimeZone {
 #[doc(hidden)]
 impl TimeZone {
     pub const fn __internal_from_tzif(
-        _tzif: &'static crate::tz::tzif::TzifStatic,
+        tzif: &'static crate::tz::tzif::TzifStatic,
     ) -> TimeZone {
-        TimeZone::UTC
+        let repr = Repr::static_tzif(tzif);
+        TimeZone { repr }
+    }
+
+    /// Returns a dumb copy of this `TimeZone`.
+    ///
+    /// # Safety
+    ///
+    /// Callers must ensure that this time zone is UTC, unknown, a fixed
+    /// offset or created with `TimeZone::__internal_from_tzif`.
+    ///
+    /// Namely, this specifically does not increment the ref count for
+    /// the `Arc` pointers when the tag is `ARC_TZIF` or `ARC_POSIX`.
+    /// This means that incorrect usage of this routine can lead to
+    /// use-after-free.
+    #[inline]
+    pub const unsafe fn copy(&self) -> TimeZone {
+        // SAFETY: Requirements are forwarded to the caller.
+        unsafe { TimeZone { repr: self.repr.copy() } }
     }
 }
 
 impl core::fmt::Debug for TimeZone {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        let field: &dyn core::fmt::Debug = match self.kind {
-            None => &"UTC",
-            Some(ref kind) => match &**kind {
-                TimeZoneKind::Unknown => &"Etc/Unknown",
-                TimeZoneKind::Fixed(ref tz) => tz,
-                #[cfg(feature = "alloc")]
-                TimeZoneKind::Posix(ref tz) => tz,
-                #[cfg(feature = "alloc")]
-                TimeZoneKind::Tzif(ref tz) => tz,
-            },
-        };
-        f.debug_tuple("TimeZone").field(field).finish()
-    }
-}
-
-#[derive(Debug, Eq, PartialEq)]
-#[cfg_attr(not(feature = "alloc"), derive(Clone))]
-enum TimeZoneKind {
-    // It would be nice if we could represent this similarly to
-    // `TimeZone::UTC`. That is, without putting it behind an `Arc`. But I
-    // didn't see an easy way to do that while retaining the single-word size
-    // of `TimeZone` without pointer tagging, since `Arc` only gives the
-    // compiler a single niche value. Plus, it should be exceptionally rare
-    // for a unknown time zone to be used anyway. It's generally an error
-    // condition.
-    Unknown,
-    Fixed(TimeZoneFixed),
-    #[cfg(feature = "alloc")]
-    Posix(TimeZonePosix),
-    #[cfg(feature = "alloc")]
-    Tzif(TimeZoneTzif),
-}
-
-#[derive(Clone)]
-struct TimeZoneFixed {
-    offset: Offset,
-}
-
-impl TimeZoneFixed {
-    #[inline]
-    fn new(offset: Offset) -> TimeZoneFixed {
-        TimeZoneFixed { offset }
-    }
-
-    #[inline]
-    fn to_offset(&self) -> Offset {
-        self.offset
-    }
-
-    #[inline]
-    fn to_offset_info(&self) -> TimeZoneOffsetInfo<'_> {
-        let abbreviation =
-            TimeZoneAbbreviation::Owned(self.offset.to_array_str());
-        TimeZoneOffsetInfo { offset: self.offset, dst: Dst::No, abbreviation }
-    }
-}
-
-impl core::fmt::Debug for TimeZoneFixed {
-    #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.debug_tuple("Fixed").field(&self.to_offset()).finish()
-    }
-}
-
-impl core::fmt::Display for TimeZoneFixed {
-    #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self.offset, f)
-    }
-}
-
-impl Eq for TimeZoneFixed {}
-
-impl PartialEq for TimeZoneFixed {
-    #[inline]
-    fn eq(&self, rhs: &TimeZoneFixed) -> bool {
-        self.to_offset() == rhs.to_offset()
-    }
-}
-
-#[cfg(feature = "alloc")]
-#[derive(Clone, Eq, PartialEq)]
-struct TimeZonePosix {
-    posix: ReasonablePosixTimeZone,
-}
-
-#[cfg(feature = "alloc")]
-impl TimeZonePosix {
-    #[inline]
-    fn to_offset(&self, timestamp: Timestamp) -> Offset {
-        self.posix.to_offset(timestamp)
-    }
-
-    #[inline]
-    fn to_offset_info(&self, timestamp: Timestamp) -> TimeZoneOffsetInfo<'_> {
-        self.posix.to_offset_info(timestamp)
-    }
-
-    #[inline]
-    fn to_ambiguous_kind(&self, dt: DateTime) -> AmbiguousOffset {
-        self.posix.to_ambiguous_kind(dt)
-    }
-
-    #[inline]
-    fn previous_transition(
-        &self,
-        timestamp: Timestamp,
-    ) -> Option<TimeZoneTransition> {
-        self.posix.previous_transition(timestamp)
-    }
-
-    #[inline]
-    fn next_transition(
-        &self,
-        timestamp: Timestamp,
-    ) -> Option<TimeZoneTransition> {
-        self.posix.next_transition(timestamp)
-    }
-}
-
-// This is implemented by hand because dumping out the full representation of
-// a `ReasonablePosixTimeZone` is way too much noise for users of Jiff.
-#[cfg(feature = "alloc")]
-impl core::fmt::Debug for TimeZonePosix {
-    #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "Posix({})", self.posix)
-    }
-}
-
-#[cfg(feature = "alloc")]
-impl core::fmt::Display for TimeZonePosix {
-    #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self.posix, f)
-    }
-}
-
-#[cfg(feature = "alloc")]
-#[derive(Eq, PartialEq)]
-struct TimeZoneTzif {
-    tzif: crate::tz::tzif::TzifOwned,
-}
-
-#[cfg(feature = "alloc")]
-impl TimeZoneTzif {
-    #[inline]
-    fn new(
-        name: Option<alloc::string::String>,
-        bytes: &[u8],
-    ) -> Result<TimeZoneTzif, Error> {
-        let tzif = crate::tz::tzif::Tzif::parse(name, bytes)?;
-        Ok(TimeZoneTzif { tzif })
-    }
-
-    #[inline]
-    fn name(&self) -> Option<&str> {
-        self.tzif.name()
-    }
-
-    #[inline]
-    fn to_offset(&self, timestamp: Timestamp) -> Offset {
-        self.tzif.to_offset(timestamp)
-    }
-
-    #[inline]
-    fn to_offset_info(&self, timestamp: Timestamp) -> TimeZoneOffsetInfo<'_> {
-        self.tzif.to_offset_info(timestamp)
-    }
-
-    #[inline]
-    fn to_ambiguous_kind(&self, dt: DateTime) -> AmbiguousOffset {
-        self.tzif.to_ambiguous_kind(dt)
-    }
-
-    #[inline]
-    fn previous_transition(
-        &self,
-        timestamp: Timestamp,
-    ) -> Option<TimeZoneTransition> {
-        self.tzif.previous_transition(timestamp)
-    }
-
-    #[inline]
-    fn next_transition(
-        &self,
-        timestamp: Timestamp,
-    ) -> Option<TimeZoneTransition> {
-        self.tzif.next_transition(timestamp)
-    }
-}
-
-// This is implemented by hand because dumping out the full representation of
-// all TZif data is too much noise for users of Jiff.
-#[cfg(feature = "alloc")]
-impl core::fmt::Debug for TimeZoneTzif {
-    #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.debug_tuple("TZif").field(&self.name().unwrap_or("Local")).finish()
+        f.debug_tuple("TimeZone").field(&self.repr).finish()
     }
 }
 
@@ -2050,16 +1876,14 @@ pub(crate) struct DiagnosticName<'a>(&'a TimeZone);
 
 impl<'a> core::fmt::Display for DiagnosticName<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        let Some(ref kind) = self.0.kind else { return write!(f, "UTC") };
-        match **kind {
-            TimeZoneKind::Unknown => write!(f, "Etc/Unknown"),
-            TimeZoneKind::Fixed(ref tz) => write!(f, "{tz}"),
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Posix(ref tz) => write!(f, "{tz}"),
-            #[cfg(feature = "alloc")]
-            TimeZoneKind::Tzif(ref tz) => {
-                write!(f, "{}", tz.name().unwrap_or("Local"))
-            }
+        repr::each! {
+            &self.0.repr,
+            UTC => write!(f, "UTC"),
+            UNKNOWN => write!(f, "Etc/Unknown"),
+            FIXED(offset) => write!(f, "{offset}"),
+            STATIC_TZIF(tzif) => write!(f, "{}", tzif.name().unwrap_or("Local")),
+            ARC_TZIF(tzif) => write!(f, "{}", tzif.name().unwrap_or("Local")),
+            ARC_POSIX(posix) => write!(f, "{posix}"),
         }
     }
 }
@@ -2098,6 +1922,536 @@ impl<'t> TimeZoneAbbreviation<'t> {
         match *self {
             TimeZoneAbbreviation::Borrowed(s) => s,
             TimeZoneAbbreviation::Owned(ref s) => s.as_str(),
+        }
+    }
+}
+
+/// This module defines the internal representation of a `TimeZone`.
+///
+/// This module exists to _encapsulate_ the representation rigorously and
+/// expose a safe and sound API.
+#[allow(warnings)]
+mod repr {
+    use core::mem::ManuallyDrop;
+
+    use crate::{
+        tz::tzif::TzifStatic,
+        util::{constant::unwrap, t},
+    };
+    #[cfg(feature = "alloc")]
+    use crate::{
+        tz::{posix::ReasonablePosixTimeZone, tzif::TzifOwned},
+        util::sync::Arc,
+    };
+
+    use super::Offset;
+
+    use self::polyfill::{without_provenance, StrictProvenancePolyfill};
+
+    /// A macro for "matching" over the time zone representation variants.
+    ///
+    /// This macro is safe to use.
+    ///
+    /// Note that the `ARC_TZIF` and `ARC_POSIX` branches are automatically
+    /// removed when `alloc` isn't enabled. Users of this macro needn't handle
+    /// the `cfg` themselves.
+    macro_rules! each {
+        (
+            $repr:expr,
+            UTC => $utc:expr,
+            UNKNOWN => $unknown:expr,
+            FIXED($offset:ident) => $fixed:expr,
+            STATIC_TZIF($static_tzif:ident) => $static_tzif_block:expr,
+            ARC_TZIF($arc_tzif:ident) => $arc_tzif_block:expr,
+            ARC_POSIX($arc_posix:ident) => $arc_posix_block:expr,
+        ) => {{
+            let repr = $repr;
+            match repr.tag() {
+                Repr::UTC => $utc,
+                Repr::UNKNOWN => $unknown,
+                Repr::FIXED => {
+                    // SAFETY: We've ensured our pointer tag is correct.
+                    let $offset = unsafe { repr.get_fixed() };
+                    $fixed
+                }
+                Repr::STATIC_TZIF => {
+                    // SAFETY: We've ensured our pointer tag is correct.
+                    let $static_tzif = unsafe { repr.get_static_tzif() };
+                    $static_tzif_block
+                }
+                #[cfg(feature = "alloc")]
+                Repr::ARC_TZIF => {
+                    // SAFETY: We've ensured our pointer tag is correct.
+                    let $arc_tzif = unsafe { repr.get_arc_tzif() };
+                    $arc_tzif_block
+                }
+                #[cfg(feature = "alloc")]
+                Repr::ARC_POSIX => {
+                    // SAFETY: We've ensured our pointer tag is correct.
+                    let $arc_posix = unsafe { repr.get_arc_posix() };
+                    $arc_posix_block
+                }
+                _ => {
+                    debug_assert!(false, "each: invalid time zone repr tag!");
+                    // SAFETY: The constructors for `Repr` guarantee that the
+                    // tag is always one of the values matched above.
+                    unsafe {
+                        core::hint::unreachable_unchecked();
+                    }
+                }
+            }
+        }};
+    }
+    pub(super) use each;
+
+    /// The internal representation of a `TimeZone`.
+    ///
+    /// It has 6 different possible variants: `UTC`, `Etc/Unknown`, fixed
+    /// offset, `static` TZif, `Arc` TZif or `Arc` POSIX time zone.
+    ///
+    /// This design uses pointer tagging so that:
+    ///
+    /// * The size of a `TimeZone` stays no bigger than a single word.
+    /// * In core-only environments, a `TimeZone` can be created from
+    ///   compile-time TZif data without allocating.
+    /// * UTC, unknown and fixed offset time zone does not require allocating.
+    /// * We can still alloc for TZif and POSIX time zones created at runtime.
+    ///   (Allocating for TZif at runtime is the intended common case, and
+    ///   corresponds to reading `/usr/share/zoneinfo` entries.)
+    ///
+    /// We achieve this through pointer tagging and careful use of a strict
+    /// provenance polyfill (because of MSRV). We use the lower 4 bits of a
+    /// pointer to indicate which variant we have. This is sound because we
+    /// require all types that we allocate for to have a minimum alignment of
+    /// 4 bytes.
+    pub(super) struct Repr {
+        ptr: *const u8,
+    }
+
+    impl Repr {
+        const BITS: usize = 0b111;
+        pub(super) const UTC: usize = 1;
+        pub(super) const UNKNOWN: usize = 2;
+        pub(super) const FIXED: usize = 3;
+        pub(super) const STATIC_TZIF: usize = 0;
+        pub(super) const ARC_TZIF: usize = 4;
+        pub(super) const ARC_POSIX: usize = 5;
+
+        // The minimum alignment required for any heap allocated time zone
+        // variants. This is related to the number of tags. We have 6 distinct
+        // values above, which means we need an alignment of at least 6. Since
+        // alignment must be a power of 2, the smallest possible alignment
+        // is 8.
+        const ALIGN: usize = 8;
+
+        /// Creates a representation for a `UTC` time zone.
+        #[inline]
+        pub(super) const fn utc() -> Repr {
+            let ptr = without_provenance(Repr::UTC);
+            Repr { ptr }
+        }
+
+        /// Creates a representation for a `Etc/Unknown` time zone.
+        #[inline]
+        pub(super) const fn unknown() -> Repr {
+            let ptr = without_provenance(Repr::UNKNOWN);
+            Repr { ptr }
+        }
+
+        /// Creates a representation for a fixed offset time zone.
+        #[inline]
+        pub(super) const fn fixed(offset: Offset) -> Repr {
+            let seconds = offset.seconds_ranged().val;
+            // OK because offset is in -93599..=93599.
+            let shifted = unwrap!(
+                seconds.checked_shl(4),
+                "offset small enough for left shift by 4 bits",
+            );
+            assert!(usize::MAX >= 4_294_967_295);
+            // usize cast is okay because Jiff requires 32-bit.
+            let ptr = without_provenance((shifted as usize) | Repr::FIXED);
+            Repr { ptr }
+        }
+
+        /// Creates a representation for a created-at-compile-time TZif time
+        /// zone.
+        ///
+        /// This can only be correctly called by the `jiff-static` proc macro.
+        #[inline]
+        pub(super) const fn static_tzif(tzif: &'static TzifStatic) -> Repr {
+            assert!(core::mem::align_of::<TzifStatic>() >= Repr::ALIGN);
+            let tzif = (tzif as *const TzifStatic).cast::<u8>();
+            // We very specifically do no materialize the pointer address here
+            // because 1) it's UB and 2) the compiler generally prevents. This
+            // is because in a const context, the specific pointer address
+            // cannot be relied upon. Yet, we still want to do pointer tagging.
+            //
+            // Thankfully, this is the only variant that is a pointer that
+            // we want to create in a const context. So we just make this
+            // variant's tag `0`, and thus, no explicit pointer tagging is
+            // required. (Becuase we ensure the alignment is at least 4, and
+            // thus the least significant 3 bits are 0.)
+            //
+            // If this ends up not working out or if we need to support
+            // another `static` variant, then we could perhaps to pointer
+            // tagging with pointer arithmetic (like what the `tagged-pointer`
+            // crate does). I haven't tried it though and I'm unclear if it
+            // work.
+            Repr { ptr: tzif }
+        }
+
+        /// Creates a representation for a TZif time zone.
+        #[cfg(feature = "alloc")]
+        #[inline]
+        pub(super) fn arc_tzif(tzif: Arc<TzifOwned>) -> Repr {
+            assert!(core::mem::align_of::<TzifOwned>() >= Repr::ALIGN);
+            let tzif = Arc::into_raw(tzif).cast::<u8>();
+            assert!(tzif.addr() % 4 == 0);
+            let ptr = tzif.map_addr(|addr| addr | Repr::ARC_TZIF);
+            Repr { ptr }
+        }
+
+        /// Creates a representation for a POSIX time zone.
+        #[cfg(feature = "alloc")]
+        #[inline]
+        pub(super) fn arc_posix(
+            posix_tz: Arc<ReasonablePosixTimeZone>,
+        ) -> Repr {
+            assert!(
+                core::mem::align_of::<ReasonablePosixTimeZone>()
+                    >= Repr::ALIGN
+            );
+            let posix_tz = Arc::into_raw(posix_tz).cast::<u8>();
+            assert!(posix_tz.addr() % 4 == 0);
+            let ptr = posix_tz.map_addr(|addr| addr | Repr::ARC_POSIX);
+            Repr { ptr }
+        }
+
+        /// Gets the offset representation.
+        ///
+        /// # Safety
+        ///
+        /// Callers must ensure that the pointer tag is `FIXED`.
+        #[inline]
+        pub(super) unsafe fn get_fixed(&self) -> Offset {
+            let addr = self.ptr.addr();
+            // NOTE: Because of sign extension, we need to case to `i32`
+            // before shifting.
+            let seconds = t::SpanZoneOffset::new_unchecked((addr as i32) >> 4);
+            Offset::from_seconds_ranged(seconds)
+        }
+
+        /// Returns true if and only if this representation corresponds to the
+        /// `Etc/Unknown` time zone.
+        #[inline]
+        pub(super) fn is_unknown(&self) -> bool {
+            self.tag() == Repr::UNKNOWN
+        }
+
+        /// Gets the static TZif representation.
+        ///
+        /// # Safety
+        ///
+        /// Callers must ensure that the pointer tag is `STATIC_TZIF`.
+        #[inline]
+        pub(super) unsafe fn get_static_tzif(&self) -> &'static TzifStatic {
+            let ptr = self.ptr.map_addr(|addr| addr & !Repr::BITS);
+            // SAFETY: Getting a `STATIC_TZIF` tag is only possible when
+            // `self.ptr` was constructed from a valid and aligned (to at least
+            // 4 bytes) `&TzifStatic` borrow. Which must be guaranteed by the
+            // caller. We've also removed the tag bits above, so we must now
+            // have the original pointer.
+            unsafe { &*ptr.cast::<TzifStatic>() }
+        }
+
+        /// Gets the `Arc` TZif representation.
+        ///
+        /// # Safety
+        ///
+        /// Callers must ensure that the pointer tag is `ARC_TZIF`.
+        #[cfg(feature = "alloc")]
+        #[inline]
+        pub(super) unsafe fn get_arc_tzif<'a>(&'a self) -> &'a TzifOwned {
+            let ptr = self.ptr.map_addr(|addr| addr & !Repr::BITS);
+            // SAFETY: Getting a `ARC_TZIF` tag is only possible when
+            // `self.ptr` was constructed from a valid and aligned
+            // (to at least 4 bytes) `Arc<TzifOwned>`. We've removed
+            // the tag bits above, so we must now have the original
+            // pointer.
+            let arc = ManuallyDrop::new(unsafe {
+                Arc::from_raw(ptr.cast::<TzifOwned>())
+            });
+            // SAFETY: The lifetime of the pointer returned is always
+            // valid as long as the strong count on `arc` is at least
+            // 1. Since the lifetime is no longer than `Repr` itself,
+            // and a `Repr` being alive implies there is at least 1
+            // for the strong `Arc` count, it follows that the lifetime
+            // returned here is correct.
+            unsafe { &*Arc::as_ptr(&arc) }
+        }
+
+        /// Gets the `Arc` POSIX time zone representation.
+        ///
+        /// # Safety
+        ///
+        /// Callers must ensure that the pointer tag is `ARC_POSIX`.
+        #[cfg(feature = "alloc")]
+        #[inline]
+        pub(super) unsafe fn get_arc_posix<'a>(
+            &'a self,
+        ) -> &'a ReasonablePosixTimeZone {
+            let ptr = self.ptr.map_addr(|addr| addr & !Repr::BITS);
+            // SAFETY: Getting a `ARC_POSIX` tag is only possible when
+            // `self.ptr` was constructed from a valid and aligned (to at least
+            // 4 bytes) `Arc<ReasonablePosixTimeZone>`. We've removed the tag
+            // bits above, so we must now have the original pointer.
+            let arc = ManuallyDrop::new(unsafe {
+                Arc::from_raw(ptr.cast::<ReasonablePosixTimeZone>())
+            });
+            // SAFETY: The lifetime of the pointer returned is always
+            // valid as long as the strong count on `arc` is at least
+            // 1. Since the lifetime is no longer than `Repr` itself,
+            // and a `Repr` being alive implies there is at least 1
+            // for the strong `Arc` count, it follows that the lifetime
+            // returned here is correct.
+            unsafe { &*Arc::as_ptr(&arc) }
+        }
+
+        /// Returns the tag on the representation's pointer.
+        ///
+        /// The value is guaranteed to be one of the constant tag values.
+        #[inline]
+        pub(super) fn tag(&self) -> usize {
+            self.ptr.addr() & Repr::BITS
+        }
+
+        /// Returns a dumb copy of this representation.
+        ///
+        /// # Safety
+        ///
+        /// Callers must ensure that this representation's tag is UTC,
+        /// UNKNOWN, FIXED or STATIC_TZIF.
+        ///
+        /// Namely, this specifically does not increment the ref count for
+        /// the `Arc` pointers when the tag is `ARC_TZIF` or `ARC_POSIX`.
+        /// This means that incorrect usage of this routine can lead to
+        /// use-after-free.
+        ///
+        /// NOTE: It would be nice if we could make this `copy` routine safe,
+        /// or at least panic if it's misused. But to do that, you need to know
+        /// the time zone variant. And to know the time zone variant, you need
+        /// to "look" at the tag in the pointer. And looking at the address of
+        /// a pointer in a `const` context is precarious.
+        #[inline]
+        pub(super) const unsafe fn copy(&self) -> Repr {
+            Repr { ptr: self.ptr }
+        }
+    }
+
+    // SAFETY: We use automic reference counting.
+    unsafe impl Send for Repr {}
+    // SAFETY: We don't use an interior mutability and otherwise don't permit
+    // any kind of mutation (other than for an `Arc` managing its ref counts)
+    // of a `Repr`.
+    unsafe impl Sync for Repr {}
+
+    impl core::fmt::Debug for Repr {
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            each! {
+                self,
+                UTC => write!(f, "UTC"),
+                UNKNOWN => write!(f, "Etc/Unknown"),
+                FIXED(offset) => write!(f, "{offset:?}"),
+                STATIC_TZIF(tzif) => {
+                    // The full debug output is a bit much, so constrain it.
+                    let field = tzif.name().unwrap_or("Local");
+                    f.debug_tuple("TZif").field(&field).finish()
+                },
+                ARC_TZIF(tzif) => {
+                    // The full debug output is a bit much, so constrain it.
+                    let field = tzif.name().unwrap_or("Local");
+                    f.debug_tuple("TZif").field(&field).finish()
+                },
+                ARC_POSIX(posix) => write!(f, "Posix({posix})"),
+            }
+        }
+    }
+
+    impl Clone for Repr {
+        #[inline]
+        fn clone(&self) -> Repr {
+            // This `match` is written in an exhaustive fashion so that if
+            // a new tag is added, it should be explicitly considered here.
+            match self.tag() {
+                // These are all `Copy` and can just be memcpy'd as-is.
+                Repr::UTC
+                | Repr::UNKNOWN
+                | Repr::FIXED
+                | Repr::STATIC_TZIF => Repr { ptr: self.ptr },
+                #[cfg(feature = "alloc")]
+                Repr::ARC_TZIF => {
+                    let ptr = self.ptr.map_addr(|addr| addr & !Repr::BITS);
+                    // SAFETY: Getting a `ARC_TZIF` tag is only possible when
+                    // `self.ptr` was constructed from a valid and aligned
+                    // (to at least 4 bytes) `Arc<TzifOwned>`. We've removed
+                    // the tag bits above, so we must now have the original
+                    // pointer.
+                    unsafe {
+                        Arc::increment_strong_count(ptr.cast::<TzifOwned>());
+                    }
+                    Repr { ptr: self.ptr }
+                }
+                #[cfg(feature = "alloc")]
+                Repr::ARC_POSIX => {
+                    let ptr = self.ptr.map_addr(|addr| addr & !Repr::BITS);
+                    // SAFETY: Getting a `ARC_POSIX` tag is only possible when
+                    // `self.ptr` was constructed from a valid and aligned (to
+                    // at least 4 bytes) `Arc<ReasonablePosixTimeZone>`. We've
+                    // removed the tag bits above, so we must now have the
+                    // original pointer.
+                    unsafe {
+                        Arc::increment_strong_count(
+                            ptr.cast::<ReasonablePosixTimeZone>(),
+                        );
+                    }
+                    Repr { ptr: self.ptr }
+                }
+                _ => {
+                    debug_assert!(false, "clone: invalid time zone repr tag!");
+                    // SAFETY: The constructors for `Repr` guarantee that the
+                    // tag is always one of the values matched above.
+                    unsafe {
+                        core::hint::unreachable_unchecked();
+                    }
+                }
+            }
+        }
+    }
+
+    impl Drop for Repr {
+        #[inline]
+        fn drop(&mut self) {
+            // This `match` is written in an exhaustive fashion so that if
+            // a new tag is added, it should be explicitly considered here.
+            match self.tag() {
+                // These are all `Copy` and have no destructor.
+                Repr::UTC
+                | Repr::UNKNOWN
+                | Repr::FIXED
+                | Repr::STATIC_TZIF => {}
+                #[cfg(feature = "alloc")]
+                Repr::ARC_TZIF => {
+                    let ptr = self.ptr.map_addr(|addr| addr & !Repr::BITS);
+                    // SAFETY: Getting a `ARC_TZIF` tag is only possible when
+                    // `self.ptr` was constructed from a valid and aligned
+                    // (to at least 4 bytes) `Arc<TzifOwned>`. We've removed
+                    // the tag bits above, so we must now have the original
+                    // pointer.
+                    unsafe {
+                        Arc::decrement_strong_count(ptr.cast::<TzifOwned>());
+                    }
+                }
+                #[cfg(feature = "alloc")]
+                Repr::ARC_POSIX => {
+                    let ptr = self.ptr.map_addr(|addr| addr & !Repr::BITS);
+                    // SAFETY: Getting a `ARC_POSIX` tag is only possible when
+                    // `self.ptr` was constructed from a valid and aligned (to
+                    // at least 4 bytes) `Arc<ReasonablePosixTimeZone>`. We've
+                    // removed the tag bits above, so we must now have the
+                    // original pointer.
+                    unsafe {
+                        Arc::decrement_strong_count(
+                            ptr.cast::<ReasonablePosixTimeZone>(),
+                        );
+                    }
+                }
+                _ => {
+                    debug_assert!(false, "drop: invalid time zone repr tag!");
+                    // SAFETY: The constructors for `Repr` guarantee that the
+                    // tag is always one of the values matched above.
+                    unsafe {
+                        core::hint::unreachable_unchecked();
+                    }
+                }
+            }
+        }
+    }
+
+    impl Eq for Repr {}
+
+    impl PartialEq for Repr {
+        fn eq(&self, other: &Repr) -> bool {
+            if self.tag() != other.tag() {
+                return false;
+            }
+            each! {
+                self,
+                UTC => true,
+                UNKNOWN => true,
+                // SAFETY: OK, because we know the tags are equivalent and
+                // `self` has a `FIXED` tag.
+                FIXED(offset) => offset == unsafe { other.get_fixed() },
+                // SAFETY: OK, because we know the tags are equivalent and
+                // `self` has a `STATIC_TZIF` tag.
+                STATIC_TZIF(tzif) => tzif == unsafe { other.get_static_tzif() },
+                // SAFETY: OK, because we know the tags are equivalent and
+                // `self` has an `ARC_TZIF` tag.
+                ARC_TZIF(tzif) => tzif == unsafe { other.get_arc_tzif() },
+                // SAFETY: OK, because we know the tags are equivalent and
+                // `self` has an `ARC_POSIX` tag.
+                ARC_POSIX(posix) => posix == unsafe { other.get_arc_posix() },
+            }
+        }
+    }
+
+    /// This is a polyfill for a small subset of std's strict provenance APIs.
+    ///
+    /// The strict provenance APIs in `core` were stabilized in Rust 1.84,
+    /// but it will likely be a while before Jiff can use them. (At time of
+    /// writing, 2025-02-24, Jiff's MSRV is Rust 1.70.)
+    ///
+    /// The `const` requirement is also why these are non-generic free
+    /// functions and not defined via an extension trait. It's also why we
+    /// don't have the useful `map_addr` routine (which is directly relevant to
+    /// our pointer tagging use case).
+    mod polyfill {
+        pub(super) const fn without_provenance(addr: usize) -> *const u8 {
+            // SAFETY: Every valid `usize` is also a valid pointer (but not
+            // necessarily legal to dereference).
+            //
+            // MSRV(1.84): We *really* ought to be using
+            // `core::ptr::without_provenance` here, but Jiff's MSRV prevents
+            // us.
+            unsafe { core::mem::transmute(addr) }
+        }
+
+        pub(super) trait StrictProvenancePolyfill:
+            Sized + Clone + Copy
+        {
+            fn addr(&self) -> usize;
+            fn with_addr(&self, addr: usize) -> Self;
+            fn map_addr(&self, map: impl FnOnce(usize) -> usize) -> Self {
+                self.with_addr(map(self.addr()))
+            }
+        }
+
+        impl StrictProvenancePolyfill for *const u8 {
+            fn addr(&self) -> usize {
+                // SAFETY: Pointer-to-integer transmutes are valid (if you are
+                // okay with losing the provenance).
+                //
+                // The implementation in std says that this isn't guaranteed to
+                // be sound outside of std, but I'm not sure how else to do it.
+                // In practice, this seems likely fine?
+                unsafe { core::mem::transmute(self.cast::<()>()) }
+            }
+
+            fn with_addr(&self, address: usize) -> Self {
+                let self_addr = self.addr() as isize;
+                let dest_addr = address as isize;
+                let offset = dest_addr.wrapping_sub(self_addr);
+                self.wrapping_offset(offset)
+            }
         }
     }
 }
@@ -3380,7 +3734,7 @@ mod tests {
         {
             #[cfg(debug_assertions)]
             {
-                assert_eq!(16, core::mem::size_of::<TimeZone>());
+                assert_eq!(8, core::mem::size_of::<TimeZone>());
             }
             #[cfg(not(debug_assertions))]
             {

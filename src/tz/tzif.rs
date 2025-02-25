@@ -44,7 +44,15 @@ pub(crate) type TzifStatic =
 /// contents of TZif formatted data in memory, and turning it into a data type
 /// that can be used as a time zone.
 #[derive(Debug)]
-#[doc(hidden)] // not part of Jiff's public API
+// not part of Jiff's public API
+#[doc(hidden)]
+// This ensures the alignment of this type is always *at least* 8 bytes. This
+// is required for the pointer tagging inside of `TimeZone` to be sound. At
+// time of writing (2024-02-24), this explicit `repr` isn't required on 64-bit
+// systems since the type definition is such that it will have an alignment of
+// at least 8 bytes anyway. But this *is* required for 32-bit systems, where
+// the type definition at present only has an alignment of 4 bytes.
+#[repr(align(8))]
 pub struct Tzif<STRING, TYPES, TRANS> {
     name: Option<STRING>,
     /// An ASCII byte corresponding to the version number. So, 0x50 is '2'.
