@@ -101,18 +101,21 @@ mod ambiguous;
 mod concatenated;
 mod db;
 mod offset;
-#[cfg(feature = "alloc")]
 pub(crate) mod posix;
 #[cfg(feature = "tz-system")]
 mod system;
 #[cfg(all(test, feature = "alloc"))]
 mod testdata;
 mod timezone;
-#[cfg(feature = "alloc")]
-mod tzif;
+pub(crate) mod tzif;
 // See module comment for WIP status. :-(
 #[cfg(test)]
 mod zic;
+
+#[cfg(feature = "static")]
+pub use jiff_static::get;
+#[cfg(feature = "static-tz")]
+pub use jiff_static::include;
 
 /// Creates a new time zone offset in a `const` context from a given number
 /// of hours.

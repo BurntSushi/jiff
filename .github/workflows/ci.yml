@@ -320,6 +320,28 @@ jobs:
       run: |
         cargo bench --manifest-path bench/Cargo.toml -- --test
 
+  # Runs miri on a subset of Jiff's test suite. This doesn't quite cover
+  # everything. In particular, `miri` and `insta` cannot play nice together,
+  # and `insta` is used a lot among Jiff's tests. However, the primary reason
+  # why we want to run `miri` (at present, 2025-02-25) is to check out pointer
+  # tagging representation of `jiff::tz::TimeZone`. And we can run the tests in
+  # `tz`.
+  miri:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        # We use nightly here so that we can use miri I guess?
+        toolchain: nightly
+        components: miri
+    - name: "Run tests on `jiff::tz` under miri"
+      run: "cargo miri test tz:: --verbose"
+    - name: Run proc macro integration tests under miri
+      run: cargo miri test --test integration procmacro --verbose
+
   # Check that all files are formatted properly.
   rustfmt:
     runs-on: ubuntu-latest

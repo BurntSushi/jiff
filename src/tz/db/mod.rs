@@ -29,12 +29,12 @@ mod zoneinfo;
 /// assert!(tz::db().get("does-not-exist").is_err());
 /// ```
 pub fn db() -> &'static TimeZoneDatabase {
-    #[cfg(not(feature = "std"))]
+    #[cfg(any(not(feature = "std"), miri))]
     {
         static NONE: TimeZoneDatabase = TimeZoneDatabase::none();
         &NONE
     }
-    #[cfg(feature = "std")]
+    #[cfg(all(feature = "std", not(miri)))]
     {
         use std::sync::OnceLock;
 

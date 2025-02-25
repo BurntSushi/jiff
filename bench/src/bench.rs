@@ -6,6 +6,7 @@ mod datetime;
 mod parse;
 mod print;
 mod timestamp;
+mod tz;
 mod zoned;
 
 fn main() {
@@ -29,6 +30,7 @@ fn main() {
     parse::define(&mut c);
     print::define(&mut c);
     timestamp::define(&mut c);
+    tz::define(&mut c);
     zoned::define(&mut c);
     // This is an undocument API. Woohoo.
     c.final_summary();

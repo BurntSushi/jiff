@@ -4,7 +4,7 @@ use alloc::string::ToString;
 
 use crate::{
     error::{err, Error, ErrorContext},
-    tz::{posix::PosixTz, TimeZone, TimeZoneDatabase},
+    tz::{posix::PosixTzEnv, TimeZone, TimeZoneDatabase},
     util::cache::Expiration,
 };
 
@@ -177,7 +177,7 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
     if tzenv.is_empty() {
         return Ok(None);
     }
-    let tz_name_or_path = match PosixTz::parse_os_str(&tzenv) {
+    let tz_name_or_path = match PosixTzEnv::parse_os_str(&tzenv) {
         Err(_err) => {
             trace!(
                 "failed to parse {tzenv:?} as POSIX TZ rule \
@@ -194,18 +194,19 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
                 })?
                 .to_string()
         }
-        Ok(PosixTz::Implementation(string)) => string.to_string(),
-        Ok(PosixTz::Rule(tz)) => match tz.reasonable() {
+        Ok(PosixTzEnv::Implementation(string)) => string.to_string(),
+        Ok(PosixTzEnv::Rule(tz)) => match tz.reasonable() {
             Ok(reasonable_posix_tz) => {
                 return Ok(Some(TimeZone::from_reasonable_posix_tz(
                     reasonable_posix_tz,
                 )));
             }
-            Err(_) => {
+            Err(_unreasonable_posix_tz) => {
                 warn!(
-                    "parsed {tzenv:?} as POSIX TZ transition string, \
-                     but Jiff considers it unreasonable since \
-                     it specifies DST but without a rule \
+                    "parsed {tzenv:?} as POSIX TZ transition \
+                     {_unreasonable_posix_tz}, but Jiff considers \
+                     it unreasonable since it specifies DST but \
+                     without a rule \
                      (therefore ignoring TZ environment variable)",
                 );
                 return Ok(None);

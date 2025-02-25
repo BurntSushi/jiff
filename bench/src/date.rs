@@ -86,6 +86,13 @@ fn add_days(c: &mut Criterion) {
         1070,
         civil::date(2026, 1, 17),
     );
+    benchmark_with(
+        c,
+        "one",
+        civil::date(2023, 2, 12),
+        1,
+        civil::date(2023, 2, 13),
+    );
 }
 
 /// Measures the timing for adding a `Span` with years, months and days to

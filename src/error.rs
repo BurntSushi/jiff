@@ -54,7 +54,7 @@ pub struct Error {
     /// This also makes clones cheap. And it also make the size of error equal
     /// to one word (although a `Box` would achieve that last goal). This is
     /// why we put the `Arc` here instead of on `std::io::Error` directly.
-    inner: Arc<ErrorInner>,
+    inner: Option<Arc<ErrorInner>>,
 }
 
 #[derive(Debug)]
@@ -176,6 +176,22 @@ impl Error {
         }));
         self.context(err)
     }
+
+    /*
+    /// Creates a new "unknown" Jiff error.
+    ///
+    /// The benefit of this API is that it permits creating an `Error` in a
+    /// `const` context. But the error message quality is currently pretty
+    /// bad: it's just a generic "unknown jiff error" message.
+    ///
+    /// This could be improved to take a `&'static str`, but I believe this
+    /// will require pointer tagging in order to avoid increasing the size of
+    /// `Error`. (Which is important, because of how many perf sensitive
+    /// APIs return a `Result<T, Error>` in Jiff.
+    pub(crate) const fn unknown() -> Error {
+        Error { inner: None }
+    }
+    */
 }
 
 #[cfg(feature = "std")]
@@ -187,8 +203,12 @@ impl core::fmt::Display for Error {
         {
             let mut err = self;
             loop {
-                write!(f, "{}", err.inner.kind)?;
-                err = match err.inner.cause.as_ref() {
+                let Some(ref inner) = err.inner else {
+                    write!(f, "unknown jiff error")?;
+                    break;
+                };
+                write!(f, "{}", inner.kind)?;
+                err = match inner.cause.as_ref() {
                     None => break,
                     Some(err) => err,
                 };
@@ -198,7 +218,10 @@ impl core::fmt::Display for Error {
         }
         #[cfg(not(feature = "alloc"))]
         {
-            write!(f, "{}", self.inner.kind)
+            match self.inner {
+                None => write!(f, "unknown jiff error"),
+                Some(ref inner) => write!(f, "{}", inner.kind),
+            }
         }
     }
 }
@@ -208,18 +231,22 @@ impl core::fmt::Debug for Error {
         if !f.alternate() {
             core::fmt::Display::fmt(self, f)
         } else {
+            let Some(ref inner) = self.inner else {
+                return f
+                    .debug_struct("Error")
+                    .field("kind", &"None")
+                    .finish();
+            };
             #[cfg(feature = "alloc")]
             {
                 f.debug_struct("Error")
-                    .field("kind", &self.inner.kind)
-                    .field("cause", &self.inner.cause)
+                    .field("kind", &inner.kind)
+                    .field("cause", &inner.cause)
                     .finish()
             }
             #[cfg(not(feature = "alloc"))]
             {
-                f.debug_struct("Error")
-                    .field("kind", &self.inner.kind)
-                    .finish()
+                f.debug_struct("Error").field("kind", &inner.kind).finish()
             }
         }
     }
@@ -240,11 +267,11 @@ impl From<ErrorKind> for Error {
     fn from(kind: ErrorKind) -> Error {
         #[cfg(feature = "alloc")]
         {
-            Error { inner: Arc::new(ErrorInner { kind, cause: None }) }
+            Error { inner: Some(Arc::new(ErrorInner { kind, cause: None })) }
         }
         #[cfg(not(feature = "alloc"))]
         {
-            Error { inner: Arc::new(ErrorInner { kind }) }
+            Error { inner: Some(Arc::new(ErrorInner { kind })) }
         }
     }
 }
@@ -528,13 +555,17 @@ impl ErrorContext for Error {
         #[cfg(feature = "alloc")]
         {
             let mut err = consequent.into_error();
+            if err.inner.is_none() {
+                err = err!("unknown jiff error");
+            }
+            let inner = err.inner.as_mut().unwrap();
             assert!(
-                err.inner.cause.is_none(),
+                inner.cause.is_none(),
                 "cause of consequence must be `None`"
             );
             // OK because we just created this error so the Arc
             // has one reference.
-            Arc::get_mut(&mut err.inner).unwrap().cause = Some(self);
+            Arc::get_mut(inner).unwrap().cause = Some(self);
             err
         }
         #[cfg(not(feature = "alloc"))]
@@ -552,13 +583,17 @@ impl ErrorContext for Error {
         #[cfg(feature = "alloc")]
         {
             let mut err = consequent().into_error();
+            if err.inner.is_none() {
+                err = err!("unknown jiff error");
+            }
+            let inner = err.inner.as_mut().unwrap();
             assert!(
-                err.inner.cause.is_none(),
+                inner.cause.is_none(),
                 "cause of consequence must be `None`"
             );
             // OK because we just created this error so the Arc
             // has one reference.
-            Arc::get_mut(&mut err.inner).unwrap().cause = Some(self);
+            Arc::get_mut(inner).unwrap().cause = Some(self);
             err
         }
         #[cfg(not(feature = "alloc"))]

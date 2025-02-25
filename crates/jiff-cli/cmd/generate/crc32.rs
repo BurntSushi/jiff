@@ -46,10 +46,11 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
     args::configure(p, USAGE, &mut [&mut config])?;
 
     let jiff = config.jiff();
-    let table_path = jiff.join("src/util/crc32/table.rs");
+    let table_path = jiff.join("src/shared/crc32/table.rs");
     write_crc_tables(&table_path).with_context(|| {
         format!("failed to write CRC32 data table to {}", table_path.display())
     })?;
+    super::rustfmt(&table_path)?;
 
     Ok(())
 }
