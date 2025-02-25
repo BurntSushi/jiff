@@ -1013,7 +1013,7 @@ impl Offset {
     }
 
     #[inline]
-    pub(crate) fn seconds_ranged(self) -> t::SpanZoneOffset {
+    pub(crate) const fn seconds_ranged(self) -> t::SpanZoneOffset {
         self.span
     }
 
