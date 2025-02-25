@@ -643,9 +643,7 @@ mod tests {
         Some(
             (
                 TimeZone(
-                    Fixed(
-                        25:59:00,
-                    ),
+                    25:59:00,
                 ),
                 false,
             ),
@@ -655,9 +653,7 @@ mod tests {
         Some(
             (
                 TimeZone(
-                    Fixed(
-                        -25:59:00,
-                    ),
+                    -25:59:00,
                 ),
                 false,
             ),

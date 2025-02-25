@@ -1,5 +1,4 @@
-use alloc::string::ToString;
-
+#[cfg(not(miri))]
 use crate::tz::tzif::TzifOwned;
 
 /// A concatenated list of TZif data with a header and an index block.
@@ -95,6 +94,8 @@ impl TzifTestFile {
     /// Parse this test TZif data into a structured representation.
     #[cfg(not(miri))]
     pub(crate) fn parse(self) -> TzifOwned {
+        use alloc::string::ToString;
+
         let name = Some(self.name.to_string());
         TzifOwned::parse(name, self.data).unwrap_or_else(|err| {
             panic!("failed to parse TZif test file for {:?}: {err}", self.name)
@@ -104,6 +105,8 @@ impl TzifTestFile {
     /// Parse this test TZif data as if it were V1.
     #[cfg(not(miri))]
     pub(crate) fn parse_v1(self) -> TzifOwned {
+        use alloc::string::ToString;
+
         let name = Some(self.name.to_string());
         let mut data = self.data.to_vec();
         data[4] = 0;

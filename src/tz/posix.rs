@@ -208,7 +208,14 @@ impl core::fmt::Display for PosixTzEnv {
 /// [GNU C Library]: https://www.gnu.org/software/libc/manual/2.25/html_node/TZ-Variable.html
 /// [RFC 9636]: https://datatracker.ietf.org/doc/rfc9636/
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[doc(hidden)] // NOT part of Jiff's public API
+// NOT part of Jiff's public API
+#[doc(hidden)]
+// This ensures the alignment of this type is always *at least* 4 bytes. This
+// is required for the pointer tagging inside of `TimeZone` to be sound. At
+// time of writing (2024-02-24), this explicit `repr` isn't required since the
+// type definition is such that it will have an alignment of at least 4 bytes
+// anyway. But we add this here to ensure it can't be silently changed.
+#[repr(align(4))]
 pub struct ReasonablePosixTimeZone {
     std_abbrev: Abbreviation,
     std_offset: PosixOffset,
