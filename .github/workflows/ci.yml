@@ -46,9 +46,6 @@ jobs:
         - build: macos
           os: macos-latest
           rust: stable
-        - build: win-msvc
-          os: windows-latest
-          rust: stable
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -57,20 +54,30 @@ jobs:
       with:
         toolchain: ${{ matrix.rust }}
     - run: cargo build --verbose
-    - run: cargo doc --features serde --verbose
+    - run: cargo doc --features serde,static --verbose
+    - run: cargo test --verbose --lib --profile testrelease
+    - run: cargo test --verbose --test integration --profile testrelease
+    - run: ./test
+
+  # Test for Windows. We test fewer configurations here because it just
+  # takes forever otherwise.
+  win-msvc:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+    - run: cargo build --verbose
+    - run: cargo doc --features serde,static --verbose
     - run: cargo test --verbose --all
-    # Skip on Windows because it takes freaking forever.
-    - if: matrix.build != 'win-msvc'
-      run: cargo test --verbose --lib --profile testrelease
-    - if: matrix.build != 'win-msvc'
-      run: cargo test --verbose --test integration --profile testrelease
-    - if: matrix.build != 'win-msvc'
-      run: ./test
 
   # Tests for stable-x86_64-gnu. It's different enough from the "main" targets
   # to warrant its own section. The main problem is that it is just
   # annoyingly slow. Like, twice as slow as the next slowest runner. So we
-  # run a stripped down version of tests.
+  # run a stripped down version (even more so than msvc) of tests.
   win-gnu:
     runs-on: windows-latest
     steps:
@@ -81,7 +88,7 @@ jobs:
       with:
         toolchain: stable-x86_64-gnu
     - run: cargo build --verbose
-    - run: cargo doc --features serde --verbose
+    - run: cargo doc --features serde,static --verbose
     - run: cargo test --verbose --lib
     - run: cargo test --verbose --test integration
 
@@ -108,7 +115,7 @@ jobs:
     - name: Build jiff-tzdb-platform
       run: cargo build -p jiff-tzdb-platform --verbose
     - name: Build docs
-      run: cargo doc --features serde --verbose
+      run: cargo doc --features serde,static --verbose
     # NOTE: We currently don't track some ecosystem integration crates
     # like `jiff-icu`. They don't support Jiff's MSRV at time of writing
     # (2025-02-02), and I think these sorts of integration crates are at very
