@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# This script is used to run a more exhaustive set of tests than what just
+# `cargo test` or even `cargo test --all` will do. Specifically, we run tests
+# under a number of different feature configurations.
+#
+# This is practically necessary because it is very easy to accidentally break
+# a particular feature combination, especially `--no-default-features`.
+
 set -e
 
 # cd to the directory containing this crate's Cargo.toml so that we don't need
@@ -10,7 +17,7 @@ cd "$(dirname "$0")"
 # features. We don't test the complete space, since the complete space is quite
 # large.
 echo "===== DEFAULT FEATURES ====="
-cargo test
+cargo test --all
 
 echo "===== DEFAULT FEATURES WITH STATIC ====="
 cargo test --features static
