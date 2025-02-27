@@ -53,6 +53,15 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
+    # In Rust 2024, doc tests are (mostly) all compiled into a single
+    # executable and then run once. This is a lot faster for Jiff, which
+    # has 1000+ doc tests. Since this job is where we run most of our
+    # tests (and we run MSRV on a different job), we just bump to Rust 2024
+    # to take advantage of this.
+    - name: Switch to Rust 2024
+      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
+    - name: Bump rust-version to Rust 1.85
+      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
     - run: cargo build --verbose
     - run: cargo doc --features serde,static --verbose
     - run: cargo test --verbose --lib --profile testrelease
