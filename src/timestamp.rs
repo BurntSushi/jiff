@@ -561,6 +561,10 @@ impl Timestamp {
     /// This returns an error if the given second corresponds to a timestamp
     /// outside of the [`Timestamp::MIN`] and [`Timestamp::MAX`] boundaries.
     ///
+    /// It is a semver guarantee that the only way for this to return an error
+    /// is if the given value is out of range. That is, when it is less than
+    /// `Timestamp::MIN` or greater than `Timestamp::MAX`.
+    ///
     /// # Example
     ///
     /// This example shows the instants in time 1 second immediately after and
@@ -580,6 +584,36 @@ impl Timestamp {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    ///
+    /// # Example: saturating construction
+    ///
+    /// If you need a way to build a `Timestamp` value that saturates to
+    /// the minimum and maximum values supported by Jiff, then this is
+    /// guaranteed to work:
+    ///
+    /// ```
+    /// use jiff::Timestamp;
+    ///
+    /// fn from_second_saturating(seconds: i64) -> Timestamp {
+    ///     Timestamp::from_second(seconds).unwrap_or_else(|_| {
+    ///         if seconds < 0 {
+    ///             Timestamp::MIN
+    ///         } else {
+    ///             Timestamp::MAX
+    ///         }
+    ///     })
+    /// }
+    ///
+    /// assert_eq!(from_second_saturating(0), Timestamp::UNIX_EPOCH);
+    /// assert_eq!(
+    ///     from_second_saturating(-999999999999999999),
+    ///     Timestamp::MIN
+    /// );
+    /// assert_eq!(
+    ///     from_second_saturating(999999999999999999),
+    ///     Timestamp::MAX
+    /// );
+    /// ```
     #[inline]
     pub fn from_second(second: i64) -> Result<Timestamp, Error> {
         Timestamp::new(second, 0)
@@ -597,6 +631,10 @@ impl Timestamp {
     /// This returns an error if the given millisecond corresponds to a
     /// timestamp outside of the [`Timestamp::MIN`] and [`Timestamp::MAX`]
     /// boundaries.
+    ///
+    /// It is a semver guarantee that the only way for this to return an error
+    /// is if the given value is out of range. That is, when it is less than
+    /// `Timestamp::MIN` or greater than `Timestamp::MAX`.
     ///
     /// # Example
     ///
@@ -616,6 +654,36 @@ impl Timestamp {
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: saturating construction
+    ///
+    /// If you need a way to build a `Timestamp` value that saturates to
+    /// the minimum and maximum values supported by Jiff, then this is
+    /// guaranteed to work:
+    ///
+    /// ```
+    /// use jiff::Timestamp;
+    ///
+    /// fn from_millisecond_saturating(millis: i64) -> Timestamp {
+    ///     Timestamp::from_millisecond(millis).unwrap_or_else(|_| {
+    ///         if millis < 0 {
+    ///             Timestamp::MIN
+    ///         } else {
+    ///             Timestamp::MAX
+    ///         }
+    ///     })
+    /// }
+    ///
+    /// assert_eq!(from_millisecond_saturating(0), Timestamp::UNIX_EPOCH);
+    /// assert_eq!(
+    ///     from_millisecond_saturating(-999999999999999999),
+    ///     Timestamp::MIN
+    /// );
+    /// assert_eq!(
+    ///     from_millisecond_saturating(999999999999999999),
+    ///     Timestamp::MAX
+    /// );
     /// ```
     #[inline]
     pub fn from_millisecond(millisecond: i64) -> Result<Timestamp, Error> {
@@ -639,6 +707,10 @@ impl Timestamp {
     /// timestamp outside of the [`Timestamp::MIN`] and [`Timestamp::MAX`]
     /// boundaries.
     ///
+    /// It is a semver guarantee that the only way for this to return an error
+    /// is if the given value is out of range. That is, when it is less than
+    /// `Timestamp::MIN` or greater than `Timestamp::MAX`.
+    ///
     /// # Example
     ///
     /// This example shows the instants in time 1 microsecond immediately after
@@ -657,6 +729,36 @@ impl Timestamp {
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: saturating construction
+    ///
+    /// If you need a way to build a `Timestamp` value that saturates to
+    /// the minimum and maximum values supported by Jiff, then this is
+    /// guaranteed to work:
+    ///
+    /// ```
+    /// use jiff::Timestamp;
+    ///
+    /// fn from_microsecond_saturating(micros: i64) -> Timestamp {
+    ///     Timestamp::from_microsecond(micros).unwrap_or_else(|_| {
+    ///         if micros < 0 {
+    ///             Timestamp::MIN
+    ///         } else {
+    ///             Timestamp::MAX
+    ///         }
+    ///     })
+    /// }
+    ///
+    /// assert_eq!(from_microsecond_saturating(0), Timestamp::UNIX_EPOCH);
+    /// assert_eq!(
+    ///     from_microsecond_saturating(-999999999999999999),
+    ///     Timestamp::MIN
+    /// );
+    /// assert_eq!(
+    ///     from_microsecond_saturating(999999999999999999),
+    ///     Timestamp::MAX
+    /// );
     /// ```
     #[inline]
     pub fn from_microsecond(microsecond: i64) -> Result<Timestamp, Error> {
@@ -680,6 +782,10 @@ impl Timestamp {
     /// timestamp outside of the [`Timestamp::MIN`] and [`Timestamp::MAX`]
     /// boundaries.
     ///
+    /// It is a semver guarantee that the only way for this to return an error
+    /// is if the given value is out of range. That is, when it is less than
+    /// `Timestamp::MIN` or greater than `Timestamp::MAX`.
+    ///
     /// # Example
     ///
     /// This example shows the instants in time 1 nanosecond immediately after
@@ -699,6 +805,36 @@ impl Timestamp {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    ///
+    /// # Example: saturating construction
+    ///
+    /// If you need a way to build a `Timestamp` value that saturates to
+    /// the minimum and maximum values supported by Jiff, then this is
+    /// guaranteed to work:
+    ///
+    /// ```
+    /// use jiff::Timestamp;
+    ///
+    /// fn from_nanosecond_saturating(nanos: i128) -> Timestamp {
+    ///     Timestamp::from_nanosecond(nanos).unwrap_or_else(|_| {
+    ///         if nanos < 0 {
+    ///             Timestamp::MIN
+    ///         } else {
+    ///             Timestamp::MAX
+    ///         }
+    ///     })
+    /// }
+    ///
+    /// assert_eq!(from_nanosecond_saturating(0), Timestamp::UNIX_EPOCH);
+    /// assert_eq!(
+    ///     from_nanosecond_saturating(-9999999999999999999999999999999999),
+    ///     Timestamp::MIN
+    /// );
+    /// assert_eq!(
+    ///     from_nanosecond_saturating(9999999999999999999999999999999999),
+    ///     Timestamp::MAX
+    /// );
+    /// ```
     #[inline]
     pub fn from_nanosecond(nanosecond: i128) -> Result<Timestamp, Error> {
         let nanosecond =
@@ -716,6 +852,10 @@ impl Timestamp {
     ///
     /// This returns an error if the given duration corresponds to a timestamp
     /// outside of the [`Timestamp::MIN`] and [`Timestamp::MAX`] boundaries.
+    ///
+    /// It is a semver guarantee that the only way for this to return an error
+    /// is if the given value is out of range. That is, when it is less than
+    /// `Timestamp::MIN` or greater than `Timestamp::MAX`.
     ///
     /// # Example
     ///
@@ -760,6 +900,39 @@ impl Timestamp {
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: saturating construction
+    ///
+    /// If you need a way to build a `Timestamp` value that saturates to
+    /// the minimum and maximum values supported by Jiff, then this is
+    /// guaranteed to work:
+    ///
+    /// ```
+    /// use jiff::{SignedDuration, Timestamp};
+    ///
+    /// fn from_duration_saturating(dur: SignedDuration) -> Timestamp {
+    ///     Timestamp::from_duration(dur).unwrap_or_else(|_| {
+    ///         if dur.is_negative() {
+    ///             Timestamp::MIN
+    ///         } else {
+    ///             Timestamp::MAX
+    ///         }
+    ///     })
+    /// }
+    ///
+    /// assert_eq!(
+    ///     from_duration_saturating(SignedDuration::ZERO),
+    ///     Timestamp::UNIX_EPOCH,
+    /// );
+    /// assert_eq!(
+    ///     from_duration_saturating(SignedDuration::from_secs(-999999999999)),
+    ///     Timestamp::MIN
+    /// );
+    /// assert_eq!(
+    ///     from_duration_saturating(SignedDuration::from_secs(999999999999)),
+    ///     Timestamp::MAX
+    /// );
     /// ```
     #[inline]
     pub fn from_duration(

@@ -12,6 +12,10 @@ Add `tz::{get,include}` macros for time zone support in core-only environments.
 Switch to `rearguard` tzdb data in `jiff-tzdb` and document it.
 * [#259](https://github.com/BurntSushi/jiff/pull/259):
 De-duplicate TZif data in `jiff-tzdb`.
+* [#273](https://github.com/BurntSushi/jiff/issues/273):
+Add "crate features" documentation to `jiff-sqlx` and `jiff-diesel`.
+* [#277](https://github.com/BurntSushi/jiff/issues/277):
+Document semver guarantee for error conditions on `Timestamp` constructors.
 
 Bug fixes:
 

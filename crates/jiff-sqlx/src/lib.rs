@@ -4,6 +4,9 @@ This crate provides integration points for [Jiff](jiff) and [SQLx][sqlx].
 Examples can be found in the
 [examples directory of the Jiff repository][examples].
 
+Note that to use this crate, you'll likely need to enable one of its
+[database backend features](#crate-features).
+
 # Organization
 
 This crates defines several types that wrap corresponding types in Jiff. Each
@@ -54,6 +57,11 @@ admittedly, tough to stomach.
 
 In the future, it may be prudent for this crate to be upstreamed into SQLx
 itself.
+
+# Crate features
+
+* **postgres** - Enables the `sqlx-postgres` dependency.
+* **sqlite** - Enables the `sqlx-sqlite` dependency.
 
 [sqlx]: https://docs.rs/sqlx/0.8
 [examples]: https://github.com/BurntSushi/jiff/tree/master/examples
