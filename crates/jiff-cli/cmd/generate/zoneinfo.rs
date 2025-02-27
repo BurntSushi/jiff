@@ -11,6 +11,7 @@ And at that point, we wouldn't need `zic` any more.
 */
 
 use std::{
+    fs::File,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -121,6 +122,43 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
         )
     })?;
 
+    // Generate "rearguard" data. tzdb has this to say about it:
+    //
+    // > The build procedure constructs three files vanguard.zi, main.zi,
+    // > and rearguard.zi, one for each format. Although the files represent
+    // > essentially the same data, they may have minor discrepancies that
+    // > users are not likely to notice. The files are intended for downstream
+    // > data consumers and are not installed. Zoneinfo parsers that do not
+    // > support negative SAVE values should start using rearguard.zi, so that
+    // > they will be unaffected when the negative-DST feature moves from
+    // > vanguard to main. Bleeding-edge Zoneinfo parsers that support the new
+    // > features already can use vanguard.zi; in this respect, current tzcode
+    // > is bleeding-edge.
+    //
+    // In effect, rearguard data doesn't use negative DST offsets, which are
+    // somewhat odd given that the concept of "daylight saving time" involves
+    // moving the clocks forward _to add more daylight_ to the typical waking
+    // hours of the day. So we specifically stick to rearguard data so that
+    // DST is more accurately modeled. The IANA release distribution provides
+    // this via an `awk` script that transforms the standard "main" zi data.
+    let mut cmd = Command::new("awk");
+    cmd.args(["-v", "DATAFORM=rearguard", "-f"])
+        .arg(tzdata.join("ziguard.awk"));
+    for tzdata_file in TZDATA_FILES {
+        cmd.arg(tzdata.join(tzdata_file));
+    }
+    let rearguard_path = outdir.join("rearguard.zi");
+    let rearguard = File::create(&rearguard_path).with_context(|| {
+        format!("failed to create `{}`", rearguard_path.display())
+    })?;
+    cmd.stdout(rearguard);
+    let status =
+        cmd.status().with_context(|| format!("failed to run `{cmd:?}`"))?;
+    anyhow::ensure!(
+        status.success(),
+        "running `{cmd:?}` failed with status {status}"
+    );
+
     // Run the zic compiler.
     let mut cmd = Command::new(zic);
     if config.verbose {
@@ -132,9 +170,7 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
     // redundant with the POSIX TZ strings for that time zone.
     cmd.arg("-b").arg("slim");
     cmd.arg("-d").arg(outdir);
-    for tzdata_file in TZDATA_FILES {
-        cmd.arg(tzdata.join(tzdata_file));
-    }
+    cmd.arg(&rearguard_path);
     let status =
         cmd.status().with_context(|| format!("failed to run `{cmd:?}`"))?;
     anyhow::ensure!(

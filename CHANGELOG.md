@@ -4,6 +4,15 @@
 ===========
 TODO
 
+Enhancements:
+
+* [#256](https://github.com/BurntSushi/jiff/issues/256):
+Add `tz::{get,include}` macros for time zone support in core-only environments.
+* [#258](https://github.com/BurntSushi/jiff/issues/258):
+Switch to `rearguard` tzdb data in `jiff-tzdb` and document it.
+* [#259](https://github.com/BurntSushi/jiff/pull/259):
+De-duplicate TZif data in `jiff-tzdb`.
+
 Bug fixes:
 
 * [#261](https://github.com/BurntSushi/jiff/issues/261):
