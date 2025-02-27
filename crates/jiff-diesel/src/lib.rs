@@ -4,6 +4,9 @@ This crate provides integration points for [Jiff](jiff) and [Diesel](diesel).
 Examples can be found in the
 [examples directory of the Jiff repository][examples].
 
+Note that to use this crate, you'll likely need to enable one of its
+[database backend features](#crate-features).
+
 # Organization
 
 This crates defines several types that wrap corresponding types in
@@ -57,6 +60,12 @@ admittedly, tough to stomach.
 
 In the future, it may be prudent for this crate to be upstreamed into Diesel
 itself.
+
+# Crate features
+
+* **mysql** - Enables `diesel/mysql_backend`.
+* **postgres** - Enables `diesel/postgres_backend`.
+* **sqlite** - Enables `disel/sqlite`.
 
 [examples]: https://github.com/BurntSushi/jiff/tree/master/examples
 [`chrono`]: https://docs.rs/chrono
