@@ -371,7 +371,56 @@ impl TimeZoneDatabase {
     /// available. To query whether the data is empty or not, use
     /// [`TimeZoneDatabase::is_definitively_empty`].
     ///
+    /// # Data generation
+    ///
+    /// The data in this crate comes from the [IANA Time Zone Database] "data
+    /// only" distribution. [`jiff-cli`] is used to first compile the release
+    /// into binary TZif data using the `zic` compiler, and secondly, converts
+    /// the binary data into a flattened and de-duplicated representation that
+    /// is embedded into this crate's source code.
+    ///
+    /// The conversion into the TZif binary data uses the following settings:
+    ///
+    /// * The "rearguard" data is used (see below).
+    /// * The binary data itself is compiled using the "slim" format. Which
+    ///   effectively means that the TZif data primarily only uses explicit
+    ///   time zone transitions for historical data and POSIX time zones for
+    ///   current time zone transition rules. This doesn't have any impact
+    ///   on the actual results. The reason that there are "slim" and "fat"
+    ///   formats is to support legacy applications that can't deal with
+    ///   POSIX time zones. For example, `/usr/share/zoneinfo` on my modern
+    ///   Archlinux installation (2025-02-27) is in the "fat" format.
+    ///
+    /// The reason that rearguard data is used is a bit more subtle and has
+    /// to do with a difference in how the IANA Time Zone Database treats its
+    /// internal "daylight saving time" flag and what people in the "real
+    /// world" consider "daylight saving time." For example, in the standard
+    /// distribution of the IANA Time Zone Database, `Europe/Dublin` has its
+    /// daylight saving time flag set to _true_ during Winter and set to
+    /// _false_ during Summer. The actual time shifts are the same as, e.g.,
+    /// `Europe/London`, but which one is actually labeled "daylight saving
+    /// time" is not.
+    ///
+    /// The IANA Time Zone Database does this for `Europe/Dublin`, presumably,
+    /// because _legally_, time during the Summer in Ireland is called `Irish
+    /// Standard Time`, and time during the Winter is called `Greenwich Mean
+    /// Time`. These legal names are reversed from what is typically the case,
+    /// where "standard" time is during the Winter and daylight saving time is
+    /// during the Summer. The IANA Time Zone Database implements this tweak in
+    /// legal language via a "negative daylight saving time offset." This is
+    /// somewhat odd, and some consumers of the IANA Time Zone Database cannot
+    /// handle it. Thus, the rearguard format was born for, seemingly, legacy
+    /// programs.
+    ///
+    /// Jiff can handle negative daylight saving time offsets just fine,
+    /// but we use the rearguard format anyway so that the underlying data
+    /// more accurately reflects on-the-ground reality for humans living in
+    /// `Europe/Dublin`. In particular, using the rearguard data enables
+    /// [localization of time zone names] to be done correctly.
+    ///
     /// [IANA Time Zone Database]: https://en.wikipedia.org/wiki/Tz_database
+    /// [`jiff-cli`]: https://github.com/BurntSushi/jiff/tree/master/crates/jiff-cli
+    /// [localization of time zone names]: https://github.com/BurntSushi/jiff/issues/258
     pub fn bundled() -> TimeZoneDatabase {
         let db = bundled::Database::new();
         if db.is_definitively_empty() {
