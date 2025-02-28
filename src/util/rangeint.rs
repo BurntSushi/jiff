@@ -2464,8 +2464,81 @@ pub(crate) struct Composite<T> {
     pub(crate) max: T,
 }
 
+impl<T> Composite<T> {
+    #[inline]
+    pub(crate) fn map<U>(self, map: impl Fn(T) -> U) -> Composite<U> {
+        #[cfg(not(debug_assertions))]
+        {
+            Composite { val: map(self.val) }
+        }
+        #[cfg(debug_assertions)]
+        {
+            Composite {
+                val: map(self.val),
+                min: map(self.min),
+                max: map(self.max),
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn zip2<U>(self, other: Composite<U>) -> Composite<(T, U)> {
+        #[cfg(not(debug_assertions))]
+        {
+            Composite { val: (self.val, other.val) }
+        }
+        #[cfg(debug_assertions)]
+        {
+            Composite {
+                val: (self.val, other.val),
+                min: (self.min, other.min),
+                max: (self.max, other.max),
+            }
+        }
+    }
+}
+
+impl<T, U> Composite<(T, U)> {
+    #[inline]
+    pub(crate) fn unzip2(self) -> (Composite<T>, Composite<U>) {
+        #[cfg(not(debug_assertions))]
+        {
+            (Composite { val: self.val.0 }, Composite { val: self.val.1 })
+        }
+        #[cfg(debug_assertions)]
+        {
+            (
+                Composite {
+                    val: self.val.0,
+                    min: self.min.0,
+                    max: self.max.0,
+                },
+                Composite {
+                    val: self.val.1,
+                    min: self.min.1,
+                    max: self.max.1,
+                },
+            )
+        }
+    }
+}
+
+impl<T, E> Composite<Result<T, E>> {
+    #[inline]
+    pub(crate) fn transpose(self) -> Result<Composite<T>, E> {
+        #[cfg(not(debug_assertions))]
+        {
+            Ok(Composite { val: self.val? })
+        }
+        #[cfg(debug_assertions)]
+        {
+            Ok(Composite { val: self.val?, min: self.min?, max: self.max? })
+        }
+    }
+}
+
 impl Composite<i8> {
-    pub(crate) fn to_rint<const MIN: i128, const MAX: i128>(
+    pub(crate) const fn to_rint<const MIN: i128, const MAX: i128>(
         self,
     ) -> ri8<MIN, MAX> {
         #[cfg(not(debug_assertions))]
@@ -2480,7 +2553,7 @@ impl Composite<i8> {
 }
 
 impl Composite<i16> {
-    pub(crate) fn to_rint<const MIN: i128, const MAX: i128>(
+    pub(crate) const fn to_rint<const MIN: i128, const MAX: i128>(
         self,
     ) -> ri16<MIN, MAX> {
         #[cfg(not(debug_assertions))]
@@ -2495,7 +2568,7 @@ impl Composite<i16> {
 }
 
 impl Composite<i32> {
-    pub(crate) fn to_rint<const MIN: i128, const MAX: i128>(
+    pub(crate) const fn to_rint<const MIN: i128, const MAX: i128>(
         self,
     ) -> ri32<MIN, MAX> {
         #[cfg(not(debug_assertions))]
@@ -2510,7 +2583,7 @@ impl Composite<i32> {
 }
 
 impl Composite<i64> {
-    pub(crate) fn to_rint<const MIN: i128, const MAX: i128>(
+    pub(crate) const fn to_rint<const MIN: i128, const MAX: i128>(
         self,
     ) -> ri64<MIN, MAX> {
         #[cfg(not(debug_assertions))]
@@ -2520,6 +2593,30 @@ impl Composite<i64> {
         #[cfg(debug_assertions)]
         {
             ri64 { val: self.val, min: self.min, max: self.max }
+        }
+    }
+
+    pub(crate) fn try_to_rint<const MIN: i128, const MAX: i128>(
+        self,
+        what: &'static str,
+    ) -> Result<ri64<MIN, MAX>, Error> {
+        #[cfg(not(debug_assertions))]
+        {
+            if !ri64::<MIN, MAX>::contains(self.val) {
+                return Err(ri64::<MIN, MAX>::error(what, self.val));
+            }
+            Ok(ri64 { val: self.val })
+        }
+        #[cfg(debug_assertions)]
+        {
+            if !ri64::<MIN, MAX>::contains(self.val) {
+                return Err(ri64::<MIN, MAX>::error(what, self.val));
+            }
+            Ok(ri64 {
+                val: self.val,
+                min: self.min.clamp(MIN as i64, MAX as i64),
+                max: self.max.clamp(MIN as i64, MAX as i64),
+            })
         }
     }
 }

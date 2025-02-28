@@ -7,13 +7,13 @@ use crate::{
     civil,
     duration::{Duration, SDuration},
     error::{err, Error, ErrorContext},
+    shared::util::itime::IOffset,
     span::Span,
     timestamp::Timestamp,
     tz::{AmbiguousOffset, AmbiguousTimestamp, AmbiguousZoned, TimeZone},
     util::{
         array_str::ArrayStr,
-        common,
-        rangeint::{composite, uncomposite, RFrom, RInto, TryRFrom},
+        rangeint::{self, Composite, RFrom, RInto, TryRFrom},
         t,
     },
     RoundMode, SignedDuration, SignedDurationRound, Unit,
@@ -446,7 +446,21 @@ impl Offset {
     /// ```
     #[inline]
     pub fn to_datetime(self, timestamp: Timestamp) -> civil::DateTime {
-        timestamp_to_datetime_zulu(timestamp, self)
+        let idt = timestamp.to_itimestamp().zip2(self.to_ioffset()).map(
+            #[allow(unused_mut)]
+            |(mut its, ioff)| {
+                // This is tricky, but if we have a minimal number of seconds,
+                // then the minimum possible nanosecond value is actually 0.
+                // So we clamp it in this case. (This encodes the invariant
+                // enforced by `Timestamp::new`.)
+                #[cfg(debug_assertions)]
+                if its.second == t::UnixSeconds::MIN_REPR {
+                    its.nanosecond = 0;
+                }
+                its.to_datetime(ioff)
+            },
+        );
+        civil::DateTime::from_idatetime(idt)
     }
 
     /// Converts the given civil datetime to a timestamp using this offset.
@@ -508,7 +522,16 @@ impl Offset {
         self,
         dt: civil::DateTime,
     ) -> Result<Timestamp, Error> {
-        datetime_zulu_to_timestamp(dt, self)
+        let its = dt
+            .to_idatetime()
+            .zip2(self.to_ioffset())
+            .map(|(idt, ioff)| idt.to_timestamp(ioff));
+        Timestamp::from_itimestamp(its).with_context(|| {
+            err!(
+                "converting {dt} with offset {offset} to timestamp overflowed",
+                offset = self,
+            )
+        })
     }
 
     /// Adds the given span of time to this offset.
@@ -1010,6 +1033,23 @@ impl Offset {
         seconds: impl RInto<t::SpanZoneOffset>,
     ) -> Offset {
         Offset { span: seconds.rinto() }
+    }
+
+    /*
+    #[inline]
+    pub(crate) fn from_ioffset(ioff: Composite<IOffset>) -> Offset {
+        let span = rangeint::uncomposite!(ioff, c => (c.second));
+        Offset { span: span.to_rint() }
+    }
+    */
+
+    #[inline]
+    pub(crate) fn to_ioffset(self) -> Composite<IOffset> {
+        rangeint::composite! {
+            (second = self.span) => {
+                IOffset { second }
+            }
+        }
     }
 
     #[inline]
@@ -2020,76 +2060,4 @@ impl OffsetConflict {
             }
         }
     }
-}
-
-fn timestamp_to_datetime_zulu(
-    timestamp: Timestamp,
-    offset: Offset,
-) -> civil::DateTime {
-    let c = composite! {
-        (
-            sec = timestamp.as_second_ranged(),
-            nano = timestamp.subsec_nanosecond_ranged(),
-            offset = offset.seconds_ranged(),
-        ) => {
-            // This is tricky, but if we have a minimal number of seconds,
-            // then the minimum possible nanosecond value is actually 0.
-            // So we clamp it in this case. (This encodes the invariant
-            // enforced by `Timestamp::new`.)
-            let nano =
-                if cfg!(debug_assertions) && sec == t::UnixSeconds::MIN_REPR {
-                    0
-                } else {
-                    nano
-                };
-            common::timestamp_to_datetime_zulu(sec, nano, offset)
-        }
-    };
-    let (y, mo, d, h, m, s, ns) = uncomposite!(
-        c,
-        c => (c.0, c.1, c.2, c.3, c.4, c.5, c.6),
-    );
-    let date = civil::Date::new_ranged_unchecked(
-        y.to_rint(),
-        mo.to_rint(),
-        d.to_rint(),
-    );
-    let time = civil::Time::new_ranged_unchecked(
-        h.to_rint(),
-        m.to_rint(),
-        s.to_rint(),
-        ns.to_rint(),
-    );
-    civil::DateTime::from_parts(date, time)
-}
-
-fn datetime_zulu_to_timestamp(
-    dt: civil::DateTime,
-    offset: Offset,
-) -> Result<Timestamp, Error> {
-    let c = composite! {
-        (
-            y = dt.date().year_ranged(),
-            mo = dt.date().month_ranged(),
-            d = dt.date().day_ranged(),
-            h = dt.time().hour_ranged(),
-            m = dt.time().minute_ranged(),
-            s = dt.time().second_ranged(),
-            ns = dt.time().subsec_nanosecond_ranged(),
-            off = offset.seconds_ranged(),
-        ) => {
-            common::datetime_zulu_to_timestamp(y, mo, d, h, m, s, ns, off)
-        }
-    };
-    let (second, nanosecond) = uncomposite!(c, c => (c.0, c.1));
-    let second: t::NoUnits = second.to_rint();
-    let nanosecond = nanosecond.to_rint();
-    let second = t::UnixSeconds::try_rfrom("unix-seconds", second)
-        .with_context(|| {
-            err!(
-                "converting {dt} with offset {offset} to timestamp \
-                 overflowed (second={second}, nanosecond={nanosecond})",
-            )
-        })?;
-    Ok(Timestamp::new_ranged_unchecked(second, nanosecond))
 }

@@ -10,10 +10,10 @@ use crate::{
         self,
         temporal::{DEFAULT_DATETIME_PARSER, DEFAULT_DATETIME_PRINTER},
     },
+    shared::util::itime::{self, IDate, IEpochDay},
     tz::TimeZone,
     util::{
-        common,
-        rangeint::{self, ri16, ri8, RFrom, RInto, TryRFrom},
+        rangeint::{self, ri16, ri8, Composite, RFrom, RInto, TryRFrom},
         t::{self, Constant, Day, Month, Sign, UnixEpochDay, Year, C},
     },
     RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
@@ -287,7 +287,7 @@ impl Date {
         if !Month::contains(month) {
             panic!("invalid month");
         }
-        if day > common::days_in_month(year, month) {
+        if day > itime::days_in_month(year, month) {
             panic!("invalid day");
         }
         let year = Year::new_unchecked(year);
@@ -2211,25 +2211,43 @@ impl Date {
 
     #[inline(always)]
     pub(crate) fn to_unix_epoch_day(self) -> UnixEpochDay {
-        let c = rangeint::composite! {
-            (year = self.year, month = self.month, day = self.day) => {
-                common::to_unix_epoch_day(year, month, day)
-            }
-        };
-        c.to_rint()
+        self.to_idate().map(|x| x.to_epoch_day().epoch_day).to_rint()
     }
 
     #[inline(always)]
     pub(crate) fn from_unix_epoch_day(epoch_day: UnixEpochDay) -> Date {
-        let c = rangeint::composite!((epoch_day) => {
-            common::from_unix_epoch_day(epoch_day)
+        let epoch_day = rangeint::composite!((epoch_day) => {
+            IEpochDay { epoch_day }
         });
+        Date::from_idate(epoch_day.map(|x| x.to_date()))
+    }
+
+    #[inline]
+    pub(crate) fn to_idate(&self) -> Composite<IDate> {
+        rangeint::composite! {
+            (year = self.year, month = self.month, day = self.day) => {
+                IDate { year, month, day }
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn from_idate(idate: Composite<IDate>) -> Date {
         let (year, month, day) =
-            rangeint::uncomposite!(c, c => (c.0, c.1, c.2));
+            rangeint::uncomposite!(idate, c => (c.year, c.month, c.day));
         Date {
             year: year.to_rint(),
             month: month.to_rint(),
             day: day.to_rint(),
+        }
+    }
+
+    #[inline]
+    pub(crate) const fn from_idate_const(idate: IDate) -> Date {
+        Date {
+            year: Year::new_unchecked(idate.year),
+            month: Month::new_unchecked(idate.month),
+            day: Day::new_unchecked(idate.day),
         }
     }
 }
@@ -3699,7 +3717,7 @@ fn day_of_year(year: Year, day: i16) -> Result<Date, Error> {
 /// A leap year is a year with 366 days. Typical years have 365 days.
 #[inline]
 fn is_leap_year(year: Year) -> bool {
-    common::is_leap_year(year.get())
+    itime::is_leap_year(year.get())
 }
 
 /// Saturates the given day in the month.
@@ -3719,7 +3737,7 @@ fn saturate_day_in_month(year: Year, month: Month, day: Day) -> Day {
 #[inline]
 fn days_in_month(year: Year, month: Month) -> Day {
     let c = rangeint::composite!((year, month) => {
-        common::days_in_month(year, month)
+        itime::days_in_month(year, month)
     });
     c.to_rint()
 }

@@ -674,10 +674,11 @@ impl TransitionWall {
         this_offset: i32,
     ) -> TransitionWall {
         const fn to_datetime(timestamp: i64, offset: i32) -> DateTime {
-            use crate::util::common::timestamp_to_datetime_zulu;
-            let (y, mo, d, h, m, s, n) =
-                timestamp_to_datetime_zulu(timestamp, 0, offset);
-            DateTime::constant(y, mo, d, h, m, s, n)
+            use crate::shared::util::itime::{IOffset, ITimestamp};
+            let its = ITimestamp { second: timestamp, nanosecond: 0 };
+            let ioff = IOffset { second: offset };
+            let idt = its.to_datetime(ioff);
+            DateTime::from_idatetime_const(idt)
         }
 
         if prev_offset == this_offset {

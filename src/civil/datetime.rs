@@ -10,9 +10,10 @@ use crate::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
     },
+    shared::util::itime::IDateTime,
     tz::TimeZone,
     util::{
-        rangeint::{RFrom, RInto},
+        rangeint::{Composite, RFrom, RInto},
         round::increment,
         t::{self, C},
     },
@@ -2384,6 +2385,27 @@ impl DateTime {
         let day_nano = self.date().to_unix_epoch_day();
         let time_nano = self.time().to_nanosecond();
         (t::NoUnits128::rfrom(day_nano) * t::NANOS_PER_CIVIL_DAY) + time_nano
+    }
+
+    #[inline]
+    pub(crate) fn to_idatetime(&self) -> Composite<IDateTime> {
+        let idate = self.date().to_idate();
+        let itime = self.time().to_itime();
+        idate.zip2(itime).map(|(date, time)| IDateTime { date, time })
+    }
+
+    #[inline]
+    pub(crate) fn from_idatetime(idt: Composite<IDateTime>) -> DateTime {
+        let (idate, itime) = idt.map(|idt| (idt.date, idt.time)).unzip2();
+        DateTime::from_parts(Date::from_idate(idate), Time::from_itime(itime))
+    }
+
+    #[inline]
+    pub(crate) const fn from_idatetime_const(idt: IDateTime) -> DateTime {
+        DateTime::from_parts(
+            Date::from_idate_const(idt.date),
+            Time::from_itime_const(idt.time),
+        )
     }
 }
 
