@@ -2521,7 +2521,6 @@ fn parse_iso_or_friendly(bytes: &[u8]) -> Result<SignedDuration, Error> {
 
 #[cfg(test)]
 mod tests {
-    use core::i64;
     use std::io::Cursor;
 
     use alloc::string::ToString;
