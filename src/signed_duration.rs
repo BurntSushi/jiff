@@ -2172,12 +2172,6 @@ impl core::iter::Sum for SignedDuration {
     }
 }
 
-impl<'a> core::iter::Sum<&'a mut Self> for SignedDuration {
-    fn sum<I: Iterator<Item = &'a mut Self>>(iter: I) -> Self {
-        iter.fold(Self::new(0, 0), |acc, d| acc + *d)
-    }
-}
-
 impl<'a> core::iter::Sum<&'a Self> for SignedDuration {
     fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
         iter.fold(Self::new(0, 0), |acc, d| acc + *d)
@@ -2801,17 +2795,15 @@ mod tests {
 
     #[test]
     fn using_sum() {
-        let mut signed_durations = [
+        let signed_durations = [
             SignedDuration::new(12, 600_000_000),
             SignedDuration::new(13, 400_000_000),
         ];
         let sum1: SignedDuration = signed_durations.iter().sum();
-        let sum2: SignedDuration = signed_durations.iter_mut().sum();
-        let sum3: SignedDuration = signed_durations.into_iter().sum();
+        let sum2: SignedDuration = signed_durations.into_iter().sum();
 
         assert_eq!(sum1, SignedDuration::new(26, 0));
         assert_eq!(sum2, SignedDuration::new(26, 0));
-        assert_eq!(sum3, SignedDuration::new(26, 0));
     }
 
     #[test]
