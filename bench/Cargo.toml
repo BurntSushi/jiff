@@ -21,7 +21,7 @@ path = "src/bench.rs"
 
 [dependencies]
 criterion = { version = "0.5.1", default-features = false }
-jiff = { path = ".." }
+jiff = { path = "..", features = ["tzdb-bundle-always"] }
 
 chrono = "0.4.38"
 chrono-tz = "0.9.0"
