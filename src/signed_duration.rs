@@ -2166,6 +2166,18 @@ impl core::ops::Mul<i32> for SignedDuration {
     }
 }
 
+impl core::iter::Sum for SignedDuration {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::new(0, 0), |acc, d| acc + d)
+    }
+}
+
+impl<'a> core::iter::Sum<&'a Self> for SignedDuration {
+    fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+        iter.fold(Self::new(0, 0), |acc, d| acc + *d)
+    }
+}
+
 impl core::ops::Mul<SignedDuration> for i32 {
     type Output = SignedDuration;
 
@@ -2778,5 +2790,29 @@ mod tests {
         let dur = humantime::parse_duration(&formatted).unwrap();
         let expected = std::time::Duration::try_from(sdur).unwrap();
         assert_eq!(dur, expected);
+    }
+
+    #[test]
+    fn using_sum() {
+        let signed_durations = [
+            SignedDuration::new(12, 600_000_000),
+            SignedDuration::new(13, 400_000_000),
+        ];
+        let sum1: SignedDuration = signed_durations.iter().sum();
+        let sum2: SignedDuration = signed_durations.into_iter().sum();
+
+        assert_eq!(sum1, SignedDuration::new(26, 0));
+        assert_eq!(sum2, SignedDuration::new(26, 0));
+    }
+
+    #[test]
+    #[should_panic]
+    fn using_sum_when_max_exceeds() {
+        [
+            SignedDuration::new(i64::MAX, 0),
+            SignedDuration::new(0, 1_000_000_000),
+        ]
+        .iter()
+        .sum::<SignedDuration>();
     }
 }
