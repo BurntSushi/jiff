@@ -448,7 +448,7 @@ impl TimeZone {
     #[inline]
     pub const fn fixed(offset: Offset) -> TimeZone {
         // Not doing `offset == Offset::UTC` because of `const`.
-        if offset.seconds_ranged().val == 0 {
+        if offset.seconds_ranged().get_unchecked() == 0 {
             return TimeZone::UTC;
         }
         let repr = Repr::fixed(offset);
@@ -2059,7 +2059,7 @@ mod repr {
         /// Creates a representation for a fixed offset time zone.
         #[inline]
         pub(super) const fn fixed(offset: Offset) -> Repr {
-            let seconds = offset.seconds_ranged().val;
+            let seconds = offset.seconds_ranged().get_unchecked();
             // OK because offset is in -93599..=93599.
             let shifted = unwrap!(
                 seconds.checked_shl(4),
