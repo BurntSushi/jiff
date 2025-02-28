@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[cfg(feature = "alloc")]
-use crate::tz::posix::ReasonablePosixTimeZone;
+use crate::tz::posix::PosixTimeZone;
 
 use self::repr::Repr;
 
@@ -496,16 +496,14 @@ impl TimeZone {
     /// ```
     #[cfg(feature = "alloc")]
     pub fn posix(posix_tz_string: &str) -> Result<TimeZone, Error> {
-        let posix_tz = ReasonablePosixTimeZone::parse(posix_tz_string)?;
-        Ok(TimeZone::from_reasonable_posix_tz(posix_tz))
+        let posix_tz = PosixTimeZone::parse(posix_tz_string)?;
+        Ok(TimeZone::from_posix_tz(posix_tz))
     }
 
     /// Creates a time zone from a POSIX tz. Expose so that other parts of Jiff
     /// can create a `TimeZone` from a POSIX tz. (Kinda sloppy to be honest.)
     #[cfg(feature = "alloc")]
-    pub(crate) fn from_reasonable_posix_tz(
-        posix: ReasonablePosixTimeZone,
-    ) -> TimeZone {
+    pub(crate) fn from_posix_tz(posix: PosixTimeZone) -> TimeZone {
         let repr = Repr::arc_posix(Arc::new(posix));
         TimeZone { repr }
     }
@@ -705,7 +703,7 @@ impl TimeZone {
     /// representation of the time zone is a POSIX time zone.
     #[cfg(feature = "alloc")]
     #[inline]
-    pub(crate) fn posix_tz(&self) -> Option<&ReasonablePosixTimeZone> {
+    pub(crate) fn posix_tz(&self) -> Option<&PosixTimeZone> {
         repr::each! {
             &self.repr,
             UTC => None,
@@ -1940,7 +1938,7 @@ mod repr {
     };
     #[cfg(feature = "alloc")]
     use crate::{
-        tz::{posix::ReasonablePosixTimeZone, tzif::TzifOwned},
+        tz::{posix::PosixTimeZone, tzif::TzifOwned},
         util::sync::Arc,
     };
 
@@ -2114,13 +2112,8 @@ mod repr {
         /// Creates a representation for a POSIX time zone.
         #[cfg(feature = "alloc")]
         #[inline]
-        pub(super) fn arc_posix(
-            posix_tz: Arc<ReasonablePosixTimeZone>,
-        ) -> Repr {
-            assert!(
-                core::mem::align_of::<ReasonablePosixTimeZone>()
-                    >= Repr::ALIGN
-            );
+        pub(super) fn arc_posix(posix_tz: Arc<PosixTimeZone>) -> Repr {
+            assert!(core::mem::align_of::<PosixTimeZone>() >= Repr::ALIGN);
             let posix_tz = Arc::into_raw(posix_tz).cast::<u8>();
             assert!(posix_tz.addr() % 4 == 0);
             let ptr = posix_tz.map_addr(|addr| addr | Repr::ARC_POSIX);
@@ -2197,16 +2190,14 @@ mod repr {
         /// Callers must ensure that the pointer tag is `ARC_POSIX`.
         #[cfg(feature = "alloc")]
         #[inline]
-        pub(super) unsafe fn get_arc_posix<'a>(
-            &'a self,
-        ) -> &'a ReasonablePosixTimeZone {
+        pub(super) unsafe fn get_arc_posix<'a>(&'a self) -> &'a PosixTimeZone {
             let ptr = self.ptr.map_addr(|addr| addr & !Repr::BITS);
             // SAFETY: Getting a `ARC_POSIX` tag is only possible when
             // `self.ptr` was constructed from a valid and aligned (to at least
-            // 4 bytes) `Arc<ReasonablePosixTimeZone>`. We've removed the tag
+            // 4 bytes) `Arc<PosixTimeZone>`. We've removed the tag
             // bits above, so we must now have the original pointer.
             let arc = ManuallyDrop::new(unsafe {
-                Arc::from_raw(ptr.cast::<ReasonablePosixTimeZone>())
+                Arc::from_raw(ptr.cast::<PosixTimeZone>())
             });
             // SAFETY: The lifetime of the pointer returned is always
             // valid as long as the strong count on `arc` is at least
@@ -2306,12 +2297,12 @@ mod repr {
                     let ptr = self.ptr.map_addr(|addr| addr & !Repr::BITS);
                     // SAFETY: Getting a `ARC_POSIX` tag is only possible when
                     // `self.ptr` was constructed from a valid and aligned (to
-                    // at least 4 bytes) `Arc<ReasonablePosixTimeZone>`. We've
+                    // at least 4 bytes) `Arc<PosixTimeZone>`. We've
                     // removed the tag bits above, so we must now have the
                     // original pointer.
                     unsafe {
                         Arc::increment_strong_count(
-                            ptr.cast::<ReasonablePosixTimeZone>(),
+                            ptr.cast::<PosixTimeZone>(),
                         );
                     }
                     Repr { ptr: self.ptr }
@@ -2356,12 +2347,12 @@ mod repr {
                     let ptr = self.ptr.map_addr(|addr| addr & !Repr::BITS);
                     // SAFETY: Getting a `ARC_POSIX` tag is only possible when
                     // `self.ptr` was constructed from a valid and aligned (to
-                    // at least 4 bytes) `Arc<ReasonablePosixTimeZone>`. We've
+                    // at least 4 bytes) `Arc<PosixTimeZone>`. We've
                     // removed the tag bits above, so we must now have the
                     // original pointer.
                     unsafe {
                         Arc::decrement_strong_count(
-                            ptr.cast::<ReasonablePosixTimeZone>(),
+                            ptr.cast::<PosixTimeZone>(),
                         );
                     }
                 }

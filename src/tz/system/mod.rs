@@ -195,23 +195,9 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
                 .to_string()
         }
         Ok(PosixTzEnv::Implementation(string)) => string.to_string(),
-        Ok(PosixTzEnv::Rule(tz)) => match tz.reasonable() {
-            Ok(reasonable_posix_tz) => {
-                return Ok(Some(TimeZone::from_reasonable_posix_tz(
-                    reasonable_posix_tz,
-                )));
-            }
-            Err(_unreasonable_posix_tz) => {
-                warn!(
-                    "parsed {tzenv:?} as POSIX TZ transition \
-                     {_unreasonable_posix_tz}, but Jiff considers \
-                     it unreasonable since it specifies DST but \
-                     without a rule \
-                     (therefore ignoring TZ environment variable)",
-                );
-                return Ok(None);
-            }
-        },
+        Ok(PosixTzEnv::Rule(tz)) => {
+            return Ok(Some(TimeZone::from_posix_tz(tz)))
+        }
     };
     // At this point, TZ is set to something that is definitively not a
     // POSIX TZ transition string. Some possible values at this point are:

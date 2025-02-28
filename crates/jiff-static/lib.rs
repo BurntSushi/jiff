@@ -321,13 +321,7 @@ impl PosixTimeZone<String> {
 impl PosixDst<String> {
     fn quote(&self) -> proc_macro2::TokenStream {
         let PosixDst { ref abbrev, offset, ref rule } = *self;
-        let rule = rule
-            .as_ref()
-            .map(|r| {
-                let r = r.quote();
-                quote!(Some(#r))
-            })
-            .unwrap_or_else(|| quote!(None));
+        let rule = rule.quote();
         quote! {
             jiff::shared::PosixDst {
                 abbrev: #abbrev,

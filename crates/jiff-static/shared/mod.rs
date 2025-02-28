@@ -135,7 +135,7 @@ pub struct PosixTimeZone<ABBREV> {
 pub struct PosixDst<ABBREV> {
     pub abbrev: ABBREV,
     pub offset: i32,
-    pub rule: Option<PosixRule>,
+    pub rule: PosixRule,
 }
 
 #[derive(Debug, Eq, PartialEq)]

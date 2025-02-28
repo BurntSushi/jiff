@@ -132,20 +132,28 @@ impl<'s> Parser<'s> {
         let abbrev = self
             .parse_abbreviation()
             .map_err(|e| err!("failed to parse DST abbreviation: {e}"))?;
+        if self.is_done() {
+            return Err(err!(
+                "found DST abbreviation `{abbrev}`, but no transition \
+                 rule (this is technically allowed by POSIX, but has \
+                 unspecified behavior)",
+            ));
+        }
         // This is the default: one hour ahead of standard time. We may
         // override this if the DST portion specifies an offset. (But it
         // usually doesn't.)
-        let offset = std_offset + 3600;
-        let mut dst = PosixDst { abbrev, offset, rule: None };
-        if self.is_done() {
-            return Ok(dst);
-        }
+        let mut offset = std_offset + 3600;
         if self.byte() != b',' {
-            dst.offset = self
+            offset = self
                 .parse_posix_offset()
                 .map_err(|e| err!("failed to parse DST offset: {e}"))?;
             if self.is_done() {
-                return Ok(dst);
+                return Err(err!(
+                    "found DST abbreviation `{abbrev}` and offset \
+                     `{offset}s`, but no transition rule (this is \
+                     technically allowed by POSIX, but has \
+                     unspecified behavior)",
+                ));
             }
         }
         if self.byte() != b',' {
@@ -161,8 +169,8 @@ impl<'s> Parser<'s> {
                  found end of string after a trailing ','",
             ));
         }
-        dst.rule = Some(self.parse_rule()?);
-        Ok(dst)
+        let rule = self.parse_rule()?;
+        Ok(PosixDst { abbrev, offset, rule })
     }
 
     /// Parse a time zone abbreviation.
@@ -987,7 +995,7 @@ mod tests {
                 dst: Some(PosixDst {
                     abbrev: "NZDT".into(),
                     offset: 13 * 60 * 60,
-                    rule: Some(PosixRule {
+                    rule: PosixRule {
                         start: PosixDayTime {
                             date: PosixDay::JulianOne(60),
                             time: 2 * 60 * 60,
@@ -996,7 +1004,7 @@ mod tests {
                             date: PosixDay::JulianOne(300),
                             time: 2 * 60 * 60,
                         },
-                    }),
+                    },
                 }),
             },
         );
@@ -1016,7 +1024,7 @@ mod tests {
                 dst: Some(PosixDst {
                     abbrev: "NZDT".into(),
                     offset: 13 * 60 * 60,
-                    rule: Some(PosixRule {
+                    rule: PosixRule {
                         start: PosixDayTime {
                             date: PosixDay::WeekdayOfMonth {
                                 month: 9,
@@ -1033,7 +1041,7 @@ mod tests {
                             },
                             time: 3 * 60 * 60,
                         },
-                    })
+                    },
                 }),
             },
         );
@@ -1047,7 +1055,7 @@ mod tests {
                 dst: Some(PosixDst {
                     abbrev: "NZDT".into(),
                     offset: 13 * 60 * 60,
-                    rule: Some(PosixRule {
+                    rule: PosixRule {
                         start: PosixDayTime {
                             date: PosixDay::WeekdayOfMonth {
                                 month: 9,
@@ -1064,7 +1072,7 @@ mod tests {
                             },
                             time: 3 * 60 * 60,
                         },
-                    })
+                    },
                 }),
             },
         );
@@ -1078,7 +1086,7 @@ mod tests {
                 dst: Some(PosixDst {
                     abbrev: "NZDT".into(),
                     offset: 13 * 60 * 60,
-                    rule: Some(PosixRule {
+                    rule: PosixRule {
                         start: PosixDayTime {
                             date: PosixDay::JulianOne(60),
                             time: 2 * 60 * 60,
@@ -1087,7 +1095,7 @@ mod tests {
                             date: PosixDay::JulianOne(300),
                             time: 2 * 60 * 60,
                         },
-                    }),
+                    },
                 }),
             },
         );
@@ -1101,7 +1109,7 @@ mod tests {
                 dst: Some(PosixDst {
                     abbrev: "NZDT".into(),
                     offset: 13 * 60 * 60,
-                    rule: Some(PosixRule {
+                    rule: PosixRule {
                         start: PosixDayTime {
                             date: PosixDay::JulianOne(60),
                             time: 2 * 60 * 60,
@@ -1110,7 +1118,7 @@ mod tests {
                             date: PosixDay::JulianOne(300),
                             time: 2 * 60 * 60,
                         },
-                    }),
+                    },
                 }),
             },
         );
@@ -1124,7 +1132,7 @@ mod tests {
             PosixDst {
                 abbrev: "NZDT".into(),
                 offset: 13 * 60 * 60,
-                rule: Some(PosixRule {
+                rule: PosixRule {
                     start: PosixDayTime {
                         date: PosixDay::WeekdayOfMonth {
                             month: 9,
@@ -1141,7 +1149,7 @@ mod tests {
                         },
                         time: 3 * 60 * 60,
                     },
-                }),
+                },
             },
         );
 
@@ -1151,7 +1159,7 @@ mod tests {
             PosixDst {
                 abbrev: "NZDT".into(),
                 offset: 13 * 60 * 60,
-                rule: Some(PosixRule {
+                rule: PosixRule {
                     start: PosixDayTime {
                         date: PosixDay::JulianOne(60),
                         time: 2 * 60 * 60,
@@ -1160,7 +1168,7 @@ mod tests {
                         date: PosixDay::JulianOne(300),
                         time: 2 * 60 * 60,
                     },
-                }),
+                },
             },
         );
 
@@ -1170,7 +1178,7 @@ mod tests {
             PosixDst {
                 abbrev: "NZDT".into(),
                 offset: 7 * 60 * 60,
-                rule: Some(PosixRule {
+                rule: PosixRule {
                     start: PosixDayTime {
                         date: PosixDay::JulianOne(60),
                         time: 2 * 60 * 60,
@@ -1179,7 +1187,7 @@ mod tests {
                         date: PosixDay::JulianOne(300),
                         time: 2 * 60 * 60,
                     },
-                }),
+                },
             },
         );
 
@@ -1189,7 +1197,7 @@ mod tests {
             PosixDst {
                 abbrev: "NZDT".into(),
                 offset: -7 * 60 * 60,
-                rule: Some(PosixRule {
+                rule: PosixRule {
                     start: PosixDayTime {
                         date: PosixDay::JulianOne(60),
                         time: 2 * 60 * 60,
@@ -1198,7 +1206,7 @@ mod tests {
                         date: PosixDay::JulianOne(300),
                         time: 2 * 60 * 60,
                     },
-                }),
+                },
             },
         );
 
@@ -1208,7 +1216,7 @@ mod tests {
             PosixDst {
                 abbrev: "NZDT".into(),
                 offset: -7 * 60 * 60,
-                rule: Some(PosixRule {
+                rule: PosixRule {
                     start: PosixDayTime {
                         date: PosixDay::JulianOne(60),
                         time: 2 * 60 * 60,
@@ -1217,7 +1225,7 @@ mod tests {
                         date: PosixDay::JulianOne(300),
                         time: 2 * 60 * 60,
                     },
-                }),
+                },
             },
         );
 

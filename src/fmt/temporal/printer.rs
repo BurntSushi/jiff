@@ -163,17 +163,20 @@ impl DateTimePrinter {
         if let Ok(offset) = tz.to_fixed_offset() {
             return self.print_offset_full_precision(&offset, wtr);
         }
-        // `ReasonablePosixTimeZone` is currently only available when the
-        // `alloc` feature is enabled. (The type itself is compatible with
-        // core-only environments, but is effectively disabled because it
-        // greatly bloats the size of `TimeZone` and thus `Zoned` since there's
-        // no way to easily introduce indirection in core-only environments.)
+        // We get this on `alloc` because we format the POSIX time zone into a
+        // `String` first. See the note below.
+        //
+        // This is generally okay because there is no current (2025-02-28) way
+        // to create a `TimeZone` that is *only* a POSIX time zone in core-only
+        // environments. (All you can do is create a TZif time zone, which may
+        // contain a POSIX time zone, but `tz.posix_tz()` would still return
+        // `None` in that case.)
         #[cfg(feature = "alloc")]
         {
             if let Some(posix_tz) = tz.posix_tz() {
                 // This is pretty unfortunate, but at time of writing, I
                 // didn't see an easy way to make the `Display` impl for
-                // `ReasonablePosixTimeZone` automatically work with
+                // `PosixTimeZone` automatically work with
                 // `jiff::fmt::Write` without allocating a new string. As
                 // far as I can see, I either have to duplicate the code or
                 // make it generic in some way. I judged neither to be worth
