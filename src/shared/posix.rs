@@ -143,14 +143,18 @@ impl<'s> Parser<'s> {
         let abbrev = self
             .parse_abbreviation()
             .map_err(|e| err!("failed to parse DST abbreviation: {e}"))?;
+        if self.is_done() {
+            return Err(err!(
+                "found DST abbreviation `{abbrev}`, but no transition \
+                 rule (this is technically allowed by POSIX, but has \
+                 unspecified behavior)",
+            ));
+        }
         // This is the default: one hour ahead of standard time. We may
         // override this if the DST portion specifies an offset. (But it
         // usually doesn't.)
         let offset = std_offset + 3600;
         let mut dst = PosixDst { abbrev, offset, rule: None };
-        if self.is_done() {
-            return Ok(dst);
-        }
         if self.byte() != b',' {
             dst.offset = self
                 .parse_posix_offset()

@@ -161,8 +161,8 @@ pub(crate) fn get_force(db: &TimeZoneDatabase) -> Result<TimeZone, Error> {
 ///
 /// Basically, `TZ` is usually just an IANA Time Zone Database name like
 /// `TZ=America/New_York` or `TZ=UTC`. But it can also be a POSIX time zone
-/// transition string like `TZ=EST5EDT` or it can be a file path (absolute
-/// or relative) to a TZif file.
+/// transition string like `TZ=EST5EDTM3.2.0,M11.1.0` or it can be a file path
+/// (absolute or relative) to a TZif file.
 ///
 /// We try very hard to extract a time zone name from `TZ` and use that to look
 /// it up via `TimeZoneDatabase`. But we will fall back to unnamed TZif
@@ -218,6 +218,8 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
     //
     //   TZ=America/New_York
     //   TZ=:America/New_York
+    //   TZ=EST5EDT
+    //   TZ=:EST5EDT
     //   TZ=/usr/share/zoneinfo/America/New_York
     //   TZ=:/usr/share/zoneinfo/America/New_York
     //   TZ=../zoneinfo/America/New_York
