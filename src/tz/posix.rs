@@ -242,23 +242,16 @@ impl PosixTimeZone {
     }
 
     /// Converts from the shared-but-internal API for use in proc macros.
-    ///
-    /// This is not `const` since it accepts an owned `String` as a time zone
-    /// abbreviation. This is used when parsing POSIX time zones at runtime.
     #[cfg(feature = "alloc")]
     pub(crate) fn from_shared_owned(
-        sh: &shared::PosixTimeZone<alloc::string::String>,
+        sh: &shared::PosixTimeZone<Abbreviation>,
     ) -> PosixTimeZone {
-        let std_abbrev = Abbreviation::new(&sh.std_abbrev)
-            .expect("expected short enough std tz abbreviation");
+        let std_abbrev = sh.std_abbrev;
         let std_offset = PosixOffset {
             offset: SpanZoneOffset::new(sh.std_offset)
                 .expect("expected std offset in range"),
         };
-        let dst = match sh.dst {
-            None => None,
-            Some(ref dst) => Some(PosixDst::from_shared_owned(dst)),
-        };
+        let dst = sh.dst.as_ref().map(PosixDst::from_shared_owned);
         PosixTimeZone { std_abbrev, std_offset, dst }
     }
 
@@ -626,15 +619,9 @@ struct PosixDst {
 
 impl PosixDst {
     /// Converts from the shared-but-internal API for use in proc macros.
-    ///
-    /// This is not `const` since it accepts an owned `String` as a time zone
-    /// abbreviation. This is used when parsing POSIX time zones at runtime.
     #[cfg(feature = "alloc")]
-    fn from_shared_owned(
-        sh: &shared::PosixDst<alloc::string::String>,
-    ) -> PosixDst {
-        let abbrev = Abbreviation::new(&sh.abbrev)
-            .expect("expected short enough dst tz abbreviation");
+    fn from_shared_owned(sh: &shared::PosixDst<Abbreviation>) -> PosixDst {
+        let abbrev = sh.abbrev;
         let offset = PosixOffset {
             offset: SpanZoneOffset::new(sh.offset)
                 .expect("expected dst offset in range"),

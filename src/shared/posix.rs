@@ -1,7 +1,10 @@
 use alloc::string::String;
 
 use super::{
-    util::escape::{Byte, Bytes},
+    util::{
+        array_str::Abbreviation,
+        escape::{Byte, Bytes},
+    },
     PosixDay, PosixDayTime, PosixDst, PosixRule, PosixTimeZone,
 };
 
@@ -22,10 +25,10 @@ impl core::fmt::Display for Error {
 }
 
 #[cfg(feature = "alloc")]
-impl PosixTimeZone<String> {
+impl PosixTimeZone<Abbreviation> {
     /// Parse a POSIX `TZ` environment variable, assuming it's a rule and not
     /// an implementation defined value, from the given bytes.
-    pub fn parse(bytes: &[u8]) -> Result<PosixTimeZone<String>, Error> {
+    pub fn parse(bytes: &[u8]) -> Result<PosixTimeZone<Abbreviation>, Error> {
         // We enable the IANA v3+ extensions here. (Namely, that the time
         // specification hour value has the range `-167..=167` instead of
         // `0..=24`.) Requiring strict POSIX rules doesn't seem necessary
@@ -41,7 +44,7 @@ impl PosixTimeZone<String> {
     /// is remaining.
     pub fn parse_prefix<'b>(
         bytes: &'b [u8],
-    ) -> Result<(PosixTimeZone<String>, &'b [u8]), Error> {
+    ) -> Result<(PosixTimeZone<Abbreviation>, &'b [u8]), Error> {
         let parser =
             Parser { ianav3plus: true, ..Parser::new(bytes.as_ref()) };
         parser.parse_prefix()
@@ -86,7 +89,7 @@ impl<'s> Parser<'s> {
     /// Parses a POSIX time zone from the current position of the parser and
     /// ensures that the entire TZ string corresponds to a single valid POSIX
     /// time zone.
-    fn parse(&self) -> Result<PosixTimeZone<String>, Error> {
+    fn parse(&self) -> Result<PosixTimeZone<Abbreviation>, Error> {
         let (time_zone, remaining) = self.parse_prefix()?;
         if !remaining.is_empty() {
             return Err(err!(
@@ -103,7 +106,7 @@ impl<'s> Parser<'s> {
     /// returns the remaining input.
     fn parse_prefix(
         &self,
-    ) -> Result<(PosixTimeZone<String>, &'s [u8]), Error> {
+    ) -> Result<(PosixTimeZone<Abbreviation>, &'s [u8]), Error> {
         let time_zone = self.parse_posix_time_zone()?;
         Ok((time_zone, self.remaining()))
     }
@@ -112,7 +115,9 @@ impl<'s> Parser<'s> {
     ///
     /// Upon success, the parser will be positioned immediately following the
     /// TZ string.
-    fn parse_posix_time_zone(&self) -> Result<PosixTimeZone<String>, Error> {
+    fn parse_posix_time_zone(
+        &self,
+    ) -> Result<PosixTimeZone<Abbreviation>, Error> {
         let std_abbrev = self
             .parse_abbreviation()
             .map_err(|e| err!("failed to parse standard abbreviation: {e}"))?;
@@ -139,7 +144,7 @@ impl<'s> Parser<'s> {
     fn parse_posix_dst(
         &self,
         std_offset: i32,
-    ) -> Result<PosixDst<String>, Error> {
+    ) -> Result<PosixDst<Abbreviation>, Error> {
         let abbrev = self
             .parse_abbreviation()
             .map_err(|e| err!("failed to parse DST abbreviation: {e}"))?;
@@ -196,7 +201,7 @@ impl<'s> Parser<'s> {
     /// The string returned is guaranteed to be no more than 30 bytes.
     /// (This restriction is somewhat arbitrary, but it's so we can put
     /// the abbreviation in a fixed capacity array.)
-    fn parse_abbreviation(&self) -> Result<String, Error> {
+    fn parse_abbreviation(&self) -> Result<Abbreviation, Error> {
         if self.byte() == b'<' {
             if !self.bump() {
                 return Err(err!(
@@ -222,18 +227,17 @@ impl<'s> Parser<'s> {
     /// The string returned is guaranteed to be no more than 30 bytes.
     /// (This restriction is somewhat arbitrary, but it's so we can put
     /// the abbreviation in a fixed capacity array.)
-    fn parse_unquoted_abbreviation(&self) -> Result<String, Error> {
-        const MAX_LEN: usize = 30;
-
+    fn parse_unquoted_abbreviation(&self) -> Result<Abbreviation, Error> {
         let start = self.pos();
         for i in 0.. {
             if !self.byte().is_ascii_alphabetic() {
                 break;
             }
-            if i >= MAX_LEN {
+            if i >= Abbreviation::capacity() {
                 return Err(err!(
-                    "expected abbreviation with at most {MAX_LEN} bytes, \
+                    "expected abbreviation with at most {} bytes, \
                          but found a longer abbreviation beginning with `{}`",
+                    Abbreviation::capacity(),
                     Bytes(&self.tz[start..i]),
                 ));
             }
@@ -263,7 +267,9 @@ impl<'s> Parser<'s> {
                 abbrev.len(),
             ));
         }
-        Ok(String::from(abbrev))
+        // OK because we verified above that the abbreviation
+        // does not exceed `Abbreviation::capacity`.
+        Ok(Abbreviation::new(abbrev).unwrap())
     }
 
     /// Parses a quoted time zone abbreviation.
@@ -277,9 +283,7 @@ impl<'s> Parser<'s> {
     /// The string returned is guaranteed to be no more than 30 bytes.
     /// (This restriction is somewhat arbitrary, but it's so we can put
     /// the abbreviation in a fixed capacity array.)
-    fn parse_quoted_abbreviation(&self) -> Result<String, Error> {
-        const MAX_LEN: usize = 30;
-
+    fn parse_quoted_abbreviation(&self) -> Result<Abbreviation, Error> {
         let start = self.pos();
         for i in 0.. {
             if !self.byte().is_ascii_alphanumeric()
@@ -288,10 +292,11 @@ impl<'s> Parser<'s> {
             {
                 break;
             }
-            if i >= MAX_LEN {
+            if i >= Abbreviation::capacity() {
                 return Err(err!(
-                    "expected abbreviation with at most {MAX_LEN} bytes, \
-                         but found a longer abbreviation beginning with `{}`",
+                    "expected abbreviation with at most {} bytes, \
+                     but found a longer abbreviation beginning with `{}`",
+                    Abbreviation::capacity(),
                     Bytes(&self.tz[start..i]),
                 ));
             }
@@ -336,7 +341,9 @@ impl<'s> Parser<'s> {
                 abbrev.len(),
             ));
         }
-        Ok(String::from(abbrev))
+        // OK because we verified above that the abbreviation
+        // does not exceed `Abbreviation::capacity`.
+        Ok(Abbreviation::new(abbrev).unwrap())
     }
 
     /// Parse a POSIX time offset.

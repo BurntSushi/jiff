@@ -83,24 +83,25 @@ this module is copied to `jiff-static`.
 
 pub type TzifOwned = Tzif<
     alloc::string::String,
+    self::util::array_str::Abbreviation,
     alloc::vec::Vec<TzifLocalTimeType>,
     alloc::vec::Vec<TzifTransition>,
 >;
 
 #[derive(Debug)]
-pub struct Tzif<STRING, TYPES, TRANS> {
-    pub fixed: TzifFixed<STRING>,
+pub struct Tzif<STRING, ABBREV, TYPES, TRANS> {
+    pub fixed: TzifFixed<STRING, ABBREV>,
     pub types: TYPES,
     pub transitions: TRANS,
 }
 
 #[derive(Debug)]
-pub struct TzifFixed<STRING> {
+pub struct TzifFixed<STRING, ABBREV> {
     pub name: Option<STRING>,
     pub version: u8,
     pub checksum: u32,
     pub designations: STRING,
-    pub posix_tz: Option<PosixTimeZone<STRING>>,
+    pub posix_tz: Option<PosixTimeZone<ABBREV>>,
 }
 
 #[derive(Debug)]
