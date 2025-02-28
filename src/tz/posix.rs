@@ -304,7 +304,7 @@ impl ReasonablePosixTimeZone {
         let dt = Offset::UTC.to_datetime(timestamp);
         self.dst_info_utc(dt.date().year_ranged())
             .filter(|dst_info| dst_info.in_dst(dt))
-            .map(|dst_info| dst_info.offset)
+            .map(|dst_info| dst_info.offset())
             .unwrap_or_else(|| self.std_offset())
     }
 
@@ -336,7 +336,7 @@ impl ReasonablePosixTimeZone {
                     dst_info.dst.abbrev.as_str(),
                 );
                 TimeZoneOffsetInfo {
-                    offset: dst_info.offset,
+                    offset: dst_info.offset(),
                     dst: Dst::Yes,
                     abbreviation,
                 }
@@ -369,7 +369,7 @@ impl ReasonablePosixTimeZone {
         let Some(dst_info) = self.dst_info_wall(year) else {
             return AmbiguousOffset::Unambiguous { offset: std_offset };
         };
-        let diff = dst_info.offset.duration_since(std_offset);
+        let diff = dst_info.offset().duration_since(std_offset);
         // When the difference between DST and standard is positive, that means
         // STD->DST results in a gap while DST->STD results in a fold. However,
         // when the difference is negative, that means STD->DST results in a
@@ -385,25 +385,25 @@ impl ReasonablePosixTimeZone {
         // cases handle the zero case correctly. But we write it out for
         // clarity.)
         if diff.as_secs() == 0 {
-            debug_assert_eq!(std_offset, dst_info.offset);
+            debug_assert_eq!(std_offset, dst_info.offset());
             AmbiguousOffset::Unambiguous { offset: std_offset }
         } else if diff.is_negative() {
             // For DST transitions that always move behind one hour, ambiguous
             // timestamps only occur when the given civil datetime falls in the
             // standard time range.
             if dst_info.in_dst(dt) {
-                AmbiguousOffset::Unambiguous { offset: dst_info.offset }
+                AmbiguousOffset::Unambiguous { offset: dst_info.offset() }
             } else {
                 let fold_start = dst_info.start.saturating_add(diff);
                 let gap_end = dst_info.end.saturating_sub(diff);
                 if fold_start <= dt && dt < dst_info.start {
                     AmbiguousOffset::Fold {
                         before: std_offset,
-                        after: dst_info.offset,
+                        after: dst_info.offset(),
                     }
                 } else if dst_info.end <= dt && dt < gap_end {
                     AmbiguousOffset::Gap {
-                        before: dst_info.offset,
+                        before: dst_info.offset(),
                         after: std_offset,
                     }
                 } else {
@@ -426,15 +426,15 @@ impl ReasonablePosixTimeZone {
                 if dst_info.start <= dt && dt < gap_end {
                     AmbiguousOffset::Gap {
                         before: std_offset,
-                        after: dst_info.offset,
+                        after: dst_info.offset(),
                     }
                 } else if fold_start <= dt && dt < dst_info.end {
                     AmbiguousOffset::Fold {
-                        before: dst_info.offset,
+                        before: dst_info.offset(),
                         after: std_offset,
                     }
                 } else {
-                    AmbiguousOffset::Unambiguous { offset: dst_info.offset }
+                    AmbiguousOffset::Unambiguous { offset: dst_info.offset() }
                 }
             }
         }
@@ -463,7 +463,7 @@ impl ReasonablePosixTimeZone {
         let timestamp = Offset::UTC.to_timestamp(prev).ok()?;
         let dt = Offset::UTC.to_datetime(timestamp);
         let (offset, abbrev, dst) = if dst_info.in_dst(dt) {
-            (dst_info.offset, dst_info.dst.abbrev.as_str(), Dst::Yes)
+            (dst_info.offset(), dst_info.dst.abbrev.as_str(), Dst::Yes)
         } else {
             (self.std_offset(), self.std_abbrev.as_str(), Dst::No)
         };
@@ -493,7 +493,7 @@ impl ReasonablePosixTimeZone {
         let timestamp = Offset::UTC.to_timestamp(next).ok()?;
         let dt = Offset::UTC.to_datetime(timestamp);
         let (offset, abbrev, dst) = if dst_info.in_dst(dt) {
-            (dst_info.offset, dst_info.dst.abbrev.as_str(), Dst::Yes)
+            (dst_info.offset(), dst_info.dst.abbrev.as_str(), Dst::Yes)
         } else {
             (self.std_offset(), self.std_abbrev.as_str(), Dst::No)
         };
@@ -520,7 +520,7 @@ impl ReasonablePosixTimeZone {
         // DST time ends with respect to DST time, so offset it by the DST
         // offset.
         let end = dst.rule.end.to_datetime(year, dst_offset);
-        Some(DstInfo { dst, offset: dst_offset, start, end })
+        Some(DstInfo { dst, start, end })
     }
 
     /// Returns the range in which DST occurs.
@@ -531,13 +531,12 @@ impl ReasonablePosixTimeZone {
     fn dst_info_wall(&self, year: impl RInto<Year>) -> Option<DstInfo<'_>> {
         let year = year.rinto();
         let dst = self.dst.as_ref()?;
-        let dst_offset = dst.offset.offset();
         // POSIX time zones express their DST transitions in terms of wall
         // clock time. Since this method specifically is returning wall
         // clock times, we don't want to offset our datetimes at all.
         let start = dst.rule.start.to_datetime(year, Offset::ZERO);
         let end = dst.rule.end.to_datetime(year, Offset::ZERO);
-        Some(DstInfo { dst, offset: dst_offset, start, end })
+        Some(DstInfo { dst, start, end })
     }
 
     /// Returns the DST transition rule. This panics if this time zone doesn't
@@ -569,12 +568,6 @@ impl core::fmt::Display for ReasonablePosixTimeZone {
 struct DstInfo<'a> {
     /// The DST transition rule that generated this info.
     dst: &'a ReasonablePosixDst,
-    /// The DST offset.
-    ///
-    /// This is the same as `ReasonablePosixDst::offset`, but accounts for
-    /// its default value (when it isn't given, 1 hour ahead of standard time)
-    /// and is converted to a Jiff data type that we can use in arithmetic.
-    offset: Offset,
     /// The start time (inclusive) that DST begins.
     ///
     /// Note that this may be greater than `end`. This tends to happen in the
@@ -613,6 +606,11 @@ impl<'a> DstInfo<'a> {
         } else {
             (self.end, self.start)
         }
+    }
+
+    /// Returns the DST offset.
+    fn offset(&self) -> Offset {
+        self.dst.offset.offset()
     }
 }
 
@@ -1279,7 +1277,6 @@ mod tests {
             // out here, and I didn't adopt snapshot testing until I had
             // written out these tests by hand. ¯\_(ツ)_/¯
             dst: tz.dst.as_ref().unwrap(),
-            offset: offset(-3),
             start: date(2024, 1, 1).at(1, 0, 0, 0),
             end: date(2024, 12, 31).at(23, 0, 0, 0),
         };
@@ -1288,7 +1285,6 @@ mod tests {
         let tz = reasonable_posix_time_zone("WART4WARST,J1/-4,J365/21");
         let dst_info = DstInfo {
             dst: tz.dst.as_ref().unwrap(),
-            offset: offset(-3),
             start: date(2024, 1, 1).at(0, 0, 0, 0),
             end: date(2024, 12, 31).at(23, 59, 59, 999_999_999),
         };
@@ -1297,7 +1293,6 @@ mod tests {
         let tz = reasonable_posix_time_zone("EST5EDT,M3.2.0,M11.1.0");
         let dst_info = DstInfo {
             dst: tz.dst.as_ref().unwrap(),
-            offset: offset(-4),
             start: date(2024, 3, 10).at(7, 0, 0, 0),
             end: date(2024, 11, 3).at(6, 0, 0, 0),
         };
