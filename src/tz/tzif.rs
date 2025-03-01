@@ -15,7 +15,7 @@ use alloc::{string::String, vec::Vec};
 
 use crate::{
     civil::DateTime,
-    error::Error,
+    error::{err, Error},
     shared,
     timestamp::Timestamp,
     tz::{
@@ -170,7 +170,7 @@ impl TzifOwned {
     ) -> Result<Self, Error> {
         let sh =
             shared::TzifOwned::parse(name, bytes).map_err(Error::shared)?;
-        let tzif = TzifOwned::from_shared_owned(&sh);
+        let tzif = TzifOwned::from_shared_owned(&sh)?;
         Ok(tzif)
     }
 
@@ -178,7 +178,9 @@ impl TzifOwned {
     ///
     /// This is not `const` since it accepts owned `String` and `Vec` values
     /// for variable length data inside `Tzif`.
-    pub(crate) fn from_shared_owned(sh: &shared::TzifOwned) -> TzifOwned {
+    pub(crate) fn from_shared_owned(
+        sh: &shared::TzifOwned,
+    ) -> Result<TzifOwned, Error> {
         let name = sh.fixed.name.clone();
         let version = sh.fixed.version;
         let checksum = sh.fixed.checksum;
@@ -194,9 +196,7 @@ impl TzifOwned {
             let this_offset = sh.types[usize::from(this.type_index)].offset;
             transitions.push(this.to_jiff(prev_offset, this_offset));
         }
-        // TODO: We need to add back the POSIX time zone consistency check,
-        // and make this routine falllible.
-        Tzif {
+        let tzif = Tzif {
             name,
             version,
             checksum,
@@ -204,7 +204,65 @@ impl TzifOwned {
             posix_tz,
             types,
             transitions,
+        };
+        tzif.verify_posix_time_zone_consistency()?;
+        Ok(tzif)
+    }
+
+    /// Validates that the POSIX TZ string we parsed (if one exists) is
+    /// consistent with the last transition in this time zone. This is
+    /// required by RFC 8536.
+    ///
+    /// RFC 8536 says, "If the string is nonempty and one or more
+    /// transitions appear in the version 2+ data, the string MUST be
+    /// consistent with the last version 2+ transition."
+    fn verify_posix_time_zone_consistency(&self) -> Result<(), Error> {
+        // We need to be a little careful, since we always have at least one
+        // transition (accounting for the dummy `Timestamp::MIN` transition).
+        // So if we only have 1 transition and a POSIX TZ string, then we
+        // should not validate it since it's equivalent to the case of 0
+        // transitions and a POSIX TZ string.
+        if self.transitions.len() <= 1 {
+            return Ok(());
         }
+        let Some(ref tz) = self.posix_tz else {
+            return Ok(());
+        };
+        let last = self.transitions.last().expect("last transition");
+        let typ = self.local_time_type(last);
+        let info = tz.to_offset_info(last.timestamp);
+        if info.offset() != typ.offset {
+            return Err(err!(
+                "expected last transition to have DST offset \
+                 of {expected_offset}, but got {got_offset} \
+                 according to POSIX TZ string {tz}",
+                expected_offset = typ.offset,
+                got_offset = info.offset(),
+                tz = tz,
+            ));
+        }
+        if info.dst() != typ.is_dst {
+            return Err(err!(
+                "expected last transition to have is_dst={expected_dst}, \
+                 but got is_dst={got_dst} according to POSIX TZ \
+                 string {tz}",
+                expected_dst = typ.is_dst.is_dst(),
+                got_dst = info.dst().is_dst(),
+                tz = tz,
+            ));
+        }
+        if info.abbreviation() != self.designation(&typ) {
+            return Err(err!(
+                "expected last transition to have \
+                 designation={expected_abbrev}, \
+                 but got designation={got_abbrev} according to POSIX TZ \
+                 string {tz}",
+                expected_abbrev = self.designation(&typ),
+                got_abbrev = info.abbreviation(),
+                tz = tz,
+            ));
+        }
+        Ok(())
     }
 }
 
