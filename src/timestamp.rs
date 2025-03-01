@@ -2354,6 +2354,22 @@ impl Timestamp {
     }
 
     #[inline]
+    pub(crate) const fn from_itimestamp_const(its: ITimestamp) -> Timestamp {
+        Timestamp {
+            second: UnixSeconds::new_unchecked(its.second),
+            nanosecond: FractionalNanosecond::new_unchecked(its.nanosecond),
+        }
+    }
+
+    #[inline]
+    pub(crate) const fn to_itimestamp_const(&self) -> ITimestamp {
+        ITimestamp {
+            second: self.second.get_unchecked(),
+            nanosecond: self.nanosecond.get_unchecked(),
+        }
+    }
+
+    #[inline]
     pub(crate) fn as_second_ranged(self) -> UnixSeconds {
         self.second
     }

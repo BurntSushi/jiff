@@ -137,6 +137,12 @@ impl<const N: usize> core::fmt::Write for ArrayStr<N> {
     }
 }
 
+impl<const N: usize> AsRef<str> for ArrayStr<N> {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 /// A self-imposed limit on the size of a time zone abbreviation, in bytes.
 ///
 /// POSIX says this:

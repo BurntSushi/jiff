@@ -96,14 +96,14 @@ pub type TzifOwned = Tzif<
     alloc::vec::Vec<TzifTransition>,
 >;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Tzif<STRING, ABBREV, TYPES, TRANS> {
     pub fixed: TzifFixed<STRING, ABBREV>,
     pub types: TYPES,
     pub transitions: TRANS,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TzifFixed<STRING, ABBREV> {
     pub name: Option<STRING>,
     pub version: u8,
@@ -114,8 +114,8 @@ pub struct TzifFixed<STRING, ABBREV> {
 
 // only-jiff-start
 impl TzifFixed<&'static str, &'static str> {
-    pub const fn to_jiff(
-        &self,
+    pub const fn into_jiff(
+        self,
         types: &'static [crate::tz::tzif::LocalTimeType],
         trans: &'static [crate::tz::tzif::Transition],
     ) -> crate::tz::tzif::TzifStatic {
@@ -124,7 +124,7 @@ impl TzifFixed<&'static str, &'static str> {
 }
 // only-jiff-end
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TzifLocalTimeType {
     pub offset: i32,
     pub is_dst: bool,
@@ -134,20 +134,20 @@ pub struct TzifLocalTimeType {
 
 // only-jiff-start
 impl TzifLocalTimeType {
-    pub const fn to_jiff(&self) -> crate::tz::tzif::LocalTimeType {
+    pub const fn into_jiff(self) -> crate::tz::tzif::LocalTimeType {
         crate::tz::tzif::LocalTimeType::from_shared(self)
     }
 }
 // only-jiff-end
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum TzifIndicator {
     LocalWall,
     LocalStandard,
     UTStandard,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TzifTransition {
     pub timestamp: i64,
     pub type_index: u8,
@@ -155,8 +155,8 @@ pub struct TzifTransition {
 
 // only-jiff-start
 impl TzifTransition {
-    pub const fn to_jiff(
-        &self,
+    pub const fn into_jiff(
+        self,
         prev_offset: i32,
         this_offset: i32,
     ) -> crate::tz::tzif::Transition {
@@ -169,33 +169,33 @@ impl TzifTransition {
 }
 // only-jiff-end
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PosixTimeZone<ABBREV> {
     pub std_abbrev: ABBREV,
-    pub std_offset: i32,
+    pub std_offset: PosixOffset,
     pub dst: Option<PosixDst<ABBREV>>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PosixDst<ABBREV> {
     pub abbrev: ABBREV,
-    pub offset: i32,
+    pub offset: PosixOffset,
     pub rule: PosixRule,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PosixRule {
     pub start: PosixDayTime,
     pub end: PosixDayTime,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PosixDayTime {
     pub date: PosixDay,
-    pub time: i32,
+    pub time: PosixTime,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PosixDay {
     /// Julian day in a year, no counting for leap days.
     ///
@@ -227,9 +227,19 @@ pub enum PosixDay {
     },
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PosixTime {
+    pub second: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PosixOffset {
+    pub second: i32,
+}
+
 // only-jiff-start
 impl PosixTimeZone<&'static str> {
-    pub const fn to_jiff(&self) -> crate::tz::posix::PosixTimeZone {
+    pub const fn into_jiff(self) -> crate::tz::posix::PosixTimeZoneStatic {
         crate::tz::posix::PosixTimeZone::from_shared_const(self)
     }
 }
@@ -238,7 +248,6 @@ impl PosixTimeZone<&'static str> {
 // Does not require `alloc`, but is only used when `alloc` is enabled.
 #[cfg(feature = "alloc")]
 pub(crate) mod crc32;
-#[cfg(feature = "alloc")]
 pub(crate) mod posix;
 #[cfg(feature = "alloc")]
 pub(crate) mod tzif;

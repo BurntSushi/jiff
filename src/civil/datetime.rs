@@ -2401,6 +2401,14 @@ impl DateTime {
     }
 
     #[inline]
+    pub(crate) const fn to_idatetime_const(&self) -> IDateTime {
+        IDateTime {
+            date: self.date.to_idate_const(),
+            time: self.time.to_itime_const(),
+        }
+    }
+
+    #[inline]
     pub(crate) const fn from_idatetime_const(idt: IDateTime) -> DateTime {
         DateTime::from_parts(
             Date::from_idate_const(idt.date),

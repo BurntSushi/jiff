@@ -46,8 +46,8 @@ use quote::quote;
 
 use self::shared::{
     util::array_str::Abbreviation, PosixDay, PosixDayTime, PosixDst,
-    PosixRule, PosixTimeZone, TzifFixed, TzifIndicator, TzifLocalTimeType,
-    TzifOwned, TzifTransition,
+    PosixOffset, PosixRule, PosixTime, PosixTimeZone, TzifFixed,
+    TzifIndicator, TzifLocalTimeType, TzifOwned, TzifTransition,
 };
 
 /// A bundle of code copied from `src/shared`.
@@ -189,7 +189,7 @@ impl TzifOwned {
             {
                 static TZ: jiff::tz::TimeZone =
                     jiff::tz::TimeZone::__internal_from_tzif(
-                        &#fixed.to_jiff(&[#(#types),*], &[#(#transitions),*])
+                        &#fixed.into_jiff(&[#(#types),*], &[#(#transitions),*])
                     );
                 // SAFETY: Since we are guaranteed that the `TimeZone` is
                 // constructed above as a static TZif time zone, it follows
@@ -263,7 +263,7 @@ impl TzifLocalTimeType {
                 is_dst: #is_dst,
                 designation: (#desig_start, #desig_end),
                 indicator: #indicator,
-            }.to_jiff()
+            }.into_jiff()
         }
     }
 }
@@ -295,15 +295,16 @@ impl TzifTransition {
             jiff::shared::TzifTransition {
                 timestamp: #timestamp,
                 type_index: #type_index,
-            }.to_jiff(#prev_offset, #this_offset)
+            }.into_jiff(#prev_offset, #this_offset)
         }
     }
 }
 
 impl PosixTimeZone<Abbreviation> {
     fn quote(&self) -> proc_macro2::TokenStream {
-        let PosixTimeZone { ref std_abbrev, std_offset, ref dst } = *self;
+        let PosixTimeZone { ref std_abbrev, ref std_offset, ref dst } = *self;
         let std_abbrev = std_abbrev.as_str();
+        let std_offset = std_offset.quote();
         let dst = dst
             .as_ref()
             .map(|dst| {
@@ -323,8 +324,9 @@ impl PosixTimeZone<Abbreviation> {
 
 impl PosixDst<Abbreviation> {
     fn quote(&self) -> proc_macro2::TokenStream {
-        let PosixDst { ref abbrev, offset, ref rule } = *self;
+        let PosixDst { ref abbrev, ref offset, ref rule } = *self;
         let abbrev = abbrev.as_str();
+        let offset = offset.quote();
         let rule = rule.quote();
         quote! {
             jiff::shared::PosixDst {
@@ -348,8 +350,9 @@ impl PosixRule {
 
 impl PosixDayTime {
     fn quote(&self) -> proc_macro2::TokenStream {
-        let PosixDayTime { ref date, time } = *self;
+        let PosixDayTime { ref date, ref time } = *self;
         let date = date.quote();
+        let time = time.quote();
         quote! {
             jiff::shared::PosixDayTime { date: #date, time: #time }
         }
@@ -372,6 +375,24 @@ impl PosixDay {
                     weekday: #weekday,
                 }
             },
+        }
+    }
+}
+
+impl PosixTime {
+    fn quote(&self) -> proc_macro2::TokenStream {
+        let PosixTime { second } = *self;
+        quote! {
+            jiff::shared::PosixTime { second: #second }
+        }
+    }
+}
+
+impl PosixOffset {
+    fn quote(&self) -> proc_macro2::TokenStream {
+        let PosixOffset { second } = *self;
+        quote! {
+            jiff::shared::PosixOffset { second: #second }
         }
     }
 }

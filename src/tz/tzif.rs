@@ -17,6 +17,7 @@ use crate::{
     civil::DateTime,
     error::{err, Error},
     shared,
+    shared::util::array_str::Abbreviation,
     timestamp::Timestamp,
     tz::{
         posix::PosixTimeZone, timezone::TimeZoneAbbreviation, AmbiguousOffset,
@@ -26,11 +27,16 @@ use crate::{
 
 /// The owned variant of `Tzif`.
 #[cfg(feature = "alloc")]
-pub(crate) type TzifOwned = Tzif<String, Vec<LocalTimeType>, Vec<Transition>>;
+pub(crate) type TzifOwned =
+    Tzif<String, Abbreviation, Vec<LocalTimeType>, Vec<Transition>>;
 
 /// The static variant of `Tzif`.
-pub(crate) type TzifStatic =
-    Tzif<&'static str, &'static [LocalTimeType], &'static [Transition]>;
+pub(crate) type TzifStatic = Tzif<
+    &'static str,
+    &'static str,
+    &'static [LocalTimeType],
+    &'static [Transition],
+>;
 
 /// A time zone based on IANA TZif formatted data.
 ///
@@ -53,7 +59,7 @@ pub(crate) type TzifStatic =
 // at least 8 bytes anyway. But this *is* required for 32-bit systems, where
 // the type definition at present only has an alignment of 4 bytes.
 #[repr(align(8))]
-pub struct Tzif<STRING, TYPES, TRANS> {
+pub struct Tzif<STRING, ABBREV, TYPES, TRANS> {
     name: Option<STRING>,
     /// An ASCII byte corresponding to the version number. So, 0x50 is '2'.
     ///
@@ -64,7 +70,7 @@ pub struct Tzif<STRING, TYPES, TRANS> {
     version: u8,
     checksum: u32,
     designations: STRING,
-    posix_tz: Option<PosixTimeZone>,
+    posix_tz: Option<PosixTimeZone<ABBREV>>,
     types: TYPES,
     transitions: TRANS,
 }
@@ -86,7 +92,7 @@ impl TzifStatic {
     /// macro. Like this:
     ///
     /// ```text
-    /// static TZIF: Tzif<&str, &[LocalTimeType], &[Transition]> =
+    /// static TZIF: Tzif<&str, &str, &[LocalTimeType], &[Transition]> =
     ///     Tzif::from_shared_const(
     ///         shared::TzifFixed {
     ///             name: Some("America/New_York"),
@@ -116,7 +122,7 @@ impl TzifStatic {
     /// variable length and they need to be the right types. At least, I
     /// couldn't see a simpler way to arrange this.
     pub(crate) const fn from_shared_const(
-        sh: &shared::TzifFixed<&'static str, &'static str>,
+        sh: shared::TzifFixed<&'static str, &'static str>,
         types: &'static [LocalTimeType],
         transitions: &'static [Transition],
     ) -> TzifStatic {
@@ -126,7 +132,7 @@ impl TzifStatic {
         let designations = sh.designations;
         let posix_tz = match sh.posix_tz {
             None => None,
-            Some(ref tz) => Some(tz.to_jiff()),
+            Some(tz) => Some(tz.into_jiff()),
         };
         // Unlike in the owned case, we specifically do not check that the
         // POSIX time zone is consistent with the last transition. This is
@@ -170,7 +176,7 @@ impl TzifOwned {
     ) -> Result<Self, Error> {
         let sh =
             shared::TzifOwned::parse(name, bytes).map_err(Error::shared)?;
-        let tzif = TzifOwned::from_shared_owned(&sh)?;
+        let tzif = TzifOwned::from_shared_owned(sh)?;
         Ok(tzif)
     }
 
@@ -179,22 +185,27 @@ impl TzifOwned {
     /// This is not `const` since it accepts owned `String` and `Vec` values
     /// for variable length data inside `Tzif`.
     pub(crate) fn from_shared_owned(
-        sh: &shared::TzifOwned,
+        sh: shared::TzifOwned,
     ) -> Result<TzifOwned, Error> {
         let name = sh.fixed.name.clone();
         let version = sh.fixed.version;
         let checksum = sh.fixed.checksum;
         let designations = sh.fixed.designations.clone();
-        let posix_tz =
-            sh.fixed.posix_tz.as_ref().map(PosixTimeZone::from_shared_owned);
-        let types: Vec<LocalTimeType> =
-            sh.types.iter().map(shared::TzifLocalTimeType::to_jiff).collect();
+        let posix_tz = sh.fixed.posix_tz.map(PosixTimeZone::from_shared_owned);
+        let types: Vec<LocalTimeType> = sh
+            .types
+            .into_iter()
+            .map(shared::TzifLocalTimeType::into_jiff)
+            .collect();
         let mut transitions = Vec::with_capacity(sh.transitions.len());
         for (i, this) in sh.transitions.iter().enumerate() {
             let prev = &sh.transitions[i.saturating_sub(1)];
-            let prev_offset = sh.types[usize::from(prev.type_index)].offset;
-            let this_offset = sh.types[usize::from(this.type_index)].offset;
-            transitions.push(this.to_jiff(prev_offset, this_offset));
+            let prev_offset = types[usize::from(prev.type_index)].offset;
+            let this_offset = types[usize::from(this.type_index)].offset;
+            transitions.push(
+                this.clone()
+                    .into_jiff(prev_offset.seconds(), this_offset.seconds()),
+            );
         }
         let tzif = Tzif {
             name,
@@ -268,9 +279,10 @@ impl TzifOwned {
 
 impl<
         STRING: AsRef<str>,
+        ABBREV: AsRef<str>,
         TYPES: AsRef<[LocalTimeType]>,
         TRANS: AsRef<[Transition]>,
-    > Tzif<STRING, TYPES, TRANS>
+    > Tzif<STRING, ABBREV, TYPES, TRANS>
 {
     /// Returns the name given to this TZif data in its constructor.
     pub(crate) fn name(&self) -> Option<&str> {
@@ -316,7 +328,7 @@ impl<
     fn to_local_time_type(
         &self,
         timestamp: Timestamp,
-    ) -> Result<&LocalTimeType, &PosixTimeZone> {
+    ) -> Result<&LocalTimeType, &PosixTimeZone<ABBREV>> {
         // This is guaranteed because we always push at least one transition.
         // This isn't guaranteed by TZif since it might have 0 transitions,
         // but we always add a "dummy" first transition with our minimum
@@ -583,10 +595,13 @@ impl<
     }
 }
 
-impl<STRING: AsRef<str>, TYPES, TRANS> Eq for Tzif<STRING, TYPES, TRANS> {}
+impl<STRING: AsRef<str>, ABBREV: AsRef<str>, TYPES, TRANS> Eq
+    for Tzif<STRING, ABBREV, TYPES, TRANS>
+{
+}
 
-impl<STRING: AsRef<str>, TYPES, TRANS> PartialEq
-    for Tzif<STRING, TYPES, TRANS>
+impl<STRING: AsRef<str>, ABBREV: AsRef<str>, TYPES, TRANS> PartialEq
+    for Tzif<STRING, ABBREV, TYPES, TRANS>
 {
     fn eq(&self, rhs: &Self) -> bool {
         self.name.as_ref().map(|n| n.as_ref())
@@ -615,7 +630,7 @@ pub struct Transition {
 impl Transition {
     /// Converts from the shared-but-internal API for use in proc macros.
     pub(crate) const fn from_shared(
-        sh: &shared::TzifTransition,
+        sh: shared::TzifTransition,
         prev_offset: i32,
         this_offset: i32,
     ) -> Transition {
@@ -792,12 +807,12 @@ pub struct LocalTimeType {
 impl LocalTimeType {
     /// Converts from the shared-but-internal API for use in proc macros.
     pub(crate) const fn from_shared(
-        sh: &shared::TzifLocalTimeType,
+        sh: shared::TzifLocalTimeType,
     ) -> LocalTimeType {
         let offset = Offset::constant_seconds(sh.offset);
         let is_dst = if sh.is_dst { Dst::Yes } else { Dst::No };
         let designation = sh.designation.0..sh.designation.1;
-        let indicator = Indicator::from_shared(&sh.indicator);
+        let indicator = Indicator::from_shared(sh.indicator);
         LocalTimeType { offset, is_dst, designation, indicator }
     }
 
@@ -873,8 +888,8 @@ enum Indicator {
 
 impl Indicator {
     /// Converts from the shared-but-internal API for use in proc macros.
-    pub(crate) const fn from_shared(sh: &shared::TzifIndicator) -> Indicator {
-        match *sh {
+    pub(crate) const fn from_shared(sh: shared::TzifIndicator) -> Indicator {
+        match sh {
             shared::TzifIndicator::LocalWall => Indicator::LocalWall,
             shared::TzifIndicator::LocalStandard => Indicator::LocalStandard,
             shared::TzifIndicator::UTStandard => Indicator::UTStandard,

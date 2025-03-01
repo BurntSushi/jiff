@@ -1,5 +1,3 @@
-#![allow(warnings)]
-
 use core::time::Duration as UnsignedDuration;
 
 use crate::{
@@ -13,8 +11,8 @@ use crate::{
     shared::util::itime::{self, IDate, IEpochDay},
     tz::TimeZone,
     util::{
-        rangeint::{self, ri16, ri8, Composite, RFrom, RInto, TryRFrom},
-        t::{self, Constant, Day, Month, Sign, UnixEpochDay, Year, C},
+        rangeint::{self, Composite, RFrom, RInto, TryRFrom},
+        t::{self, Day, Month, Sign, UnixEpochDay, Year, C},
     },
     RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
 };
@@ -2105,13 +2103,6 @@ impl Date {
     }
 }
 
-// Constants used for converting between Gregorian calendar dates and Unix
-// epoch days.
-//
-// See: http://howardhinnant.github.io/date_algorithms.html
-const DAYS_IN_ERA: Constant = Constant(146_097);
-const DAYS_FROM_0000_01_01_TO_1970_01_01: Constant = Constant(719_468);
-
 /// Internal APIs using ranged integers.
 impl Date {
     #[inline]
@@ -2169,11 +2160,6 @@ impl Date {
     #[inline]
     pub(crate) fn days_in_month_ranged(self) -> Day {
         days_in_month(self.year_ranged(), self.month_ranged())
-    }
-
-    #[inline]
-    pub(crate) fn since_days_ranged(self, other: Date) -> t::SpanDays {
-        -self.until_days_ranged(other)
     }
 
     #[inline]
