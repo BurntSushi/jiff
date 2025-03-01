@@ -169,7 +169,7 @@ impl TzifOwned {
         bytes: &[u8],
     ) -> Result<Self, Error> {
         let sh =
-            shared::TzifOwned::parse(name, bytes).map_err(Error::adhoc)?;
+            shared::TzifOwned::parse(name, bytes).map_err(Error::shared)?;
         let tzif = TzifOwned::from_shared_owned(&sh);
         Ok(tzif)
     }
