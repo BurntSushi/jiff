@@ -54,6 +54,7 @@ use self::shared::{
 ///
 /// The main thing we use in here is the parsing routine for TZif data and
 /// shared data types for representing TZif data.
+#[allow(dead_code)] // TODO: remove and see what's remaining after dust settles
 mod shared;
 
 // Public API docs are in Jiff.
