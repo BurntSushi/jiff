@@ -251,7 +251,7 @@ pub(super) enum ParsedTimeZoneKind<'i> {
     Named(&'i str),
     Offset(ParsedOffset),
     #[cfg(feature = "alloc")]
-    Posix(crate::tz::posix::PosixTimeZone),
+    Posix(crate::tz::posix::PosixTimeZoneOwned),
 }
 
 impl<'i> ParsedTimeZone<'i> {

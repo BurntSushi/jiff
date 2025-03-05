@@ -6,6 +6,7 @@ use super::{
     util::{
         error::{err, Error},
         escape::{Byte, Bytes},
+        itime::ITimestamp,
     },
     PosixTimeZone, TzifFixed, TzifIndicator, TzifLocalTimeType, TzifOwned,
     TzifTransition,
@@ -66,6 +67,7 @@ impl TzifOwned {
         } else {
             TzifOwned::parse64(name, header32, rest)?
         };
+        tzif.verify_posix_time_zone_consistency()?;
         // Compute the checksum using the entire contents of the TZif data.
         let tzif_raw_len = (rest.as_ptr() as usize)
             .checked_sub(original.as_ptr() as usize)
@@ -150,6 +152,14 @@ impl TzifOwned {
         // We otherwise don't check that the TZif data is fully valid. It is
         // possible for it to contain superfluous information. For example, a
         // non-zero local time type that is never referenced by a transition.
+
+        // BREADCRUMBS: I guess move POSIX tz verification to here. And then
+        // work on computing more transitions to fatten up the TZif data and
+        // remove the perf regression when switching between bundled/static
+        // tzdb and a "fat" `/usr/share/zoneinfo`. I think the main challenge
+        // here will be finding the local time types, but it should be fine?
+        // Otherwise, just pick the last transition and iterate over
+        // `next_transition` until a set year...
         Ok((tzif, rest))
     }
 
@@ -474,6 +484,82 @@ impl TzifOwned {
             self.fixed.posix_tz = Some(posix_tz);
         }
         Ok(&rest[1..])
+    }
+
+    /// Validates that the POSIX TZ string we parsed (if one exists) is
+    /// consistent with the last transition in this time zone. This is
+    /// required by RFC 8536.
+    ///
+    /// RFC 8536 says, "If the string is nonempty and one or more
+    /// transitions appear in the version 2+ data, the string MUST be
+    /// consistent with the last version 2+ transition."
+    fn verify_posix_time_zone_consistency(&self) -> Result<(), Error> {
+        // We need to be a little careful, since we always have at least one
+        // transition (accounting for the dummy `Timestamp::MIN` transition).
+        // So if we only have 1 transition and a POSIX TZ string, then we
+        // should not validate it since it's equivalent to the case of 0
+        // transitions and a POSIX TZ string.
+        if self.transitions.len() <= 1 {
+            return Ok(());
+        }
+        let Some(ref tz) = self.fixed.posix_tz else {
+            return Ok(());
+        };
+        let last = self.transitions.last().expect("last transition");
+        let typ = self.local_time_type(last);
+        let (ioff, abbrev, is_dst) = tz.to_offset_info(ITimestamp {
+            second: last.timestamp,
+            nanosecond: 0,
+        });
+        if ioff.second != typ.offset {
+            return Err(err!(
+                "expected last transition to have DST offset \
+                 of {expected_offset}, but got {got_offset} \
+                 according to POSIX TZ string {tz}",
+                expected_offset = typ.offset,
+                got_offset = ioff.second,
+                tz = tz,
+            ));
+        }
+        if is_dst != typ.is_dst {
+            return Err(err!(
+                "expected last transition to have is_dst={expected_dst}, \
+                 but got is_dst={got_dst} according to POSIX TZ \
+                 string {tz}",
+                expected_dst = typ.is_dst,
+                got_dst = is_dst,
+                tz = tz,
+            ));
+        }
+        if abbrev != self.designation(&typ) {
+            return Err(err!(
+                "expected last transition to have \
+                 designation={expected_abbrev}, \
+                 but got designation={got_abbrev} according to POSIX TZ \
+                 string {tz}",
+                expected_abbrev = self.designation(&typ),
+                got_abbrev = abbrev,
+                tz = tz,
+            ));
+        }
+        Ok(())
+    }
+
+    fn local_time_type(
+        &self,
+        transition: &TzifTransition,
+    ) -> &TzifLocalTimeType {
+        // OK because we require that `type_index` always points to a valid
+        // local time type.
+        &self.types[usize::from(transition.type_index)]
+    }
+
+    fn designation(&self, typ: &TzifLocalTimeType) -> &str {
+        let range =
+            usize::from(typ.designation.0)..usize::from(typ.designation.1);
+        // OK because we verify that the designation range on every local
+        // time type is a valid range into `self.designations`.
+        &self.fixed.designations[range]
     }
 }
 

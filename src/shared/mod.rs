@@ -96,14 +96,14 @@ pub type TzifOwned = Tzif<
     alloc::vec::Vec<TzifTransition>,
 >;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Tzif<STRING, ABBREV, TYPES, TRANS> {
     pub fixed: TzifFixed<STRING, ABBREV>,
     pub types: TYPES,
     pub transitions: TRANS,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TzifFixed<STRING, ABBREV> {
     pub name: Option<STRING>,
     pub version: u8,
@@ -114,8 +114,8 @@ pub struct TzifFixed<STRING, ABBREV> {
 
 // only-jiff-start
 impl TzifFixed<&'static str, &'static str> {
-    pub const fn to_jiff(
-        &self,
+    pub const fn into_jiff(
+        self,
         types: &'static [crate::tz::tzif::LocalTimeType],
         trans: &'static [crate::tz::tzif::Transition],
     ) -> crate::tz::tzif::TzifStatic {
@@ -124,7 +124,7 @@ impl TzifFixed<&'static str, &'static str> {
 }
 // only-jiff-end
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TzifLocalTimeType {
     pub offset: i32,
     pub is_dst: bool,
@@ -134,20 +134,82 @@ pub struct TzifLocalTimeType {
 
 // only-jiff-start
 impl TzifLocalTimeType {
-    pub const fn to_jiff(&self) -> crate::tz::tzif::LocalTimeType {
+    pub const fn into_jiff(self) -> crate::tz::tzif::LocalTimeType {
         crate::tz::tzif::LocalTimeType::from_shared(self)
     }
 }
 // only-jiff-end
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum TzifIndicator {
     LocalWall,
     LocalStandard,
     UTStandard,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
+pub struct TzifTransitions<TIMESTAMPS, STARTS, ENDS, INFOS> {
+    pub timestamps: TIMESTAMPS,
+    pub civil_starts: STARTS,
+    pub civil_ends: ENDS,
+    pub infos: INFOS,
+}
+
+#[derive(Clone, Debug)]
+pub struct TzifTransitionInfo {
+    pub type_index: u8,
+    pub kind: TzifTransitionKind,
+}
+
+/// The kind of a transition.
+///
+/// This is used when trying to determine the offset for a local datetime. It
+/// indicates how the corresponding civil datetimes in `civil_starts` and
+/// `civil_ends` should be interpreted. That is, there are three possible
+/// cases:
+///
+/// 1. The offset of this transition is equivalent to the offset of the
+/// previous transition. That means there are no ambiguous civil datetimes
+/// between the transitions. This can occur, e.g., when the time zone
+/// abbreviation changes.
+/// 2. The offset of the transition is greater than the offset of the previous
+/// transition. That means there is a "gap" in local time between the
+/// transitions. This typically corresponds to entering daylight saving time.
+/// It is usually, but not always, 1 hour.
+/// 3. The offset of the transition is less than the offset of the previous
+/// transition. That means there is a "fold" in local time where time is
+/// repeated. This typically corresponds to leaving daylight saving time. It
+/// is usually, but not always, 1 hour.
+#[derive(Clone, Debug)]
+pub enum TzifTransitionKind {
+    /// This transition cannot possibly lead to an unambiguous offset because
+    /// its offset is equivalent to the offset of the previous transition.
+    ///
+    /// Has an entry in `civil_starts`, but corresponding entry in `civil_ends`
+    /// is always zeroes (i.e., meaningless).
+    Unambiguous,
+    /// This occurs when this transition's offset is strictly greater than the
+    /// previous transition's offset. This effectively results in a "gap" of
+    /// time equal to the difference in the offsets between the two
+    /// transitions.
+    ///
+    /// Has an entry in `civil_starts` for when the gap starts (inclusive) in
+    /// local time. Also has an entry in `civil_ends` for when the fold ends
+    /// (exclusive) in local time.
+    Gap,
+    /// This occurs when this transition's offset is strictly less than the
+    /// previous transition's offset. This results in a "fold" of time where
+    /// the two transitions have an overlap where it is ambiguous which one
+    /// applies given a wall clock time. In effect, a span of time equal to the
+    /// difference in the offsets is repeated.
+    ///
+    /// Has an entry in `civil_starts` for when the fold starts (inclusive) in
+    /// local time. Also has an entry in `civil_ends` for when the fold ends
+    /// (exclusive) in local time.
+    Fold,
+}
+
+#[derive(Clone, Debug)]
 pub struct TzifTransition {
     pub timestamp: i64,
     pub type_index: u8,
@@ -155,8 +217,8 @@ pub struct TzifTransition {
 
 // only-jiff-start
 impl TzifTransition {
-    pub const fn to_jiff(
-        &self,
+    pub const fn into_jiff(
+        self,
         prev_offset: i32,
         this_offset: i32,
     ) -> crate::tz::tzif::Transition {
@@ -169,33 +231,33 @@ impl TzifTransition {
 }
 // only-jiff-end
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PosixTimeZone<ABBREV> {
     pub std_abbrev: ABBREV,
-    pub std_offset: i32,
+    pub std_offset: PosixOffset,
     pub dst: Option<PosixDst<ABBREV>>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PosixDst<ABBREV> {
     pub abbrev: ABBREV,
-    pub offset: i32,
+    pub offset: PosixOffset,
     pub rule: PosixRule,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PosixRule {
     pub start: PosixDayTime,
     pub end: PosixDayTime,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PosixDayTime {
     pub date: PosixDay,
-    pub time: i32,
+    pub time: PosixTime,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PosixDay {
     /// Julian day in a year, no counting for leap days.
     ///
@@ -227,9 +289,19 @@ pub enum PosixDay {
     },
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PosixTime {
+    pub second: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PosixOffset {
+    pub second: i32,
+}
+
 // only-jiff-start
 impl PosixTimeZone<&'static str> {
-    pub const fn to_jiff(&self) -> crate::tz::posix::PosixTimeZone {
+    pub const fn into_jiff(self) -> crate::tz::posix::PosixTimeZoneStatic {
         crate::tz::posix::PosixTimeZone::from_shared_const(self)
     }
 }
@@ -238,7 +310,6 @@ impl PosixTimeZone<&'static str> {
 // Does not require `alloc`, but is only used when `alloc` is enabled.
 #[cfg(feature = "alloc")]
 pub(crate) mod crc32;
-#[cfg(feature = "alloc")]
 pub(crate) mod posix;
 #[cfg(feature = "alloc")]
 pub(crate) mod tzif;

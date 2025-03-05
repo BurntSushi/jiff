@@ -2,18 +2,14 @@
 A command for copying shared code from Jiff to the `jiff-static` proc-macro.
 */
 
-#![allow(warnings)]
-
 use std::{
     fmt::Write as _,
-    fs::{self, File},
-    io::{self, BufWriter, Write},
+    fs, io,
     path::{Path, PathBuf},
     sync::LazyLock,
 };
 
 use anyhow::Context;
-use jiff::Unit;
 use lexopt::{Arg, Parser};
 use regex_lite::Regex;
 
