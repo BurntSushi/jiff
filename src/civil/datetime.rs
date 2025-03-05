@@ -2407,14 +2407,6 @@ impl DateTime {
             time: self.time.to_itime_const(),
         }
     }
-
-    #[inline]
-    pub(crate) const fn from_idatetime_const(idt: IDateTime) -> DateTime {
-        DateTime::from_parts(
-            Date::from_idate_const(idt.date),
-            Time::from_itime_const(idt.time),
-        )
-    }
 }
 
 /// Parsing and formatting using a "printf"-style API.

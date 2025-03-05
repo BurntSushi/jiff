@@ -1054,7 +1054,12 @@ impl Offset {
 
     #[inline]
     pub(crate) const fn from_ioffset_const(ioff: IOffset) -> Offset {
-        Offset { span: t::SpanZoneOffset::new_unchecked(ioff.second) }
+        Offset::from_seconds_unchecked(ioff.second)
+    }
+
+    #[inline]
+    pub(crate) const fn from_seconds_unchecked(second: i32) -> Offset {
+        Offset { span: t::SpanZoneOffset::new_unchecked(second) }
     }
 
     /*

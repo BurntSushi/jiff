@@ -4,12 +4,14 @@ use alloc::{string::String, vec};
 
 use super::{
     util::{
+        array_str::Abbreviation,
         error::{err, Error},
         escape::{Byte, Bytes},
         itime::{IOffset, ITimestamp},
     },
-    PosixTimeZone, TzifFixed, TzifIndicator, TzifLocalTimeType, TzifOwned,
-    TzifTransition,
+    PosixTimeZone, TzifDateTime, TzifFixed, TzifIndicator, TzifLocalTimeType,
+    TzifOwned, TzifTransitionInfo, TzifTransitionKind, TzifTransitions,
+    TzifTransitionsOwned,
 };
 
 // These are Jiff min and max timestamp (in seconds) values.
@@ -89,6 +91,9 @@ impl TzifOwned {
             TzifOwned::parse64(name, header32, rest)?
         };
         tzif.fatten();
+        // This should come after fattening, because fattening may add new
+        // transitions and we want to add civil datetimes to those.
+        tzif.add_civil_datetimes_to_transitions();
         tzif.verify_posix_time_zone_consistency()?;
         // Compute the checksum using the entire contents of the TZif data.
         let tzif_raw_len = (rest.as_ptr() as usize)
@@ -96,6 +101,15 @@ impl TzifOwned {
             .unwrap();
         let tzif_raw_bytes = &original[..tzif_raw_len];
         tzif.fixed.checksum = super::crc32::sum(tzif_raw_bytes);
+
+        // Shrink all of our allocs so we don't keep excess capacity around.
+        tzif.fixed.designations.shrink_to_fit();
+        tzif.types.shrink_to_fit();
+        tzif.transitions.timestamps.shrink_to_fit();
+        tzif.transitions.civil_starts.shrink_to_fit();
+        tzif.transitions.civil_ends.shrink_to_fit();
+        tzif.transitions.infos.shrink_to_fit();
+
         Ok(tzif)
     }
 
@@ -114,7 +128,12 @@ impl TzifOwned {
                 posix_tz: None,
             },
             types: vec![],
-            transitions: vec![],
+            transitions: TzifTransitions {
+                timestamps: vec![],
+                civil_starts: vec![],
+                civil_ends: vec![],
+                infos: vec![],
+            },
         };
         let rest = tzif.parse_transitions(&header32, bytes)?;
         let rest = tzif.parse_transition_types(&header32, rest)?;
@@ -147,7 +166,12 @@ impl TzifOwned {
                 posix_tz: None,
             },
             types: vec![],
-            transitions: vec![],
+            transitions: TzifTransitions {
+                timestamps: vec![],
+                civil_starts: vec![],
+                civil_ends: vec![],
+                infos: vec![],
+            },
         };
         let rest = tzif.parse_transitions(&header64, rest)?;
         let rest = tzif.parse_transition_types(&header64, rest)?;
@@ -156,32 +180,9 @@ impl TzifOwned {
         let rest = tzif.parse_leap_seconds(&header64, rest)?;
         let rest = tzif.parse_indicators(&header64, rest)?;
         let rest = tzif.parse_footer(&header64, rest)?;
-        // Note that we specifically and unfortunately do not "validate"
-        // the POSIX TZ string here. We *should* check that it is
-        // consistent with the last transition. Since:
-        //
-        // RFC 8536 says, "If the string is nonempty and one or more
-        // transitions appear in the version 2+ data, the string MUST be
-        // consistent with the last version 2+ transition."
-        //
-        // But in this context, we don't have any of the infrastructure
-        // to actually do TZ operations on a POSIX time zone. It requires
-        // civil datetimes and a bunch of other bullshit. This means that
-        // this verification step doesn't run when using the `jiff-tzdb-static`
-        // proc macro. However, we do still run it when parsing TZif data
-        // at runtime.
-        //
-        // We otherwise don't check that the TZif data is fully valid. It is
+        // Note that we don't check that the TZif data is fully valid. It is
         // possible for it to contain superfluous information. For example, a
         // non-zero local time type that is never referenced by a transition.
-
-        // BREADCRUMBS: I guess move POSIX tz verification to here. And then
-        // work on computing more transitions to fatten up the TZif data and
-        // remove the perf regression when switching between bundled/static
-        // tzdb and a "fat" `/usr/share/zoneinfo`. I think the main challenge
-        // here will be finding the local time types, but it should be fine?
-        // Otherwise, just pick the last transition and iterate over
-        // `next_transition` until a set year...
         Ok((tzif, rest))
     }
 
@@ -209,8 +210,7 @@ impl TzifOwned {
         // Similarly, since this is the minimum timestamp value, it will
         // trigger for any times before the first transition found in the TZif
         // data.
-        self.transitions
-            .push(TzifTransition { timestamp: TIMESTAMP_MIN, type_index: 0 });
+        self.transitions.add_with_type_index(TIMESTAMP_MIN, 0);
         while let Some(chunk) = it.next() {
             let mut timestamp = if header.is_32bit() {
                 i64::from(from_be_bytes_i32(chunk))
@@ -232,12 +232,7 @@ impl TzifOwned {
                 let clamped = timestamp.clamp(TIMESTAMP_MIN, TIMESTAMP_MAX);
                 timestamp = clamped;
             }
-            self.transitions.push(TzifTransition {
-                timestamp,
-                // We can't fill in the type index yet. We fill this in
-                // later when we parse the transition types.
-                type_index: 0,
-            });
+            self.transitions.add(timestamp);
         }
         assert!(it.remainder().is_empty());
         Ok(rest)
@@ -253,9 +248,8 @@ impl TzifOwned {
             bytes,
             header.transition_types_len()?,
         )?;
-        // We start our transition indices at 1 because we always insert a
-        // dummy first transition corresponding to `Timestamp::MIN`. Its type
-        // index is always 0, so there's no need to change it here.
+        // We skip the first transition because it is our minimum dummy
+        // transition.
         for (transition_index, &type_index) in (1..).zip(bytes) {
             if usize::from(type_index) >= header.tzh_typecnt {
                 return Err(err!(
@@ -264,7 +258,7 @@ impl TzifOwned {
                     header.tzh_typecnt,
                 ));
             }
-            self.transitions[transition_index].type_index = type_index;
+            self.transitions.infos[transition_index].type_index = type_index;
         }
         Ok(rest)
     }
@@ -521,16 +515,26 @@ impl TzifOwned {
         // So if we only have 1 transition and a POSIX TZ string, then we
         // should not validate it since it's equivalent to the case of 0
         // transitions and a POSIX TZ string.
-        if self.transitions.len() <= 1 {
+        if self.transitions.timestamps.len() <= 1 {
             return Ok(());
         }
         let Some(ref tz) = self.fixed.posix_tz else {
             return Ok(());
         };
-        let last = self.transitions.last().expect("last transition");
-        let typ = self.local_time_type(last);
+        let last = self
+            .transitions
+            .timestamps
+            .last()
+            .expect("last transition timestamp");
+        let type_index = self
+            .transitions
+            .infos
+            .last()
+            .expect("last transition info")
+            .type_index;
+        let typ = &self.types[usize::from(type_index)];
         let (ioff, abbrev, is_dst) =
-            tz.to_offset_info(ITimestamp::from_second(last.timestamp));
+            tz.to_offset_info(ITimestamp::from_second(*last));
         if ioff.second != typ.offset {
             return Err(err!(
                 "expected last transition to have DST offset \
@@ -565,6 +569,76 @@ impl TzifOwned {
         Ok(())
     }
 
+    /// Add civil datetimes to our transitions.
+    ///
+    /// This isn't strictly necessary, but it speeds up time zone lookups when
+    /// the input is a civil datetime. It lets us do comparisons directly on
+    /// the civil datetime as given, instead of needing to convert the civil
+    /// datetime given to a timestamp first. (Even if we didn't do this, I
+    /// believe we'd still need at least one additional timestamp that is
+    /// offset, because TZ lookups for a civil datetime are done in local time,
+    /// and the timestamps in TZif data are, of course, all in UTC.)
+    fn add_civil_datetimes_to_transitions(&mut self) {
+        fn to_datetime(timestamp: i64, offset: i32) -> TzifDateTime {
+            use crate::shared::util::itime::{IOffset, ITimestamp};
+            let its = ITimestamp { second: timestamp, nanosecond: 0 };
+            let ioff = IOffset { second: offset };
+            let dt = its.to_datetime(ioff);
+            (
+                dt.date.year,
+                dt.date.month,
+                dt.date.day,
+                dt.time.hour,
+                dt.time.minute,
+                dt.time.second,
+            )
+        }
+
+        let trans = &mut self.transitions;
+        for i in 0..trans.timestamps.len() {
+            let timestamp = trans.timestamps[i];
+            let offset = {
+                let type_index = trans.infos[i].type_index;
+                self.types[usize::from(type_index)].offset
+            };
+            let prev_offset = {
+                let type_index = trans.infos[i.saturating_sub(1)].type_index;
+                self.types[usize::from(type_index)].offset
+            };
+
+            if prev_offset == offset {
+                // Equivalent offsets means there can never be any ambiguity.
+                let start = to_datetime(timestamp, prev_offset);
+                trans.infos[i].kind = TzifTransitionKind::Unambiguous;
+                trans.civil_starts[i] = start;
+            } else if prev_offset < offset {
+                // When the offset of the previous transition is less, that
+                // means there is some non-zero amount of time that is
+                // "skipped" when moving to the next transition. Thus, we have
+                // a gap. The start of the gap is the offset which gets us the
+                // earliest time, i.e., the smaller of the two offsets.
+                trans.infos[i].kind = TzifTransitionKind::Gap;
+                trans.civil_starts[i] = to_datetime(timestamp, prev_offset);
+                trans.civil_ends[i] = to_datetime(timestamp, offset);
+            } else {
+                // When the offset of the previous transition is greater, that
+                // means there is some non-zero amount of time that will be
+                // replayed on a wall clock in this time zone. Thus, we have
+                // a fold. The start of the gold is the offset which gets us
+                // the earliest time, i.e., the smaller of the two offsets.
+                assert!(prev_offset > offset);
+                trans.infos[i].kind = TzifTransitionKind::Fold;
+                trans.civil_starts[i] = to_datetime(timestamp, offset);
+                trans.civil_ends[i] = to_datetime(timestamp, prev_offset);
+            }
+        }
+    }
+
+    /// Fatten up this TZif data with additional transitions.
+    ///
+    /// These additional transitions often make time zone lookups faster, and
+    /// they smooth out the performance difference between using "slim" and
+    /// "fat" tzdbs.
     fn fatten(&mut self) {
         // Note that this is a crate feature for *both* `jiff` and
         // `jiff-static`.
@@ -572,34 +646,46 @@ impl TzifOwned {
             return;
         }
         let Some(posix_tz) = self.fixed.posix_tz.clone() else { return };
-        let last = self.transitions.last().expect("last transition");
+        let last =
+            self.transitions.timestamps.last().expect("last transition");
         let mut i = 0;
-        let mut prev = ITimestamp::from_second(last.timestamp);
+        let mut prev = ITimestamp::from_second(*last);
         loop {
             if i > FATTEN_MAX_TRANSITIONS {
                 return;
             }
             i += 1;
-
-            let Some((its, ioff, abbrev, is_dst)) =
-                posix_tz.next_transition(prev)
-            else {
-                break;
+            prev = match self.add_transition(&posix_tz, prev) {
+                None => break,
+                Some(next) => next,
             };
-            if its.to_datetime(IOffset::UTC).date.year >= FATTEN_UP_TO_YEAR {
-                break;
-            }
-            let Some(type_index) =
-                self.find_or_create_local_time_type(ioff, abbrev, is_dst)
-            else {
-                break;
-            };
-            self.transitions
-                .push(TzifTransition { timestamp: its.second, type_index });
-            prev = its;
         }
     }
 
+    /// If there's a transition strictly after the given timestamp for the
+    /// given POSIX time zone, then add it to this TZif data.
+    fn add_transition(
+        &mut self,
+        posix_tz: &PosixTimeZone<Abbreviation>,
+        prev: ITimestamp,
+    ) -> Option<ITimestamp> {
+        let (its, ioff, abbrev, is_dst) = posix_tz.next_transition(prev)?;
+        if its.to_datetime(IOffset::UTC).date.year >= FATTEN_UP_TO_YEAR {
+            return None;
+        }
+        let type_index =
+            self.find_or_create_local_time_type(ioff, abbrev, is_dst)?;
+        self.transitions.add_with_type_index(its.second, type_index);
+        Some(its)
+    }
+
+    /// Look for a local time type matching the data given.
+    ///
+    /// If one could not be found, then one is created and its index is
+    /// returned.
+    ///
+    /// If one could not be found and one could not be created (e.g., the index
+    /// would overflow `u8`), then `None` is returned.
     fn find_or_create_local_time_type(
         &mut self,
         offset: IOffset,
@@ -627,6 +713,14 @@ impl TzifOwned {
         Some(i)
     }
 
+    /// Look for a designation (i.e., time zone abbreviation) matching the data
+    /// given, and return its range into `self.fixed.designations`.
+    ///
+    /// If one could not be found, then one is created and its range is
+    /// returned.
+    ///
+    /// If one could not be found and one could not be created (e.g., the range
+    /// would overflow `u8`), then `None` is returned.
     fn find_or_create_designation(
         &mut self,
         needle: &str,
@@ -646,15 +740,6 @@ impl TzifOwned {
         Some((start.try_into().ok()?, end.try_into().ok()?))
     }
 
-    fn local_time_type(
-        &self,
-        transition: &TzifTransition,
-    ) -> &TzifLocalTimeType {
-        // OK because we require that `type_index` always points to a valid
-        // local time type.
-        &self.types[usize::from(transition.type_index)]
-    }
-
     fn designation(&self, typ: &TzifLocalTimeType) -> &str {
         let range =
             usize::from(typ.designation.0)..usize::from(typ.designation.1);
@@ -663,6 +748,42 @@ impl TzifOwned {
         &self.fixed.designations[range]
     }
 }
+
+impl TzifTransitionsOwned {
+    /// Add a single transition with the given timestamp.
+    ///
+    /// This also fills in the other columns (civil starts, civil ends and
+    /// infos) with sensible default values. It is expected that callers will
+    /// later fill them in.
+    fn add(&mut self, timestamp: i64) {
+        self.add_with_type_index(timestamp, 0);
+    }
+
+    /// Like `TzifTransitionsOwned::add`, but let's the caller provide a type
+    /// index if it is known.
+    fn add_with_type_index(&mut self, timestamp: i64, type_index: u8) {
+        self.timestamps.push(timestamp);
+        self.civil_starts.push((0, 0, 0, 0, 0, 0));
+        self.civil_ends.push((0, 0, 0, 0, 0, 0));
+        self.infos.push(TzifTransitionInfo {
+            type_index,
+            kind: TzifTransitionKind::Unambiguous,
+        });
+    }
+}
+
+// impl<
+// TIMESTAMPS: AsRef<[i64]>,
+// STARTS: AsRef<[TzifDateTime]>,
+// ENDS: AsRef<[TzifDateTime]>,
+// INFOS: AsRef<[TzifTransitionInfo]>,
+// > TzifTransitions<TIMESTAMPS, STARTS, ENDS, INFOS>
+// {
+// #[inline]
+// fn type_index(&self, i: usize) -> usize {
+// usize::from(self.infos.as_ref()[i].type_index)
+// }
+// }
 
 /// The header for a TZif formatted file.
 ///

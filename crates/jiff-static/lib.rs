@@ -47,14 +47,20 @@ use quote::quote;
 use self::shared::{
     util::array_str::Abbreviation, PosixDay, PosixDayTime, PosixDst,
     PosixOffset, PosixRule, PosixTime, PosixTimeZone, TzifFixed,
-    TzifIndicator, TzifLocalTimeType, TzifOwned, TzifTransition,
+    TzifIndicator, TzifLocalTimeType, TzifOwned, TzifTransitionInfo,
+    TzifTransitionKind, TzifTransitionsOwned,
 };
 
 /// A bundle of code copied from `src/shared`.
 ///
 /// The main thing we use in here is the parsing routine for TZif data and
 /// shared data types for representing TZif data.
-#[allow(dead_code)] // TODO: remove and see what's remaining after dust settles
+///
+/// We also squash dead code warnings. This is somewhat precarious since
+/// ideally we wouldn't compile what we don't need. But in practice, it's
+/// annoying to get rid of everything we don't need in this context, and it
+/// should be pretty small anyway.
+#[allow(dead_code)]
 mod shared;
 
 // Public API docs are in Jiff.
@@ -176,20 +182,19 @@ impl syn::parse::Parse for Get {
 
 impl TzifOwned {
     fn quote(&self) -> proc_macro2::TokenStream {
-        let fixed = self.fixed.quote();
-        let types = self.types.iter().map(TzifLocalTimeType::quote);
-        let mut transitions = vec![];
-        for (i, this) in self.transitions.iter().enumerate() {
-            let prev = &self.transitions[i.saturating_sub(1)];
-            let prev_offset = self.types[usize::from(prev.type_index)].offset;
-            let this_offset = self.types[usize::from(this.type_index)].offset;
-            transitions.push(this.quote(prev_offset, this_offset));
-        }
+        let TzifOwned { ref fixed, ref types, ref transitions } = *self;
+        let fixed = fixed.quote();
+        let types = types.iter().map(TzifLocalTimeType::quote);
+        let transitions = transitions.quote();
         quote! {
             {
                 static TZ: jiff::tz::TimeZone =
                     jiff::tz::TimeZone::__internal_from_tzif(
-                        &#fixed.into_jiff(&[#(#types),*], &[#(#transitions),*])
+                        &jiff::shared::TzifStatic {
+                            fixed: #fixed,
+                            types: &[#(#types),*],
+                            transitions: #transitions,
+                        }.into_jiff()
                     );
                 // SAFETY: Since we are guaranteed that the `TimeZone` is
                 // constructed above as a static TZif time zone, it follows
@@ -246,6 +251,35 @@ impl TzifFixed<String, Abbreviation> {
     }
 }
 
+impl TzifTransitionsOwned {
+    fn quote(&self) -> proc_macro2::TokenStream {
+        let TzifTransitionsOwned {
+            ref timestamps,
+            ref civil_starts,
+            ref civil_ends,
+            ref infos,
+        } = *self;
+        let civil_starts: Vec<_> = civil_starts
+            .iter()
+            .map(|(y, mo, d, h, m, s)| quote!((#y, #mo, #d, #h, #m, #s)))
+            .collect();
+        let civil_ends: Vec<_> = civil_ends
+            .iter()
+            .map(|(y, mo, d, h, m, s)| quote!((#y, #mo, #d, #h, #m, #s)))
+            .collect();
+        let infos: Vec<_> =
+            infos.iter().map(TzifTransitionInfo::quote).collect();
+        quote! {
+            jiff::shared::TzifTransitions {
+                timestamps: &[#(#timestamps),*],
+                civil_starts: &[#(#civil_starts),*],
+                civil_ends: &[#(#civil_ends),*],
+                infos: &[#(#infos),*],
+            }
+        }
+    }
+}
+
 impl TzifLocalTimeType {
     fn quote(&self) -> proc_macro2::TokenStream {
         let TzifLocalTimeType {
@@ -263,7 +297,7 @@ impl TzifLocalTimeType {
                 is_dst: #is_dst,
                 designation: (#desig_start, #desig_end),
                 indicator: #indicator,
-            }.into_jiff()
+            }
         }
     }
 }
@@ -284,18 +318,31 @@ impl TzifIndicator {
     }
 }
 
-impl TzifTransition {
-    fn quote(
-        &self,
-        prev_offset: i32,
-        this_offset: i32,
-    ) -> proc_macro2::TokenStream {
-        let TzifTransition { timestamp, type_index } = *self;
+impl TzifTransitionInfo {
+    fn quote(&self) -> proc_macro2::TokenStream {
+        let TzifTransitionInfo { type_index, kind } = *self;
+        let kind = kind.quote();
         quote! {
-            jiff::shared::TzifTransition {
-                timestamp: #timestamp,
+            jiff::shared::TzifTransitionInfo {
                 type_index: #type_index,
-            }.into_jiff(#prev_offset, #this_offset)
+                kind: #kind,
+            }
+        }
+    }
+}
+
+impl TzifTransitionKind {
+    fn quote(&self) -> proc_macro2::TokenStream {
+        match *self {
+            TzifTransitionKind::Unambiguous => quote! {
+                jiff::shared::TzifTransitionKind::Unambiguous
+            },
+            TzifTransitionKind::Gap => quote! {
+                jiff::shared::TzifTransitionKind::Gap
+            },
+            TzifTransitionKind::Fold => quote! {
+                jiff::shared::TzifTransitionKind::Fold
+            },
         }
     }
 }

@@ -16,8 +16,7 @@ use alloc::{string::String, vec::Vec};
 use crate::{
     civil::DateTime,
     error::Error,
-    shared,
-    shared::util::array_str::Abbreviation,
+    shared::{self, util::array_str::Abbreviation},
     timestamp::Timestamp,
     tz::{
         posix::PosixTimeZone, timezone::TimeZoneAbbreviation, AmbiguousOffset,
@@ -27,15 +26,25 @@ use crate::{
 
 /// The owned variant of `Tzif`.
 #[cfg(feature = "alloc")]
-pub(crate) type TzifOwned =
-    Tzif<String, Abbreviation, Vec<LocalTimeType>, Vec<Transition>>;
+pub(crate) type TzifOwned = Tzif<
+    String,
+    Abbreviation,
+    Vec<shared::TzifLocalTimeType>,
+    Vec<i64>,
+    Vec<shared::TzifDateTime>,
+    Vec<shared::TzifDateTime>,
+    Vec<shared::TzifTransitionInfo>,
+>;
 
 /// The static variant of `Tzif`.
 pub(crate) type TzifStatic = Tzif<
     &'static str,
     &'static str,
-    &'static [LocalTimeType],
-    &'static [Transition],
+    &'static [shared::TzifLocalTimeType],
+    &'static [i64],
+    &'static [shared::TzifDateTime],
+    &'static [shared::TzifDateTime],
+    &'static [shared::TzifTransitionInfo],
 >;
 
 /// A time zone based on IANA TZif formatted data.
@@ -59,20 +68,16 @@ pub(crate) type TzifStatic = Tzif<
 // at least 8 bytes anyway. But this *is* required for 32-bit systems, where
 // the type definition at present only has an alignment of 4 bytes.
 #[repr(align(8))]
-pub struct Tzif<STRING, ABBREV, TYPES, TRANS> {
-    name: Option<STRING>,
-    /// An ASCII byte corresponding to the version number. So, 0x50 is '2'.
+pub struct Tzif<STR, ABBREV, TYPES, TIMESTAMPS, STARTS, ENDS, INFOS> {
+    inner: shared::Tzif<STR, ABBREV, TYPES, TIMESTAMPS, STARTS, ENDS, INFOS>,
+    /// The POSIX time zone for this TZif data, if present.
     ///
-    /// This is unused. It's only used in `test` compilation for emitting
-    /// diagnostic data about TZif files. If we really need to use this, we
-    /// should probably just convert it to an actual integer.
-    #[allow(dead_code)]
-    version: u8,
-    checksum: u32,
-    designations: STRING,
+    /// Note that this is also present on `shared::Tzif`, but uses the
+    /// `shared::PosixTimeZone` type, which isn't quite what we want here.
+    ///
+    /// For now we just duplicate it, which is slightly unfortunate. But this
+    /// is small and not a huge deal. Ideally we can clean this up later.
     posix_tz: Option<PosixTimeZone<ABBREV>>,
-    types: TYPES,
-    transitions: TRANS,
 }
 
 impl TzifStatic {
@@ -122,35 +127,13 @@ impl TzifStatic {
     /// variable length and they need to be the right types. At least, I
     /// couldn't see a simpler way to arrange this.
     pub(crate) const fn from_shared_const(
-        sh: shared::TzifFixed<&'static str, &'static str>,
-        types: &'static [LocalTimeType],
-        transitions: &'static [Transition],
+        sh: shared::TzifStatic,
     ) -> TzifStatic {
-        let name = sh.name;
-        let version = sh.version;
-        let checksum = sh.checksum;
-        let designations = sh.designations;
-        let posix_tz = match sh.posix_tz {
+        let posix_tz = match sh.fixed.posix_tz {
             None => None,
-            Some(tz) => Some(tz.into_jiff()),
+            Some(posix_tz) => Some(PosixTimeZone::from_shared_const(posix_tz)),
         };
-        // Unlike in the owned case, we specifically do not check that the
-        // POSIX time zone is consistent with the last transition. This is
-        // because it would require making a lot of code in Jiff `const`
-        // that is difficult to make `const`. Moreover, this constructor is
-        // generally only used with the `jiff-static` proc-macros, and those
-        // go through the owned APIs at compile time. And thus, it is already
-        // validated that the POSIX time zone is consistent with the last
-        // transition.
-        Tzif {
-            name,
-            version,
-            checksum,
-            designations,
-            posix_tz,
-            types,
-            transitions,
-        }
+        Tzif { inner: sh, posix_tz }
     }
 }
 
@@ -176,67 +159,42 @@ impl TzifOwned {
     ) -> Result<Self, Error> {
         let sh =
             shared::TzifOwned::parse(name, bytes).map_err(Error::shared)?;
-        let tzif = TzifOwned::from_shared_owned(sh)?;
-        Ok(tzif)
+        Ok(TzifOwned::from_shared_owned(sh))
     }
 
     /// Converts from the shared-but-internal API for use in proc macros.
     ///
-    /// This is not `const` since it accepts owned `String` and `Vec` values
-    /// for variable length data inside `Tzif`.
-    pub(crate) fn from_shared_owned(
-        sh: shared::TzifOwned,
-    ) -> Result<TzifOwned, Error> {
-        let name = sh.fixed.name.clone();
-        let version = sh.fixed.version;
-        let checksum = sh.fixed.checksum;
-        let designations = sh.fixed.designations.clone();
-        let posix_tz = sh.fixed.posix_tz.map(PosixTimeZone::from_shared_owned);
-        let types: Vec<LocalTimeType> = sh
-            .types
-            .into_iter()
-            .map(shared::TzifLocalTimeType::into_jiff)
-            .collect();
-        let mut transitions = Vec::with_capacity(sh.transitions.len());
-        for (i, this) in sh.transitions.iter().enumerate() {
-            let prev = &sh.transitions[i.saturating_sub(1)];
-            let prev_offset = types[usize::from(prev.type_index)].offset;
-            let this_offset = types[usize::from(this.type_index)].offset;
-            transitions.push(
-                this.clone()
-                    .into_jiff(prev_offset.seconds(), this_offset.seconds()),
-            );
-        }
-        let tzif = Tzif {
-            name,
-            version,
-            checksum,
-            designations,
-            posix_tz,
-            types,
-            transitions,
+    /// This is not `const` since it accepts owned values on the heap for
+    /// variable length data inside `Tzif`.
+    pub(crate) fn from_shared_owned(sh: shared::TzifOwned) -> TzifOwned {
+        let posix_tz = match sh.fixed.posix_tz {
+            None => None,
+            Some(posix_tz) => Some(PosixTimeZone::from_shared_owned(posix_tz)),
         };
-        Ok(tzif)
+        Tzif { inner: sh, posix_tz }
     }
 }
 
 impl<
-        STRING: AsRef<str>,
+        STR: AsRef<str>,
         ABBREV: AsRef<str>,
-        TYPES: AsRef<[LocalTimeType]>,
-        TRANS: AsRef<[Transition]>,
-    > Tzif<STRING, ABBREV, TYPES, TRANS>
+        TYPES: AsRef<[shared::TzifLocalTimeType]>,
+        TIMESTAMPS: AsRef<[i64]>,
+        STARTS: AsRef<[shared::TzifDateTime]>,
+        ENDS: AsRef<[shared::TzifDateTime]>,
+        INFOS: AsRef<[shared::TzifTransitionInfo]>,
+    > Tzif<STR, ABBREV, TYPES, TIMESTAMPS, STARTS, ENDS, INFOS>
 {
     /// Returns the name given to this TZif data in its constructor.
     pub(crate) fn name(&self) -> Option<&str> {
-        self.name.as_ref().map(|n| n.as_ref())
+        self.inner.fixed.name.as_ref().map(|n| n.as_ref())
     }
 
     /// Returns the appropriate time zone offset to use for the given
     /// timestamp.
     pub(crate) fn to_offset(&self, timestamp: Timestamp) -> Offset {
         match self.to_local_time_type(timestamp) {
-            Ok(typ) => typ.offset,
+            Ok(typ) => Offset::from_seconds_unchecked(typ.offset),
             Err(tz) => tz.to_offset(timestamp),
         }
     }
@@ -258,8 +216,8 @@ impl<
         let abbreviation =
             TimeZoneAbbreviation::Borrowed(self.designation(typ));
         TimeZoneOffsetInfo {
-            offset: typ.offset,
-            dst: typ.is_dst,
+            offset: Offset::from_seconds_unchecked(typ.offset),
+            dst: Dst::from(typ.is_dst),
             abbreviation,
         }
     }
@@ -271,7 +229,7 @@ impl<
     fn to_local_time_type(
         &self,
         timestamp: Timestamp,
-    ) -> Result<&LocalTimeType, &PosixTimeZone<ABBREV>> {
+    ) -> Result<&shared::TzifLocalTimeType, &PosixTimeZone<ABBREV>> {
         let timestamp = timestamp.as_second();
         // This is guaranteed because we always push at least one transition.
         // This isn't guaranteed by TZif since it might have 0 transitions,
@@ -282,23 +240,12 @@ impl<
         //
         // The result of the dummy transition is that the code below is simpler
         // with fewer special cases.
-        assert!(!self.transitions().is_empty(), "transitions is non-empty");
-        let index = if timestamp > self.transitions().last().unwrap().timestamp
-        {
-            self.transitions().len() - 1
+        let timestamps = self.timestamps();
+        assert!(!timestamps.is_empty(), "transitions is non-empty");
+        let index = if timestamp > *timestamps.last().unwrap() {
+            timestamps.len() - 1
         } else {
-            let search = self
-                .transitions()
-                // It is an optimization to compare only by the second instead
-                // of the second and the nanosecond. This works for two
-                // reasons. Firstly, the timestamps in TZif are limited to
-                // second precision. Secondly, this may result in two
-                // timestamps comparing equal when they would otherwise be
-                // unequal (for example, when a timestamp given falls on a
-                // transition, but has non-zero fractional seconds). But this
-                // is okay, because it would otherwise get an `Err(i)`, and
-                // access `i-1`. i.e., The timestamp it compared equal to.
-                .binary_search_by_key(&timestamp, |t| t.timestamp);
+            let search = self.timestamps().binary_search(&timestamp);
             match search {
                 // Since the first transition is always Timestamp::MIN, it's
                 // impossible for any timestamp to sort before it.
@@ -316,18 +263,18 @@ impl<
         // binary search returns an Err(len) for a time greater than the
         // maximum transition. But we account for that above by converting
         // Err(len) to Err(len-1).
-        assert!(index < self.transitions().len());
+        debug_assert!(index < timestamps.len());
         // RFC 8536 says: "Local time for timestamps on or after the last
         // transition is specified by the TZ string in the footer (Section 3.3)
         // if present and nonempty; otherwise, it is unspecified."
         //
         // Subtracting 1 is OK because we know self.transitions is not empty.
-        let t = if index < self.transitions().len() - 1 {
+        let index = if index < timestamps.len() - 1 {
             // This is the typical case in "fat" TZif files: we found a
             // matching transition.
-            &self.transitions()[index]
+            index
         } else {
-            match self.posix_tz.as_ref() {
+            match self.posix_tz() {
                 // This is the typical case in "slim" TZif files, where the
                 // last transition is, as I understand it, the transition at
                 // which a consistent rule started that a POSIX TZ string can
@@ -342,10 +289,10 @@ impl<
                 // This case is technically unspecified, but I think the
                 // typical thing to do is to just use the last transition.
                 // I'm not 100% sure on this one.
-                None => &self.transitions()[index],
+                None => index,
             }
         };
-        Ok(self.local_time_type(t))
+        Ok(self.local_time_type(index))
     }
 
     /// Returns a possibly ambiguous timestamp for the given civil datetime.
@@ -360,51 +307,55 @@ impl<
     /// repeated) or as a "gap" (when a particular wall clock time is skipped
     /// entirely).
     pub(crate) fn to_ambiguous_kind(&self, dt: DateTime) -> AmbiguousOffset {
-        // This implementation very nearly mirrors `to_offset` above in the
-        // beginning: we do a binary search to find transition applicable for
-        // the given datetime. Except, we do it on wall clock times instead
-        // of timestamps. And in particular, each transition begins with a
-        // possibly ambiguous range of wall clock times corresponding to either
-        // a "gap" or "fold" in time.
-        assert!(!self.transitions().is_empty(), "transitions is non-empty");
-        let search =
-            self.transitions().binary_search_by_key(&dt, |t| t.wall.start());
-        let this_index = match search {
+        // This implementation very nearly mirrors `to_local_time_type`
+        // above in the beginning: we do a binary search to find transition
+        // applicable for the given datetime. Except, we do it on wall clock
+        // times instead of timestamps. And in particular, each transition
+        // begins with a possibly ambiguous range of wall clock times
+        // corresponding to either a "gap" or "fold" in time.
+        let dtt = (
+            dt.year(),
+            dt.month(),
+            dt.day(),
+            dt.hour(),
+            dt.minute(),
+            dt.second(),
+        );
+        let (starts, ends) = (self.civil_starts(), self.civil_ends());
+        assert!(!starts.is_empty(), "transitions is non-empty");
+        let this_index = match starts.binary_search(&dtt) {
             Err(0) => unreachable!("impossible to come before DateTime::MIN"),
             Ok(i) => i,
             Err(i) => i.checked_sub(1).expect("i is non-zero"),
         };
-        assert!(this_index < self.transitions().len());
+        debug_assert!(this_index < starts.len());
 
-        let this = &self.transitions()[this_index];
-        let this_offset = self.local_time_type(this).offset;
+        let this_offset = self.local_time_type(this_index).offset;
         // This is a little tricky, but we need to check for ambiguous civil
         // datetimes before possibly using the POSIX TZ string. Namely, a
         // datetime could be ambiguous with respect to the last transition,
         // and we should handle that according to the gap/fold determined for
         // that transition. We cover this case in tests in tz/mod.rs for the
         // Pacific/Honolulu time zone, whose last transition begins with a gap.
-        match this.wall {
-            TransitionWall::Gap { end, .. } if dt < end => {
+        match self.transition_kind(this_index) {
+            shared::TzifTransitionKind::Gap if dtt < ends[this_index] => {
                 // A gap/fold can only appear when there exists a previous
                 // transition.
                 let prev_index = this_index.checked_sub(1).unwrap();
-                let prev = &self.transitions()[prev_index];
-                let prev_offset = self.local_time_type(prev).offset;
+                let prev_offset = self.local_time_type(prev_index).offset;
                 return AmbiguousOffset::Gap {
-                    before: prev_offset,
-                    after: this_offset,
+                    before: Offset::from_seconds_unchecked(prev_offset),
+                    after: Offset::from_seconds_unchecked(this_offset),
                 };
             }
-            TransitionWall::Fold { end, .. } if dt < end => {
+            shared::TzifTransitionKind::Fold if dtt < ends[this_index] => {
                 // A gap/fold can only appear when there exists a previous
                 // transition.
                 let prev_index = this_index.checked_sub(1).unwrap();
-                let prev = &self.transitions()[prev_index];
-                let prev_offset = self.local_time_type(prev).offset;
+                let prev_offset = self.local_time_type(prev_index).offset;
                 return AmbiguousOffset::Fold {
-                    before: prev_offset,
-                    after: this_offset,
+                    before: Offset::from_seconds_unchecked(prev_offset),
+                    after: Offset::from_seconds_unchecked(this_offset),
                 };
             }
             _ => {}
@@ -413,8 +364,8 @@ impl<
         // transitions in the TZif data. But, if we matched at or after the
         // last transition, then we need to use the POSIX TZ string (which
         // could still return an ambiguous offset).
-        if this_index == self.transitions().len() - 1 {
-            if let Some(tz) = self.posix_tz.as_ref() {
+        if this_index == starts.len() - 1 {
+            if let Some(tz) = self.posix_tz() {
                 return tz.to_ambiguous_kind(dt);
             }
             // This case is unspecified according to RFC 8536. It means that
@@ -426,7 +377,9 @@ impl<
             // in time zones with DST. But there really isn't much else we can
             // do I think.
         }
-        AmbiguousOffset::Unambiguous { offset: this_offset }
+        AmbiguousOffset::Unambiguous {
+            offset: Offset::from_seconds_unchecked(this_offset),
+        }
     }
 
     /// Returns the timestamp of the most recent time zone transition prior
@@ -435,23 +388,21 @@ impl<
         &self,
         ts: Timestamp,
     ) -> Option<TimeZoneTransition> {
-        assert!(!self.transitions().is_empty(), "transitions is non-empty");
+        assert!(!self.timestamps().is_empty(), "transitions is non-empty");
         let mut timestamp = ts.as_second();
         if ts.subsec_nanosecond() != 0 {
             timestamp = timestamp.saturating_add(1);
         }
-        let search = self
-            .transitions()
-            .binary_search_by_key(&timestamp, |t| t.timestamp);
+        let search = self.timestamps().binary_search(&timestamp);
         let index = match search {
             Ok(i) | Err(i) => i.checked_sub(1)?,
         };
-        let trans = if index == 0 {
+        let index = if index == 0 {
             // The first transition is a dummy that we insert, so if we land on
             // it here, treat it as if it doesn't exist.
             return None;
-        } else if index == self.transitions().len() - 1 {
-            if let Some(ref posix_tz) = self.posix_tz {
+        } else if index == self.timestamps().len() - 1 {
+            if let Some(ref posix_tz) = self.posix_tz() {
                 // Since the POSIX TZ must be consistent with the last
                 // transition, it must be the case that tzif_last <=
                 // posix_prev_trans in all cases. So the transition according
@@ -462,16 +413,17 @@ impl<
                 // of the TZif format if it does.
                 return posix_tz.previous_transition(ts);
             }
-            &self.transitions()[index]
+            index
         } else {
-            &self.transitions()[index]
+            index
         };
-        let typ = &self.types()[usize::from(trans.type_index)];
+        let timestamp = self.timestamps()[index];
+        let typ = self.local_time_type(index);
         Some(TimeZoneTransition {
-            timestamp: Timestamp::constant(trans.timestamp, 0),
-            offset: typ.offset,
+            timestamp: Timestamp::constant(timestamp, 0),
+            offset: Offset::from_seconds_unchecked(typ.offset),
             abbrev: self.designation(typ),
-            dst: typ.is_dst,
+            dst: Dst::from(typ.is_dst),
         })
     }
 
@@ -481,21 +433,19 @@ impl<
         &self,
         ts: Timestamp,
     ) -> Option<TimeZoneTransition> {
-        assert!(!self.transitions().is_empty(), "transitions is non-empty");
+        assert!(!self.timestamps().is_empty(), "transitions is non-empty");
         let timestamp = ts.as_second();
-        let search = self
-            .transitions()
-            .binary_search_by_key(&timestamp, |t| t.timestamp);
+        let search = self.timestamps().binary_search(&timestamp);
         let index = match search {
             Ok(i) => i.checked_add(1)?,
             Err(i) => i,
         };
-        let trans = if index == 0 {
+        let index = if index == 0 {
             // The first transition is a dummy that we insert, so if we land on
             // it here, treat it as if it doesn't exist.
             return None;
-        } else if index >= self.transitions().len() - 1 {
-            if let Some(ref posix_tz) = self.posix_tz {
+        } else if index >= self.timestamps().len() - 1 {
+            if let Some(posix_tz) = self.posix_tz() {
                 // Since the POSIX TZ must be consistent with the last
                 // transition, it must be the case that next.timestamp <=
                 // posix_next_tans in all cases. So the transition according to
@@ -506,352 +456,98 @@ impl<
                 // of the TZif format if it does.
                 return posix_tz.next_transition(ts);
             }
-            self.transitions().last().expect("last transition")
+            self.timestamps().len() - 1
         } else {
-            &self.transitions()[index]
+            index
         };
-        let typ = &self.types()[usize::from(trans.type_index)];
+        let timestamp = self.timestamps()[index];
+        let typ = self.local_time_type(index);
         Some(TimeZoneTransition {
-            timestamp: Timestamp::constant(trans.timestamp, 0),
-            offset: typ.offset,
+            timestamp: Timestamp::constant(timestamp, 0),
+            offset: Offset::from_seconds_unchecked(typ.offset),
             abbrev: self.designation(typ),
-            dst: typ.is_dst,
+            dst: Dst::from(typ.is_dst),
         })
     }
 
-    fn designation(&self, typ: &LocalTimeType) -> &str {
+    fn designation(&self, typ: &shared::TzifLocalTimeType) -> &str {
         // OK because we verify that the designation range on every local
         // time type is a valid range into `self.designations`.
         &self.designations()[typ.designation()]
     }
 
-    fn local_time_type(&self, transition: &Transition) -> &LocalTimeType {
+    fn local_time_type(
+        &self,
+        transition_index: usize,
+    ) -> &shared::TzifLocalTimeType {
         // OK because we require that `type_index` always points to a valid
         // local time type.
-        &self.types()[usize::from(transition.type_index)]
+        &self.types()[usize::from(self.infos()[transition_index].type_index)]
+    }
+
+    fn transition_kind(
+        &self,
+        transition_index: usize,
+    ) -> shared::TzifTransitionKind {
+        self.infos()[transition_index].kind
+    }
+
+    fn posix_tz(&self) -> Option<&PosixTimeZone<ABBREV>> {
+        self.posix_tz.as_ref()
     }
 
     fn designations(&self) -> &str {
-        self.designations.as_ref()
+        self.inner.fixed.designations.as_ref()
     }
 
-    fn types(&self) -> &[LocalTimeType] {
-        self.types.as_ref()
+    fn types(&self) -> &[shared::TzifLocalTimeType] {
+        self.inner.types.as_ref()
     }
 
-    fn transitions(&self) -> &[Transition] {
-        self.transitions.as_ref()
+    fn timestamps(&self) -> &[i64] {
+        self.inner.transitions.timestamps.as_ref()
+    }
+
+    fn civil_starts(&self) -> &[shared::TzifDateTime] {
+        self.inner.transitions.civil_starts.as_ref()
+    }
+
+    fn civil_ends(&self) -> &[shared::TzifDateTime] {
+        self.inner.transitions.civil_ends.as_ref()
+    }
+
+    fn infos(&self) -> &[shared::TzifTransitionInfo] {
+        self.inner.transitions.infos.as_ref()
     }
 }
 
-impl<STRING: AsRef<str>, ABBREV: AsRef<str>, TYPES, TRANS> Eq
-    for Tzif<STRING, ABBREV, TYPES, TRANS>
+impl<STR: AsRef<str>, ABBREV, TYPES, TIMESTAMPS, STARTS, ENDS, INFOS> Eq
+    for Tzif<STR, ABBREV, TYPES, TIMESTAMPS, STARTS, ENDS, INFOS>
 {
 }
 
-impl<STRING: AsRef<str>, ABBREV: AsRef<str>, TYPES, TRANS> PartialEq
-    for Tzif<STRING, ABBREV, TYPES, TRANS>
+impl<STR: AsRef<str>, ABBREV, TYPES, TIMESTAMPS, STARTS, ENDS, INFOS> PartialEq
+    for Tzif<STR, ABBREV, TYPES, TIMESTAMPS, STARTS, ENDS, INFOS>
 {
     fn eq(&self, rhs: &Self) -> bool {
-        self.name.as_ref().map(|n| n.as_ref())
-            == rhs.name.as_ref().map(|n| n.as_ref())
-            && self.checksum == rhs.checksum
+        self.inner.fixed.name.as_ref().map(|n| n.as_ref())
+            == rhs.inner.fixed.name.as_ref().map(|n| n.as_ref())
+            && self.inner.fixed.checksum == rhs.inner.fixed.checksum
     }
 }
 
-/// A transition to a different offset.
-#[derive(Clone, Debug, Eq, PartialEq)]
-#[doc(hidden)] // not part of Jiff's public API
-pub struct Transition {
-    /// The UNIX leap time at which the transition starts. The transition
-    /// continues up to and _not_ including the next transition.
-    timestamp: i64,
-    /// The wall clock time for when this transition begins. This includes
-    /// boundary conditions for quickly determining if a given wall clock time
-    /// is ambiguous (i.e., falls in a gap or a fold).
-    wall: TransitionWall,
-    /// The index into the sequence of local time type records. This is what
-    /// provides the correct offset (from UTC) that is active beginning at
-    /// this transition.
-    type_index: u8,
-}
-
-impl Transition {
-    /// Converts from the shared-but-internal API for use in proc macros.
-    pub(crate) const fn from_shared(
-        sh: shared::TzifTransition,
-        prev_offset: i32,
-        this_offset: i32,
-    ) -> Transition {
-        let timestamp = sh.timestamp;
-        let wall = TransitionWall::new(sh.timestamp, prev_offset, this_offset);
-        let type_index = sh.type_index;
-        Transition { timestamp, wall, type_index }
-    }
-}
-
-/// The wall clock time for when a transition begins.
-///
-/// This explicitly represents ambiguous wall clock times that occur at the
-/// boundaries of transitions.
-///
-/// The start of the wall clock time is always the earlier possible wall clock
-/// time that could occur with this transition's corresponding offset. For a
-/// gap, it's the previous transition's offset. For a fold, it's the current
-/// transition's offset.
-///
-/// For example, DST for `America/New_York` began on `2024-03-10T07:00:00+00`.
-/// The offset prior to this instant in time is `-05`, corresponding
-/// to standard time (EST). Thus, in wall clock time, DST began at
-/// `2024-03-10T02:00:00`. And since this is a DST transition that jumps ahead
-/// an hour, the start of DST also corresponds to the start of a gap. That is,
-/// the times `02:00:00` through `02:59:59` never appear on a clock for this
-/// hour. The question is thus: which offset should we apply to `02:00:00`?
-/// We could apply the offset from the earlier transition `-05` and get
-/// `2024-03-10T01:00:00-05` (that's `2024-03-10T06:00:00+00`), or we could
-/// apply the offset from the later transition `-04` and get
-/// `2024-03-10T03:00:00-04` (that's `2024-03-10T07:00:00+00`).
-///
-/// So in the above, we would have a `Gap` variant where `start` (inclusive) is
-/// `2024-03-10T02:00:00` and `end` (exclusive) is `2024-03-10T03:00:00`.
-///
-/// The fold case is the same idea, but where the same time is repeated.
-/// For example, in `America/New_York`, standard time began on
-/// `2024-11-03T06:00:00+00`. The offset prior to this instant in time
-/// is `-04`, corresponding to DST (EDT). Thus, in wall clock time, DST
-/// ended at `2024-11-03T02:00:00`. However, since this is a fold, the
-/// actual set of ambiguous times begins at `2024-11-03T01:00:00` and
-/// ends at `2024-11-03T01:59:59.999999999`. That is, the wall clock time
-/// `2024-11-03T02:00:00` is unambiguous.
-///
-/// So in the fold case above, we would have a `Fold` variant where
-/// `start` (inclusive) is `2024-11-03T01:00:00` and `end` (exclusive) is
-/// `2024-11-03T02:00:00`.
-///
-/// Since this gets bundled in with the sorted sequence of transitions, we'll
-/// use the "start" time in all three cases as our target of binary search.
-/// Once we land on a transition, we'll know our given wall clock time is
-/// greater than or equal to its start wall clock time. At that point, to
-/// determine if there is ambiguity, we merely need to determine if the given
-/// wall clock time is less than the corresponding `end` time. If it is, then
-/// it falls in a gap or fold. Otherwise, it's unambiguous.
-///
-/// Note that we could compute these datetime values while searching for the
-/// correct transition, but there's a fair bit of math involved in going
-/// between timestamps (which is what TZif gives us) and calendar datetimes
-/// (which is what we're given as input). It is also necessary that we offset
-/// the timestamp given in TZif at some point, since it is in UTC and the
-/// datetime given is in wall clock time. So I decided it would be worth
-/// pre-computing what we need in terms of what the input is. This way, we
-/// don't need to do any conversions, or indeed, any arithmetic at all, for
-/// time zone lookups. We *could* store these as transitions, but then the
-/// input datetime would need to be converted to a timestamp before searching
-/// the transitions.
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum TransitionWall {
-    /// This transition cannot possibly lead to an unambiguous offset because
-    /// its offset is equivalent to the offset of the previous transition.
-    Unambiguous {
-        /// The civil datetime corresponding to the beginning of this
-        /// transition, inclusive.
-        start: DateTime,
-    },
-    /// This occurs when this transition's offset is strictly greater than the
-    /// previous transition's offset. This effectively results in a "gap" of
-    /// time equal to the difference in the offsets between the two
-    /// transitions.
-    Gap {
-        /// The start of a gap (inclusive) in wall clock time.
-        start: DateTime,
-        /// The end of the gap (exclusive) in wall clock time.
-        end: DateTime,
-    },
-    /// This occurs when this transition's offset is strictly less than the
-    /// previous transition's offset. This results in a "fold" of time where
-    /// the two transitions have an overlap where it is ambiguous which one
-    /// applies given a wall clock time. In effect, a span of time equal to the
-    /// difference in the offsets is repeated.
-    Fold {
-        /// The start of the fold (inclusive) in wall clock time.
-        start: DateTime,
-        /// The end of the fold (exclusive) in wall clock time.
-        end: DateTime,
-    },
-}
-
-impl TransitionWall {
-    /// Creates transition data based on wall-clock time.
-    ///
-    /// This data isn't directly part of TZif, but can be derived from it.
-    /// It is principally done so that TZ lookups for civil datetime are
-    /// faster. That is, we pre-compute whatever we can here.
-    ///
-    /// `timestamp` corresponds to the timestamp of the respective transition.
-    /// `this_offset` is the offset associated with that transition (via the
-    /// corresponding local time type), and `prev_offset` is the offset of the
-    /// previous transition (also through its corresponding local time type).
-    const fn new(
-        timestamp: i64,
-        prev_offset: i32,
-        this_offset: i32,
-    ) -> TransitionWall {
-        const fn to_datetime(timestamp: i64, offset: i32) -> DateTime {
-            use crate::shared::util::itime::{IOffset, ITimestamp};
-            let its = ITimestamp { second: timestamp, nanosecond: 0 };
-            let ioff = IOffset { second: offset };
-            let idt = its.to_datetime(ioff);
-            DateTime::from_idatetime_const(idt)
-        }
-
-        if prev_offset == this_offset {
-            // Equivalent offsets means there can never be any ambiguity.
-            let start = to_datetime(timestamp, prev_offset);
-            TransitionWall::Unambiguous { start }
-        } else if prev_offset < this_offset {
-            // When the offset of the previous transition is less, that
-            // means there is some non-zero amount of time that is
-            // "skipped" when moving to the next transition. Thus, we have
-            // a gap. The start of the gap is the offset which gets us the
-            // earliest time, i.e., the smaller of the two offsets.
-            let start = to_datetime(timestamp, prev_offset);
-            let end = to_datetime(timestamp, this_offset);
-            TransitionWall::Gap { start, end }
-        } else {
-            // When the offset of the previous transition is greater, that
-            // means there is some non-zero amount of time that will be
-            // replayed on a wall clock in this time zone. Thus, we have
-            // a fold. The start of the gold is the offset which gets us
-            // the earliest time, i.e., the smaller of the two offsets.
-            assert!(prev_offset > this_offset);
-            let start = to_datetime(timestamp, this_offset);
-            let end = to_datetime(timestamp, prev_offset);
-            TransitionWall::Fold { start, end }
-        }
-    }
-
-    fn start(&self) -> DateTime {
-        match *self {
-            TransitionWall::Unambiguous { start } => start,
-            TransitionWall::Gap { start, .. } => start,
-            TransitionWall::Fold { start, .. } => start,
-        }
-    }
-}
-
-/// A single local time type.
-///
-/// Basically, this is what transition times map to. Once you have a local time
-/// type, then you know the offset, whether it's in DST and the corresponding
-/// abbreviation. (There is also an "indicator," but I have no clue what it
-/// means. See the `Indicator` type for a rant.)
-#[derive(Clone, Debug, Eq, PartialEq)]
-#[doc(hidden)] // not part of Jiff's public API
-pub struct LocalTimeType {
-    offset: Offset,
-    is_dst: Dst,
-    designation: Range<u8>,
-    indicator: Indicator,
-}
-
-impl LocalTimeType {
-    /// Converts from the shared-but-internal API for use in proc macros.
-    pub(crate) const fn from_shared(
-        sh: shared::TzifLocalTimeType,
-    ) -> LocalTimeType {
-        let offset = Offset::constant_seconds(sh.offset);
-        let is_dst = if sh.is_dst { Dst::Yes } else { Dst::No };
-        let designation = sh.designation.0..sh.designation.1;
-        let indicator = Indicator::from_shared(sh.indicator);
-        LocalTimeType { offset, is_dst, designation, indicator }
-    }
-
+impl shared::TzifLocalTimeType {
     fn designation(&self) -> Range<usize> {
-        usize::from(self.designation.start)..usize::from(self.designation.end)
+        usize::from(self.designation.0)..usize::from(self.designation.1)
     }
 }
 
-/// This enum corresponds to the possible indicator values for standard/wall
-/// and UT/local.
-///
-/// Note that UT+Wall is not allowed.
-///
-/// I honestly have no earthly clue what they mean. I've read the section about
-/// them in RFC 8536 several times and I can't make sense of it. I've even
-/// looked at data files that have these set and still can't make sense of
-/// them. I've even looked at what other datetime libraries do with these, and
-/// they all seem to just ignore them. Like, WTF. I've spent the last couple
-/// months of my life steeped in time, and I just cannot figure this out. Am I
-/// just dumb?
-///
-/// Anyway, we parse them, but otherwise ignore them because that's what all
-/// the cool kids do.
-///
-/// The default is `LocalWall`, which also occurs when no indicators are
-/// present.
-///
-/// I tried again and still don't get it. Here's a dump for `Pacific/Honolulu`:
-///
-/// ```text
-/// $ ./scripts/jiff-debug tzif /usr/share/zoneinfo/Pacific/Honolulu
-/// TIME ZONE NAME
-///   /usr/share/zoneinfo/Pacific/Honolulu
-/// LOCAL TIME TYPES
-///   000: offset=-10:31:26, is_dst=false, designation=LMT, indicator=local/wall
-///   001: offset=-10:30, is_dst=false, designation=HST, indicator=local/wall
-///   002: offset=-09:30, is_dst=true, designation=HDT, indicator=local/wall
-///   003: offset=-09:30, is_dst=true, designation=HWT, indicator=local/wall
-///   004: offset=-09:30, is_dst=true, designation=HPT, indicator=ut/std
-///   005: offset=-10, is_dst=false, designation=HST, indicator=local/wall
-/// TRANSITIONS
-///   0000: -9999-01-02T01:59:59 :: -377705023201 :: type=0, -10:31:26, is_dst=false, LMT, local/wall
-///   0001: 1896-01-13T22:31:26 :: -2334101314 :: type=1, -10:30, is_dst=false, HST, local/wall
-///   0002: 1933-04-30T12:30:00 :: -1157283000 :: type=2, -09:30, is_dst=true, HDT, local/wall
-///   0003: 1933-05-21T21:30:00 :: -1155436200 :: type=1, -10:30, is_dst=false, HST, local/wall
-///   0004: 1942-02-09T12:30:00 :: -880198200 :: type=3, -09:30, is_dst=true, HWT, local/wall
-///   0005: 1945-08-14T23:00:00 :: -769395600 :: type=4, -09:30, is_dst=true, HPT, ut/std
-///   0006: 1945-09-30T11:30:00 :: -765376200 :: type=1, -10:30, is_dst=false, HST, local/wall
-///   0007: 1947-06-08T12:30:00 :: -712150200 :: type=5, -10, is_dst=false, HST, local/wall
-/// POSIX TIME ZONE STRING
-///   HST10
-/// ```
-///
-/// See how type 004 has a ut/std indicator? What the fuck does that mean?
-/// All transitions are defined in terms of UTC. I confirmed this with `zdump`:
-///
-/// ```text
-/// $ zdump -v Pacific/Honolulu | rg 1945
-/// Pacific/Honolulu  Tue Aug 14 22:59:59 1945 UT = Tue Aug 14 13:29:59 1945 HWT isdst=1 gmtoff=-34200
-/// Pacific/Honolulu  Tue Aug 14 23:00:00 1945 UT = Tue Aug 14 13:30:00 1945 HPT isdst=1 gmtoff=-34200
-/// Pacific/Honolulu  Sun Sep 30 11:29:59 1945 UT = Sun Sep 30 01:59:59 1945 HPT isdst=1 gmtoff=-34200
-/// Pacific/Honolulu  Sun Sep 30 11:30:00 1945 UT = Sun Sep 30 01:00:00 1945 HST isdst=0 gmtoff=-37800
-/// ```
-///
-/// The times match up. All of them. The indicators don't seem to make a
-/// difference. I'm clearly missing something.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Indicator {
-    LocalWall,
-    LocalStandard,
-    UTStandard,
-}
-
-impl Indicator {
-    /// Converts from the shared-but-internal API for use in proc macros.
-    pub(crate) const fn from_shared(sh: shared::TzifIndicator) -> Indicator {
-        match sh {
-            shared::TzifIndicator::LocalWall => Indicator::LocalWall,
-            shared::TzifIndicator::LocalStandard => Indicator::LocalStandard,
-            shared::TzifIndicator::UTStandard => Indicator::UTStandard,
-        }
-    }
-}
-
-impl core::fmt::Display for Indicator {
+impl core::fmt::Display for shared::TzifIndicator {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match *self {
-            Indicator::LocalWall => write!(f, "local/wall"),
-            Indicator::LocalStandard => write!(f, "local/std"),
-            Indicator::UTStandard => write!(f, "ut/std"),
+            shared::TzifIndicator::LocalWall => write!(f, "local/wall"),
+            shared::TzifIndicator::LocalStandard => write!(f, "local/std"),
+            shared::TzifIndicator::UTStandard => write!(f, "ut/std"),
         }
     }
 }
@@ -888,6 +584,10 @@ mod tests {
     fn tzif_to_human_readable(tzif: &TzifOwned) -> String {
         use std::io::Write;
 
+        fn datetime((y, mo, d, h, m, s): shared::TzifDateTime) -> DateTime {
+            DateTime::constant(y, mo, d, h, m, s, 0)
+        }
+
         let mut out = tabwriter::TabWriter::new(vec![])
             .alignment(tabwriter::Alignment::Left);
 
@@ -895,37 +595,45 @@ mod tests {
         writeln!(out, "  {}", tzif.name().unwrap_or("UNNAMED")).unwrap();
 
         writeln!(out, "TIME ZONE VERSION").unwrap();
-        writeln!(out, "  {}", char::try_from(tzif.version).unwrap()).unwrap();
+        writeln!(
+            out,
+            "  {}",
+            char::try_from(tzif.inner.fixed.version).unwrap()
+        )
+        .unwrap();
 
         writeln!(out, "LOCAL TIME TYPES").unwrap();
-        for (i, typ) in tzif.types.iter().enumerate() {
+        for (i, typ) in tzif.inner.types.iter().enumerate() {
             writeln!(
                 out,
                 "  {i:03}:\toffset={off}\t\
                    designation={desig}\t{dst}\tindicator={ind}",
-                off = typ.offset,
+                off = Offset::from_seconds_unchecked(typ.offset),
                 desig = tzif.designation(&typ),
-                dst = if typ.is_dst.is_dst() { "dst" } else { "" },
+                dst = if typ.is_dst { "dst" } else { "" },
                 ind = typ.indicator,
             )
             .unwrap();
         }
-        if !tzif.transitions.is_empty() {
+        if !tzif.timestamps().is_empty() {
             writeln!(out, "TRANSITIONS").unwrap();
-            for (i, t) in tzif.transitions.iter().enumerate() {
-                let timestamp = Timestamp::constant(t.timestamp, 0);
+            for i in 0..tzif.timestamps().len() {
+                let timestamp = Timestamp::constant(tzif.timestamps()[i], 0);
                 let dt = Offset::UTC.to_datetime(timestamp);
-                let typ = &tzif.types[usize::from(t.type_index)];
-                let wall = alloc::format!("{:?}", t.wall.start());
-                let ambiguous = match t.wall {
-                    TransitionWall::Unambiguous { .. } => {
+                let typ = tzif.local_time_type(i);
+                let wall =
+                    alloc::format!("{}", datetime(tzif.civil_starts()[i]));
+                let ambiguous = match tzif.transition_kind(i) {
+                    shared::TzifTransitionKind::Unambiguous => {
                         "unambiguous".to_string()
                     }
-                    TransitionWall::Gap { end, .. } => {
-                        alloc::format!(" gap-until({end:?})")
+                    shared::TzifTransitionKind::Gap => {
+                        let end = datetime(tzif.civil_ends()[i]);
+                        alloc::format!(" gap-until({end})")
                     }
-                    TransitionWall::Fold { end, .. } => {
-                        alloc::format!("fold-until({end:?})")
+                    shared::TzifTransitionKind::Fold => {
+                        let end = datetime(tzif.civil_ends()[i]);
+                        alloc::format!("fold-until({end})")
                     }
                 };
 
@@ -935,11 +643,11 @@ mod tests {
                        {ambiguous}\t\
                        type={type_index}\t{off}\t\
                        {desig}\t{dst}",
-                    ts = t.timestamp,
-                    type_index = t.type_index,
-                    off = typ.offset,
+                    ts = timestamp.as_second(),
+                    type_index = tzif.infos()[i].type_index,
+                    off = Offset::from_seconds_unchecked(typ.offset),
                     desig = tzif.designation(typ),
-                    dst = if typ.is_dst.is_dst() { "dst" } else { "" },
+                    dst = if typ.is_dst { "dst" } else { "" },
                 )
                 .unwrap();
             }

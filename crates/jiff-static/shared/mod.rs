@@ -81,30 +81,49 @@ building a static `TimeZone`. But these conversion routines are removed when
 this module is copied to `jiff-static`.
 */
 
+/// An alias for TZif data whose backing storage has a `'static` lifetime.
+
+/// An alias for TZif data whose backing storage is on the heap.
 pub type TzifOwned = Tzif<
     alloc::string::String,
     self::util::array_str::Abbreviation,
     alloc::vec::Vec<TzifLocalTimeType>,
-    alloc::vec::Vec<TzifTransition>,
+    alloc::vec::Vec<i64>,
+    alloc::vec::Vec<TzifDateTime>,
+    alloc::vec::Vec<TzifDateTime>,
+    alloc::vec::Vec<TzifTransitionInfo>,
+>;
+
+/// An alias for TZif transition data whose backing storage is on the heap.
+pub type TzifTransitionsOwned = TzifTransitions<
+    alloc::vec::Vec<i64>,
+    alloc::vec::Vec<TzifDateTime>,
+    alloc::vec::Vec<TzifDateTime>,
+    alloc::vec::Vec<TzifTransitionInfo>,
 >;
 
 #[derive(Clone, Debug)]
-pub struct Tzif<STRING, ABBREV, TYPES, TRANS> {
-    pub fixed: TzifFixed<STRING, ABBREV>,
+pub struct Tzif<STR, ABBREV, TYPES, TIMESTAMPS, STARTS, ENDS, INFOS> {
+    pub fixed: TzifFixed<STR, ABBREV>,
     pub types: TYPES,
-    pub transitions: TRANS,
+    pub transitions: TzifTransitions<TIMESTAMPS, STARTS, ENDS, INFOS>,
 }
 
 #[derive(Clone, Debug)]
-pub struct TzifFixed<STRING, ABBREV> {
-    pub name: Option<STRING>,
+pub struct TzifFixed<STR, ABBREV> {
+    pub name: Option<STR>,
+    /// An ASCII byte corresponding to the version number. So, 0x50 is '2'.
+    ///
+    /// This is unused. It's only used in `test` compilation for emitting
+    /// diagnostic data about TZif files. If we really need to use this, we
+    /// should probably just convert it to an actual integer.
     pub version: u8,
     pub checksum: u32,
-    pub designations: STRING,
+    pub designations: STR,
     pub posix_tz: Option<PosixTimeZone<ABBREV>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct TzifLocalTimeType {
     pub offset: i32,
     pub is_dst: bool,
@@ -112,46 +131,256 @@ pub struct TzifLocalTimeType {
     pub indicator: TzifIndicator,
 }
 
-#[derive(Clone, Debug)]
+/// This enum corresponds to the possible indicator values for standard/wall
+/// and UT/local.
+///
+/// Note that UT+Wall is not allowed.
+///
+/// I honestly have no earthly clue what they mean. I've read the section about
+/// them in RFC 8536 several times and I can't make sense of it. I've even
+/// looked at data files that have these set and still can't make sense of
+/// them. I've even looked at what other datetime libraries do with these, and
+/// they all seem to just ignore them. Like, WTF. I've spent the last couple
+/// months of my life steeped in time, and I just cannot figure this out. Am I
+/// just dumb?
+///
+/// Anyway, we parse them, but otherwise ignore them because that's what all
+/// the cool kids do.
+///
+/// The default is `LocalWall`, which also occurs when no indicators are
+/// present.
+///
+/// I tried again and still don't get it. Here's a dump for `Pacific/Honolulu`:
+///
+/// ```text
+/// $ ./scripts/jiff-debug tzif /usr/share/zoneinfo/Pacific/Honolulu
+/// TIME ZONE NAME
+///   /usr/share/zoneinfo/Pacific/Honolulu
+/// LOCAL TIME TYPES
+///   000: offset=-10:31:26, is_dst=false, designation=LMT, indicator=local/wall
+///   001: offset=-10:30, is_dst=false, designation=HST, indicator=local/wall
+///   002: offset=-09:30, is_dst=true, designation=HDT, indicator=local/wall
+///   003: offset=-09:30, is_dst=true, designation=HWT, indicator=local/wall
+///   004: offset=-09:30, is_dst=true, designation=HPT, indicator=ut/std
+///   005: offset=-10, is_dst=false, designation=HST, indicator=local/wall
+/// TRANSITIONS
+///   0000: -9999-01-02T01:59:59 :: -377705023201 :: type=0, -10:31:26, is_dst=false, LMT, local/wall
+///   0001: 1896-01-13T22:31:26 :: -2334101314 :: type=1, -10:30, is_dst=false, HST, local/wall
+///   0002: 1933-04-30T12:30:00 :: -1157283000 :: type=2, -09:30, is_dst=true, HDT, local/wall
+///   0003: 1933-05-21T21:30:00 :: -1155436200 :: type=1, -10:30, is_dst=false, HST, local/wall
+///   0004: 1942-02-09T12:30:00 :: -880198200 :: type=3, -09:30, is_dst=true, HWT, local/wall
+///   0005: 1945-08-14T23:00:00 :: -769395600 :: type=4, -09:30, is_dst=true, HPT, ut/std
+///   0006: 1945-09-30T11:30:00 :: -765376200 :: type=1, -10:30, is_dst=false, HST, local/wall
+///   0007: 1947-06-08T12:30:00 :: -712150200 :: type=5, -10, is_dst=false, HST, local/wall
+/// POSIX TIME ZONE STRING
+///   HST10
+/// ```
+///
+/// See how type 004 has a ut/std indicator? What the fuck does that mean?
+/// All transitions are defined in terms of UTC. I confirmed this with `zdump`:
+///
+/// ```text
+/// $ zdump -v Pacific/Honolulu | rg 1945
+/// Pacific/Honolulu  Tue Aug 14 22:59:59 1945 UT = Tue Aug 14 13:29:59 1945 HWT isdst=1 gmtoff=-34200
+/// Pacific/Honolulu  Tue Aug 14 23:00:00 1945 UT = Tue Aug 14 13:30:00 1945 HPT isdst=1 gmtoff=-34200
+/// Pacific/Honolulu  Sun Sep 30 11:29:59 1945 UT = Sun Sep 30 01:59:59 1945 HPT isdst=1 gmtoff=-34200
+/// Pacific/Honolulu  Sun Sep 30 11:30:00 1945 UT = Sun Sep 30 01:00:00 1945 HST isdst=0 gmtoff=-37800
+/// ```
+///
+/// The times match up. All of them. The indicators don't seem to make a
+/// difference. I'm clearly missing something.
+#[derive(Clone, Copy, Debug)]
 pub enum TzifIndicator {
     LocalWall,
     LocalStandard,
     UTStandard,
 }
 
+/// The set of transitions in TZif data, laid out in column orientation.
+///
+/// The column orientation is used to make TZ lookups faster. Specifically,
+/// for finding an offset for a timestamp, we do a binary search on
+/// `timestamps`. For finding an offset for a local datetime, we do a binary
+/// search on `civil_starts`. By making these two distinct sequences with
+/// nothing else in them, we make them as small as possible and thus improve
+/// cache locality.
+///
+/// All sequences in this type are in correspondence with one another. They
+/// are all guaranteed to have the same length.
 #[derive(Clone, Debug)]
-pub struct TzifTransition {
-    pub timestamp: i64,
-    pub type_index: u8,
+pub struct TzifTransitions<TIMESTAMPS, STARTS, ENDS, INFOS> {
+    /// The timestamp at which this transition begins.
+    pub timestamps: TIMESTAMPS,
+    /// The wall clock time for when a transition begins.
+    pub civil_starts: STARTS,
+    /// The wall clock time for when a transition ends.
+    ///
+    /// This is only non-zero when the transition kind is a gap or a fold.
+    pub civil_ends: ENDS,
+    /// Any other relevant data about a transition, such as its local type
+    /// index and the transition kind.
+    pub infos: INFOS,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// TZif transition info beyond the timestamp and civil datetime.
+///
+/// For example, this contains a transition's "local type index," which in
+/// turn gives access to the offset (among other metadata) for that transition.
+#[derive(Clone, Copy, Debug)]
+pub struct TzifTransitionInfo {
+    /// The index into the sequence of local time type records. This is what
+    /// provides the correct offset (from UTC) that is active beginning at
+    /// this transition.
+    pub type_index: u8,
+    /// The boundary condition for quickly determining if a given wall clock
+    /// time is ambiguous (i.e., falls in a gap or a fold).
+    pub kind: TzifTransitionKind,
+}
+
+/// The representation we use to represent a civil datetime.
+///
+/// The tuple is years, months, days, hours, minutes and seconds.
+///
+/// We don't use `shared::util::itime::IDateTime` here because we
+/// specifically do not need to represent fractional seconds. This
+/// lets us easily represent what we need in 8 bytes instead of
+/// the 12 bytes used by `IDateTime`.
+pub type TzifDateTime = (i16, i8, i8, i8, i8, i8);
+
+/// The kind of a transition.
+///
+/// This is used when trying to determine the offset for a local datetime. It
+/// indicates how the corresponding civil datetimes in `civil_starts` and
+/// `civil_ends` should be interpreted. That is, there are three possible
+/// cases:
+///
+/// 1. The offset of this transition is equivalent to the offset of the
+/// previous transition. That means there are no ambiguous civil datetimes
+/// between the transitions. This can occur, e.g., when the time zone
+/// abbreviation changes.
+/// 2. The offset of the transition is greater than the offset of the previous
+/// transition. That means there is a "gap" in local time between the
+/// transitions. This typically corresponds to entering daylight saving time.
+/// It is usually, but not always, 1 hour.
+/// 3. The offset of the transition is less than the offset of the previous
+/// transition. That means there is a "fold" in local time where time is
+/// repeated. This typically corresponds to leaving daylight saving time. It
+/// is usually, but not always, 1 hour.
+///
+/// # More explanation
+///
+/// This, when combined with `civil_starts` and `civil_ends` in
+/// `TzifTransitions`, explicitly represents ambiguous wall clock times that
+/// occur at the boundaries of transitions.
+///
+/// The start of the wall clock time is always the earlier possible wall clock
+/// time that could occur with this transition's corresponding offset. For a
+/// gap, it's the previous transition's offset. For a fold, it's the current
+/// transition's offset.
+///
+/// For example, DST for `America/New_York` began on `2024-03-10T07:00:00+00`.
+/// The offset prior to this instant in time is `-05`, corresponding
+/// to standard time (EST). Thus, in wall clock time, DST began at
+/// `2024-03-10T02:00:00`. And since this is a DST transition that jumps ahead
+/// an hour, the start of DST also corresponds to the start of a gap. That is,
+/// the times `02:00:00` through `02:59:59` never appear on a clock for this
+/// hour. The question is thus: which offset should we apply to `02:00:00`?
+/// We could apply the offset from the earlier transition `-05` and get
+/// `2024-03-10T01:00:00-05` (that's `2024-03-10T06:00:00+00`), or we could
+/// apply the offset from the later transition `-04` and get
+/// `2024-03-10T03:00:00-04` (that's `2024-03-10T07:00:00+00`).
+///
+/// So in the above, we would have a `Gap` variant where `start` (inclusive) is
+/// `2024-03-10T02:00:00` and `end` (exclusive) is `2024-03-10T03:00:00`.
+///
+/// The fold case is the same idea, but where the same time is repeated.
+/// For example, in `America/New_York`, standard time began on
+/// `2024-11-03T06:00:00+00`. The offset prior to this instant in time
+/// is `-04`, corresponding to DST (EDT). Thus, in wall clock time, DST
+/// ended at `2024-11-03T02:00:00`. However, since this is a fold, the
+/// actual set of ambiguous times begins at `2024-11-03T01:00:00` and
+/// ends at `2024-11-03T01:59:59.999999999`. That is, the wall clock time
+/// `2024-11-03T02:00:00` is unambiguous.
+///
+/// So in the fold case above, we would have a `Fold` variant where
+/// `start` (inclusive) is `2024-11-03T01:00:00` and `end` (exclusive) is
+/// `2024-11-03T02:00:00`.
+///
+/// Since this gets bundled in with the sorted sequence of transitions, we'll
+/// use the "start" time in all three cases as our target of binary search.
+/// Once we land on a transition, we'll know our given wall clock time is
+/// greater than or equal to its start wall clock time. At that point, to
+/// determine if there is ambiguity, we merely need to determine if the given
+/// wall clock time is less than the corresponding `end` time. If it is, then
+/// it falls in a gap or fold. Otherwise, it's unambiguous.
+///
+/// Note that we could compute these datetime values while searching for the
+/// correct transition, but there's a fair bit of math involved in going
+/// between timestamps (which is what TZif gives us) and calendar datetimes
+/// (which is what we're given as input). It is also necessary that we offset
+/// the timestamp given in TZif at some point, since it is in UTC and the
+/// datetime given is in wall clock time. So I decided it would be worth
+/// pre-computing what we need in terms of what the input is. This way, we
+/// don't need to do any conversions, or indeed, any arithmetic at all, for
+/// time zone lookups. We *could* store these as transitions, but then the
+/// input datetime would need to be converted to a timestamp before searching
+/// the transitions.
+#[derive(Clone, Copy, Debug)]
+pub enum TzifTransitionKind {
+    /// This transition cannot possibly lead to an unambiguous offset because
+    /// its offset is equivalent to the offset of the previous transition.
+    ///
+    /// Has an entry in `civil_starts`, but corresponding entry in `civil_ends`
+    /// is always zeroes (i.e., meaningless).
+    Unambiguous,
+    /// This occurs when this transition's offset is strictly greater than the
+    /// previous transition's offset. This effectively results in a "gap" of
+    /// time equal to the difference in the offsets between the two
+    /// transitions.
+    ///
+    /// Has an entry in `civil_starts` for when the gap starts (inclusive) in
+    /// local time. Also has an entry in `civil_ends` for when the fold ends
+    /// (exclusive) in local time.
+    Gap,
+    /// This occurs when this transition's offset is strictly less than the
+    /// previous transition's offset. This results in a "fold" of time where
+    /// the two transitions have an overlap where it is ambiguous which one
+    /// applies given a wall clock time. In effect, a span of time equal to the
+    /// difference in the offsets is repeated.
+    ///
+    /// Has an entry in `civil_starts` for when the fold starts (inclusive) in
+    /// local time. Also has an entry in `civil_ends` for when the fold ends
+    /// (exclusive) in local time.
+    Fold,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PosixTimeZone<ABBREV> {
     pub std_abbrev: ABBREV,
     pub std_offset: PosixOffset,
     pub dst: Option<PosixDst<ABBREV>>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PosixDst<ABBREV> {
     pub abbrev: ABBREV,
     pub offset: PosixOffset,
     pub rule: PosixRule,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PosixRule {
     pub start: PosixDayTime,
     pub end: PosixDayTime,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PosixDayTime {
     pub date: PosixDay,
     pub time: PosixTime,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PosixDay {
     /// Julian day in a year, no counting for leap days.
     ///
@@ -183,12 +412,12 @@ pub enum PosixDay {
     },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PosixTime {
     pub second: i32,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PosixOffset {
     pub second: i32,
 }

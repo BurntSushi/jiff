@@ -1841,18 +1841,6 @@ impl Time {
             subsec_nanosecond: self.subsec_nanosecond.get_unchecked(),
         }
     }
-
-    #[inline]
-    pub(crate) const fn from_itime_const(itime: ITime) -> Time {
-        Time {
-            hour: Hour::new_unchecked(itime.hour),
-            minute: Minute::new_unchecked(itime.minute),
-            second: Second::new_unchecked(itime.second),
-            subsec_nanosecond: SubsecNanosecond::new_unchecked(
-                itime.subsec_nanosecond,
-            ),
-        }
-    }
 }
 
 impl Default for Time {
