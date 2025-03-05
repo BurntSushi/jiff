@@ -2397,12 +2397,26 @@ impl Span {
         };
         let relspan = result
             .and_then(|r| r.into_relative_span(Unit::Second, *self))
-            .with_context(|| {
-                err!(
-                    "could not compute normalized relative span \
-                     from datetime {relative} and span {self}",
-                    relative = relative.kind,
-                )
+            .with_context(|| match relative.kind {
+                SpanRelativeToKind::Civil(dt) => {
+                    err!(
+                        "could not compute normalized relative span \
+                         from datetime {dt} and span {self}",
+                    )
+                }
+                SpanRelativeToKind::Zoned(ref zdt) => {
+                    err!(
+                        "could not compute normalized relative span \
+                         from datetime {zdt} and span {self}",
+                    )
+                }
+                SpanRelativeToKind::DaysAre24Hours => {
+                    err!(
+                        "could not compute normalized relative span \
+                         from {self} when all days are assumed to be \
+                         24 hours",
+                    )
+                }
             })?;
         debug_assert!(relspan.span.largest_unit() <= Unit::Second);
         Ok(relspan.span.to_duration_invariant())
@@ -5766,16 +5780,6 @@ impl From<Date> for SpanRelativeTo<'static> {
     fn from(date: Date) -> SpanRelativeTo<'static> {
         let dt = DateTime::from_parts(date, Time::midnight());
         SpanRelativeTo { kind: SpanRelativeToKind::Civil(dt) }
-    }
-}
-
-impl<'a> core::fmt::Display for SpanRelativeToKind<'a> {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        match *self {
-            SpanRelativeToKind::Civil(dt) => core::fmt::Display::fmt(&dt, f),
-            SpanRelativeToKind::Zoned(zdt) => core::fmt::Display::fmt(zdt, f),
-            SpanRelativeToKind::DaysAre24Hours => write!(f, "TODO"),
-        }
     }
 }
 
