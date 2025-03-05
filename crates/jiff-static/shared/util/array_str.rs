@@ -8,7 +8,8 @@
 /// Also, since it isn't needed and it lets us save on storage requirements,
 /// `N` must be less than `256` (so that the length can fit in a `u8`).
 #[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub(crate) struct ArrayStr<const N: usize> {
+#[doc(hidden)] // not part of Jiff's public API
+pub struct ArrayStr<const N: usize> {
     /// The UTF-8 bytes that make up the string.
     ///
     /// This array---the entire array---is always valid UTF-8. And
@@ -46,6 +47,11 @@ impl<const N: usize> ArrayStr<N> {
         // array. If such a thing is needed, please file an issue to discuss.
         debug_assert!(N <= u8::MAX as usize, "size of ArrayStr is too big");
         Some(ArrayStr { bytes, len: len as u8 })
+    }
+
+    /// Returns the capacity of this array string.
+    pub(crate) fn capacity() -> usize {
+        N
     }
 
     /// Append the bytes given to the end of this string.
@@ -180,7 +186,8 @@ const ABBREVIATION_MAX: usize = 30;
 ///
 /// Basically, this creates one single coherent place where we control the
 /// length of a time zone abbreviation.
-pub(crate) type Abbreviation = ArrayStr<ABBREVIATION_MAX>;
+#[doc(hidden)] // not part of Jiff's public API
+pub type Abbreviation = ArrayStr<ABBREVIATION_MAX>;
 
 #[cfg(test)]
 mod tests {
