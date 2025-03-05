@@ -28,14 +28,13 @@ pub(super) fn define(c: &mut Criterion) {
 /// offset }` is the way to go.
 fn fixed_offset_add_time(c: &mut Criterion) {
     const NAME: &str = "zoned/fixed_offset_add_time";
-    const OFFSET: Offset = Offset::constant(-4);
+    const TZ: TimeZone = TimeZone::fixed(Offset::constant(-4));
     const START: Timestamp = Timestamp::constant(1719755160, 0);
     const EXPECTED: Timestamp =
         Timestamp::constant(1719755160 + (24 * 60 * 60), 0);
 
-    let tz = TimeZone::fixed(OFFSET);
-    let start = START.to_zoned(tz.clone());
-    let expected = EXPECTED.to_zoned(tz.clone());
+    let start = START.to_zoned(TZ.clone());
+    let expected = EXPECTED.to_zoned(TZ.clone());
 
     {
         let span = 24.hours();
@@ -94,12 +93,11 @@ fn fixed_offset_add_time(c: &mut Criterion) {
 /// this operation is effectively free.
 fn fixed_offset_to_civil_datetime(c: &mut Criterion) {
     const NAME: &str = "zoned/fixed_offset_to_civil_datetime";
-    const OFFSET: Offset = Offset::constant(-4);
+    const TZ: TimeZone = TimeZone::fixed(Offset::constant(-4));
     const STAMP: Timestamp = Timestamp::constant(1719755160, 0);
     const EXPECTED: civil::DateTime = civil::date(2024, 6, 30).at(9, 46, 0, 0);
 
-    let tz = TimeZone::fixed(OFFSET);
-    let zdt = STAMP.to_zoned(tz.clone());
+    let zdt = STAMP.to_zoned(TZ.clone());
 
     {
         benchmark(c, format!("{NAME}/jiff"), |b| {
@@ -143,11 +141,10 @@ fn fixed_offset_to_civil_datetime(c: &mut Criterion) {
 /// conversion step.
 fn fixed_offset_to_timestamp(c: &mut Criterion) {
     const NAME: &str = "zoned/fixed_offset_to_timestamp";
-    const OFFSET: Offset = Offset::constant(-4);
+    const TZ: TimeZone = TimeZone::fixed(Offset::constant(-4));
     const STAMP: Timestamp = Timestamp::constant(1719755160, 0);
 
-    let tz = TimeZone::fixed(OFFSET);
-    let zdt = STAMP.to_zoned(tz.clone());
+    let zdt = STAMP.to_zoned(TZ.clone());
 
     {
         benchmark(c, format!("{NAME}/jiff"), |b| {
