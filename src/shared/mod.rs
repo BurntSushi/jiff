@@ -248,16 +248,6 @@ pub struct TzifTransitionInfo {
     pub kind: TzifTransitionKind,
 }
 
-/// The representation we use to represent a civil datetime.
-///
-/// The tuple is years, months, days, hours, minutes and seconds.
-///
-/// We don't use `shared::util::itime::IDateTime` here because we
-/// specifically do not need to represent fractional seconds. This
-/// lets us easily represent what we need in 8 bytes instead of
-/// the 12 bytes used by `IDateTime`.
-pub type TzifDateTime = (i16, i8, i8, i8, i8, i8);
-
 /// The kind of a transition.
 ///
 /// This is used when trying to determine the offset for a local datetime. It
@@ -363,6 +353,68 @@ pub enum TzifTransitionKind {
     /// local time. Also has an entry in `civil_ends` for when the fold ends
     /// (exclusive) in local time.
     Fold,
+}
+
+/// The representation we use to represent a civil datetime.
+///
+/// We don't use `shared::util::itime::IDateTime` here because we specifically
+/// do not need to represent fractional seconds. This lets us easily represent
+/// what we need in 8 bytes instead of the 12 bytes used by `IDateTime`.
+///
+/// Moreover, we pack the fields into a single `i64` to make comparisons
+/// extremely cheap. This is especially useful since we do a binary search on
+/// `&[TzifDateTime]` when doing a TZ lookup for a civil datetime.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[repr(align(8))]
+pub struct TzifDateTime {
+    bits: i64,
+}
+
+impl TzifDateTime {
+    pub const ZERO: TzifDateTime = TzifDateTime::new(0, 0, 0, 0, 0, 0);
+
+    pub const fn new(
+        year: i16,
+        month: i8,
+        day: i8,
+        hour: i8,
+        minute: i8,
+        second: i8,
+    ) -> TzifDateTime {
+        // TzifDateTime { year, month, day, hour, minute, second }
+        let mut bits = (year as u64) << 48;
+        bits |= (month as u64) << 40;
+        bits |= (day as u64) << 32;
+        bits |= (hour as u64) << 24;
+        bits |= (minute as u64) << 16;
+        bits |= (second as u64) << 8;
+        // The least significant 8 bits remain 0.
+        TzifDateTime { bits: bits as i64 }
+    }
+
+    pub const fn year(self) -> i16 {
+        (self.bits as u64 >> 48) as u16 as i16
+    }
+
+    pub const fn month(self) -> i8 {
+        (self.bits as u64 >> 40) as u8 as i8
+    }
+
+    pub const fn day(self) -> i8 {
+        (self.bits as u64 >> 32) as u8 as i8
+    }
+
+    pub const fn hour(self) -> i8 {
+        (self.bits as u64 >> 24) as u8 as i8
+    }
+
+    pub const fn minute(self) -> i8 {
+        (self.bits as u64 >> 16) as u8 as i8
+    }
+
+    pub const fn second(self) -> i8 {
+        (self.bits as u64 >> 8) as u8 as i8
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

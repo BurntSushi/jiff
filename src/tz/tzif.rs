@@ -313,7 +313,7 @@ impl<
         // times instead of timestamps. And in particular, each transition
         // begins with a possibly ambiguous range of wall clock times
         // corresponding to either a "gap" or "fold" in time.
-        let dtt = (
+        let dtt = shared::TzifDateTime::new(
             dt.year(),
             dt.month(),
             dt.day(),
@@ -584,8 +584,16 @@ mod tests {
     fn tzif_to_human_readable(tzif: &TzifOwned) -> String {
         use std::io::Write;
 
-        fn datetime((y, mo, d, h, m, s): shared::TzifDateTime) -> DateTime {
-            DateTime::constant(y, mo, d, h, m, s, 0)
+        fn datetime(dt: shared::TzifDateTime) -> DateTime {
+            DateTime::constant(
+                dt.year(),
+                dt.month(),
+                dt.day(),
+                dt.hour(),
+                dt.minute(),
+                dt.second(),
+                0,
+            )
         }
 
         let mut out = tabwriter::TabWriter::new(vec![])
