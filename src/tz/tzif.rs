@@ -272,6 +272,7 @@ impl<
         &self,
         timestamp: Timestamp,
     ) -> Result<&LocalTimeType, &PosixTimeZone<ABBREV>> {
+        let timestamp = timestamp.as_second();
         // This is guaranteed because we always push at least one transition.
         // This isn't guaranteed by TZif since it might have 0 transitions,
         // but we always add a "dummy" first transition with our minimum
@@ -297,9 +298,7 @@ impl<
                 // transition, but has non-zero fractional seconds). But this
                 // is okay, because it would otherwise get an `Err(i)`, and
                 // access `i-1`. i.e., The timestamp it compared equal to.
-                .binary_search_by_key(&timestamp.as_second(), |t| {
-                    t.timestamp.as_second()
-                });
+                .binary_search_by_key(&timestamp, |t| t.timestamp);
             match search {
                 // Since the first transition is always Timestamp::MIN, it's
                 // impossible for any timestamp to sort before it.
@@ -437,8 +436,13 @@ impl<
         ts: Timestamp,
     ) -> Option<TimeZoneTransition> {
         assert!(!self.transitions().is_empty(), "transitions is non-empty");
-        let search =
-            self.transitions().binary_search_by_key(&ts, |t| t.timestamp);
+        let mut timestamp = ts.as_second();
+        if ts.subsec_nanosecond() != 0 {
+            timestamp = timestamp.saturating_add(1);
+        }
+        let search = self
+            .transitions()
+            .binary_search_by_key(&timestamp, |t| t.timestamp);
         let index = match search {
             Ok(i) | Err(i) => i.checked_sub(1)?,
         };
@@ -464,7 +468,7 @@ impl<
         };
         let typ = &self.types()[usize::from(trans.type_index)];
         Some(TimeZoneTransition {
-            timestamp: trans.timestamp,
+            timestamp: Timestamp::constant(trans.timestamp, 0),
             offset: typ.offset,
             abbrev: self.designation(typ),
             dst: typ.is_dst,
@@ -478,8 +482,10 @@ impl<
         ts: Timestamp,
     ) -> Option<TimeZoneTransition> {
         assert!(!self.transitions().is_empty(), "transitions is non-empty");
-        let search =
-            self.transitions().binary_search_by_key(&ts, |t| t.timestamp);
+        let timestamp = ts.as_second();
+        let search = self
+            .transitions()
+            .binary_search_by_key(&timestamp, |t| t.timestamp);
         let index = match search {
             Ok(i) => i.checked_add(1)?,
             Err(i) => i,
@@ -506,7 +512,7 @@ impl<
         };
         let typ = &self.types()[usize::from(trans.type_index)];
         Some(TimeZoneTransition {
-            timestamp: trans.timestamp,
+            timestamp: Timestamp::constant(trans.timestamp, 0),
             offset: typ.offset,
             abbrev: self.designation(typ),
             dst: typ.is_dst,
@@ -559,7 +565,7 @@ impl<STRING: AsRef<str>, ABBREV: AsRef<str>, TYPES, TRANS> PartialEq
 pub struct Transition {
     /// The UNIX leap time at which the transition starts. The transition
     /// continues up to and _not_ including the next transition.
-    timestamp: Timestamp,
+    timestamp: i64,
     /// The wall clock time for when this transition begins. This includes
     /// boundary conditions for quickly determining if a given wall clock time
     /// is ambiguous (i.e., falls in a gap or a fold).
@@ -577,7 +583,7 @@ impl Transition {
         prev_offset: i32,
         this_offset: i32,
     ) -> Transition {
-        let timestamp = Timestamp::constant(sh.timestamp, 0);
+        let timestamp = sh.timestamp;
         let wall = TransitionWall::new(sh.timestamp, prev_offset, this_offset);
         let type_index = sh.type_index;
         Transition { timestamp, wall, type_index }
@@ -907,7 +913,8 @@ mod tests {
         if !tzif.transitions.is_empty() {
             writeln!(out, "TRANSITIONS").unwrap();
             for (i, t) in tzif.transitions.iter().enumerate() {
-                let dt = Offset::UTC.to_datetime(t.timestamp);
+                let timestamp = Timestamp::constant(t.timestamp, 0);
+                let dt = Offset::UTC.to_datetime(timestamp);
                 let typ = &tzif.types[usize::from(t.type_index)];
                 let wall = alloc::format!("{:?}", t.wall.start());
                 let ambiguous = match t.wall {
@@ -928,7 +935,7 @@ mod tests {
                        {ambiguous}\t\
                        type={type_index}\t{off}\t\
                        {desig}\t{dst}",
-                    ts = t.timestamp.as_second(),
+                    ts = t.timestamp,
                     type_index = t.type_index,
                     off = typ.offset,
                     desig = tzif.designation(typ),
