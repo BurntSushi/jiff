@@ -2130,6 +2130,7 @@ mod repr {
         /// Callers must ensure that the pointer tag is `FIXED`.
         #[inline]
         pub(super) unsafe fn get_fixed(&self) -> Offset {
+            #[allow(unstable_name_collisions)]
             let addr = self.ptr.addr();
             // NOTE: Because of sign extension, we need to case to `i32`
             // before shifting.
@@ -2151,6 +2152,7 @@ mod repr {
         /// Callers must ensure that the pointer tag is `STATIC_TZIF`.
         #[inline]
         pub(super) unsafe fn get_static_tzif(&self) -> &'static TzifStatic {
+            #[allow(unstable_name_collisions)]
             let ptr = self.ptr.map_addr(|addr| addr & !Repr::BITS);
             // SAFETY: Getting a `STATIC_TZIF` tag is only possible when
             // `self.ptr` was constructed from a valid and aligned (to at least
@@ -2218,7 +2220,10 @@ mod repr {
         /// The value is guaranteed to be one of the constant tag values.
         #[inline]
         pub(super) fn tag(&self) -> usize {
-            self.ptr.addr() & Repr::BITS
+            #[allow(unstable_name_collisions)]
+            {
+                self.ptr.addr() & Repr::BITS
+            }
         }
 
         /// Returns a dumb copy of this representation.
