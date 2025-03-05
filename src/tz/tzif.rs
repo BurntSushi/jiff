@@ -116,7 +116,7 @@ impl TzifStatic {
     /// variable length and they need to be the right types. At least, I
     /// couldn't see a simpler way to arrange this.
     pub(crate) const fn from_shared_const(
-        sh: &shared::TzifFixed<&'static str>,
+        sh: &shared::TzifFixed<&'static str, &'static str>,
         types: &'static [LocalTimeType],
         transitions: &'static [Transition],
     ) -> TzifStatic {
