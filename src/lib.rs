@@ -638,6 +638,13 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
   looking at the symlink information on `/etc/localtime`. But in general, it's
   very platform specific and heuristic oriented. On some platforms, this may
   require extra dependencies. (For example, `windows-sys` on Windows.)
+* **tz-fat** (enabled by default) -
+  When enabled, Jiff will "fatten" time zone data with extra transitions to
+  make time zone lookups faster. This may result in increased heap memory
+  (when loading time zones from `/usr/share/zoneinfo`) or increased binary
+  size (when using the `jiff-static` proc macros). Note that this doesn't add
+  more transitions than are likely already in `/usr/share/zoneinfo`, depending
+  on how it was generated.
 * **tzdb-bundle-always** -
   When enabled, Jiff will forcefully depend on the `jiff-tzdb` crate, which
   embeds an entire copy of the Time Zone Database. You should avoid this unless

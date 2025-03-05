@@ -6,7 +6,7 @@ use super::{
     util::{
         error::{err, Error},
         escape::{Byte, Bytes},
-        itime::ITimestamp,
+        itime::{IOffset, ITimestamp},
     },
     PosixTimeZone, TzifFixed, TzifIndicator, TzifLocalTimeType, TzifOwned,
     TzifTransition,
@@ -39,6 +39,27 @@ const TIMESTAMP_MAX: i64 = 253402207200;
 const OFFSET_MIN: i32 = -93599;
 const OFFSET_MAX: i32 = 93599;
 
+// When fattening TZif data, this is the year to go up to.
+//
+// This year was chosen because it's what the "fat" TZif data generated
+// by `zic` uses.
+const FATTEN_UP_TO_YEAR: i16 = 2038;
+
+// This is a "sanity" limit on the maximum number of transitions we'll
+// add to TZif data when fattening them up.
+//
+// This is mostly just a defense-in-depth limit to avoid weird cases
+// where a pathological POSIX time zone could be defined to create
+// many transitions. It's not clear that this is actually possible,
+// but I felt a little uneasy doing unbounded work that isn't linearly
+// proportional to the input data. So, this limit is put into place for
+// reasons of "good sense."
+//
+// For "normal" cases, there should be at most two transitions per
+// year. So this limit permits 300/2=150 years of transition data.
+// (Although we won't go above 2036. See above.)
+const FATTEN_MAX_TRANSITIONS: usize = 300;
+
 impl TzifOwned {
     /// Parses the given data as a TZif formatted file.
     ///
@@ -67,6 +88,7 @@ impl TzifOwned {
         } else {
             TzifOwned::parse64(name, header32, rest)?
         };
+        tzif.fatten();
         tzif.verify_posix_time_zone_consistency()?;
         // Compute the checksum using the entire contents of the TZif data.
         let tzif_raw_len = (rest.as_ptr() as usize)
@@ -507,10 +529,8 @@ impl TzifOwned {
         };
         let last = self.transitions.last().expect("last transition");
         let typ = self.local_time_type(last);
-        let (ioff, abbrev, is_dst) = tz.to_offset_info(ITimestamp {
-            second: last.timestamp,
-            nanosecond: 0,
-        });
+        let (ioff, abbrev, is_dst) =
+            tz.to_offset_info(ITimestamp::from_second(last.timestamp));
         if ioff.second != typ.offset {
             return Err(err!(
                 "expected last transition to have DST offset \
@@ -543,6 +563,87 @@ impl TzifOwned {
             ));
         }
         Ok(())
+    }
+
+    fn fatten(&mut self) {
+        // Note that this is a crate feature for *both* `jiff` and
+        // `jiff-static`.
+        if !cfg!(feature = "tz-fat") {
+            return;
+        }
+        let Some(posix_tz) = self.fixed.posix_tz.clone() else { return };
+        let last = self.transitions.last().expect("last transition");
+        let mut i = 0;
+        let mut prev = ITimestamp::from_second(last.timestamp);
+        loop {
+            if i > FATTEN_MAX_TRANSITIONS {
+                return;
+            }
+            i += 1;
+
+            let Some((its, ioff, abbrev, is_dst)) =
+                posix_tz.next_transition(prev)
+            else {
+                break;
+            };
+            if its.to_datetime(IOffset::UTC).date.year >= FATTEN_UP_TO_YEAR {
+                break;
+            }
+            let Some(type_index) =
+                self.find_or_create_local_time_type(ioff, abbrev, is_dst)
+            else {
+                break;
+            };
+            self.transitions
+                .push(TzifTransition { timestamp: its.second, type_index });
+            prev = its;
+        }
+    }
+
+    fn find_or_create_local_time_type(
+        &mut self,
+        offset: IOffset,
+        abbrev: &str,
+        is_dst: bool,
+    ) -> Option<u8> {
+        for (i, typ) in self.types.iter().enumerate() {
+            if offset.second == typ.offset
+                && abbrev == self.designation(typ)
+                && is_dst == typ.is_dst
+            {
+                return u8::try_from(i).ok();
+            }
+        }
+        let i = u8::try_from(self.types.len()).ok()?;
+        let designation = self.find_or_create_designation(abbrev)?;
+        self.types.push(TzifLocalTimeType {
+            offset: offset.second,
+            is_dst,
+            designation,
+            // Not really clear if this is correct, but Jiff
+            // ignores this anyway, so ¯\_(ツ)_/¯.
+            indicator: TzifIndicator::LocalWall,
+        });
+        Some(i)
+    }
+
+    fn find_or_create_designation(
+        &mut self,
+        needle: &str,
+    ) -> Option<(u8, u8)> {
+        let mut start = 0;
+        while let Some(offset) = self.fixed.designations[start..].find('\0') {
+            let end = start + offset;
+            let abbrev = &self.fixed.designations[start..end];
+            if needle == abbrev {
+                return Some((start.try_into().ok()?, end.try_into().ok()?));
+            }
+            start = end + 1;
+        }
+        self.fixed.designations.push_str(needle);
+        self.fixed.designations.push('\0');
+        let end = start + needle.len();
+        Some((start.try_into().ok()?, end.try_into().ok()?))
     }
 
     fn local_time_type(

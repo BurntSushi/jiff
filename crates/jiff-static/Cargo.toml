@@ -25,6 +25,12 @@ default = []
 # This forces the jiff-tzdb crate to be included and makes the `get` proc macro
 # available (which pulls from the bundled tzdb).
 tzdb = ["dep:jiff-tzdb"]
+# This fattens up the TZif data to contain more explicit transitions. This may
+# improve the performance of time zone lookups.
+#
+# See the `tz-fat` feature in this repository's root `Cargo.toml` for more
+# context.
+tz-fat = []
 
 [dependencies]
 jiff-tzdb = { version = "0.1.2", path = "../jiff-tzdb", optional = true }

@@ -38,6 +38,12 @@ impl ITimestamp {
     const MAX: ITimestamp =
         ITimestamp { second: 253402207200, nanosecond: 999_999_999 };
 
+    /// Creates an `ITimestamp` from a Unix timestamp in seconds.
+    #[inline]
+    pub(crate) const fn from_second(second: i64) -> ITimestamp {
+        ITimestamp { second, nanosecond: 0 }
+    }
+
     /// Converts a Unix timestamp with an offset to a Gregorian datetime.
     ///
     /// The offset should correspond to the number of seconds required to
