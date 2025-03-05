@@ -538,7 +538,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn weekday(self) -> Weekday {
-        weekday_from_unix_epoch_days(self.to_unix_epoch_day())
+        Weekday::from_iweekday(self.to_idate_const().weekday())
     }
 
     /// Returns the ordinal day of the year that this date resides in.
@@ -753,7 +753,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn in_leap_year(self) -> bool {
-        is_leap_year(self.year_ranged())
+        itime::is_leap_year(self.year_ranged().get())
     }
 
     /// Returns the date immediately following this one.
@@ -902,38 +902,13 @@ impl Date {
         nth: i8,
         weekday: Weekday,
     ) -> Result<Date, Error> {
-        type Nth = ri8<-5, 5>;
-
-        let nth = Nth::try_new("nth", nth)?;
-        if nth == 0 {
-            Err(err!("nth weekday of month cannot be `0`"))
-        } else if nth > 0 {
-            let nth = nth.max(C(1));
-            let first_weekday = self.first_of_month().weekday();
-            let diff = weekday.since_ranged(first_weekday);
-            let day = Day::rfrom(diff) + C(1) + (nth - C(1)) * C(7);
-            Date::new_ranged(self.year_ranged(), self.month_ranged(), day)
-        } else {
-            let nth = nth.min(C(-1));
-            let last = self.last_of_month();
-            let last_weekday = last.weekday();
-            let diff = last_weekday.since_ranged(weekday);
-            let day = last.day_ranged()
-                - Day::rfrom(diff)
-                - (nth.abs() - C(1)) * C(7);
-            // Our math can go below 1 when nth is -5 and there is no "5th from
-            // last" weekday in this month. Since this is outside the bounds
-            // of `Day`, we can't let this boundary condition escape. So we
-            // check it here.
-            if day < 1 {
-                return Err(day.to_error_with_bounds(
-                    "day",
-                    1,
-                    self.days_in_month(),
-                ));
-            }
-            Date::new_ranged(self.year_ranged(), self.month_ranged(), day)
-        }
+        let weekday = weekday.to_iweekday();
+        let idate = self
+            .to_idate()
+            .map(|x| x.nth_weekday_of_month(nth, weekday))
+            .transpose()
+            .map_err(Error::shared)?;
+        Ok(Date::from_idate(idate))
     }
 
     /// Returns the "nth" weekday from this date, not including itself.
@@ -1176,7 +1151,9 @@ impl Date {
             week_start
         });
 
-        let weekday = weekday_from_unix_epoch_days(days);
+        let weekday = Weekday::from_iweekday(
+            IEpochDay { epoch_day: days.get() }.weekday(),
+        );
         let week = ((days - week_start) / C(7)) + C(1);
 
         let unix_epoch_day = week_start
@@ -2243,6 +2220,15 @@ impl Date {
     }
 
     #[inline]
+    pub(crate) const fn to_idate_const(self) -> IDate {
+        IDate {
+            year: self.year.get_unchecked(),
+            month: self.month.get_unchecked(),
+            day: self.day.get_unchecked(),
+        }
+    }
+
+    #[inline]
     pub(crate) const fn from_idate_const(idate: IDate) -> Date {
         Date {
             year: Year::new_unchecked(idate.year),
@@ -3224,16 +3210,16 @@ impl DateWith {
             None => self.original.day_ranged(),
             Some(DateWithDay::OfMonth(day)) => Day::try_new("day", day)?,
             Some(DateWithDay::OfYear(day)) => {
-                return day_of_year(year, day);
+                let year = year.get_unchecked();
+                let idate = IDate::from_day_of_year(year, day)
+                    .map_err(Error::shared)?;
+                return Ok(Date::from_idate_const(idate));
             }
-            Some(DateWithDay::OfYearNoLeap(mut day)) => {
-                type DayOfYear = ri16<1, 365>;
-
-                let _ = DayOfYear::try_new("day-of-year", day)?;
-                if is_leap_year(year) && day >= 60 {
-                    day += 1;
-                }
-                return day_of_year(year, day);
+            Some(DateWithDay::OfYearNoLeap(day)) => {
+                let year = year.get_unchecked();
+                let idate = IDate::from_day_of_year_no_leap(year, day)
+                    .map_err(Error::shared)?;
+                return Ok(Date::from_idate_const(idate));
             }
         };
         Date::new_ranged(year, month, day)
@@ -3642,17 +3628,6 @@ fn iso_week_start_from_year(year: impl RInto<t::ISOYear>) -> UnixEpochDay {
     date_in_first_week.to_unix_epoch_day() - diff_from_monday
 }
 
-/// Returns the weekday for the given number of days since the Unix epoch.
-fn weekday_from_unix_epoch_days(days: impl RInto<UnixEpochDay>) -> Weekday {
-    // Based on Hinnant's approach here, although we use ISO weekday numbering
-    // by default. Basically, this works by using the knowledge that 1970-01-01
-    // was a Thursday.
-    //
-    // Ref: http://howardhinnant.github.io/date_algorithms.html
-    let days = days.rinto();
-    Weekday::from_monday_zero_offset_ranged((days + C(3)) % C(7))
-}
-
 /// Adds or subtracts `sign` from the given `year`/`month`.
 ///
 /// If month overflows in either direction, then the `year` returned is
@@ -3695,29 +3670,6 @@ fn month_add_overflowing(
     let years = total / C(12);
     let month = (total % C(12)) + C(1);
     (month.rinto(), years.rinto())
-}
-
-fn day_of_year(year: Year, day: i16) -> Result<Date, Error> {
-    let day = t::DayOfYear::try_new("day-of-year", day)?;
-    let span = Span::new().days_ranged(day - C(1));
-    let start = Date::new_ranged(year, C(1), C(1))?;
-    let end = start.checked_add(span)?;
-    // If we overflowed into the next year, then `day` is too big.
-    if start.year() != end.year() {
-        // Can only happen given day=366 and this is a leap year.
-        debug_assert_eq!(day, 366);
-        debug_assert!(!start.in_leap_year());
-        return Err(Error::range("day-of-year", day, 1, 365));
-    }
-    Ok(end)
-}
-
-/// Returns true if and only if the given year is a leap year.
-///
-/// A leap year is a year with 366 days. Typical years have 365 days.
-#[inline]
-fn is_leap_year(year: Year) -> bool {
-    itime::is_leap_year(year.get())
 }
 
 /// Saturates the given day in the month.

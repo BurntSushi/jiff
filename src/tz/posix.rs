@@ -213,7 +213,7 @@ impl PosixTimeZone {
     ) -> Result<PosixTimeZone, Error> {
         let bytes = bytes.as_ref();
         let shared_tz = shared::PosixTimeZone::parse(bytes.as_ref())
-            .map_err(Error::adhoc)
+            .map_err(Error::shared)
             .map_err(|e| {
                 e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
             })?;
@@ -230,7 +230,7 @@ impl PosixTimeZone {
         let bytes = bytes.as_ref();
         let (shared_tz, remaining) =
             shared::PosixTimeZone::parse_prefix(bytes.as_ref())
-                .map_err(Error::adhoc)
+                .map_err(Error::shared)
                 .map_err(|e| {
                     e.context(err!(
                         "invalid POSIX TZ string {:?}",

@@ -792,5 +792,6 @@ mod tests {
         dbg!((t::SpanMicroseconds::MIN, t::SpanMicroseconds::MAX));
         dbg!((t::SpanNanoseconds::MIN, t::SpanNanoseconds::MAX));
         dbg!((t::UnixSeconds::MIN, t::UnixSeconds::MAX));
+        dbg!((t::UnixEpochDay::MIN, t::UnixEpochDay::MAX));
     }
 }
