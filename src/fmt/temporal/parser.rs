@@ -251,7 +251,7 @@ pub(super) enum ParsedTimeZoneKind<'i> {
     Named(&'i str),
     Offset(ParsedOffset),
     #[cfg(feature = "alloc")]
-    Posix(crate::tz::posix::ReasonablePosixTimeZone),
+    Posix(crate::tz::posix::PosixTimeZone),
 }
 
 impl<'i> ParsedTimeZone<'i> {
@@ -283,7 +283,7 @@ impl<'i> ParsedTimeZone<'i> {
             }
             #[cfg(feature = "alloc")]
             ParsedTimeZoneKind::Posix(posix_tz) => {
-                Ok(TimeZone::from_reasonable_posix_tz(posix_tz))
+                Ok(TimeZone::from_posix_tz(posix_tz))
             }
         }
     }
@@ -530,18 +530,19 @@ impl DateTimeParser {
         }
         #[cfg(feature = "alloc")]
         {
-            use crate::tz::posix::ReasonablePosixTimeZone;
+            use crate::tz::posix::PosixTimeZone;
 
-            match ReasonablePosixTimeZone::parse_prefix(consumed) {
+            match PosixTimeZone::parse_prefix(consumed) {
                 Ok((posix_tz, input)) => {
                     let kind = ParsedTimeZoneKind::Posix(posix_tz);
                     let value = ParsedTimeZone { input: original, kind };
                     Ok(Parsed { value, input })
                 }
-                // We get here for invalid POSIX tz strings, or even if they
-                // are valid but not "reasonable", i.e., `EST5EDT`. Which in
-                // that case would end up doing an IANA tz lookup. (And it
-                // might hit because `EST5EDT` is a legacy IANA tz id. Lol.)
+                // We get here for invalid POSIX tz strings, or even if
+                // they are technically valid according to POSIX but not
+                // "reasonable", i.e., `EST5EDT`. Which in that case would
+                // end up doing an IANA tz lookup. (And it might hit because
+                // `EST5EDT` is a legacy IANA tz id. Lol.)
                 Err(_) => mknamed(consumed, input),
             }
         }
