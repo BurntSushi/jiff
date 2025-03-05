@@ -13,7 +13,7 @@ use core::cmp::Ordering;
 /// fast UTF-8 decoder, this is not it. If you feel like you need one in this
 /// crate, then please file an issue and discuss your use case.
 pub(crate) fn decode(bytes: &[u8]) -> Option<Result<char, u8>> {
-    crate::shared::util::utf8_decode(bytes)
+    crate::shared::util::utf8::decode(bytes)
 }
 
 /// Like std's `eq_ignore_ascii_case`, but returns a full `Ordering`.
