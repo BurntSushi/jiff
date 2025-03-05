@@ -1,4 +1,4 @@
-use crate::util::sync::Arc;
+use crate::{shared::util::error::Error as SharedError, util::sync::Arc};
 
 /// Creates a new ad hoc error with no causal chain.
 ///
@@ -83,6 +83,11 @@ enum ErrorKind {
     /// of a public API, or as a result of an operation on a number that
     /// results in it being out of range.
     Range(RangeError),
+    /// An error that occurs within `jiff::shared`.
+    ///
+    /// It has its own error type to avoid bringing in this much bigger error
+    /// type.
+    Shared(SharedError),
     /// An error associated with a file path.
     ///
     /// This is generally expected to always have a cause attached to it
@@ -149,6 +154,11 @@ impl Error {
         max: impl Into<i128>,
     ) -> Error {
         Error::from(ErrorKind::Range(RangeError::new(what, given, min, max)))
+    }
+
+    /// Creates a new error from the special "shared" error type.
+    pub(crate) fn shared(err: SharedError) -> Error {
+        Error::from(ErrorKind::Shared(err))
     }
 
     /// A convenience constructor for building an I/O error.
@@ -257,6 +267,7 @@ impl core::fmt::Display for ErrorKind {
         match *self {
             ErrorKind::Adhoc(ref msg) => msg.fmt(f),
             ErrorKind::Range(ref err) => err.fmt(f),
+            ErrorKind::Shared(ref err) => err.fmt(f),
             ErrorKind::FilePath(ref err) => err.fmt(f),
             ErrorKind::IO(ref err) => err.fmt(f),
         }

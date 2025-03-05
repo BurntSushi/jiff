@@ -24,7 +24,7 @@ they are internal types. Specifically, to distinguish them from Jiff's public
 types. For example, `Date` versus `IDate`.
 */
 
-// #![allow(warnings)]
+use super::error::{err, Error};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub(crate) struct ITimestamp {
@@ -98,6 +98,9 @@ pub(crate) struct IEpochDay {
 }
 
 impl IEpochDay {
+    const MIN: IEpochDay = IEpochDay { epoch_day: -4371587 };
+    const MAX: IEpochDay = IEpochDay { epoch_day: 2932896 };
+
     /// Converts days since the Unix epoch to a Gregorian date.
     ///
     /// This is Neri-Schneider. There's no branching or divisions.
@@ -133,6 +136,42 @@ impl IEpochDay {
         let day = (D + 1) as i8;
         IDate { year, month, day }
     }
+
+    /// Returns the day of the week for this epoch day.
+    #[inline(always)]
+    pub(crate) const fn weekday(&self) -> IWeekday {
+        // Based on Hinnant's approach here, although we use ISO weekday
+        // numbering by default. Basically, this works by using the knowledge
+        // that 1970-01-01 was a Thursday.
+        //
+        // Ref: http://howardhinnant.github.io/date_algorithms.html
+        IWeekday::from_monday_zero_offset(
+            (self.epoch_day + 3).rem_euclid(7) as i8
+        )
+    }
+
+    /// Add the given number of days to this epoch day.
+    ///
+    /// If this would overflow an `i32` or result in an out-of-bounds epoch
+    /// day, then this returns an error.
+    #[inline]
+    pub(crate) fn checked_add(&self, amount: i32) -> Result<IEpochDay, Error> {
+        let epoch_day = self.epoch_day;
+        let sum = epoch_day.checked_add(amount).ok_or_else(|| {
+            err!("adding `{amount}` to epoch day `{epoch_day}` overflowed i32")
+        })?;
+        let ret = IEpochDay { epoch_day: sum };
+        if !(IEpochDay::MIN <= ret && ret <= IEpochDay::MAX) {
+            return Err(err!(
+                "adding `{amount}` to epoch day `{epoch_day}` \
+                 resulted in `{sum}`, which is not in the required \
+                 epoch day range of `{min}..={max}`",
+                min = IEpochDay::MIN.epoch_day,
+                max = IEpochDay::MAX.epoch_day,
+            ));
+        }
+        Ok(ret)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -143,6 +182,100 @@ pub(crate) struct IDate {
 }
 
 impl IDate {
+    /// Fallibly builds a new date.
+    ///
+    /// This checks that the given day is valid for the given year/month.
+    ///
+    /// No other conditions are checked. This assumes `year` and `month` are
+    /// valid, and that `day >= 1`.
+    #[inline]
+    pub(crate) fn try_new(
+        year: i16,
+        month: i8,
+        day: i8,
+    ) -> Result<IDate, Error> {
+        if day > 28 {
+            let max_day = days_in_month(year, month);
+            if day > max_day {
+                return Err(err!(
+                    "day={day} is out of range for year={year} \
+                     and month={month}, must be in range 1..={max_day}",
+                ));
+            }
+        }
+        Ok(IDate { year, month, day })
+    }
+
+    /// Returns the date corresponding to the day of the given year. The day
+    /// of the year should be a value in `1..=366`, with `366` only being valid
+    /// if `year` is a leap year.
+    ///
+    /// This assumes that `year` is valid, but returns an error if `day` is
+    /// not in the range `1..=366`.
+    #[inline]
+    pub(crate) fn from_day_of_year(
+        year: i16,
+        day: i16,
+    ) -> Result<IDate, Error> {
+        if !(1 <= day && day <= 366) {
+            return Err(err!(
+                "day-of-year={day} is out of range for year={year}, \
+                 must be in range 1..={max_day}",
+                max_day = days_in_year(year),
+            ));
+        }
+        let start = IDate { year, month: 1, day: 1 }.to_epoch_day();
+        let end = start
+            .checked_add(i32::from(day) - 1)
+            .map_err(|_| {
+                err!(
+                    "failed to find date for \
+                     year={year} and day-of-year={day}: \
+                     adding `{day}` to `{start}` overflows \
+                     Jiff's range",
+                    start = start.epoch_day,
+                )
+            })?
+            .to_date();
+        // If we overflowed into the next year, then `day` is too big.
+        if year != end.year {
+            // Can only happen given day=366 and this is a leap year.
+            debug_assert_eq!(day, 366);
+            debug_assert!(!is_leap_year(year));
+            return Err(err!(
+                "day-of-year={day} is out of range for year={year}, \
+                 must be in range 1..={max_day}",
+                max_day = days_in_year(year),
+            ));
+        }
+        Ok(end)
+    }
+
+    /// Returns the date corresponding to the day of the given year. The day
+    /// of the year should be a value in `1..=365`, with February 29 being
+    /// completely ignored. That is, it is guaranteed that Febraury 29 will
+    /// never be returned by this function. It is impossible.
+    ///
+    /// This assumes that `year` is valid, but returns an error if `day` is
+    /// not in the range `1..=365`.
+    #[inline]
+    pub(crate) fn from_day_of_year_no_leap(
+        year: i16,
+        mut day: i16,
+    ) -> Result<IDate, Error> {
+        if !(1 <= day && day <= 365) {
+            return Err(err!(
+                "day-of-year={day} is out of range for year={year}, \
+                 must be in range 1..=365",
+            ));
+        }
+        if day >= 60 && is_leap_year(year) {
+            day += 1;
+        }
+        // The boundary check above guarantees this always succeeds.
+        Ok(IDate::from_day_of_year(year, day).unwrap())
+    }
+
     /// Converts a Gregorian date to days since the Unix epoch.
     ///
     /// This is Neri-Schneider. There's no branching or divisions.
@@ -172,6 +305,68 @@ impl IDate {
         let N_U = N.wrapping_sub(K);
         let epoch_day = N_U as i32;
         IEpochDay { epoch_day }
+    }
+
+    /// Returns the day of the week for this date.
+    #[inline]
+    pub(crate) const fn weekday(&self) -> IWeekday {
+        self.to_epoch_day().weekday()
+    }
+
+    /// Returns the `nth` weekday of the month represented by this date.
+    ///
+    /// `nth` must be non-zero and otherwise in the range `-5..=5`. If it
+    /// isn't, an error is returned.
+    ///
+    /// This also returns an error if `abs(nth)==5` and there is no "5th"
+    /// weekday of this month.
+    #[inline]
+    pub(crate) fn nth_weekday_of_month(
+        &self,
+        nth: i8,
+        weekday: IWeekday,
+    ) -> Result<IDate, Error> {
+        if nth == 0 || !(-5 <= nth && nth <= 5) {
+            return Err(err!(
+                "got nth weekday of `{nth}`, but \
+                 must be non-zero and in range `-5..=5`",
+            ));
+        }
+        if nth > 0 {
+            let first_weekday = self.first_of_month().weekday();
+            let diff = weekday.since(first_weekday);
+            let day = diff + 1 + (nth - 1) * 7;
+            IDate::try_new(self.year, self.month, day)
+        } else {
+            let last = self.last_of_month();
+            let last_weekday = last.weekday();
+            let diff = last_weekday.since(weekday);
+            let day = last.day - diff - (nth.abs() - 1) * 7;
+            // Our math can go below 1 when nth is -5 and there is no "5th from
+            // last" weekday in this month. Since this is outside the bounds
+            // of `Day`, we can't let this boundary condition escape. So we
+            // check it here.
+            if day < 1 {
+                return Err(err!(
+                    "day={day} is out of range for year={year} \
+                     and month={month}, must be in range 1..={max_day}",
+                    year = self.year,
+                    month = self.month,
+                    max_day = days_in_month(self.year, self.month),
+                ));
+            }
+            IDate::try_new(self.year, self.month, day)
+        }
+    }
+
+    #[inline]
+    fn first_of_month(&self) -> IDate {
+        IDate { day: 1, ..*self }
+    }
+
+    #[inline]
+    fn last_of_month(&self) -> IDate {
+        IDate { day: days_in_month(self.year, self.month), ..*self }
     }
 }
 
@@ -262,6 +457,85 @@ impl ITimeNanosecond {
     }
 }
 
+/// Represents a weekday.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub(crate) struct IWeekday {
+    /// Range is `1..=6` with `1=Monday`.
+    offset: i8,
+}
+
+impl IWeekday {
+    /// Creates a weekday assuming the week starts on Monday and Monday is at
+    /// offset `0`.
+    #[inline]
+    pub(crate) const fn from_monday_zero_offset(offset: i8) -> IWeekday {
+        assert!(0 <= offset && offset <= 6);
+        IWeekday::from_monday_one_offset(offset + 1)
+    }
+
+    /// Creates a weekday assuming the week starts on Monday and Monday is at
+    /// offset `1`.
+    #[inline]
+    pub(crate) const fn from_monday_one_offset(offset: i8) -> IWeekday {
+        assert!(1 <= offset && offset <= 7);
+        IWeekday { offset }
+    }
+
+    /// Creates a weekday assuming the week starts on Sunday and Sunday is at
+    /// offset `0`.
+    #[cfg(test)] // currently dead code
+    #[inline]
+    pub(crate) const fn from_sunday_zero_offset(offset: i8) -> IWeekday {
+        assert!(0 <= offset && offset <= 6);
+        IWeekday::from_monday_zero_offset((offset - 1).rem_euclid(7))
+    }
+
+    /// Creates a weekday assuming the week starts on Sunday and Sunday is at
+    /// offset `1`.
+    #[cfg(test)] // currently dead code
+    #[inline]
+    pub(crate) const fn from_sunday_one_offset(offset: i8) -> IWeekday {
+        assert!(1 <= offset && offset <= 7);
+        IWeekday::from_sunday_zero_offset(offset - 1)
+    }
+
+    /// Returns this weekday as an offset in the range `0..=6` where
+    /// `0=Monday`.
+    #[inline]
+    pub(crate) const fn to_monday_zero_offset(self) -> i8 {
+        self.to_monday_one_offset() - 1
+    }
+
+    /// Returns this weekday as an offset in the range `1..=7` where
+    /// `1=Monday`.
+    #[inline]
+    pub(crate) const fn to_monday_one_offset(self) -> i8 {
+        self.offset
+    }
+
+    /// Returns this weekday as an offset in the range `0..=6` where
+    /// `0=Sunday`.
+    #[cfg(test)] // currently dead code
+    #[inline]
+    pub(crate) const fn to_sunday_zero_offset(self) -> i8 {
+        (self.to_monday_zero_offset() + 1) % 7
+    }
+
+    /// Returns this weekday as an offset in the range `1..=7` where
+    /// `1=Sunday`.
+    #[cfg(test)] // currently dead code
+    #[inline]
+    pub(crate) const fn to_sunday_one_offset(self) -> i8 {
+        self.to_sunday_zero_offset() + 1
+    }
+
+    #[inline]
+    pub(crate) const fn since(self, other: IWeekday) -> i8 {
+        (self.to_monday_zero_offset() - other.to_monday_zero_offset())
+            .rem_euclid(7)
+    }
+}
+
 /// Returns true if and only if the given year is a leap year.
 ///
 /// A leap year is a year with 366 days. Typical years have 365 days.
@@ -270,6 +544,16 @@ pub(crate) const fn is_leap_year(year: i16) -> bool {
     // From: https://github.com/BurntSushi/jiff/pull/23
     let d = if year % 25 != 0 { 4 } else { 16 };
     (year % d) == 0
+}
+
+/// Return the number of days in the given year.
+#[inline]
+pub(crate) const fn days_in_year(year: i16) -> i16 {
+    if is_leap_year(year) {
+        366
+    } else {
+        365
+    }
 }
 
 /// Return the number of days in the given month.
@@ -329,6 +613,47 @@ mod tests {
                 assert_eq!(nanosecond, nanosecond_roundtrip);
             }
         }
+    }
+
+    #[test]
+    fn nth_weekday() {
+        let d1 = IDate { year: 2017, month: 3, day: 1 };
+        let wday = IWeekday::from_sunday_zero_offset(5);
+        let d2 = d1.nth_weekday_of_month(2, wday).unwrap();
+        assert_eq!(d2, IDate { year: 2017, month: 3, day: 10 });
+
+        let d1 = IDate { year: 2024, month: 3, day: 1 };
+        let wday = IWeekday::from_sunday_zero_offset(4);
+        let d2 = d1.nth_weekday_of_month(-1, wday).unwrap();
+        assert_eq!(d2, IDate { year: 2024, month: 3, day: 28 });
+
+        let d1 = IDate { year: 2024, month: 3, day: 25 };
+        let wday = IWeekday::from_sunday_zero_offset(1);
+        assert!(d1.nth_weekday_of_month(5, wday).is_err());
+        assert!(d1.nth_weekday_of_month(-5, wday).is_err());
+    }
+
+    #[test]
+    fn weekday() {
+        let wday = IWeekday::from_sunday_zero_offset(0);
+        assert_eq!(wday.to_monday_one_offset(), 7);
+
+        let wday = IWeekday::from_monday_one_offset(7);
+        assert_eq!(wday.to_sunday_zero_offset(), 0);
+
+        let wday = IWeekday::from_sunday_one_offset(1);
+        assert_eq!(wday.to_monday_zero_offset(), 6);
+
+        let wday = IWeekday::from_monday_zero_offset(6);
+        assert_eq!(wday.to_sunday_one_offset(), 1);
+    }
+
+    #[test]
+    fn weekday_since() {
+        let wday1 = IWeekday::from_sunday_zero_offset(0);
+        let wday2 = IWeekday::from_sunday_zero_offset(6);
+        assert_eq!(wday2.since(wday1), 6);
+        assert_eq!(wday1.since(wday2), 1);
     }
 
     #[test]

@@ -1,4 +1,3 @@
-#[allow(unused_macros)] // TODO: remove, not currently used in core-only
 macro_rules! err {
     ($($tt:tt)*) => {{
         crate::shared::util::error::Error::from_args(format_args!($($tt)*))
