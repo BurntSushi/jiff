@@ -53,6 +53,7 @@ exclude = [
 default = [
   "std",
   "tz-system",
+  "tz-fat",
   "tzdb-bundle-platform",
   "tzdb-zoneinfo",
   "tzdb-concatenated",
@@ -68,6 +69,52 @@ logging = ["dep:log"]
 # very platform specific and heuristic oriented. On some platforms, this may
 # require extra dependencies. (For example, `windows-sys` on Windows.)
 tz-system = ["std", "dep:windows-sys"]
+
+# When enabled, Jiff will "fatten" time zone data so that it contains more
+# transitions. This uses a little extra heap memory (or binary size, when
+# embedding time zone data into your binary) in exchange for generally faster
+# time zone lookups.
+#
+# Why is this a thing? The TZif files that make up the IANA Time Zone Database
+# contain both explicit transitions for when offsets change (e.g., twice a
+# year for DST) _and_ a more general rule for dealing with offset changes
+# that aren't explicitly listed. In the long ago, TZif data only contained the
+# explicit transitions. Later, they added support for the general rule
+# mechanism, which is only used for "current" transitions. The general rule
+# is implemented via, roughly, POSIX time zone strings.
+#
+# Not all consumers of the IANA Time Zone Database support POSIX time zone
+# strings, and so, the TZif files can be built in a "fat" mode that adds extra
+# transitions (usually up to the year 2037). This means that if you want to
+# find the offset for a timestamp in a particular time zone before 2037, you
+# just need to do one very fast binary search on the explicit transitions.
+#
+# However, these explicit transitions up through 2037 aren't, strictly speaking,
+# required. For example, the DST transition rule in the United States is
+# perfectly described by a single POSIX time zone string:
+#
+#     EST5EDT,M3.2.0,M11.1.0
+#
+# Therefore, it isn't necessary to add any explicit transitions to, e.g.,
+# `America/New_York` after the year 2007. (It would only become necessary if
+# the DST transition rule changed.)
+#
+# Thus, the TZif data files for the IANA Time Zone Database can _also_ be
+# generated in a "slim" fashion, where only the historical transitions are
+# included. Some platforms use the slim data by default, while others uses
+# the fat data.
+#
+# The problem is that determining the offset from a POSIX time zone can
+# generally be more costly than a simple binary search on explicit transitions.
+# That in turn means your time zone lookup performance can vary quite a bit due
+# to factors generally beyond your control. In order to mitigate this problem,
+# Jiff will automatically "fatten" up slim TZif data to include more explicit
+# transitions in memory. This smoothes out those performance differences.
+#
+# Users may want to disable this if they are sensitive to the extra memory
+# used. But generally speaking, the extra memory used is no more than what
+# would be used by "fat" TZif data files from `/usr/share/zoneinfo`.
+tz-fat = ["jiff-static?/tz-fat"]
 
 # When enabled, the `jiff::tz::get` and `jiff::tz::include` proc-macros
 # become available. These proc macros enable creating `TimeZone` values in a
