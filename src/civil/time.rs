@@ -1833,6 +1833,16 @@ impl Time {
     }
 
     #[inline]
+    pub(crate) const fn to_itime_const(&self) -> ITime {
+        ITime {
+            hour: self.hour.get_unchecked(),
+            minute: self.minute.get_unchecked(),
+            second: self.second.get_unchecked(),
+            subsec_nanosecond: self.subsec_nanosecond.get_unchecked(),
+        }
+    }
+
+    #[inline]
     pub(crate) const fn from_itime_const(itime: ITime) -> Time {
         Time {
             hour: Hour::new_unchecked(itime.hour),

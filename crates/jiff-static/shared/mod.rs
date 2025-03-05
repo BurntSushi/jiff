@@ -88,14 +88,14 @@ pub type TzifOwned = Tzif<
     alloc::vec::Vec<TzifTransition>,
 >;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Tzif<STRING, ABBREV, TYPES, TRANS> {
     pub fixed: TzifFixed<STRING, ABBREV>,
     pub types: TYPES,
     pub transitions: TRANS,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TzifFixed<STRING, ABBREV> {
     pub name: Option<STRING>,
     pub version: u8,
@@ -104,7 +104,7 @@ pub struct TzifFixed<STRING, ABBREV> {
     pub posix_tz: Option<PosixTimeZone<ABBREV>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TzifLocalTimeType {
     pub offset: i32,
     pub is_dst: bool,
@@ -112,46 +112,46 @@ pub struct TzifLocalTimeType {
     pub indicator: TzifIndicator,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum TzifIndicator {
     LocalWall,
     LocalStandard,
     UTStandard,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TzifTransition {
     pub timestamp: i64,
     pub type_index: u8,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PosixTimeZone<ABBREV> {
     pub std_abbrev: ABBREV,
-    pub std_offset: i32,
+    pub std_offset: PosixOffset,
     pub dst: Option<PosixDst<ABBREV>>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PosixDst<ABBREV> {
     pub abbrev: ABBREV,
-    pub offset: i32,
+    pub offset: PosixOffset,
     pub rule: PosixRule,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PosixRule {
     pub start: PosixDayTime,
     pub end: PosixDayTime,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PosixDayTime {
     pub date: PosixDay,
-    pub time: i32,
+    pub time: PosixTime,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PosixDay {
     /// Julian day in a year, no counting for leap days.
     ///
@@ -181,6 +181,16 @@ pub enum PosixDay {
         /// Valid range is `0..=6`, with `0` corresponding to Sunday.
         weekday: i8,
     },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PosixTime {
+    pub second: i32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PosixOffset {
+    pub second: i32,
 }
 
 // Does not require `alloc`, but is only used when `alloc` is enabled.

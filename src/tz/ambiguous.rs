@@ -1,6 +1,7 @@
 use crate::{
     civil::DateTime,
     error::{err, Error, ErrorContext},
+    shared::util::itime::IAmbiguousOffset,
     tz::{Offset, TimeZone},
     Timestamp, Zoned,
 };
@@ -199,6 +200,30 @@ pub enum AmbiguousOffset {
         /// for time on the second `2020-11-01T01:00:00` is `-08`.
         after: Offset,
     },
+}
+
+impl AmbiguousOffset {
+    #[inline]
+    pub(crate) const fn from_iambiguous_offset_const(
+        iaoff: IAmbiguousOffset,
+    ) -> AmbiguousOffset {
+        match iaoff {
+            IAmbiguousOffset::Unambiguous { offset } => {
+                let offset = Offset::from_ioffset_const(offset);
+                AmbiguousOffset::Unambiguous { offset }
+            }
+            IAmbiguousOffset::Gap { before, after } => {
+                let before = Offset::from_ioffset_const(before);
+                let after = Offset::from_ioffset_const(after);
+                AmbiguousOffset::Gap { before, after }
+            }
+            IAmbiguousOffset::Fold { before, after } => {
+                let before = Offset::from_ioffset_const(before);
+                let after = Offset::from_ioffset_const(after);
+                AmbiguousOffset::Fold { before, after }
+            }
+        }
+    }
 }
 
 /// A possibly ambiguous [`Timestamp`], created by

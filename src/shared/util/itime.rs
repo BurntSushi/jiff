@@ -31,6 +31,17 @@ pub(crate) struct ITimestamp {
 }
 
 impl ITimestamp {
+    const MIN: ITimestamp =
+        ITimestamp { second: -377705023201, nanosecond: 0 };
+    const MAX: ITimestamp =
+        ITimestamp { second: 253402207200, nanosecond: 999_999_999 };
+
+    /// Creates an `ITimestamp` from a Unix timestamp in seconds.
+    #[inline]
+    pub(crate) const fn from_second(second: i64) -> ITimestamp {
+        ITimestamp { second, nanosecond: 0 }
+    }
+
     /// Converts a Unix timestamp with an offset to a Gregorian datetime.
     ///
     /// The offset should correspond to the number of seconds required to
@@ -64,6 +75,10 @@ pub(crate) struct IOffset {
     pub(crate) second: i32,
 }
 
+impl IOffset {
+    pub(crate) const UTC: IOffset = IOffset { second: 0 };
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub(crate) struct IDateTime {
     pub(crate) date: IDate,
@@ -71,12 +86,15 @@ pub(crate) struct IDateTime {
 }
 
 impl IDateTime {
+    const MIN: IDateTime = IDateTime { date: IDate::MIN, time: ITime::MIN };
+    const MAX: IDateTime = IDateTime { date: IDate::MAX, time: ITime::MAX };
+
     /// Converts a Gregorian datetime and its offset to a Unix timestamp.
     ///
     /// The offset should correspond to the number of seconds required to
     /// subtract from this datetime in order to get to UTC.
     #[inline(always)]
-    pub(crate) const fn to_timestamp(&self, offset: IOffset) -> ITimestamp {
+    pub(crate) fn to_timestamp(&self, offset: IOffset) -> ITimestamp {
         let epoch_day = self.date.to_epoch_day().epoch_day;
         let mut second = (epoch_day as i64) * 86_400
             + (self.time.to_second().second as i64);
@@ -87,6 +105,52 @@ impl IDateTime {
             nanosecond -= 1_000_000_000;
         }
         ITimestamp { second, nanosecond }
+    }
+
+    /// Converts a Gregorian datetime and its offset to a Unix timestamp.
+    ///
+    /// If the timestamp would overflow Jiff's timestamp range, then this
+    /// returns `None`.
+    ///
+    /// The offset should correspond to the number of seconds required to
+    /// subtract from this datetime in order to get to UTC.
+    #[inline(always)]
+    pub(crate) fn to_timestamp_checked(
+        &self,
+        offset: IOffset,
+    ) -> Option<ITimestamp> {
+        let ts = self.to_timestamp(offset);
+        if !(ITimestamp::MIN <= ts && ts <= ITimestamp::MAX) {
+            return None;
+        }
+        Some(ts)
+    }
+
+    #[inline(always)]
+    pub(crate) fn saturating_add_seconds(&self, seconds: i32) -> IDateTime {
+        self.checked_add_seconds(seconds).unwrap_or_else(|_| {
+            if seconds < 0 {
+                IDateTime::MIN
+            } else {
+                IDateTime::MAX
+            }
+        })
+    }
+
+    #[inline(always)]
+    pub(crate) fn checked_add_seconds(
+        &self,
+        seconds: i32,
+    ) -> Result<IDateTime, Error> {
+        let day_second =
+            self.time.to_second().second.checked_add(seconds).ok_or_else(
+                || err!("adding `{seconds}s` to datetime overflowed"),
+            )?;
+        let days = day_second.div_euclid(86400);
+        let second = day_second.rem_euclid(86400);
+        let date = self.date.checked_add_days(days)?;
+        let time = ITimeSecond { second }.to_time();
+        Ok(IDateTime { date, time })
     }
 }
 
@@ -180,6 +244,9 @@ pub(crate) struct IDate {
 }
 
 impl IDate {
+    const MIN: IDate = IDate { year: -9999, month: 1, day: 1 };
+    const MAX: IDate = IDate { year: 9999, month: 12, day: 31 };
+
     /// Fallibly builds a new date.
     ///
     /// This checks that the given day is valid for the given year/month.
@@ -357,6 +424,97 @@ impl IDate {
         }
     }
 
+    /// Returns the day before this date.
+    #[inline]
+    pub(crate) fn yesterday(self) -> Result<IDate, Error> {
+        if self.day == 1 {
+            if self.month == 1 {
+                let year = self.year - 1;
+                if year <= -10000 {
+                    return Err(err!(
+                        "returning yesterday for -9999-01-01 is not \
+                         possible because it is less than Jiff's supported
+                         minimum date",
+                    ));
+                }
+                return Ok(IDate { year, month: 12, day: 31 });
+            }
+            let month = self.month - 1;
+            let day = days_in_month(self.year, self.month);
+            return Ok(IDate { month, day, ..self });
+        }
+        Ok(IDate { day: self.day - 1, ..self })
+    }
+
+    /// Returns the day after this date.
+    #[inline]
+    pub(crate) fn tomorrow(self) -> Result<IDate, Error> {
+        if self.day >= 28 && self.day == days_in_month(self.year, self.month) {
+            if self.month == 12 {
+                let year = self.year + 1;
+                if year >= 10000 {
+                    return Err(err!(
+                        "returning tomorrow for 9999-12-31 is not \
+                         possible because it is greater than Jiff's supported
+                         maximum date",
+                    ));
+                }
+                return Ok(IDate { year, month: 1, day: 1 });
+            }
+            let month = self.month + 1;
+            return Ok(IDate { month, day: 1, ..self });
+        }
+        Ok(IDate { day: self.day + 1, ..self })
+    }
+
+    /// Returns the year one year before this date.
+    #[inline]
+    pub(crate) fn prev_year(self) -> Result<i16, Error> {
+        let year = self.year - 1;
+        if year <= -10_000 {
+            return Err(err!(
+                "returning previous year for {year:04}-{month:02}-{day:02} is \
+                 not possible because it is less than Jiff's supported \
+                 minimum date",
+                year = self.year,
+                month = self.month,
+                day = self.day,
+            ));
+        }
+        Ok(year)
+    }
+
+    /// Returns the year one year from this date.
+    #[inline]
+    pub(crate) fn next_year(self) -> Result<i16, Error> {
+        let year = self.year + 1;
+        if year >= 10_000 {
+            return Err(err!(
+                "returning next year for {year:04}-{month:02}-{day:02} is \
+                 not possible because it is greater than Jiff's supported \
+                 maximum date",
+                year = self.year,
+                month = self.month,
+                day = self.day,
+            ));
+        }
+        Ok(year)
+    }
+
+    /// Add the number of days to this date.
+    #[inline]
+    pub(crate) fn checked_add_days(
+        &self,
+        amount: i32,
+    ) -> Result<IDate, Error> {
+        match amount {
+            0 => Ok(*self),
+            -1 => self.yesterday(),
+            1 => self.tomorrow(),
+            n => self.to_epoch_day().checked_add(n).map(|d| d.to_date()),
+        }
+    }
+
     #[inline]
     fn first_of_month(&self) -> IDate {
         IDate { day: 1, ..*self }
@@ -365,6 +523,18 @@ impl IDate {
     #[inline]
     fn last_of_month(&self) -> IDate {
         IDate { day: days_in_month(self.year, self.month), ..*self }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn at(
+        &self,
+        hour: i8,
+        minute: i8,
+        second: i8,
+        subsec_nanosecond: i32,
+    ) -> IDateTime {
+        let time = ITime { hour, minute, second, subsec_nanosecond };
+        IDateTime { date: *self, time }
     }
 }
 
@@ -383,6 +553,14 @@ pub(crate) struct ITime {
 impl ITime {
     pub(crate) const ZERO: ITime =
         ITime { hour: 0, minute: 0, second: 0, subsec_nanosecond: 0 };
+    pub(crate) const MIN: ITime =
+        ITime { hour: 0, minute: 0, second: 0, subsec_nanosecond: 0 };
+    pub(crate) const MAX: ITime = ITime {
+        hour: 23,
+        minute: 59,
+        second: 59,
+        subsec_nanosecond: 999_999_999,
+    };
 
     #[inline(always)]
     pub(crate) const fn to_second(&self) -> ITimeSecond {
@@ -481,7 +659,6 @@ impl IWeekday {
 
     /// Creates a weekday assuming the week starts on Sunday and Sunday is at
     /// offset `0`.
-    #[cfg(test)] // currently dead code
     #[inline]
     pub(crate) const fn from_sunday_zero_offset(offset: i8) -> IWeekday {
         assert!(0 <= offset && offset <= 6);
@@ -532,6 +709,13 @@ impl IWeekday {
         (self.to_monday_zero_offset() - other.to_monday_zero_offset())
             .rem_euclid(7)
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum IAmbiguousOffset {
+    Unambiguous { offset: IOffset },
+    Gap { before: IOffset, after: IOffset },
+    Fold { before: IOffset, after: IOffset },
 }
 
 /// Returns true if and only if the given year is a leap year.
