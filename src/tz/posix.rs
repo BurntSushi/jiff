@@ -1302,10 +1302,7 @@ mod tests {
     #[test]
     fn reasonable() {
         assert!(PosixTimeZone::parse("EST5").unwrap().reasonable().is_ok());
-        assert!(PosixTimeZone::parse("EST5EDT")
-            .unwrap()
-            .reasonable()
-            .is_err());
+        assert!(PosixTimeZone::parse("EST5EDT").is_err());
         assert!(PosixTimeZone::parse("EST5EDT,J1,J365")
             .unwrap()
             .reasonable()
@@ -1563,19 +1560,12 @@ mod tests {
     #[cfg(feature = "tz-system")]
     #[test]
     fn parse_posix_tz() {
-        let tz = PosixTzEnv::parse("EST5EDT").unwrap();
-        assert_eq!(
-            tz,
-            PosixTzEnv::Rule(PosixTimeZone {
-                std_abbrev: "EST".into(),
-                std_offset: offset(-5).into(),
-                dst: Some(PosixDst {
-                    abbrev: "EDT".into(),
-                    offset: offset(-4).into(),
-                    rule: None,
-                }),
-            },)
-        );
+        // We used to parse this and then error when we tried
+        // to convert to a "reasonable" POSIX time zone with a
+        // DST transition rule. We never actually used unreasonable
+        // POSIX time zones and it was complicating the type
+        // definitions, so now we just reject it outright.
+        assert!(PosixTzEnv::parse("EST5EDT").is_err());
 
         let tz = PosixTzEnv::parse(":EST5EDT").unwrap();
         assert_eq!(tz, PosixTzEnv::Implementation("EST5EDT".into()));
