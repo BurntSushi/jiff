@@ -584,14 +584,14 @@ impl TzifOwned {
             let its = ITimestamp { second: timestamp, nanosecond: 0 };
             let ioff = IOffset { second: offset };
             let dt = its.to_datetime(ioff);
-            (
-                dt.date.year,
-                dt.date.month,
-                dt.date.day,
-                dt.time.hour,
-                dt.time.minute,
-                dt.time.second,
-            )
+            TzifDateTime {
+                year: dt.date.year,
+                month: dt.date.month,
+                day: dt.date.day,
+                hour: dt.time.hour,
+                minute: dt.time.minute,
+                second: dt.time.second,
+            }
         }
 
         let trans = &mut self.transitions;
@@ -763,27 +763,14 @@ impl TzifTransitionsOwned {
     /// index if it is known.
     fn add_with_type_index(&mut self, timestamp: i64, type_index: u8) {
         self.timestamps.push(timestamp);
-        self.civil_starts.push((0, 0, 0, 0, 0, 0));
-        self.civil_ends.push((0, 0, 0, 0, 0, 0));
+        self.civil_starts.push(TzifDateTime::ZERO);
+        self.civil_ends.push(TzifDateTime::ZERO);
         self.infos.push(TzifTransitionInfo {
             type_index,
             kind: TzifTransitionKind::Unambiguous,
         });
     }
 }
-
-// impl<
-// TIMESTAMPS: AsRef<[i64]>,
-// STARTS: AsRef<[TzifDateTime]>,
-// ENDS: AsRef<[TzifDateTime]>,
-// INFOS: AsRef<[TzifTransitionInfo]>,
-// > TzifTransitions<TIMESTAMPS, STARTS, ENDS, INFOS>
-// {
-// #[inline]
-// fn type_index(&self, i: usize) -> usize {
-// usize::from(self.infos.as_ref()[i].type_index)
-// }
-// }
 
 /// The header for a TZif formatted file.
 ///
