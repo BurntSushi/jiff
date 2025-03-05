@@ -13,7 +13,7 @@ use crate::{
     util::{
         array_str::ArrayStr,
         common,
-        rangeint::{RFrom, RInto, TryRFrom},
+        rangeint::{composite, uncomposite, RFrom, RInto, TryRFrom},
         t,
     },
     RoundMode, SignedDuration, SignedDurationRound, Unit,
@@ -2026,144 +2026,70 @@ fn timestamp_to_datetime_zulu(
     timestamp: Timestamp,
     offset: Offset,
 ) -> civil::DateTime {
-    #[cfg(not(debug_assertions))]
-    {
-        let (y, mo, d, h, m, s, ns) = common::timestamp_to_datetime_zulu(
-            timestamp.as_second(),
-            timestamp.subsec_nanosecond(),
-            offset.seconds(),
-        );
-        let date = civil::Date::new_ranged_unchecked(
-            t::Year { val: y },
-            t::Month { val: mo },
-            t::Day { val: d },
-        );
-        let time = civil::Time::new_ranged_unchecked(
-            t::Hour { val: h },
-            t::Minute { val: m },
-            t::Second { val: s },
-            t::SubsecNanosecond { val: ns },
-        );
-        civil::DateTime::from_parts(date, time)
-    }
-    #[cfg(debug_assertions)]
-    {
-        let secs = timestamp.as_second_ranged();
-        let subsec = timestamp.subsec_nanosecond_ranged();
-        let offset = offset.seconds_ranged();
-
-        let (y, mo, d, h, m, s, ns) = common::timestamp_to_datetime_zulu(
-            secs.val, subsec.val, offset.val,
-        );
-        let (min_y, min_mo, min_d, min_h, min_m, min_s, min_ns) =
-            common::timestamp_to_datetime_zulu(
-                secs.min,
-                // This is tricky, but if we have a minimal number of seconds,
-                // then the minimum possible nanosecond value is actually 0.
-                // So we clamp it in this case. (This encodes the invariant
-                // enforced by `Timestamp::new`.)
-                if secs.min == t::UnixSeconds::MIN_REPR {
+    let c = composite! {
+        (
+            sec = timestamp.as_second_ranged(),
+            nano = timestamp.subsec_nanosecond_ranged(),
+            offset = offset.seconds_ranged(),
+        ) => {
+            // This is tricky, but if we have a minimal number of seconds,
+            // then the minimum possible nanosecond value is actually 0.
+            // So we clamp it in this case. (This encodes the invariant
+            // enforced by `Timestamp::new`.)
+            let nano =
+                if cfg!(debug_assertions) && sec == t::UnixSeconds::MIN_REPR {
                     0
                 } else {
-                    subsec.min
-                },
-                offset.min,
-            );
-        let (max_y, max_mo, max_d, max_h, max_m, max_s, max_ns) =
-            common::timestamp_to_datetime_zulu(
-                secs.max, subsec.max, offset.max,
-            );
-        let date = civil::Date::new_ranged_unchecked(
-            t::Year { val: y, min: min_y, max: max_y },
-            t::Month { val: mo, min: min_mo, max: max_mo },
-            t::Day { val: d, min: min_d, max: max_d },
-        );
-        let time = civil::Time::new_ranged_unchecked(
-            t::Hour { val: h, min: min_h, max: max_h },
-            t::Minute { val: m, min: min_m, max: max_m },
-            t::Second { val: s, min: min_s, max: max_s },
-            t::SubsecNanosecond { val: ns, min: min_ns, max: max_ns },
-        );
-        civil::DateTime::from_parts(date, time)
-    }
+                    nano
+                };
+            common::timestamp_to_datetime_zulu(sec, nano, offset)
+        }
+    };
+    let (y, mo, d, h, m, s, ns) = uncomposite!(
+        c,
+        c => (c.0, c.1, c.2, c.3, c.4, c.5, c.6),
+    );
+    let date = civil::Date::new_ranged_unchecked(
+        y.to_rint(),
+        mo.to_rint(),
+        d.to_rint(),
+    );
+    let time = civil::Time::new_ranged_unchecked(
+        h.to_rint(),
+        m.to_rint(),
+        s.to_rint(),
+        ns.to_rint(),
+    );
+    civil::DateTime::from_parts(date, time)
 }
 
 fn datetime_zulu_to_timestamp(
     dt: civil::DateTime,
     offset: Offset,
 ) -> Result<Timestamp, Error> {
-    #[cfg(not(debug_assertions))]
-    {
-        let (secs, subsec) = common::datetime_zulu_to_timestamp(
-            dt.year(),
-            dt.month(),
-            dt.day(),
-            dt.hour(),
-            dt.minute(),
-            dt.second(),
-            dt.subsec_nanosecond(),
-            offset.seconds(),
-        );
-        let second = t::UnixSeconds::try_new("unix-seconds", secs)
-            .with_context(|| {
-                err!(
-                    "converting {dt} with offset {offset} to timestamp \
-                     overflowed (second={secs}, nanosecond={subsec})",
-                )
-            })?;
-        let nanosecond = t::FractionalNanosecond::new_unchecked(subsec);
-        Ok(Timestamp::new_ranged_unchecked(second, nanosecond))
-    }
-    #[cfg(debug_assertions)]
-    {
-        let (secs, subsec) = common::datetime_zulu_to_timestamp(
-            dt.date().year_ranged().val,
-            dt.date().month_ranged().val,
-            dt.date().day_ranged().val,
-            dt.time().hour_ranged().val,
-            dt.time().minute_ranged().val,
-            dt.time().second_ranged().val,
-            dt.time().subsec_nanosecond_ranged().val,
-            offset.seconds_ranged().val,
-        );
-        let (min_secs, min_subsec) = common::datetime_zulu_to_timestamp(
-            dt.date().year_ranged().min,
-            dt.date().month_ranged().min,
-            dt.date().day_ranged().min,
-            dt.time().hour_ranged().min,
-            dt.time().minute_ranged().min,
-            dt.time().second_ranged().min,
-            dt.time().subsec_nanosecond_ranged().min,
-            offset.seconds_ranged().min,
-        );
-        let (max_secs, max_subsec) = common::datetime_zulu_to_timestamp(
-            dt.date().year_ranged().max,
-            dt.date().month_ranged().max,
-            dt.date().day_ranged().max,
-            dt.time().hour_ranged().max,
-            dt.time().minute_ranged().max,
-            dt.time().second_ranged().max,
-            dt.time().subsec_nanosecond_ranged().max,
-            offset.seconds_ranged().max,
-        );
-
-        let mut second = t::UnixSeconds::try_new("unix-seconds", secs)
-            .with_context(|| {
-                err!(
-                    "converting {dt} with offset {offset} to timestamp \
-                     overflowed (second={secs}, nanosecond={subsec})",
-                )
-            })?;
-        second.min =
-            min_secs.clamp(t::UnixSeconds::MIN_REPR, t::UnixSeconds::MAX_REPR);
-        second.max =
-            max_secs.clamp(t::UnixSeconds::MIN_REPR, t::UnixSeconds::MAX_REPR);
-
-        let nanosecond = t::FractionalNanosecond {
-            val: subsec,
-            min: min_subsec,
-            max: max_subsec,
-        };
-        Ok(Timestamp::new_ranged_unchecked(second, nanosecond))
-    }
+    let c = composite! {
+        (
+            y = dt.date().year_ranged(),
+            mo = dt.date().month_ranged(),
+            d = dt.date().day_ranged(),
+            h = dt.time().hour_ranged(),
+            m = dt.time().minute_ranged(),
+            s = dt.time().second_ranged(),
+            ns = dt.time().subsec_nanosecond_ranged(),
+            off = offset.seconds_ranged(),
+        ) => {
+            common::datetime_zulu_to_timestamp(y, mo, d, h, m, s, ns, off)
+        }
+    };
+    let (second, nanosecond) = uncomposite!(c, c => (c.0, c.1));
+    let second: t::NoUnits = second.to_rint();
+    let nanosecond = nanosecond.to_rint();
+    let second = t::UnixSeconds::try_rfrom("unix-seconds", second)
+        .with_context(|| {
+            err!(
+                "converting {dt} with offset {offset} to timestamp \
+                 overflowed (second={second}, nanosecond={nanosecond})",
+            )
+        })?;
+    Ok(Timestamp::new_ranged_unchecked(second, nanosecond))
 }

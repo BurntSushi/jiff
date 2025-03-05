@@ -10,7 +10,7 @@ use crate::{
     },
     util::{
         common,
-        rangeint::{RFrom, RInto, TryRFrom},
+        rangeint::{composite, uncomposite, RFrom, RInto, TryRFrom},
         round::increment,
         t::{
             self, CivilDayNanosecond, CivilDaySecond, Hour, Microsecond,
@@ -1779,35 +1779,12 @@ impl Time {
     /// `23:59:59`.
     #[inline]
     pub(crate) fn to_second(&self) -> CivilDaySecond {
-        #[cfg(not(debug_assertions))]
-        {
-            CivilDaySecond {
-                val: common::to_day_second(
-                    self.hour.val,
-                    self.minute.val,
-                    self.second.val,
-                ),
+        let c = composite! {
+            (hour = self.hour, minute = self.minute, second = self.second) => {
+                common::to_day_second(hour, minute, second)
             }
-        }
-        #[cfg(debug_assertions)]
-        {
-            let val = common::to_day_second(
-                self.hour.val,
-                self.minute.val,
-                self.second.val,
-            );
-            let min = common::to_day_second(
-                self.hour.min,
-                self.minute.min,
-                self.second.min,
-            );
-            let max = common::to_day_second(
-                self.hour.max,
-                self.minute.max,
-                self.second.max,
-            );
-            CivilDaySecond { val, min, max }
-        }
+        };
+        c.to_rint()
     }
 
     /// Converts the given second to a time value. The second should correspond
@@ -1815,34 +1792,15 @@ impl Time {
     /// fractional second component of the `Time` returned is always `0`.
     #[inline(always)]
     pub(crate) fn from_second(second: CivilDaySecond) -> Time {
-        #[cfg(not(debug_assertions))]
-        {
-            let (hour, minute, second) = common::from_day_second(second.val);
-            Time {
-                hour: Hour { val: hour },
-                minute: Minute { val: minute },
-                second: Second { val: second },
-                subsec_nanosecond: SubsecNanosecond { val: 0 },
-            }
-        }
-        #[cfg(debug_assertions)]
-        {
-            let (hour, minute, sec) = common::from_day_second(second.val);
-            let (min_hour, min_minute, min_sec) =
-                common::from_day_second(second.min);
-            let (max_hour, max_minute, max_sec) =
-                common::from_day_second(second.max);
-
-            let hour = Hour { val: hour, min: min_hour, max: max_hour };
-            let minute =
-                Minute { val: minute, min: min_minute, max: max_minute };
-            let second = Second { val: sec, min: min_sec, max: max_sec };
-            Time {
-                hour,
-                minute,
-                second,
-                subsec_nanosecond: SubsecNanosecond::N::<0>(),
-            }
+        let c = composite!((second) => {
+            common::from_day_second(second)
+        });
+        let (hour, minute, second) = uncomposite!(c, c => (c.0, c.1, c.2));
+        Time {
+            hour: hour.to_rint(),
+            minute: minute.to_rint(),
+            second: second.to_rint(),
+            subsec_nanosecond: SubsecNanosecond::N::<0>(),
         }
     }
 
@@ -1853,39 +1811,22 @@ impl Time {
     /// `23:59:59.999999999`.
     #[inline]
     pub(crate) fn to_nanosecond(&self) -> CivilDayNanosecond {
-        #[cfg(not(debug_assertions))]
-        {
-            CivilDayNanosecond {
-                val: common::to_day_nanosecond(
-                    self.hour.val,
-                    self.minute.val,
-                    self.second.val,
-                    self.subsec_nanosecond.val,
-                ),
+        let c = composite! {
+            (
+                hour = self.hour,
+                minute = self.minute,
+                second = self.second,
+                subsec_nanosecond = self.subsec_nanosecond,
+            ) => {
+                common::to_day_nanosecond(
+                    hour,
+                    minute,
+                    second,
+                    subsec_nanosecond,
+                )
             }
-        }
-        #[cfg(debug_assertions)]
-        {
-            let val = common::to_day_nanosecond(
-                self.hour.val,
-                self.minute.val,
-                self.second.val,
-                self.subsec_nanosecond.val,
-            );
-            let min = common::to_day_nanosecond(
-                self.hour.min,
-                self.minute.min,
-                self.second.min,
-                self.subsec_nanosecond.min,
-            );
-            let max = common::to_day_nanosecond(
-                self.hour.max,
-                self.minute.max,
-                self.second.max,
-                self.subsec_nanosecond.max,
-            );
-            CivilDayNanosecond { val, min, max }
-        }
+        };
+        c.to_rint()
     }
 
     /// Converts the given nanosecond to a time value. The nanosecond should
@@ -1893,37 +1834,17 @@ impl Time {
     /// `00:00:00.000000000`.
     #[inline(always)]
     pub(crate) fn from_nanosecond(nanosecond: CivilDayNanosecond) -> Time {
-        #[cfg(not(debug_assertions))]
-        {
-            let (hour, minute, second, subsec) =
-                common::from_day_nanosecond(nanosecond.val);
-            Time {
-                hour: Hour { val: hour },
-                minute: Minute { val: minute },
-                second: Second { val: second },
-                subsec_nanosecond: SubsecNanosecond { val: subsec },
-            }
-        }
-        #[cfg(debug_assertions)]
-        {
-            let (hour, minute, second, subsec) =
-                common::from_day_nanosecond(nanosecond.val);
-            let (min_hour, min_minute, min_second, min_subsec) =
-                common::from_day_nanosecond(nanosecond.min);
-            let (max_hour, max_minute, max_second, max_subsec) =
-                common::from_day_nanosecond(nanosecond.max);
-
-            let hour = Hour { val: hour, min: min_hour, max: max_hour };
-            let minute =
-                Minute { val: minute, min: min_minute, max: max_minute };
-            let second =
-                Second { val: second, min: min_second, max: max_second };
-            let subsec = SubsecNanosecond {
-                val: subsec,
-                min: min_subsec,
-                max: max_subsec,
-            };
-            Time { hour, minute, second, subsec_nanosecond: subsec }
+        let c = composite!((nanosecond) => {
+            common::from_day_nanosecond(nanosecond)
+        });
+        let (hour, minute, second, subsec_nanosecond) = uncomposite!(
+            c, c => (c.0, c.1, c.2, c.3),
+        );
+        Time {
+            hour: hour.to_rint(),
+            minute: minute.to_rint(),
+            second: second.to_rint(),
+            subsec_nanosecond: subsec_nanosecond.to_rint(),
         }
     }
 }

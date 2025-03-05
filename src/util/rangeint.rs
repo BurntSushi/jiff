@@ -366,7 +366,7 @@ macro_rules! define_ranged {
             /// otherwise printing the debug representation of a type will fail
             /// if a ranged integer is out of bounds. (And this is annoying.)
             #[inline]
-            fn get_unchecked(self) -> $repr {
+            pub(crate) const fn get_unchecked(self) -> $repr {
                 self.val
             }
 
@@ -2379,6 +2379,148 @@ where
     #[inline]
     fn try_rinto(self, what: &'static str) -> Result<U, Error> {
         U::try_rfrom(what, self)
+    }
+}
+
+macro_rules! composite {
+    (($($name:ident),* $(,)?) => $with:expr) => {{
+        crate::util::rangeint::composite!(($($name = $name),*) => $with)
+    }};
+    (($($name:ident = $rangeint:expr),* $(,)?) => $with:expr) => {{
+        #[cfg(not(debug_assertions))]
+        {
+            $(
+                let $name = $rangeint.val;
+            )*
+            let val = $with;
+            crate::util::rangeint::Composite { val }
+        }
+        #[cfg(debug_assertions)]
+        {
+            let val = {
+                $(
+                    let $name = $rangeint.val;
+                )*
+                $with
+            };
+            let min = {
+                $(
+                    let $name = $rangeint.min;
+                )*
+                $with
+            };
+            let max = {
+                $(
+                    let $name = $rangeint.max;
+                )*
+                $with
+            };
+            crate::util::rangeint::Composite { val, min, max }
+        }
+    }};
+}
+
+macro_rules! uncomposite {
+    ($composite:expr, $val:ident => ($($get:expr),* $(,)?) $(,)?) => {{
+        #[cfg(not(debug_assertions))]
+        {
+            ($({
+                let val = {
+                    let $val = $composite.val;
+                    $get
+                };
+                crate::util::rangeint::Composite { val }
+            }),*)
+        }
+        #[cfg(debug_assertions)]
+        {
+            ($({
+                let val = {
+                    let $val = $composite.val;
+                    $get
+                };
+                let min = {
+                    let $val = $composite.min;
+                    $get
+                };
+                let max = {
+                    let $val = $composite.max;
+                    $get
+                };
+                crate::util::rangeint::Composite { val, min, max }
+            }),*)
+        }
+    }};
+}
+
+pub(crate) use {composite, uncomposite};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct Composite<T> {
+    pub(crate) val: T,
+    #[cfg(debug_assertions)]
+    pub(crate) min: T,
+    #[cfg(debug_assertions)]
+    pub(crate) max: T,
+}
+
+impl Composite<i8> {
+    pub(crate) fn to_rint<const MIN: i128, const MAX: i128>(
+        self,
+    ) -> ri8<MIN, MAX> {
+        #[cfg(not(debug_assertions))]
+        {
+            ri8 { val: self.val }
+        }
+        #[cfg(debug_assertions)]
+        {
+            ri8 { val: self.val, min: self.min, max: self.max }
+        }
+    }
+}
+
+impl Composite<i16> {
+    pub(crate) fn to_rint<const MIN: i128, const MAX: i128>(
+        self,
+    ) -> ri16<MIN, MAX> {
+        #[cfg(not(debug_assertions))]
+        {
+            ri16 { val: self.val }
+        }
+        #[cfg(debug_assertions)]
+        {
+            ri16 { val: self.val, min: self.min, max: self.max }
+        }
+    }
+}
+
+impl Composite<i32> {
+    pub(crate) fn to_rint<const MIN: i128, const MAX: i128>(
+        self,
+    ) -> ri32<MIN, MAX> {
+        #[cfg(not(debug_assertions))]
+        {
+            ri32 { val: self.val }
+        }
+        #[cfg(debug_assertions)]
+        {
+            ri32 { val: self.val, min: self.min, max: self.max }
+        }
+    }
+}
+
+impl Composite<i64> {
+    pub(crate) fn to_rint<const MIN: i128, const MAX: i128>(
+        self,
+    ) -> ri64<MIN, MAX> {
+        #[cfg(not(debug_assertions))]
+        {
+            ri64 { val: self.val }
+        }
+        #[cfg(debug_assertions)]
+        {
+            ri64 { val: self.val, min: self.min, max: self.max }
+        }
     }
 }
 

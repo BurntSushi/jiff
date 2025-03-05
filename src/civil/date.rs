@@ -13,7 +13,7 @@ use crate::{
     tz::TimeZone,
     util::{
         common,
-        rangeint::{ri16, ri8, RFrom, RInto, TryRFrom},
+        rangeint::{self, ri16, ri8, RFrom, RInto, TryRFrom},
         t::{self, Constant, Day, Month, Sign, UnixEpochDay, Year, C},
     },
     RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
@@ -2211,63 +2211,25 @@ impl Date {
 
     #[inline(always)]
     pub(crate) fn to_unix_epoch_day(self) -> UnixEpochDay {
-        #[cfg(not(debug_assertions))]
-        {
-            UnixEpochDay {
-                val: common::to_unix_epoch_day(
-                    self.year.val,
-                    self.month.val,
-                    self.day.val,
-                ),
+        let c = rangeint::composite! {
+            (year = self.year, month = self.month, day = self.day) => {
+                common::to_unix_epoch_day(year, month, day)
             }
-        }
-        #[cfg(debug_assertions)]
-        {
-            let val = common::to_unix_epoch_day(
-                self.year.val,
-                self.month.val,
-                self.day.val,
-            );
-            let min = common::to_unix_epoch_day(
-                self.year.min,
-                self.month.min,
-                self.day.min,
-            );
-            let max = common::to_unix_epoch_day(
-                self.year.max,
-                self.month.max,
-                self.day.max,
-            );
-            UnixEpochDay { val, min, max }
-        }
+        };
+        c.to_rint()
     }
 
     #[inline(always)]
-    pub(crate) fn from_unix_epoch_day(unix_epoch_day: UnixEpochDay) -> Date {
-        #[cfg(not(debug_assertions))]
-        {
-            let (year, month, day) =
-                common::from_unix_epoch_day(unix_epoch_day.val);
-            Date {
-                year: Year { val: year },
-                month: Month { val: month },
-                day: Day { val: day },
-            }
-        }
-        #[cfg(debug_assertions)]
-        {
-            let (year, month, day) =
-                common::from_unix_epoch_day(unix_epoch_day.val);
-            let (min_year, min_month, min_day) =
-                common::from_unix_epoch_day(unix_epoch_day.min);
-            let (max_year, max_month, max_day) =
-                common::from_unix_epoch_day(unix_epoch_day.max);
-
-            let year = Year { val: year, min: min_year, max: max_year };
-            let month = Month { val: month, min: min_month, max: max_month };
-            let day = Day { val: day, min: min_day, max: max_day };
-
-            Date { year, month, day }
+    pub(crate) fn from_unix_epoch_day(epoch_day: UnixEpochDay) -> Date {
+        let c = rangeint::composite!((epoch_day) => {
+            common::from_unix_epoch_day(epoch_day)
+        });
+        let (year, month, day) =
+            rangeint::uncomposite!(c, c => (c.0, c.1, c.2));
+        Date {
+            year: year.to_rint(),
+            month: month.to_rint(),
+            day: day.to_rint(),
         }
     }
 }
@@ -3756,17 +3718,10 @@ fn saturate_day_in_month(year: Year, month: Month, day: Day) -> Day {
 /// February.
 #[inline]
 fn days_in_month(year: Year, month: Month) -> Day {
-    #[cfg(not(debug_assertions))]
-    {
-        Day::new_unchecked(common::days_in_month(year.get(), month.get()))
-    }
-    #[cfg(debug_assertions)]
-    {
-        let days = common::days_in_month(year.val, month.val);
-        let min_days = common::days_in_month(year.min, month.min);
-        let max_days = common::days_in_month(year.max, month.max);
-        Day { val: days, min: min_days, max: max_days }
-    }
+    let c = rangeint::composite!((year, month) => {
+        common::days_in_month(year, month)
+    });
+    c.to_rint()
 }
 
 #[cfg(test)]
