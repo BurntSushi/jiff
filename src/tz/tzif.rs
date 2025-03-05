@@ -19,8 +19,8 @@ use crate::{
     shared,
     timestamp::Timestamp,
     tz::{
-        posix::ReasonablePosixTimeZone, timezone::TimeZoneAbbreviation,
-        AmbiguousOffset, Dst, Offset, TimeZoneOffsetInfo, TimeZoneTransition,
+        posix::PosixTimeZone, timezone::TimeZoneAbbreviation, AmbiguousOffset,
+        Dst, Offset, TimeZoneOffsetInfo, TimeZoneTransition,
     },
 };
 
@@ -64,7 +64,7 @@ pub struct Tzif<STRING, TYPES, TRANS> {
     version: u8,
     checksum: u32,
     designations: STRING,
-    posix_tz: Option<ReasonablePosixTimeZone>,
+    posix_tz: Option<PosixTimeZone>,
     types: TYPES,
     transitions: TRANS,
 }
@@ -183,15 +183,8 @@ impl TzifOwned {
         let version = sh.fixed.version;
         let checksum = sh.fixed.checksum;
         let designations = sh.fixed.designations.clone();
-        let posix_tz = match sh.fixed.posix_tz {
-            None => None,
-            Some(ref tz) => {
-                let tz =
-                    crate::tz::posix::PosixTimeZone::from_shared_owned(tz);
-                // OK because `shared::tzif` returns an error otherwise.
-                Some(tz.reasonable().unwrap())
-            }
-        };
+        let posix_tz =
+            sh.fixed.posix_tz.as_ref().map(PosixTimeZone::from_shared_owned);
         let types: Vec<LocalTimeType> =
             sh.types.iter().map(shared::TzifLocalTimeType::to_jiff).collect();
         let mut transitions = Vec::with_capacity(sh.transitions.len());
@@ -265,7 +258,7 @@ impl<
     fn to_local_time_type(
         &self,
         timestamp: Timestamp,
-    ) -> Result<&LocalTimeType, &ReasonablePosixTimeZone> {
+    ) -> Result<&LocalTimeType, &PosixTimeZone> {
         // This is guaranteed because we always push at least one transition.
         // This isn't guaranteed by TZif since it might have 0 transitions,
         // but we always add a "dummy" first transition with our minimum

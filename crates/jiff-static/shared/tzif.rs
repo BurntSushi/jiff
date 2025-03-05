@@ -478,23 +478,14 @@ impl TzifOwned {
         };
         let (bytes, rest) = bytes.split_at(nlat);
         if !bytes.is_empty() {
-            let posix_tz =
-                PosixTimeZone::parse(bytes).map_err(|e| err!("{e}"))?;
             // We could in theory limit TZ strings to their strict POSIX
             // definition here for TZif V2, but I don't think there is any
             // harm in allowing the extensions in V2 formatted TZif data. Note
             // that the GNU tooling allow it via the `TZ` environment variable
             // even though POSIX doesn't specify it. This all seems okay to me
             // because the V3+ extension is a strict superset of functionality.
-            if let Some(ref dst) = posix_tz.dst {
-                if dst.rule.is_none() {
-                    return Err(err!(
-                        "TZ string `{}` in v3+ tzfile has DST \
-                         but no transition rules",
-                        Bytes(bytes),
-                    ));
-                }
-            }
+            let posix_tz =
+                PosixTimeZone::parse(bytes).map_err(|e| err!("{e}"))?;
             self.fixed.posix_tz = Some(posix_tz);
         }
         Ok(&rest[1..])

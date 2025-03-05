@@ -52,38 +52,16 @@ other programs do in practice (for example, GNU date).
 
 # `no-std` and `no-alloc` support
 
-This module works just fine in `no_std` mode. It also generally works fine
-without `alloc` too, modulo some APIs for parsing from an environment variable
-(which need `std` anyway) and the POSIX TZ parser using `String` to represent
-abbreviations. (The latter could be fixed if necessary.) The main problem is
-that the type defined here takes up a lot of space (100+ bytes). A good chunk
-of that comes from representing time zone abbreviations inline. In theory, only
-6-10 bytes are needed for simple cases like `TZ=EST5EDT,M3.2.0,M11.1.0`, but we
-make room for 30 byte length abbreviations (times two). Plus, there's a much of
-room made for the rule representation.
+A big part of this module works fine in core-only environments. But because
+core-only environments provide means of indirection, and embedding a
+`PosixTimeZone` into a `TimeZone` without indirection would use up a lot of
+space (and thereby make `Zoned` quite chunky), we provide core-only support
+principally through a proc macro. Namely, a `PosixTimeZone` can be parsed by
+the proc macro and then turned into static data.
 
-When you then stuff this inside a `TimeZone` which cannot use heap allocation
-to force an indirection, you wind up with a very chunky `TimeZone`. And this in
-turn makes `Zoned` itself quite chunky.
-
-So while there isn't actually any particular reason why a
-`ReasonablePosixTimeZone` cannot be used in core-only environments, we don't
-include it in Jiff for now because it seems like bad juju to make `TimeZone`
-so big. So if you do need POSIX time zone support in core-only environments,
-please open an issue.
-
-My guess is that `Zoned` is itself kind of doomed in core-only environments.
-It's just too hard to bundle an entire time zone with every instant without
-using the heap to amortize copies of the time zone definition. I've been
-thinking about adding an `Unzoned` type that is just like `Zoned`, but requires
-the caller to pass in a `&TimeZone` for every API call. Less convenient for
-sure, but you get a more flexible type.
-
-ADDENDUM: The above is still mostly true, but it looks like we are going to
-allow static `TimeZone` values via a proc-macro. And this also requires
-parsing POSIX time zones and building them at compile time. In order to make
-this work well with `TimeZone` without indirection, we'll use pointer tagging.
-This should help save `Zoned` in core-only environments.
+POSIX time zone support isn't explicitly provided directly as a public API
+for core-only environments, but is implicitly supported via TZif. (Since TZif
+data contains POSIX time zone strings.)
 
 [posix-env]: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap08.html#tag_08_03
 [iana-env]: https://data.iana.org/time-zones/tzdb-2024a/theory.html#functions
@@ -176,34 +154,38 @@ impl core::fmt::Display for PosixTzEnv {
     }
 }
 
-// BREADCRUMBS: For a proc macro to work, we need to provide a way to
-// introduce and eliminate a `ReasonablePosixTimeZone` in a `const` context.
-// I really do not want to make nearly every type in this module completely
-// `pub`, and would prefer to just expose a new type. But it's kind of a pain
-// because of how nested this type is. Short of writing a parser that works
-// in a `const` context, I don't really see a better way.
-
-/// A "reasonable" POSIX time zone.
+/// A POSIX time zone.
 ///
-/// This is the same as a regular POSIX time zone, but requires that if a DST
-/// time zone abbreviation is present, then a transition rule must also be
-/// present for it. In other words, this considers a `TZ` string of `EST5EDT`
-/// as unreasonable because it doesn't say *when* the DST transitions should
-/// occur.
+/// # On "reasonable" POSIX time zones
 ///
-/// Generally speaking, we only deal with reasonable POSIX time zones. And
-/// we expect `TZ` strings parsed from IANA v2+ formatted `tzfile`s to also
-/// be reasonable or parsing fails. This also seems to be consistent with the
-/// [GNU C Library]'s treatment of the `TZ` variable: it only documents support
-/// for reasonable POSIX time zone strings.
+/// Jiff only supports "reasonable" POSIX time zones. A "reasonable" POSIX time
+/// zone is a POSIX time zone that has a DST transition rule _when_ it has a
+/// DST time zone abbreviation. Without the transition rule, it isn't possible
+/// to know when DST starts and stops.
+///
+/// POSIX technically allows a DST time zone abbreviation *without* a
+/// transition rule, but the behavior is literally unspecified. So Jiff just
+/// rejects them.
+///
+/// Note that if you're confused as to why Jiff accepts `TZ=EST5EDT` (where
+/// `EST5EDT` is an example of an _unreasonable_ POSIX time zone), that's
+/// because Jiff rejects `EST5EDT` and instead attempts to use it as an IANA
+/// time zone identifier. And indeed, the IANA Time Zone Database contains an
+/// entry for `EST5EDT` (presumably for legacy reasons).
+///
+/// Also, we expect `TZ` strings parsed from IANA v2+ formatted `tzfile`s to
+/// also be reasonable or parsing fails. This also seems to be consistent with
+/// the [GNU C Library]'s treatment of the `TZ` variable: it only documents
+/// support for reasonable POSIX time zone strings.
 ///
 /// Note that a V2 `TZ` string is precisely identical to a POSIX `TZ`
 /// environment variable string. A V3 `TZ` string however supports signed DST
 /// transition times, and hours in the range `0..=167`. The V2 and V3 here
-/// reference how `TZ` strings are defined in the TZif format specified by [RFC
-/// 9636]. V2 is the original version of it straight from POSIX, where as V3+
-/// corresponds to an extension added to V3 (and newer versions) of the TZif
-/// format.
+/// reference how `TZ` strings are defined in the TZif format specified by
+/// [RFC 9636]. V2 is the original version of it straight from POSIX, where as
+/// V3+ corresponds to an extension added to V3 (and newer versions) of the
+/// TZif format. V3 is a superset of V2, so in practice, Jiff just permits
+/// V3 everywhere.
 ///
 /// [GNU C Library]: https://www.gnu.org/software/libc/manual/2.25/html_node/TZ-Variable.html
 /// [RFC 9636]: https://datatracker.ietf.org/doc/rfc9636/
@@ -217,29 +199,26 @@ impl core::fmt::Display for PosixTzEnv {
 // at least 8 bytes anyway. But this *is* required for 32-bit systems, where
 // the type definition at present only has an alignment of 4 bytes.
 #[repr(align(8))]
-pub struct ReasonablePosixTimeZone {
+pub struct PosixTimeZone {
     std_abbrev: Abbreviation,
     std_offset: PosixOffset,
-    dst: Option<ReasonablePosixDst>,
+    dst: Option<PosixDst>,
 }
 
-impl ReasonablePosixTimeZone {
+impl PosixTimeZone {
     /// Parse a IANA tzfile v3+ `TZ` string from the given bytes.
     #[cfg(feature = "alloc")]
     pub(crate) fn parse(
         bytes: impl AsRef<[u8]>,
-    ) -> Result<ReasonablePosixTimeZone, Error> {
+    ) -> Result<PosixTimeZone, Error> {
         let bytes = bytes.as_ref();
-        let posix_tz = PosixTimeZone::parse(bytes).map_err(|e| {
-            e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
-        })?;
-        let Ok(reasonable) = posix_tz.reasonable() else {
-            return Err(err!(
-                "TZ string {:?} in v3+ tzfile has DST but no transition rules",
-                Bytes(bytes),
-            ));
-        };
-        Ok(reasonable)
+        let shared_tz = shared::PosixTimeZone::parse(bytes.as_ref())
+            .map_err(Error::adhoc)
+            .map_err(|e| {
+                e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
+            })?;
+        let posix_tz = PosixTimeZone::from_shared_owned(&shared_tz);
+        Ok(posix_tz)
     }
 
     /// Like `parse`, but parses a POSIX TZ string from a prefix of the
@@ -247,19 +226,40 @@ impl ReasonablePosixTimeZone {
     #[cfg(feature = "alloc")]
     pub(crate) fn parse_prefix<'b, B: AsRef<[u8]> + ?Sized + 'b>(
         bytes: &'b B,
-    ) -> Result<(ReasonablePosixTimeZone, &'b [u8]), Error> {
+    ) -> Result<(PosixTimeZone, &'b [u8]), Error> {
         let bytes = bytes.as_ref();
-        let (posix_tz, remaining) = PosixTimeZone::parse_prefix(bytes)
-            .map_err(|e| {
-                e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
-            })?;
-        let Ok(reasonable) = posix_tz.reasonable() else {
-            return Err(err!(
-                "TZ string {:?} in v3+ tzfile has DST but no transition rules",
-                Bytes(bytes),
-            ));
+        let (shared_tz, remaining) =
+            shared::PosixTimeZone::parse_prefix(bytes.as_ref())
+                .map_err(Error::adhoc)
+                .map_err(|e| {
+                    e.context(err!(
+                        "invalid POSIX TZ string {:?}",
+                        Bytes(bytes)
+                    ))
+                })?;
+        let posix_tz = PosixTimeZone::from_shared_owned(&shared_tz);
+        Ok((posix_tz, remaining))
+    }
+
+    /// Converts from the shared-but-internal API for use in proc macros.
+    ///
+    /// This is not `const` since it accepts an owned `String` as a time zone
+    /// abbreviation. This is used when parsing POSIX time zones at runtime.
+    #[cfg(feature = "alloc")]
+    pub(crate) fn from_shared_owned(
+        sh: &shared::PosixTimeZone<alloc::string::String>,
+    ) -> PosixTimeZone {
+        let std_abbrev = Abbreviation::new(&sh.std_abbrev)
+            .expect("expected short enough std tz abbreviation");
+        let std_offset = PosixOffset {
+            offset: SpanZoneOffset::new(sh.std_offset)
+                .expect("expected std offset in range"),
         };
-        Ok((reasonable, remaining))
+        let dst = match sh.dst {
+            None => None,
+            Some(ref dst) => Some(PosixDst::from_shared_owned(dst)),
+        };
+        PosixTimeZone { std_abbrev, std_offset, dst }
     }
 
     /// Converts from the shared-but-internal API for use in proc macros.
@@ -269,7 +269,7 @@ impl ReasonablePosixTimeZone {
     /// code generated by a proc macro to this Jiff internal type.
     pub(crate) const fn from_shared_const(
         sh: &shared::PosixTimeZone<&'static str>,
-    ) -> ReasonablePosixTimeZone {
+    ) -> PosixTimeZone {
         use crate::util::constant::unwrap;
 
         let std_abbrev = unwrap!(
@@ -284,18 +284,18 @@ impl ReasonablePosixTimeZone {
         };
         let dst = match sh.dst {
             None => None,
-            Some(ref dst) => Some(ReasonablePosixDst::from_shared_const(dst)),
+            Some(ref dst) => Some(PosixDst::from_shared_const(dst)),
         };
-        ReasonablePosixTimeZone { std_abbrev, std_offset, dst }
+        PosixTimeZone { std_abbrev, std_offset, dst }
     }
 
     /// Returns the appropriate time zone offset to use for the given
     /// timestamp.
     ///
-    /// If you need information like whether the offset is in
-    /// DST or not, or the time zone abbreviation, then use
-    /// `ReasonablePosixTimeZone::to_offset_info`. But that API may be more
-    /// expensive to use, so only use it if you need the additional data.
+    /// If you need information like whether the offset is in DST or not, or
+    /// the time zone abbreviation, then use `PosixTimeZone::to_offset_info`.
+    /// But that API may be more expensive to use, so only use it if you need
+    /// the additional data.
     pub(crate) fn to_offset(&self, timestamp: Timestamp) -> Offset {
         if self.dst.is_none() {
             return self.std_offset();
@@ -547,7 +547,7 @@ impl ReasonablePosixTimeZone {
     }
 }
 
-impl core::fmt::Display for ReasonablePosixTimeZone {
+impl core::fmt::Display for PosixTimeZone {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
             f,
@@ -567,24 +567,24 @@ impl core::fmt::Display for ReasonablePosixTimeZone {
 #[derive(Debug, Eq, PartialEq)]
 struct DstInfo<'a> {
     /// The DST transition rule that generated this info.
-    dst: &'a ReasonablePosixDst,
+    dst: &'a PosixDst,
     /// The start time (inclusive) that DST begins.
     ///
     /// Note that this may be greater than `end`. This tends to happen in the
     /// southern hemisphere.
     ///
-    /// Note also that this may be in UTC or in wall clock civil time.
-    /// It depends on whether `ReasonablePosixTimeZone::dst_info_utc` or
-    /// `ReasonablePosixTimeZone::dst_info_wall` was used.
+    /// Note also that this may be in UTC or in wall clock civil
+    /// time. It depends on whether `PosixTimeZone::dst_info_utc` or
+    /// `PosixTimeZone::dst_info_wall` was used.
     start: DateTime,
     /// The end time (exclusive) that DST ends.
     ///
     /// Note that this may be less than `start`. This tends to happen in the
     /// southern hemisphere.
     ///
-    /// Note also that this may be in UTC or in wall clock civil time.
-    /// It depends on whether `ReasonablePosixTimeZone::dst_info_utc` or
-    /// `ReasonablePosixTimeZone::dst_info_wall` was used.
+    /// Note also that this may be in UTC or in wall clock civil
+    /// time. It depends on whether `PosixTimeZone::dst_info_utc` or
+    /// `PosixTimeZone::dst_info_wall` was used.
     end: DateTime,
 }
 
@@ -614,192 +614,14 @@ impl<'a> DstInfo<'a> {
     }
 }
 
-/// A "reasonable" DST transition rule.
+/// The daylight-saving-time abbreviation, offset and rule for this time zone.
 ///
 /// Unlike what POSIX specifies, this requires a rule.
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct ReasonablePosixDst {
-    abbrev: Abbreviation,
-    offset: PosixOffset,
-    /// This is the principal change. A "reasonable" DST must include a rule.
-    rule: Rule,
-}
-
-impl ReasonablePosixDst {
-    /// Converts from the shared-but-internal API for use in proc macros.
-    ///
-    /// This works in a `const` context by requiring that the time zone
-    /// abbreviations are `static` strings. This is used when converting
-    /// code generated by a proc macro to this Jiff internal type.
-    const fn from_shared_const(
-        sh: &shared::PosixDst<&'static str>,
-    ) -> ReasonablePosixDst {
-        use crate::util::constant::unwrap;
-
-        let abbrev = unwrap!(
-            Abbreviation::new(sh.abbrev),
-            "expected short enough dst tz abbreviation"
-        );
-        let offset = PosixOffset {
-            offset: unwrap!(
-                SpanZoneOffset::new_const(sh.offset),
-                "expected dst offset in range",
-            ),
-        };
-        let rule = match sh.rule {
-            None => {
-                panic!("expected reasonable POSIX time zone (DST has a rule)")
-            }
-            Some(ref rule) => Rule::from_shared(rule),
-        };
-        ReasonablePosixDst { abbrev, offset, rule }
-    }
-
-    fn display(
-        &self,
-        std_offset: PosixOffset,
-        f: &mut core::fmt::Formatter,
-    ) -> core::fmt::Result {
-        write!(f, "{}", AbbreviationDisplay(self.abbrev))?;
-        // The overwhelming common case is that DST is exactly one hour ahead
-        // of standard time. So common that this is the default. So don't write
-        // the offset if we don't need to.
-        let default =
-            PosixOffset { offset: std_offset.offset + t::SECONDS_PER_HOUR };
-        if self.offset != default {
-            write!(f, "{}", self.offset)?;
-        }
-        write!(f, ",{}", self.rule)?;
-        Ok(())
-    }
-}
-
-/// A POSIX time zone.
-///
-/// This is effectively identical to a `ReasonablePosixTimeZone`, except if it
-/// has a DST time zone abbreviation provided, then it _may_ be missing the
-/// corresponding transition rule. This is seemingly allowed by POSIX, but Jiff
-/// in practice considers POSIX time zones with a DST time zone abbreviation
-/// but without a DST transition rule to be invalid.
-///
-/// This type generally shouldn't be used. It's only exported (to the rest of
-/// the crate) for use with `PosixTzEnv`. The only thing you can do with a
-/// `PosixTimeZone` is attempt to convert it a `ReasonablePosixTimeZone`. Jiff
-/// will emit helpful log messages when this conversion fails.
-#[derive(Debug, Eq, PartialEq)]
-pub(crate) struct PosixTimeZone {
-    std_abbrev: Abbreviation,
-    std_offset: PosixOffset,
-    dst: Option<PosixDst>,
-}
-
-impl PosixTimeZone {
-    /// Parse a POSIX `TZ` environment variable, assuming it's a rule and not
-    /// an implementation defined value, from the given bytes.
-    #[cfg(feature = "alloc")]
-    fn parse(bytes: impl AsRef<[u8]>) -> Result<PosixTimeZone, Error> {
-        let shared_tz = crate::shared::PosixTimeZone::parse(bytes.as_ref())
-            .map_err(Error::adhoc)?;
-        let jiff_tz = PosixTimeZone::from_shared_owned(&shared_tz);
-        Ok(jiff_tz)
-    }
-
-    /// Like parse, but parses a prefix of the input given and returns whatever
-    /// is remaining.
-    #[cfg(feature = "alloc")]
-    fn parse_prefix<'b, B: AsRef<[u8]> + ?Sized + 'b>(
-        bytes: &'b B,
-    ) -> Result<(PosixTimeZone, &'b [u8]), Error> {
-        let (shared_tz, remaining) =
-            crate::shared::PosixTimeZone::parse_prefix(bytes.as_ref())
-                .map_err(Error::adhoc)?;
-        let jiff_tz = PosixTimeZone::from_shared_owned(&shared_tz);
-        Ok((jiff_tz, remaining))
-    }
-
-    /// Converts from the shared-but-internal API for use in proc macros.
-    ///
-    /// This is not `const` since it accepts an owned `String` as a time zone
-    /// abbreviation. This is used when parsing POSIX time zones at runtime.
-    #[cfg(feature = "alloc")]
-    pub(crate) fn from_shared_owned(
-        sh: &shared::PosixTimeZone<alloc::string::String>,
-    ) -> PosixTimeZone {
-        let std_abbrev = Abbreviation::new(&sh.std_abbrev)
-            .expect("expected short enough std tz abbreviation");
-        let std_offset = PosixOffset {
-            offset: SpanZoneOffset::new(sh.std_offset)
-                .expect("expected std offset in range"),
-        };
-        let dst = match sh.dst {
-            None => None,
-            Some(ref dst) => Some(PosixDst::from_shared_owned(dst)),
-        };
-        PosixTimeZone { std_abbrev, std_offset, dst }
-    }
-
-    /// Transforms this POSIX time zone into a "reasonable" time zone.
-    ///
-    /// If this isn't a reasonable time zone, then the original time zone is
-    /// returned unchanged.
-    ///
-    /// A POSIX time zone is reasonable when, if it has DST, then it must also
-    /// have a rule declaring when DST starts and ends. A POSIX time zone
-    /// without DST at all is always reasonable.
-    pub(crate) fn reasonable(
-        mut self,
-    ) -> Result<ReasonablePosixTimeZone, PosixTimeZone> {
-        if let Some(mut dst) = self.dst.take() {
-            if let Some(rule) = dst.rule.take() {
-                Ok(ReasonablePosixTimeZone {
-                    std_abbrev: self.std_abbrev,
-                    std_offset: self.std_offset,
-                    dst: Some(ReasonablePosixDst {
-                        abbrev: dst.abbrev,
-                        offset: dst.offset,
-                        rule,
-                    }),
-                })
-            } else {
-                // This is the main problematic case: the time zone declares
-                // that DST exists, but gives us no information about when
-                // it starts and ends.
-                Err(PosixTimeZone { dst: Some(dst), ..self })
-            }
-        } else {
-            // This is still reasonable even though there's no rule because
-            // there's no DST at all. So no rule is required for this time
-            // zone to be reasonable.
-            Ok(ReasonablePosixTimeZone {
-                std_abbrev: self.std_abbrev,
-                std_offset: self.std_offset,
-                dst: None,
-            })
-        }
-    }
-}
-
-impl core::fmt::Display for PosixTimeZone {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(
-            f,
-            "{}{}",
-            AbbreviationDisplay(self.std_abbrev),
-            self.std_offset
-        )?;
-        if let Some(ref dst) = self.dst {
-            dst.display(self.std_offset, f)?;
-        }
-        Ok(())
-    }
-}
-
-/// The daylight-saving-time abbreviation, offset and rule for this time zone.
-#[derive(Debug, Eq, PartialEq)]
 struct PosixDst {
     abbrev: Abbreviation,
     offset: PosixOffset,
-    rule: Option<Rule>,
+    rule: Rule,
 }
 
 impl PosixDst {
@@ -817,10 +639,31 @@ impl PosixDst {
             offset: SpanZoneOffset::new(sh.offset)
                 .expect("expected dst offset in range"),
         };
-        let rule = match sh.rule {
-            None => None,
-            Some(ref rule) => Some(Rule::from_shared(rule)),
+        let rule = Rule::from_shared(&sh.rule);
+        PosixDst { abbrev, offset, rule }
+    }
+
+    /// Converts from the shared-but-internal API for use in proc macros.
+    ///
+    /// This works in a `const` context by requiring that the time zone
+    /// abbreviations are `static` strings. This is used when converting
+    /// code generated by a proc macro to this Jiff internal type.
+    const fn from_shared_const(
+        sh: &shared::PosixDst<&'static str>,
+    ) -> PosixDst {
+        use crate::util::constant::unwrap;
+
+        let abbrev = unwrap!(
+            Abbreviation::new(sh.abbrev),
+            "expected short enough dst tz abbreviation"
+        );
+        let offset = PosixOffset {
+            offset: unwrap!(
+                SpanZoneOffset::new_const(sh.offset),
+                "expected dst offset in range",
+            ),
         };
+        let rule = Rule::from_shared(&sh.rule);
         PosixDst { abbrev, offset, rule }
     }
 
@@ -838,9 +681,7 @@ impl PosixDst {
         if self.offset != default {
             write!(f, "{}", self.offset)?;
         }
-        if let Some(rule) = self.rule {
-            write!(f, ",{rule}")?;
-        }
+        write!(f, ",{}", self.rule)?;
         Ok(())
     }
 }
@@ -1247,11 +1088,9 @@ mod tests {
 
     use super::*;
 
-    fn reasonable_posix_time_zone(
-        input: impl AsRef<[u8]>,
-    ) -> ReasonablePosixTimeZone {
+    fn posix_time_zone(input: impl AsRef<[u8]>) -> PosixTimeZone {
         let input = core::str::from_utf8(input.as_ref()).unwrap();
-        let tz = ReasonablePosixTimeZone::parse(input).unwrap();
+        let tz = PosixTimeZone::parse(input).unwrap();
         // While we're here, assert that converting the TZ back
         // to a string matches what we got. In the original version
         // of the POSIX TZ parser, we were very meticulous about
@@ -1263,15 +1102,15 @@ mod tests {
         //
         // So to account for this, we serialize to a string and
         // then parse it back. We should get what we started with.
-        let reparsed = ReasonablePosixTimeZone::parse(tz.to_string()).unwrap();
+        let reparsed = PosixTimeZone::parse(tz.to_string()).unwrap();
         assert_eq!(tz, reparsed);
         assert_eq!(tz.to_string(), reparsed.to_string());
         tz
     }
 
     #[test]
-    fn reasonable_to_dst_civil_datetime_utc_range() {
-        let tz = reasonable_posix_time_zone("WART4WARST,J1/-3,J365/20");
+    fn to_dst_civil_datetime_utc_range() {
+        let tz = posix_time_zone("WART4WARST,J1/-3,J365/20");
         let dst_info = DstInfo {
             // We test this in other places. It's too annoying to write this
             // out here, and I didn't adopt snapshot testing until I had
@@ -1282,7 +1121,7 @@ mod tests {
         };
         assert_eq!(tz.dst_info_utc(C(2024)), Some(dst_info));
 
-        let tz = reasonable_posix_time_zone("WART4WARST,J1/-4,J365/21");
+        let tz = posix_time_zone("WART4WARST,J1/-4,J365/21");
         let dst_info = DstInfo {
             dst: tz.dst.as_ref().unwrap(),
             start: date(2024, 1, 1).at(0, 0, 0, 0),
@@ -1290,7 +1129,7 @@ mod tests {
         };
         assert_eq!(tz.dst_info_utc(C(2024)), Some(dst_info));
 
-        let tz = reasonable_posix_time_zone("EST5EDT,M3.2.0,M11.1.0");
+        let tz = posix_time_zone("EST5EDT,M3.2.0,M11.1.0");
         let dst_info = DstInfo {
             dst: tz.dst.as_ref().unwrap(),
             start: date(2024, 3, 10).at(7, 0, 0, 0),
@@ -1301,20 +1140,17 @@ mod tests {
 
     #[test]
     fn reasonable() {
-        assert!(PosixTimeZone::parse("EST5").unwrap().reasonable().is_ok());
+        assert!(PosixTimeZone::parse("EST5").is_ok());
         assert!(PosixTimeZone::parse("EST5EDT").is_err());
-        assert!(PosixTimeZone::parse("EST5EDT,J1,J365")
-            .unwrap()
-            .reasonable()
-            .is_ok());
+        assert!(PosixTimeZone::parse("EST5EDT,J1,J365").is_ok());
 
-        let tz = reasonable_posix_time_zone("EST24EDT,J1,J365");
+        let tz = posix_time_zone("EST24EDT,J1,J365");
         assert_eq!(
             tz,
-            ReasonablePosixTimeZone {
+            PosixTimeZone {
                 std_abbrev: "EST".into(),
                 std_offset: offset(-24).into(),
-                dst: Some(ReasonablePosixDst {
+                dst: Some(PosixDst {
                     abbrev: "EDT".into(),
                     offset: offset(-23).into(),
                     rule: Rule {
@@ -1331,13 +1167,13 @@ mod tests {
             },
         );
 
-        let tz = reasonable_posix_time_zone("EST-24EDT,J1,J365");
+        let tz = posix_time_zone("EST-24EDT,J1,J365");
         assert_eq!(
             tz,
-            ReasonablePosixTimeZone {
+            PosixTimeZone {
                 std_abbrev: "EST".into(),
                 std_offset: offset(24).into(),
-                dst: Some(ReasonablePosixDst {
+                dst: Some(PosixDst {
                     abbrev: "EDT".into(),
                     offset: offset(25).into(),
                     rule: Rule {
@@ -1364,7 +1200,7 @@ mod tests {
             spec.to_datetime(year, crate::tz::offset(0))
         };
 
-        let tz = reasonable_posix_time_zone("EST5EDT,J1,J365/5:12:34");
+        let tz = posix_time_zone("EST5EDT,J1,J365/5:12:34");
         assert_eq!(
             to_datetime(&tz.rule().start, 2023),
             date(2023, 1, 1).at(2, 0, 0, 0),
@@ -1374,7 +1210,7 @@ mod tests {
             date(2023, 12, 31).at(5, 12, 34, 0),
         );
 
-        let tz = reasonable_posix_time_zone("EST+5EDT,M3.2.0/2,M11.1.0/2");
+        let tz = posix_time_zone("EST+5EDT,M3.2.0/2,M11.1.0/2");
         assert_eq!(
             to_datetime(&tz.rule().start, 2024),
             date(2024, 3, 10).at(2, 0, 0, 0),
@@ -1384,7 +1220,7 @@ mod tests {
             date(2024, 11, 3).at(2, 0, 0, 0),
         );
 
-        let tz = reasonable_posix_time_zone("EST+5EDT,M1.1.1,M12.5.2");
+        let tz = posix_time_zone("EST+5EDT,M1.1.1,M12.5.2");
         assert_eq!(
             to_datetime(&tz.rule().start, 2024),
             date(2024, 1, 1).at(2, 0, 0, 0),
@@ -1394,7 +1230,7 @@ mod tests {
             date(2024, 12, 31).at(2, 0, 0, 0),
         );
 
-        let tz = reasonable_posix_time_zone("EST5EDT,0/0,J365/25");
+        let tz = posix_time_zone("EST5EDT,0/0,J365/25");
         assert_eq!(
             to_datetime(&tz.rule().start, 2024),
             date(2024, 1, 1).at(0, 0, 0, 0),
@@ -1404,7 +1240,7 @@ mod tests {
             date(2024, 12, 31).at(23, 59, 59, 999_999_999),
         );
 
-        let tz = reasonable_posix_time_zone("XXX3EDT4,0/0,J365/23");
+        let tz = posix_time_zone("XXX3EDT4,0/0,J365/23");
         assert_eq!(
             to_datetime(&tz.rule().start, 2024),
             date(2024, 1, 1).at(0, 0, 0, 0),
@@ -1414,7 +1250,7 @@ mod tests {
             date(2024, 12, 31).at(23, 0, 0, 0),
         );
 
-        let tz = reasonable_posix_time_zone("XXX3EDT4,0/0,365");
+        let tz = posix_time_zone("XXX3EDT4,0/0,365");
         assert_eq!(
             to_datetime(&tz.rule().end, 2023),
             date(2023, 12, 31).at(23, 59, 59, 999_999_999),
@@ -1424,9 +1260,7 @@ mod tests {
             date(2024, 12, 31).at(2, 0, 0, 0),
         );
 
-        let tz = reasonable_posix_time_zone(
-            "XXX3EDT4,J1/-167:59:59,J365/167:59:59",
-        );
+        let tz = posix_time_zone("XXX3EDT4,J1/-167:59:59,J365/167:59:59");
         assert_eq!(
             to_datetime(&tz.rule().start, 2024),
             date(2024, 1, 1).at(0, 0, 0, 0),
@@ -1439,7 +1273,7 @@ mod tests {
 
     #[test]
     fn posix_date_time_spec_time() {
-        let tz = reasonable_posix_time_zone("EST5EDT,J1,J365/5:12:34");
+        let tz = posix_time_zone("EST5EDT,J1,J365/5:12:34");
         assert_eq!(tz.rule().start.time(), PosixTimeSpec::DEFAULT,);
         assert_eq!(
             tz.rule().end.time(),
@@ -1452,7 +1286,7 @@ mod tests {
 
     #[test]
     fn posix_date_spec_to_date() {
-        let tz = reasonable_posix_time_zone("EST+5EDT,M3.2.0/2,M11.1.0/2");
+        let tz = posix_time_zone("EST+5EDT,M3.2.0/2,M11.1.0/2");
         let start = tz.rule().start.date.to_civil_date(C(2023));
         assert_eq!(start, Some(date(2023, 3, 12)));
         let end = tz.rule().end.date.to_civil_date(C(2023));
@@ -1462,7 +1296,7 @@ mod tests {
         let end = tz.rule().end.date.to_civil_date(C(2024));
         assert_eq!(end, Some(date(2024, 11, 3)));
 
-        let tz = reasonable_posix_time_zone("EST+5EDT,J60,J365");
+        let tz = posix_time_zone("EST+5EDT,J60,J365");
         let start = tz.rule().start.date.to_civil_date(C(2023));
         assert_eq!(start, Some(date(2023, 3, 1)));
         let end = tz.rule().end.date.to_civil_date(C(2023));
@@ -1472,7 +1306,7 @@ mod tests {
         let end = tz.rule().end.date.to_civil_date(C(2024));
         assert_eq!(end, Some(date(2024, 12, 31)));
 
-        let tz = reasonable_posix_time_zone("EST+5EDT,59,365");
+        let tz = posix_time_zone("EST+5EDT,59,365");
         let start = tz.rule().start.date.to_civil_date(C(2023));
         assert_eq!(start, Some(date(2023, 3, 1)));
         let end = tz.rule().end.date.to_civil_date(C(2023));
@@ -1482,7 +1316,7 @@ mod tests {
         let end = tz.rule().end.date.to_civil_date(C(2024));
         assert_eq!(end, Some(date(2024, 12, 31)));
 
-        let tz = reasonable_posix_time_zone("EST+5EDT,M1.1.1,M12.5.2");
+        let tz = posix_time_zone("EST+5EDT,M1.1.1,M12.5.2");
         let start = tz.rule().start.date.to_civil_date(C(2024));
         assert_eq!(start, Some(date(2024, 1, 1)));
         let end = tz.rule().end.date.to_civil_date(C(2024));
@@ -1491,7 +1325,7 @@ mod tests {
 
     #[test]
     fn posix_time_spec_to_civil_time() {
-        let tz = reasonable_posix_time_zone("EST5EDT,J1,J365/5:12:34");
+        let tz = posix_time_zone("EST5EDT,J1,J365/5:12:34");
         assert_eq!(
             tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
             SignedDuration::from_hours(2),
@@ -1501,8 +1335,7 @@ mod tests {
             SignedDuration::new(5 * 60 * 60 + 12 * 60 + 34, 0),
         );
 
-        let tz =
-            reasonable_posix_time_zone("EST5EDT,J1/23:59:59,J365/24:00:00");
+        let tz = posix_time_zone("EST5EDT,J1/23:59:59,J365/24:00:00");
         assert_eq!(
             tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
             SignedDuration::new(23 * 60 * 60 + 59 * 60 + 59, 0),
@@ -1512,7 +1345,7 @@ mod tests {
             SignedDuration::from_hours(24),
         );
 
-        let tz = reasonable_posix_time_zone("EST5EDT,J1/-1,J365/167:00:00");
+        let tz = posix_time_zone("EST5EDT,J1/-1,J365/167:00:00");
         assert_eq!(
             tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
             SignedDuration::from_hours(-1),
@@ -1525,7 +1358,7 @@ mod tests {
 
     #[test]
     fn posix_time_spec_to_span() {
-        let tz = reasonable_posix_time_zone("EST5EDT,J1,J365/5:12:34");
+        let tz = posix_time_zone("EST5EDT,J1,J365/5:12:34");
         assert_eq!(
             tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
             SignedDuration::from_hours(2),
@@ -1535,8 +1368,7 @@ mod tests {
             SignedDuration::from_secs((5 * 60 * 60) + (12 * 60) + 34),
         );
 
-        let tz =
-            reasonable_posix_time_zone("EST5EDT,J1/23:59:59,J365/24:00:00");
+        let tz = posix_time_zone("EST5EDT,J1/23:59:59,J365/24:00:00");
         assert_eq!(
             tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
             SignedDuration::from_secs((23 * 60 * 60) + (59 * 60) + 59),
@@ -1546,7 +1378,7 @@ mod tests {
             SignedDuration::from_hours(24),
         );
 
-        let tz = reasonable_posix_time_zone("EST5EDT,J1/-1,J365/167:00:00");
+        let tz = posix_time_zone("EST5EDT,J1/-1,J365/167:00:00");
         assert_eq!(
             tz.dst.as_ref().unwrap().rule.start.time().to_duration(),
             SignedDuration::from_hours(-1),
@@ -1560,11 +1392,11 @@ mod tests {
     #[cfg(feature = "tz-system")]
     #[test]
     fn parse_posix_tz() {
-        // We used to parse this and then error when we tried
-        // to convert to a "reasonable" POSIX time zone with a
-        // DST transition rule. We never actually used unreasonable
-        // POSIX time zones and it was complicating the type
-        // definitions, so now we just reject it outright.
+        // We used to parse this and then error when we tried to
+        // convert to a "reasonable" POSIX time zone with a DST
+        // transition rule. We never actually used unreasonable POSIX
+        // time zones and it was complicating the type definitions, so
+        // now we just reject it outright.
         assert!(PosixTzEnv::parse("EST5EDT").is_err());
 
         let tz = PosixTzEnv::parse(":EST5EDT").unwrap();
@@ -1578,14 +1410,13 @@ mod tests {
     #[test]
     fn parse_iana() {
         // Ref: https://github.com/chronotope/chrono/issues/1153
-        let p = ReasonablePosixTimeZone::parse("CRAZY5SHORT,M12.5.0/50,0/2")
-            .unwrap();
+        let p = PosixTimeZone::parse("CRAZY5SHORT,M12.5.0/50,0/2").unwrap();
         assert_eq!(
             p,
-            ReasonablePosixTimeZone {
+            PosixTimeZone {
                 std_abbrev: "CRAZY".into(),
                 std_offset: offset(-5).into(),
-                dst: Some(ReasonablePosixDst {
+                dst: Some(PosixDst {
                     abbrev: "SHORT".into(),
                     offset: offset(-4).into(),
                     rule: Rule {
@@ -1614,7 +1445,7 @@ mod tests {
             },
         );
 
-        assert!(ReasonablePosixTimeZone::parse("America/New_York").is_err());
-        assert!(ReasonablePosixTimeZone::parse(":America/New_York").is_err());
+        assert!(PosixTimeZone::parse("America/New_York").is_err());
+        assert!(PosixTimeZone::parse(":America/New_York").is_err());
     }
 }

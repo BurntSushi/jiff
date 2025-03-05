@@ -178,7 +178,7 @@ pub struct PosixTimeZone<ABBREV> {
 pub struct PosixDst<ABBREV> {
     pub abbrev: ABBREV,
     pub offset: i32,
-    pub rule: Option<PosixRule>,
+    pub rule: PosixRule,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -227,8 +227,8 @@ pub enum PosixDay {
 
 // only-jiff-start
 impl PosixTimeZone<&'static str> {
-    pub const fn to_jiff(&self) -> crate::tz::posix::ReasonablePosixTimeZone {
-        crate::tz::posix::ReasonablePosixTimeZone::from_shared_const(self)
+    pub const fn to_jiff(&self) -> crate::tz::posix::PosixTimeZone {
+        crate::tz::posix::PosixTimeZone::from_shared_const(self)
     }
 }
 // only-jiff-end
