@@ -1,30 +1,12 @@
-use alloc::string::String;
-
 use super::{
     util::{
         array_str::Abbreviation,
+        error::{err, Error},
         escape::{Byte, Bytes},
     },
     PosixDay, PosixDayTime, PosixDst, PosixRule, PosixTimeZone,
 };
 
-macro_rules! err {
-    ($($tt:tt)*) => {{
-        self::Error(alloc::format!($($tt)*))
-    }}
-}
-
-/// An error that can be returned when parsing.
-#[derive(Debug)]
-pub struct Error(String);
-
-impl core::fmt::Display for Error {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self.0, f)
-    }
-}
-
-#[cfg(feature = "alloc")]
 impl PosixTimeZone<Abbreviation> {
     /// Parse a POSIX `TZ` environment variable, assuming it's a rule and not
     /// an implementation defined value, from the given bytes.
