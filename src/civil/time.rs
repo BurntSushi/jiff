@@ -8,9 +8,9 @@ use crate::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
     },
+    shared::util::itime::{ITime, ITimeNanosecond, ITimeSecond},
     util::{
-        common,
-        rangeint::{composite, uncomposite, RFrom, RInto, TryRFrom},
+        rangeint::{self, Composite, RFrom, RInto, TryRFrom},
         round::increment,
         t::{
             self, CivilDayNanosecond, CivilDaySecond, Hour, Microsecond,
@@ -1695,16 +1695,6 @@ impl Time {
         }
     }
 
-    #[inline]
-    pub(crate) fn new_ranged_unchecked(
-        hour: Hour,
-        minute: Minute,
-        second: Second,
-        subsec_nanosecond: SubsecNanosecond,
-    ) -> Time {
-        Time { hour, minute, second, subsec_nanosecond }
-    }
-
     /// Set the fractional parts of this time to the given units via ranged
     /// types.
     #[inline]
@@ -1779,12 +1769,7 @@ impl Time {
     /// `23:59:59`.
     #[inline]
     pub(crate) fn to_second(&self) -> CivilDaySecond {
-        let c = composite! {
-            (hour = self.hour, minute = self.minute, second = self.second) => {
-                common::to_day_second(hour, minute, second)
-            }
-        };
-        c.to_rint()
+        self.to_itime().map(|x| x.to_second().second).to_rint()
     }
 
     /// Converts the given second to a time value. The second should correspond
@@ -1792,16 +1777,10 @@ impl Time {
     /// fractional second component of the `Time` returned is always `0`.
     #[inline(always)]
     pub(crate) fn from_second(second: CivilDaySecond) -> Time {
-        let c = composite!((second) => {
-            common::from_day_second(second)
+        let second = rangeint::composite!((second) => {
+            ITimeSecond { second }
         });
-        let (hour, minute, second) = uncomposite!(c, c => (c.0, c.1, c.2));
-        Time {
-            hour: hour.to_rint(),
-            minute: minute.to_rint(),
-            second: second.to_rint(),
-            subsec_nanosecond: SubsecNanosecond::N::<0>(),
-        }
+        Time::from_itime(second.map(|x| x.to_time()))
     }
 
     /// Converts this time value to the number of nanoseconds that has elapsed
@@ -1811,22 +1790,7 @@ impl Time {
     /// `23:59:59.999999999`.
     #[inline]
     pub(crate) fn to_nanosecond(&self) -> CivilDayNanosecond {
-        let c = composite! {
-            (
-                hour = self.hour,
-                minute = self.minute,
-                second = self.second,
-                subsec_nanosecond = self.subsec_nanosecond,
-            ) => {
-                common::to_day_nanosecond(
-                    hour,
-                    minute,
-                    second,
-                    subsec_nanosecond,
-                )
-            }
-        };
-        c.to_rint()
+        self.to_itime().map(|x| x.to_nanosecond().nanosecond).to_rint()
     }
 
     /// Converts the given nanosecond to a time value. The nanosecond should
@@ -1834,17 +1798,49 @@ impl Time {
     /// `00:00:00.000000000`.
     #[inline(always)]
     pub(crate) fn from_nanosecond(nanosecond: CivilDayNanosecond) -> Time {
-        let c = composite!((nanosecond) => {
-            common::from_day_nanosecond(nanosecond)
+        let nano = rangeint::composite!((nanosecond) => {
+            ITimeNanosecond { nanosecond }
         });
-        let (hour, minute, second, subsec_nanosecond) = uncomposite!(
-            c, c => (c.0, c.1, c.2, c.3),
+        Time::from_itime(nano.map(|x| x.to_time()))
+    }
+
+    #[inline]
+    pub(crate) fn to_itime(&self) -> Composite<ITime> {
+        rangeint::composite! {
+            (
+                hour = self.hour,
+                minute = self.minute,
+                second = self.second,
+                subsec_nanosecond = self.subsec_nanosecond,
+            ) => {
+                ITime { hour, minute, second, subsec_nanosecond }
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn from_itime(itime: Composite<ITime>) -> Time {
+        let (hour, minute, second, subsec_nanosecond) = rangeint::uncomposite!(
+            itime,
+            c => (c.hour, c.minute, c.second, c.subsec_nanosecond),
         );
         Time {
             hour: hour.to_rint(),
             minute: minute.to_rint(),
             second: second.to_rint(),
             subsec_nanosecond: subsec_nanosecond.to_rint(),
+        }
+    }
+
+    #[inline]
+    pub(crate) const fn from_itime_const(itime: ITime) -> Time {
+        Time {
+            hour: Hour::new_unchecked(itime.hour),
+            minute: Minute::new_unchecked(itime.minute),
+            second: Second::new_unchecked(itime.second),
+            subsec_nanosecond: SubsecNanosecond::new_unchecked(
+                itime.subsec_nanosecond,
+            ),
         }
     }
 }
