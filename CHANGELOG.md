@@ -16,6 +16,8 @@ De-duplicate TZif data in `jiff-tzdb`.
 Add "crate features" documentation to `jiff-sqlx` and `jiff-diesel`.
 * [#277](https://github.com/BurntSushi/jiff/issues/277):
 Document semver guarantee for error conditions on `Timestamp` constructors.
+* [#277](https://github.com/BurntSushi/jiff/pull/287):
+Greatly optimize time zone lookups (for both timestamps and civil datetimes).
 
 Bug fixes:
 
