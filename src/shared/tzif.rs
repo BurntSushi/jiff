@@ -3,7 +3,7 @@
 use alloc::{string::String, vec};
 
 use super::{
-    util::{Byte, Bytes},
+    util::escape::{Byte, Bytes},
     PosixTimeZone, TzifFixed, TzifIndicator, TzifLocalTimeType, TzifOwned,
     TzifTransition,
 };

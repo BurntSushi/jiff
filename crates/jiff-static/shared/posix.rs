@@ -3,7 +3,7 @@
 use alloc::string::String;
 
 use super::{
-    util::{Byte, Bytes},
+    util::escape::{Byte, Bytes},
     PosixDay, PosixDayTime, PosixDst, PosixRule, PosixTimeZone,
 };
 
