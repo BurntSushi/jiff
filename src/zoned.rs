@@ -893,6 +893,14 @@ impl Zoned {
     ///
     /// The value returned is guaranteed to be in the range `0..=999_999_999`.
     ///
+    /// Note that this returns the fractional second associated with the civil
+    /// time on this `Zoned` value. This is distinct from the fractional
+    /// second on the underlying timestamp. A timestamp, for example, may be
+    /// negative to indicate time before the Unix epoch. But a civil datetime
+    /// can only have a negative year, while the remaining values are all
+    /// semantically positive. See the examples below for how this can manifest
+    /// in practice.
+    ///
     /// # Example
     ///
     /// This shows the relationship between constructing a `Zoned` value
@@ -919,15 +927,35 @@ impl Zoned {
     /// manifests from a specific timestamp.
     ///
     /// ```
-    /// use jiff::{civil, Timestamp};
+    /// use jiff::Timestamp;
     ///
     /// // 1,234 nanoseconds after the Unix epoch.
     /// let zdt = Timestamp::new(0, 1_234)?.in_tz("UTC")?;
     /// assert_eq!(zdt.subsec_nanosecond(), 1_234);
+    /// // N.B. The timestamp's fractional second and the civil datetime's
+    /// // fractional second happen to be equal here:
+    /// assert_eq!(zdt.timestamp().subsec_nanosecond(), 1_234);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: fractional seconds can differ between timestamps and civil time
+    ///
+    /// This shows how a timestamp can have a different fractional second
+    /// value than its corresponding `Zoned` value because of how the sign
+    /// is handled:
+    ///
+    /// ```
+    /// use jiff::{civil, Timestamp};
     ///
     /// // 1,234 nanoseconds before the Unix epoch.
     /// let zdt = Timestamp::new(0, -1_234)?.in_tz("UTC")?;
-    /// // The nanosecond is equal to `1_000_000_000 - 1_234`.
+    /// // The timestamp's fractional second is what was given:
+    /// assert_eq!(zdt.timestamp().subsec_nanosecond(), -1_234);
+    /// // But the civil datetime's fractional second is equal to
+    /// // `1_000_000_000 - 1_234`. This is because civil datetimes
+    /// // represent times in strictly positive values, like it
+    /// // would read on a clock.
     /// assert_eq!(zdt.subsec_nanosecond(), 999998766);
     /// // Looking at the other components of the time value might help.
     /// assert_eq!(zdt.hour(), 23);
