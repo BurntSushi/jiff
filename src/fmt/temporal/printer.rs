@@ -567,6 +567,7 @@ impl SpanPrinter {
     }
 }
 
+#[cfg(feature = "alloc")]
 #[cfg(test)]
 mod tests {
     use alloc::string::String;
