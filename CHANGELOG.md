@@ -1,8 +1,38 @@
 # CHANGELOG
 
-0.2.2 (TBD)
-===========
-TODO
+0.2.2 (2025-03-06)
+==================
+This release of Jiff includes a new opt-in proc macro for embedding a
+`TimeZone` into your binary. Just enable Jiff's `static` feature, and this will
+print the current time in the `America/New_York` time zone:
+
+```rust
+use jiff::{
+    tz::{self, TimeZone},
+    Timestamp,
+};
+
+fn main() {
+    static TZ: TimeZone = tz::get!("America/New_York");
+    let zdt = Timestamp::now().to_zoned(TZ.clone());
+    println!("{zdt}");
+}
+```
+
+This enables `TimeZone` to be meaningfully used in core-only environments,
+even when dynamic memory allocation isn't available.
+
+This release also features a number of performance improvements for time zone
+lookups. In some cases, the improvement is significant (by an order of
+magnitude).
+
+Additionally, the IANA Time Zone Database embedded into `jiff-tzdb` now
+uses "rearguard" semantics. This means that the boolean flag indicating
+whether daylight saving time is active or not (only accessible via
+`TimeZone::to_offset_info`) will respect the actual definition of
+daylight saving time. (This is relevant, for example, for time zones like
+`Europe/Dublin`, where their summer time is _legally_ known as their standard
+time, but is in effect daylight saving time.)
 
 Enhancements:
 
