@@ -584,14 +584,14 @@ impl TzifOwned {
             let its = ITimestamp { second: timestamp, nanosecond: 0 };
             let ioff = IOffset { second: offset };
             let dt = its.to_datetime(ioff);
-            TzifDateTime {
-                year: dt.date.year,
-                month: dt.date.month,
-                day: dt.date.day,
-                hour: dt.time.hour,
-                minute: dt.time.minute,
-                second: dt.time.second,
-            }
+            TzifDateTime::new(
+                dt.date.year,
+                dt.date.month,
+                dt.date.day,
+                dt.time.hour,
+                dt.time.minute,
+                dt.time.second,
+            )
         }
 
         let trans = &mut self.transitions;
