@@ -1,0 +1,26 @@
+#!/bin/bash
+
+set -e
+
+# cd to the directory containing this crate's Cargo.toml so that we don't need
+# to pass --manifest-path to every `cargo` command.
+cd "$(dirname "$0")/.."
+
+features=(
+    "alloc"
+    "alloc tzdb-bundle-always"
+    "alloc serde"
+    "std"
+    "std tzdb-bundle-platform tzdb-bundle-always"
+    "std tzdb-bundle-platform tzdb-bundle-always tzdb-zoneinfo"
+    "std tzdb-bundle-platform tzdb-zoneinfo"
+    "std tzdb-bundle-always tzdb-zoneinfo"
+    "std tzdb-bundle-always logging"
+    "std tzdb-bundle-always serde"
+)
+for f in "${features[@]}"; do
+    echo "===== FEATURES: '$f' ====="
+    cargo build --no-default-features --features "$f"
+    cargo test --lib --no-default-features --features "$f"
+    cargo test --test integration --no-default-features --features "$f"
+done

@@ -1,0 +1,35 @@
+#!/bin/bash
+
+set -e
+
+# cd to the directory containing this crate's Cargo.toml so that we don't need
+# to pass --manifest-path to every `cargo` command.
+cd "$(dirname "$0")/.."
+
+# We test core-only mode specially. Sadly, in core-only mode, error messages
+# are quite a bit worse. And this wreaks havoc with Jiff's snapshot tests on
+# error messages. We could `cfg` all of them, but that's a huge pain and it's
+# not clear that it's worth it.
+#
+# Since we use snapshot tests for more than error messages, this technique also
+# risks accidentally passing a test that doesn't involve error messages. Sigh.
+# We accept this risk because this still runs a lot of tests, and the tests
+# that aren't covered are run in other configurations. Still, it's not ideal.
+echo "===== CORE ONLY ====="
+cargo build --no-default-features
+INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test --lib --no-default-features
+INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test --test integration --no-default-features
+
+# More core-only tests, when combined with compatible features.
+features=(
+    "serde"
+    "logging"
+    "serde logging"
+    "static"
+)
+for f in "${features[@]}"; do
+    echo "===== COREONLY PLUS '$f' ====="
+    cargo build --no-default-features --features "$f"
+    INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test --lib --no-default-features --features "$f"
+    INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test --test integration --no-default-features --features "$f"
+done

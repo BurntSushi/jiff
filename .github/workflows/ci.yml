@@ -28,10 +28,11 @@ permissions:
   contents: read
 
 jobs:
-  # This runs tests under a number of different feature combinations. Jiff has
-  # too many features to do the full powerset, but we capture a number of
-  # configurations here.
-  testfull:
+  # The standard `cargo test --all` on many platforms.
+  #
+  # For the other `test-*` jobs, we cut this down to Linux/nightly and
+  # macOS/nightly, just to avoid more jobs than we probably need.
+  test-default:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -65,7 +66,190 @@ jobs:
       run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
     - name: Bump rust-version to Rust 1.85
       run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
-    - run: ./scripts/test
+    - run: ./scripts/test-default
+
+  # Test all features enabled.
+  test-all:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - build: nightly
+          os: ubuntu-latest
+          rust: nightly
+        - build: macos
+          os: macos-latest
+          rust: nightly
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+    # In Rust 2024, doc tests are (mostly) all compiled into a single
+    # executable and then run once. This is a lot faster for Jiff, which
+    # has 1000+ doc tests. Since this job is where we run most of our
+    # tests (and we run MSRV on a different job), we just bump to Rust 2024
+    # to take advantage of this.
+    - name: Switch to Rust 2024
+      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
+    - name: Bump rust-version to Rust 1.85
+      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
+    - run: ./scripts/test-all
+
+  # Test Jiff when only the bundled tzdb is enabled.
+  test-only-bundle:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - build: nightly
+          os: ubuntu-latest
+          rust: nightly
+        - build: macos
+          os: macos-latest
+          rust: nightly
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+    # In Rust 2024, doc tests are (mostly) all compiled into a single
+    # executable and then run once. This is a lot faster for Jiff, which
+    # has 1000+ doc tests. Since this job is where we run most of our
+    # tests (and we run MSRV on a different job), we just bump to Rust 2024
+    # to take advantage of this.
+    - name: Switch to Rust 2024
+      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
+    - name: Bump rust-version to Rust 1.85
+      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
+    - run: ./scripts/test-only-bundle
+
+  # Test Jiff in core-only (including no-alloc) configurations.
+  test-core:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - build: nightly
+          os: ubuntu-latest
+          rust: nightly
+        - build: macos
+          os: macos-latest
+          rust: nightly
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+    - run: ./scripts/test-only-core
+
+  # Test a number of different feature combinations.
+  #
+  # Jiff has too many features to do the full powerset, so this just tries to
+  # get decent coverage over what I perceive to be likely configs.
+  test-various-feature-combos:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - build: nightly
+          os: ubuntu-latest
+          rust: nightly
+        - build: macos
+          os: macos-latest
+          rust: nightly
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+    - run: ./scripts/test-various-feature-combos
+
+  # Run tests with `testrelease` profile.
+  #
+  # This is useful because Jiff's ranged integers internally track min/max
+  # values in debug mode, but don't in release mode. So there may occasionally
+  # be a discrepancy that is worth testing here.
+  test-release:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+    # In Rust 2024, doc tests are (mostly) all compiled into a single
+    # executable and then run once. This is a lot faster for Jiff, which has
+    # 1000+ doc tests. Since we run doc tests in this job, we just bump to Rust
+    # 2024 to take advantage of this.
+    - name: Switch to Rust 2024
+      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
+    - name: Bump rust-version to Rust 1.85
+      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
+    - name: Run tests under release mode
+      run: cargo test --verbose --all --profile testrelease
+
+  # Test that documentation gets built.
+  test-doc:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+    - name: Build docs with all features enabled
+      run: cargo doc --verbose --all-features
+
+  # Run benchmarks as tests.
+  test-bench:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+    - name: Run benchmark tests
+      run: |
+        cargo bench --manifest-path bench/Cargo.toml -- --test
+
+  # Runs miri on a subset of Jiff's test suite. This doesn't quite cover
+  # everything. In particular, `miri` and `insta` cannot play nice together,
+  # and `insta` is used a lot among Jiff's tests. However, the primary reason
+  # why we want to run `miri` (at present, 2025-02-25) is to check out pointer
+  # tagging representation of `jiff::tz::TimeZone`. And we can run the tests in
+  # `tz`.
+  test-miri:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        # We use nightly here so that we can use miri I guess?
+        toolchain: nightly
+        components: miri
+    - name: "Run tests on `jiff::tz` under miri"
+      run: "cargo miri test tz:: --verbose"
+    - name: Run proc macro integration tests under miri
+      run: cargo miri test --test integration procmacro --verbose
 
   # Test for Windows. We test fewer configurations here because it just
   # takes forever otherwise.
@@ -320,80 +504,6 @@ jobs:
       run: |
         cd crates/jiff-wasm
         wasm-pack test --node
-
-  # Run tests with `testrelease` profile.
-  #
-  # This is useful because Jiff's ranged integers internally track min/max
-  # values in debug mode, but don't in release mode. So there may occasionally
-  # be a discrepancy that is worth testing here.
-  testrelease:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-    # In Rust 2024, doc tests are (mostly) all compiled into a single
-    # executable and then run once. This is a lot faster for Jiff, which has
-    # 1000+ doc tests. Since we run doc tests in this job, we just bump to Rust
-    # 2024 to take advantage of this.
-    - name: Switch to Rust 2024
-      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
-    - name: Bump rust-version to Rust 1.85
-      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
-    - name: Run tests under release mode
-      run: cargo test --verbose --all --profile testrelease
-
-  # Test that documentation gets built.
-  testdoc:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-    - name: Build docs with all features enabled
-      run: cargo doc --verbose --all-features
-
-  # Run benchmarks as tests.
-  testbench:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-    - name: Run benchmark tests
-      run: |
-        cargo bench --manifest-path bench/Cargo.toml -- --test
-
-  # Runs miri on a subset of Jiff's test suite. This doesn't quite cover
-  # everything. In particular, `miri` and `insta` cannot play nice together,
-  # and `insta` is used a lot among Jiff's tests. However, the primary reason
-  # why we want to run `miri` (at present, 2025-02-25) is to check out pointer
-  # tagging representation of `jiff::tz::TimeZone`. And we can run the tests in
-  # `tz`.
-  miri:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        # We use nightly here so that we can use miri I guess?
-        toolchain: nightly
-        components: miri
-    - name: "Run tests on `jiff::tz` under miri"
-      run: "cargo miri test tz:: --verbose"
-    - name: Run proc macro integration tests under miri
-      run: cargo miri test --test integration procmacro --verbose
 
   # Check that all files are formatted properly.
   rustfmt:

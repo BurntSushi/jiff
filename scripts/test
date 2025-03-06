@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# This is a convenience script for running a broad swath of tests across
+# features. We don't test the complete space, since the complete space is quite
+# large.
+#
 # This script is used to run a more exhaustive set of tests than what just
 # `cargo test` or even `cargo test --all` will do. Specifically, we run tests
 # under a number of different feature configurations.
@@ -13,68 +17,12 @@ set -e
 # to pass --manifest-path to every `cargo` command.
 cd "$(dirname "$0")/.."
 
-# This is a convenience script for running a broad swath of tests across
-# features. We don't test the complete space, since the complete space is quite
-# large.
-echo "===== DEFAULT FEATURES ====="
-cargo test --all
-
-echo "===== DEFAULT FEATURES WITH STATIC ====="
-cargo test --features static
-
-# This one is useful because sometimes the bundled time zone database can
-# behave differently than the system time zone database depending on the
-# inputs. For example, the bundled database uses as few transitions as possible
-# (this is tzdb's "slim" data model) and thus relies more heavily on POSIX
-# time zone strings. So if there's a bug in POSIX time zone handling, you're
-# likely to see it with the bundled database while missing it completely with
-# the system database.
-echo "===== WITH ONLY THE BUNDLED TIME ZONE DATABASE ====="
-cargo test --no-default-features --features std,tz-system,tzdb-bundle-always
-
-# We test core-only mode specially. Sadly, in core-only mode, error messages
-# are quite a bit worse. And this wreaks havoc with Jiff's snapshot tests on
-# error messages. We could `cfg` all of them, but that's a huge pain and it's
-# not clear that it's worth it.
-#
-# Since we use snapshot tests for more than error messages, this technique also
-# risks accidentally passing a test that doesn't involve error messages. Sigh.
-# We accept this risk because this still runs a lot of tests, and the tests
-# that aren't covered are run in other configurations. Still, it's not ideal.
-echo "===== CORE ONLY ====="
-cargo build --no-default-features
-INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test --lib --no-default-features
-INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test --test integration --no-default-features
-
-# More core-only tests, when combined with compatible features.
-features=(
-    "serde"
-    "logging"
-    "serde logging"
-    "static"
-)
-for f in "${features[@]}"; do
-    echo "===== COREONLY PLUS '$f' ====="
-    cargo build --no-default-features --features "$f"
-    INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test --lib --no-default-features --features "$f"
-    INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test --test integration --no-default-features --features "$f"
-done
-
-features=(
-    "alloc"
-    "alloc tzdb-bundle-always"
-    "alloc serde"
-    "std"
-    "std tzdb-bundle-platform tzdb-bundle-always"
-    "std tzdb-bundle-platform tzdb-bundle-always tzdb-zoneinfo"
-    "std tzdb-bundle-platform tzdb-zoneinfo"
-    "std tzdb-bundle-always tzdb-zoneinfo"
-    "std tzdb-bundle-always logging"
-    "std tzdb-bundle-always serde"
-)
-for f in "${features[@]}"; do
-    echo "===== FEATURES: '$f' ====="
-    cargo build --no-default-features --features "$f"
-    cargo test --lib --no-default-features --features "$f"
-    cargo test --test integration --no-default-features --features "$f"
-done
+# This is split into separate scripts so that each one can be run in an
+# independent job on CI. This speeds up CI. But locally, developer workstations
+# are powerful enough that just running everything at once doesn't take that
+# long (a few minutes on my aging i9-12900K).
+./scripts/test-default
+./scripts/test-all
+./scripts/test-only-bundle
+./scripts/test-only-core
+./scripts/test-various-feature-combos
