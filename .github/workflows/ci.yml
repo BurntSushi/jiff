@@ -28,7 +28,10 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  # This runs tests under a number of different feature combinations. Jiff has
+  # too many features to do the full powerset, but we capture a number of
+  # configurations here.
+  testfull:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -62,10 +65,6 @@ jobs:
       run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
     - name: Bump rust-version to Rust 1.85
       run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
-    - run: cargo build --verbose
-    - run: cargo doc --features serde,static --verbose
-    - run: cargo test --verbose --lib --profile testrelease
-    - run: cargo test --verbose --test integration --profile testrelease
     - run: ./test
 
   # Test for Windows. We test fewer configurations here because it just
@@ -321,6 +320,44 @@ jobs:
       run: |
         cd crates/jiff-wasm
         wasm-pack test --node
+
+  # Run tests with `testrelease` profile.
+  #
+  # This is useful because Jiff's ranged integers internally track min/max
+  # values in debug mode, but don't in release mode. So there may occasionally
+  # be a discrepancy that is worth testing here.
+  testrelease:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+    # In Rust 2024, doc tests are (mostly) all compiled into a single
+    # executable and then run once. This is a lot faster for Jiff, which has
+    # 1000+ doc tests. Since we run doc tests in this job, we just bump to Rust
+    # 2024 to take advantage of this.
+    - name: Switch to Rust 2024
+      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
+    - name: Bump rust-version to Rust 1.85
+      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
+    - name: Run tests under release mode
+      run: cargo test --verbose --all --profile testrelease
+
+  # Test that documentation gets built.
+  testdoc:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+    - name: Build docs with all features enabled
+      run: cargo doc --verbose --all-features
 
   # Run benchmarks as tests.
   testbench:

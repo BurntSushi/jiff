@@ -684,7 +684,12 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
 // Lots of rustdoc links break when disabling default features because docs
 // aren't written conditionally.
 #![cfg_attr(
-    all(feature = "std", feature = "serde", feature = "tzdb-zoneinfo"),
+    all(
+        feature = "std",
+        feature = "serde",
+        feature = "static",
+        feature = "tzdb-zoneinfo"
+    ),
     deny(rustdoc::broken_intra_doc_links)
 )]
 // These are just too annoying to squash otherwise.
