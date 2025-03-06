@@ -234,7 +234,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # The version of wasmtime to download and install.
-      WASMTIME_VERSION: 22.0.0
+      WASMTIME_VERSION: 30.0.1
       # Yes'um.
       WASMTIME_BACKTRACE_DETAILS: 1
     steps:
