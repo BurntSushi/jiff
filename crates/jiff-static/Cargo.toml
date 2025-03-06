@@ -12,12 +12,11 @@ keywords = ["date", "time", "static", "zone", "iana"]
 workspace = "../.."
 edition = "2021"
 rust-version = "1.70"
-include = ["/*.rs", "/*.dat", "COPYING", "LICENSE-MIT", "UNLICENSE"]
+include = ["/src/**/*.rs", "COPYING", "LICENSE-MIT", "UNLICENSE"]
 
 [lib]
 name = "jiff_static"
 bench = false
-path = "lib.rs"
 proc-macro = true
 
 [features]
