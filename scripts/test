@@ -11,7 +11,7 @@ set -e
 
 # cd to the directory containing this crate's Cargo.toml so that we don't need
 # to pass --manifest-path to every `cargo` command.
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 # This is a convenience script for running a broad swath of tests across
 # features. We don't test the complete space, since the complete space is quite

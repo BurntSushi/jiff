@@ -65,7 +65,7 @@ jobs:
       run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
     - name: Bump rust-version to Rust 1.85
       run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
-    - run: ./test
+    - run: ./scripts/test
 
   # Test for Windows. We test fewer configurations here because it just
   # takes forever otherwise.

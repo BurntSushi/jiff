@@ -1,5 +1,11 @@
 #!/bin/sh
 
+set -e
+
+# cd to the directory containing this crate's Cargo.toml so that we don't need
+# to pass --manifest-path to every `cargo` command.
+cd "$(dirname "$0")/.."
+
 if [ $# = 0 ]; then
   echo "Usage: ./test-wasm <cargo command>" >&2
   echo "Example: ./test-wasm cargo test --lib -- --nocapture" >&2
