@@ -1,0 +1,17 @@
+#!/bin/bash
+
+set -e
+
+# cd to the directory containing this crate's Cargo.toml so that we don't need
+# to pass --manifest-path to every `cargo` command.
+cd "$(dirname "$0")/.."
+
+# This one is useful because sometimes the bundled time zone database can
+# behave differently than the system time zone database depending on the
+# inputs. For example, the bundled database uses as few transitions as possible
+# (this is tzdb's "slim" data model) and thus relies more heavily on POSIX
+# time zone strings. So if there's a bug in POSIX time zone handling, you're
+# likely to see it with the bundled database while missing it completely with
+# the system database.
+echo "===== WITH ONLY THE BUNDLED TIME ZONE DATABASE ====="
+cargo test --no-default-features --features std,tz-system,tzdb-bundle-always
