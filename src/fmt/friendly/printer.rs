@@ -1729,6 +1729,7 @@ impl FractionalPrinter {
     }
 }
 
+#[cfg(feature = "alloc")]
 #[cfg(test)]
 mod tests {
     use crate::ToSpan;

@@ -1539,6 +1539,7 @@ fn is_whitespace(byte: u8) -> bool {
     byte.is_ascii_whitespace()
 }
 
+#[cfg(feature = "alloc")]
 #[cfg(test)]
 mod tests {
     use alloc::string::{String, ToString};

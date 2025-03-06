@@ -851,6 +851,7 @@ impl Case {
     }
 }
 
+#[cfg(feature = "alloc")]
 #[cfg(test)]
 mod tests {
     use crate::{

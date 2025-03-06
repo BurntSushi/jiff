@@ -1298,6 +1298,7 @@ fn parse_iana_component<'i>(
     Ok((mkname(input), input))
 }
 
+#[cfg(feature = "alloc")]
 #[cfg(test)]
 mod tests {
     use alloc::string::ToString;
