@@ -60,7 +60,6 @@ for f in "${features[@]}"; do
     INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test --test integration --no-default-features --features "$f"
 done
 
-exit 0
 features=(
     "alloc"
     "alloc tzdb-bundle-always"
