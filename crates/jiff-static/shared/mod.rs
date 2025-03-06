@@ -350,30 +350,17 @@ pub enum TzifTransitionKind {
 /// do not need to represent fractional seconds. This lets us easily represent
 /// what we need in 8 bytes instead of the 12 bytes used by `IDateTime`.
 ///
-/// Moreover, we explicitly set the alignment here to force the compiler to
-/// optimize comparisons down to `i64.cmp(&i64)`. This is especially useful
-/// since we do a binary search on `&[TzifDateTime]` when doing a TZ lookup for
-/// a civil datetime.
+/// Moreover, we pack the fields into a single `i64` to make comparisons
+/// extremely cheap. This is especially useful since we do a binary search on
+/// `&[TzifDateTime]` when doing a TZ lookup for a civil datetime.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[repr(align(8))]
 pub struct TzifDateTime {
-    year: i16,
-    month: i8,
-    day: i8,
-    hour: i8,
-    minute: i8,
-    second: i8,
+    bits: i64,
 }
 
 impl TzifDateTime {
-    pub const ZERO: TzifDateTime = TzifDateTime {
-        year: 0,
-        month: 0,
-        day: 0,
-        hour: 0,
-        minute: 0,
-        second: 0,
-    };
+    pub const ZERO: TzifDateTime = TzifDateTime::new(0, 0, 0, 0, 0, 0);
 
     pub const fn new(
         year: i16,
@@ -383,31 +370,39 @@ impl TzifDateTime {
         minute: i8,
         second: i8,
     ) -> TzifDateTime {
-        TzifDateTime { year, month, day, hour, minute, second }
+        // TzifDateTime { year, month, day, hour, minute, second }
+        let mut bits = (year as u64) << 48;
+        bits |= (month as u64) << 40;
+        bits |= (day as u64) << 32;
+        bits |= (hour as u64) << 24;
+        bits |= (minute as u64) << 16;
+        bits |= (second as u64) << 8;
+        // The least significant 8 bits remain 0.
+        TzifDateTime { bits: bits as i64 }
     }
 
     pub const fn year(self) -> i16 {
-        self.year
+        (self.bits as u64 >> 48) as u16 as i16
     }
 
     pub const fn month(self) -> i8 {
-        self.month
+        (self.bits as u64 >> 40) as u8 as i8
     }
 
     pub const fn day(self) -> i8 {
-        self.day
+        (self.bits as u64 >> 32) as u8 as i8
     }
 
     pub const fn hour(self) -> i8 {
-        self.hour
+        (self.bits as u64 >> 24) as u8 as i8
     }
 
     pub const fn minute(self) -> i8 {
-        self.minute
+        (self.bits as u64 >> 16) as u8 as i8
     }
 
     pub const fn second(self) -> i8 {
-        self.second
+        (self.bits as u64 >> 8) as u8 as i8
     }
 }
 
