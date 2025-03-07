@@ -1,0 +1,189 @@
+#!/usr/bin/env python3
+
+'''
+This is a preprocessor program for mdbook that attempts to translate Jiff API
+links into docs.rs links. Moreover, we try to do this in a way that creates
+permalinks with actual version numbers.
+
+Yes, we do this with regex. Which means this can totally trash the document.
+But in practice, the way the links are written is pretty specific, and I doubt
+we'll have problems. If we do, we can switch over to writing a Rust program
+that uses the `mdbook` library.
+'''
+
+import functools
+import json
+import os
+import os.path
+import re
+import sys
+
+# These are the crates we support linking to. Their versions are extracted
+# from `./Cargo.lock` and their API items are extracted from `./target/doc`.
+CRATES = ['jiff', 'jiff_tzdb', 'time']
+
+
+def transform(versions, api_items, book):
+    SIMPLE_LINK_RE = re.compile(r'\[`(?P<item>[^`]+)`\]')
+    NAMED_LINK_RE = re.compile(
+        r'(?P<name>\[[^\]]+\])\((?P<item>[^#\)]+)(?P<frag>#[^\)]+)?\)',
+    )
+    CITE_LINK_RE = re.compile(
+        r'(?P<name>\[[^\]]+\]):\s*(?P<item>[^#\n]+)(?P<frag>#[^\n]+)?',
+    )
+
+    for section in book.get("sections", []):
+        chapter = section.get("Chapter")
+        if chapter is None:
+            continue
+        # Supports links like [`jiff::tz::TimeZone`]
+        chapter["content"] = SIMPLE_LINK_RE.sub(
+            functools.partial(simple_link_sub, versions, api_items),
+            chapter["content"],
+        )
+        # Supports links like [`TimeZone`](jiff::tz::TimeZone)
+        chapter["content"] = NAMED_LINK_RE.sub(
+            functools.partial(named_link_sub, versions, api_items),
+            chapter["content"],
+        )
+        # Supports links like [`TimeZone`] with
+        # [`TimeZone`]: jiff::tz::TimeZone somewhere else.
+        chapter["content"] = CITE_LINK_RE.sub(
+            functools.partial(cite_link_sub, versions, api_items),
+            chapter["content"],
+        )
+    return book
+
+
+def simple_link_sub(versions, api_items, m):
+    item = m.group('item')
+    crate = item.split('::')[0]
+    version = versions.get(crate)
+    path = api_items.get(item)
+    if version is None or path is None:
+        return m.group(0)
+    return f'[`{item}`](https://docs.rs/{crate}/{version}/{path})'
+
+
+def named_link_sub(versions, api_items, m):
+    name = m.group('name')
+    item = m.group('item')
+    crate = item.split('::')[0]
+    version = versions.get(crate)
+    path = api_items.get(item)
+    frag = m.group('frag') or ''
+    if version is None or path is None:
+        return m.group(0)
+    return f'{name}(https://docs.rs/{crate}/{version}/{path}{frag})'
+
+
+def cite_link_sub(versions, api_items, m):
+    name = m.group('name')
+    item = m.group('item')
+    crate = item.split('::')[0]
+    version = versions.get(crate)
+    path = api_items.get(item)
+    frag = m.group('frag') or ''
+    if version is None or path is None:
+        return m.group(0)
+    return f'{name}: https://docs.rs/{crate}/{version}/{path}{frag}'
+
+
+def get_version(crate):
+    with open('Cargo.lock', 'r') as f:
+        toml = f.read()
+        m = re.search(
+            fr'(?m)^name = "{crate}"\nversion = "(?P<version>[^"]+)"$', toml,
+        )
+        if not m:
+            return None
+        return m.group("version")
+
+
+def get_api_items(crate):
+    '''
+    Returns a map from API item path to rustdoc URL path.
+
+    e.g., `jiff::tz::TimeZone` will map to
+    `jiff/tz/struct.TimeZone.html`.
+
+    This crawls the HTML output of `rustdoc` to figure out how to
+    translate API item paths to actual URLs. This isn't quite perfect.
+    It only works for items that have their own page.
+
+    With some extra effort and heuristics, we also make method and
+    trait method links work too.
+    '''
+    RUST_KINDS = ['struct', 'enum', 'trait', 'fn', 'macro', 'static', 'type']
+    IGNORE = ['all.html']
+    # Regexes to parse HTML! w00t!
+    METHOD_RE = re.compile(
+        r'<section id="method.(?P<name>[^"]+)" class="method">',
+    )
+    TRAIT_METHOD_RE = re.compile(
+        r'<section id="tymethod.(?P<name>[^"]+)" class="method">',
+    )
+
+    prefix = './target/doc/'
+    path = os.path.join(prefix, crate)
+    if not os.path.exists(path):
+        print(
+            'must run `cargo doc --all --manifest-path book/Cargo.toml` first',
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    api_items = {}
+    for root, dirs, files in os.walk(path):
+        modpath = '::'.join(root.removeprefix(prefix).split('/'))
+        urlpath = root.removeprefix(prefix)
+        for file in files:
+            if file in IGNORE:
+                continue
+            urlsuffix = f'{urlpath}/{file}'
+            if file == 'index.html':
+                api_items[modpath] = urlsuffix
+                continue
+            if not file.endswith('.html'):
+                continue
+
+            stem = file.removesuffix('.html')
+            item = None
+            for kind in RUST_KINDS:
+                if not stem.startswith(kind + '.'):
+                    continue
+                item = stem.removeprefix(kind + '.')
+                break
+            else:
+                print(
+                    f'WARNING: did not recognize {root}/{file}',
+                    file=sys.stderr,
+                )
+                continue
+            api_items[f'{modpath}::{item}'] = urlsuffix
+
+            with open(os.path.join(root, file), 'r') as f:
+                html = f.read()
+                for m in METHOD_RE.finditer(html):
+                    method = m.group('name')
+                    api_items[f'{modpath}::{item}::{method}'] = \
+                        f'{urlsuffix}#method.{method}'
+                for m in TRAIT_METHOD_RE.finditer(html):
+                    method = m.group('name')
+                    api_items[f'{modpath}::{item}::{method}'] = \
+                        f'{urlsuffix}#tymethod.{method}'
+    return api_items
+
+
+if __name__ == '__main__':
+    versions, api_items = {}, {}
+    for crate in CRATES:
+        versions[crate] = get_version(crate)
+        api_items |= get_api_items(crate)
+
+    if len(sys.argv) > 1:
+        sys.exit(0)
+
+    [_, book] = json.load(sys.stdin)
+    out = json.dumps(transform(versions, api_items, book))
+    print(f'{out}')
