@@ -1,5 +1,19 @@
 # CHANGELOG
 
+0.2.3 (2025-03-07)
+==================
+This is a small release that fixes a bug in the handling of POSIX time zones
+in some cases. Specifically, the implementation of `Date::yesterday` was wrong
+when the date was the first of the month. This was a regression introduced in
+`0.2.2` and was not present in older releases. More test coverage has been
+added.
+
+Bug fixes:
+
+* [#290](https://github.com/BurntSushi/jiff/issues/290):
+Fix bug in implementation of `Date::yesterday`.
+
+
 0.2.2 (2025-03-06)
 ==================
 This release of Jiff includes a new opt-in proc macro for embedding a

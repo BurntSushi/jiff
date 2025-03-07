@@ -5599,4 +5599,18 @@ mod tests {
         );
         assert_eq!(zdt1, &zdt2 - span, "should be reversible");
     }
+
+    // See: https://github.com/BurntSushi/jiff/issues/290
+    #[test]
+    fn zoned_roundtrip_regression() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let zdt: Zoned =
+            "2063-03-31T10:00:00+11:00[Australia/Sydney]".parse().unwrap();
+        assert_eq!(zdt.offset(), super::Offset::constant(11));
+        let roundtrip = zdt.time_zone().to_zoned(zdt.datetime()).unwrap();
+        assert_eq!(zdt, roundtrip);
+    }
 }
