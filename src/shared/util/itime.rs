@@ -440,7 +440,7 @@ impl IDate {
                 return Ok(IDate { year, month: 12, day: 31 });
             }
             let month = self.month - 1;
-            let day = days_in_month(self.year, self.month);
+            let day = days_in_month(self.year, month);
             return Ok(IDate { month, day, ..self });
         }
         Ok(IDate { day: self.day - 1, ..self })
@@ -878,5 +878,41 @@ mod tests {
 
         assert_eq!(days_in_month(1900, 2), 28);
         assert_eq!(days_in_month(2000, 2), 29);
+    }
+
+    #[test]
+    fn yesterday() {
+        let d1 = IDate { year: 2025, month: 4, day: 7 };
+        let d2 = d1.yesterday().unwrap();
+        assert_eq!(d2, IDate { year: 2025, month: 4, day: 6 });
+
+        let d1 = IDate { year: 2025, month: 4, day: 1 };
+        let d2 = d1.yesterday().unwrap();
+        assert_eq!(d2, IDate { year: 2025, month: 3, day: 31 });
+
+        let d1 = IDate { year: 2025, month: 1, day: 1 };
+        let d2 = d1.yesterday().unwrap();
+        assert_eq!(d2, IDate { year: 2024, month: 12, day: 31 });
+
+        let d1 = IDate { year: -9999, month: 1, day: 1 };
+        assert_eq!(d1.yesterday().ok(), None);
+    }
+
+    #[test]
+    fn tomorrow() {
+        let d1 = IDate { year: 2025, month: 4, day: 7 };
+        let d2 = d1.tomorrow().unwrap();
+        assert_eq!(d2, IDate { year: 2025, month: 4, day: 8 });
+
+        let d1 = IDate { year: 2025, month: 3, day: 31 };
+        let d2 = d1.tomorrow().unwrap();
+        assert_eq!(d2, IDate { year: 2025, month: 4, day: 1 });
+
+        let d1 = IDate { year: 2025, month: 12, day: 31 };
+        let d2 = d1.tomorrow().unwrap();
+        assert_eq!(d2, IDate { year: 2026, month: 1, day: 1 });
+
+        let d1 = IDate { year: 9999, month: 12, day: 31 };
+        assert_eq!(d1.tomorrow().ok(), None);
     }
 }
