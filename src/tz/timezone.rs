@@ -2022,7 +2022,7 @@ mod repr {
     /// provenance polyfill (because of MSRV). We use the lower 4 bits of a
     /// pointer to indicate which variant we have. This is sound because we
     /// require all types that we allocate for to have a minimum alignment of
-    /// 4 bytes.
+    /// 8 bytes.
     pub(super) struct Repr {
         ptr: *const u8,
     }
