@@ -1,0 +1,39 @@
+[book]
+title = "Jiff"
+authors = ["Andrew Gallant <jamslam@gmail.com>"]
+language = "en"
+multilingual = false
+src = "src"
+
+[rust]
+edition = "2024"
+
+[build]
+create-missing = false
+
+[preprocessor.docsrs]
+command = "../scripts/mdbook-docsrs"
+
+[output.html]
+default-theme = "light"
+smart-punctuation = false
+git-repository-url = "https://github.com/BurntSushi/jiff/tree/master/book"
+
+[output.html.playground]
+# As far as I can tell, the playground feature is just totally borked. I'd love
+# to enable it, but I think I'd probably need to host my own Playground with
+# Jiff enabled? At time of writing (2025-03-07), `jiff 0.1.x` is on the main
+# Rust Playground.
+#
+# Maybe once Jiff is 1.0 and the Rust Playground is using it, then we can
+# enable it.
+#
+# But even so, this still doesn't work. It just says that I need an `extern
+# crate jiff;`. Is it defaulting to Rust 2015 or something?
+runnable = false
+
+# This is kinda expensive to run, so it's disabled by default.
+# We should maybe run this in CI? But for now, I just run it
+# manually on occasion.
+# [output.linkcheck]
+# follow-web-links = true
