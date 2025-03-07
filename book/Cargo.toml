@@ -1,0 +1,29 @@
+[package]
+publish = false
+name = "book"
+version = "0.0.1"
+edition = "2024"
+
+# The book has a lot more dependencies, or at least, I intend it to. At time
+# of writing, Jiff's has a lot of dev-dependencies too. But I'd like to slim
+# that down. Either way, I'd like to see about keeping the `Cargo.lock` files
+# separate.
+[workspace]
+
+[dependencies]
+anyhow = "1.0.86"
+env_logger = "0.11.3"
+jiff = { path = "..", features = ["serde", "static"] }
+# humantime = "2.1.0"
+serde = { version = "1.0.203", features = ["derive"] }
+serde_json = "1.0.117"
+# chrono = "0.4.38"
+# chrono-tz = "0.10.0"
+time = { version = "0.3.39", features = ["local-offset", "macros"] }
+
+[lib]
+name = "book"
+path = "doctest.rs"
+
+[profile.release]
+debug = true
