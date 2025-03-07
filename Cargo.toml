@@ -40,6 +40,7 @@ members = [
   "examples/*",
 ]
 exclude = [
+  "book",
   "examples/diesel-mysql",
   "examples/diesel-postgres",
   "examples/diesel-sqlite",
