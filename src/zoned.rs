@@ -3905,7 +3905,7 @@ impl<'a> ZonedDifference<'a> {
         let zdt2 = self.zoned;
 
         let sign = t::sign(zdt2, zdt1);
-        if sign == 0 {
+        if sign == C(0) {
             return Ok(Span::new());
         }
 
@@ -3952,7 +3952,7 @@ impl<'a> ZonedDifference<'a> {
             )
         })?;
         if t::sign(zdt2, &zmid) == -sign {
-            if sign == -1 {
+            if sign == C(-1) {
                 panic!("this should be an error");
             }
             day_correct += C(1);

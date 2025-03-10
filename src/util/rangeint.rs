@@ -1151,17 +1151,6 @@ macro_rules! define_ranged {
             }
 
             impl<
-                const MIN: i128,
-                const MAX: i128,
-            > PartialEq<$smaller_repr> for $name<MIN, MAX>
-            {
-                #[inline]
-                fn eq(&self, other: &$smaller_repr) -> bool {
-                    self.eq(&<$repr>::from(*other))
-                }
-            }
-
-            impl<
                 const MIN1: i128,
                 const MAX1: i128,
                 const MIN2: i128,
@@ -1174,20 +1163,6 @@ macro_rules! define_ranged {
                     other: &$smaller_name<MIN1, MAX1>,
                 ) -> Option<Ordering> {
                     self.partial_cmp(&Self::rfrom(*other))
-                }
-            }
-
-            impl<
-                const MIN: i128,
-                const MAX: i128,
-            > PartialOrd<$smaller_repr> for $name<MIN, MAX>
-            {
-                #[inline]
-                fn partial_cmp(
-                    &self,
-                    other: &$smaller_repr,
-                ) -> Option<Ordering> {
-                    self.partial_cmp(&<$repr>::from(*other))
                 }
             }
 
@@ -1467,17 +1442,6 @@ macro_rules! define_ranged {
             }
 
             impl<
-                const MIN: i128,
-                const MAX: i128,
-            > PartialEq<$bigger_repr> for $name<MIN, MAX>
-            {
-                #[inline]
-                fn eq(&self, other: &$bigger_repr) -> bool {
-                    <$bigger_name<MIN, MAX>>::rfrom(*self).eq(other)
-                }
-            }
-
-            impl<
                 const MIN1: i128,
                 const MAX1: i128,
                 const MIN2: i128,
@@ -1490,20 +1454,6 @@ macro_rules! define_ranged {
                     other: &$bigger_name<MIN1, MAX1>,
                 ) -> Option<Ordering> {
                     <$bigger_name<MIN1, MAX1>>::rfrom(*self).partial_cmp(other)
-                }
-            }
-
-            impl<
-                const MIN: i128,
-                const MAX: i128,
-            > PartialOrd<$bigger_repr> for $name<MIN, MAX>
-            {
-                #[inline]
-                fn partial_cmp(
-                    &self,
-                    other: &$bigger_repr,
-                ) -> Option<Ordering> {
-                    <$bigger_name<MIN, MAX>>::rfrom(*self).partial_cmp(other)
                 }
             }
 
@@ -2084,20 +2034,6 @@ macro_rules! define_ranged {
             }
         }
 
-        impl<const MIN: i128, const MAX: i128> PartialEq<$repr> for $name<MIN, MAX> {
-            #[inline]
-            fn eq(&self, other: &$repr) -> bool {
-                self.val.eq(other)
-            }
-        }
-
-        impl<const MIN: i128, const MAX: i128> PartialEq<$name<MIN, MAX>> for $repr {
-            #[inline]
-            fn eq(&self, other: &$name<MIN, MAX>) -> bool {
-                self.eq(&other.val)
-            }
-        }
-
         impl<const MIN: i128, const MAX: i128> Ord for $name<MIN, MAX> {
             #[inline]
             fn cmp(&self, other: &Self) -> core::cmp::Ordering {
@@ -2137,26 +2073,6 @@ macro_rules! define_ranged {
                 other: &$name<MIN, MAX>,
             ) -> Option<core::cmp::Ordering> {
                 <$repr>::from(*self).partial_cmp(&other.val)
-            }
-        }
-
-        impl<const MIN: i128, const MAX: i128> PartialOrd<$repr> for $name<MIN, MAX> {
-            #[inline]
-            fn partial_cmp(
-                &self,
-                other: &$repr,
-            ) -> Option<core::cmp::Ordering> {
-                self.val.partial_cmp(other)
-            }
-        }
-
-        impl<const MIN: i128, const MAX: i128> PartialOrd<$name<MIN, MAX>> for $repr {
-            #[inline]
-            fn partial_cmp(
-                &self,
-                other: &$name<MIN, MAX>,
-            ) -> Option<core::cmp::Ordering> {
-                self.partial_cmp(&other.val)
             }
         }
 

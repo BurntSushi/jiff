@@ -3454,7 +3454,7 @@ mod tests {
         let max = -SignedDuration::MIN.as_nanos();
         let got = time(15, 30, 8, 999_999_999).to_nanosecond();
         let expected = max.rem_euclid(t::NANOS_PER_CIVIL_DAY.bound());
-        assert_eq!(got, expected);
+        assert_eq!(i128::from(got.get()), expected);
     }
 
     // This test checks that a wrapping subtraction with the maximum signed
@@ -3464,7 +3464,7 @@ mod tests {
         let max = -SignedDuration::MAX.as_nanos();
         let got = time(8, 29, 52, 1).to_nanosecond();
         let expected = max.rem_euclid(t::NANOS_PER_CIVIL_DAY.bound());
-        assert_eq!(got, expected);
+        assert_eq!(i128::from(got.get()), expected);
     }
 
     // This test checks that a wrapping subtraction with the maximum unsigned
@@ -3475,7 +3475,7 @@ mod tests {
             -i128::try_from(std::time::Duration::MAX.as_nanos()).unwrap();
         let got = time(16, 59, 44, 1).to_nanosecond();
         let expected = max.rem_euclid(t::NANOS_PER_CIVIL_DAY.bound());
-        assert_eq!(got, expected);
+        assert_eq!(i128::from(got.get()), expected);
     }
 
     /// # `serde` deserializer compatibility test

@@ -167,7 +167,7 @@ impl ParsedOffset {
             ParsedOffsetKind::Zulu => Ok(PiecesOffset::Zulu),
             ParsedOffsetKind::Numeric(ref numeric) => {
                 let mut off = PiecesNumericOffset::from(numeric.to_offset()?);
-                if numeric.sign < 0 {
+                if numeric.sign < C(0) {
                     off = off.with_negative_zero();
                 }
                 Ok(PiecesOffset::from(off))
@@ -228,7 +228,7 @@ impl Numeric {
             seconds += part_seconds;
         }
         if let Some(part_nanoseconds) = self.nanoseconds {
-            if part_nanoseconds >= 500_000_000 {
+            if part_nanoseconds >= C(500_000_000) {
                 seconds = seconds
                     .try_checked_add("offset-seconds", C(1))
                     .with_context(|| {
@@ -248,7 +248,7 @@ impl Numeric {
 // `Offset` fails.
 impl core::fmt::Display for Numeric {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        if self.sign == -1 {
+        if self.sign == C(-1) {
             write!(f, "-")?;
         } else {
             write!(f, "+")?;

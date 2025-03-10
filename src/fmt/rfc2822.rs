@@ -1435,7 +1435,7 @@ impl DateTimePrinter {
         // seem clearly indicated, we choose to do that here. An alternative
         // would be to return an error. It isn't clear how important this is in
         // practice though.
-        if offset.part_seconds_ranged().abs() >= 30 {
+        if offset.part_seconds_ranged().abs() >= C(30) {
             if minutes == 59 {
                 hours = hours.saturating_add(1);
                 minutes = 0;

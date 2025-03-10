@@ -359,8 +359,8 @@ impl Date {
                 // max value bigger than what can really occur, and then panic.
                 // So we use these caps to say, "no range integer, it truly
                 // won't exceed 9999-W52-4."
-                if year == 9999 {
-                    if week >= 52 {
+                if year == C(9999) {
+                    if week >= C(52) {
                         [week.min(C(52)), weekday.min(C(4))]
                     } else {
                         [week, weekday]
@@ -472,7 +472,7 @@ impl Date {
     #[inline]
     pub fn era_year(self) -> (i16, Era) {
         let year = self.year_ranged();
-        if year >= 1 {
+        if year >= C(1) {
             (year.get(), Era::CE)
         } else {
             // We specifically ensure our min/max bounds on `Year` always leave
@@ -1058,9 +1058,9 @@ impl Date {
         // ref: http://howardhinnant.github.io/date_algorithms.html#next_weekday
 
         let nth = t::SpanWeeks::try_new("nth weekday", nth)?;
-        if nth == 0 {
+        if nth == C(0) {
             Err(err!("nth weekday cannot be `0`"))
-        } else if nth > 0 {
+        } else if nth > C(0) {
             let nth = nth.max(C(1));
             let weekday_diff = weekday.since_ranged(self.weekday().next());
             let diff = (nth - C(1)) * C(7) + weekday_diff;
@@ -1463,9 +1463,9 @@ impl Date {
         }
         if span.units().contains_only(Unit::Day) {
             let span_days = span.get_days_ranged();
-            return if span_days == -1 {
+            return if span_days == C(-1) {
                 self.yesterday()
-            } else if span_days == 1 {
+            } else if span_days == C(1) {
                 self.tomorrow()
             } else {
                 let epoch_days = self.to_unix_epoch_day();
@@ -2112,7 +2112,7 @@ impl Date {
         day: impl RInto<Day>,
     ) -> Result<Date, Error> {
         let (year, month, day) = (year.rinto(), month.rinto(), day.rinto());
-        if day > 28 {
+        if day > C(28) {
             let max_day = days_in_month(year, month);
             if day > max_day {
                 return Err(day.to_error_with_bounds("day", 1, max_day));
@@ -2970,8 +2970,8 @@ impl DateDifference {
         let mut months =
             t::SpanMonths::rfrom(month2) - t::SpanMonths::rfrom(month1);
         let mut days = t::SpanDays::rfrom(day2) - t::SpanMonths::rfrom(day1);
-        if years != 0 || months != 0 {
-            let sign = if years != 0 {
+        if years != C(0) || months != C(0) {
+            let sign = if years != C(0) {
                 Sign::rfrom(years.signum())
             } else {
                 Sign::rfrom(months.signum())
@@ -2990,7 +2990,7 @@ impl DateDifference {
                 months = t::SpanMonths::rfrom(month2)
                     - t::SpanMonths::rfrom(month1);
                 days_in_month1 = days_in_month(year2, month2).rinto();
-                day_correct = if sign < 0 {
+                day_correct = if sign < C(0) {
                     -original_days_in_month1
                 } else {
                     days_in_month1
@@ -3000,11 +3000,11 @@ impl DateDifference {
             let day0_trunc = t::SpanDays::rfrom(day1.min(days_in_month1));
             days = t::SpanDays::rfrom(day2) - day0_trunc + day_correct;
 
-            if years != 0 {
+            if years != C(0) {
                 months = t::SpanMonths::rfrom(month2)
                     - t::SpanMonths::rfrom(month1);
                 if months.signum() == -sign {
-                    let month_correct = if sign < 0 {
+                    let month_correct = if sign < C(0) {
                         -t::MONTHS_PER_YEAR
                     } else {
                         t::MONTHS_PER_YEAR
@@ -3019,7 +3019,7 @@ impl DateDifference {
                 }
             }
         }
-        if largest == Unit::Month && years != 0 {
+        if largest == Unit::Month && years != C(0) {
             months = months.try_checked_add(
                 "months",
                 t::SpanMonths::rfrom(years) * t::MONTHS_PER_YEAR,
@@ -3628,7 +3628,7 @@ fn month_add_one(
     let delta = sign.rinto();
 
     month += delta;
-    if month < 1 {
+    if month < C(1) {
         year -= C(1);
         month += t::MONTHS_PER_YEAR;
     } else if month > t::MONTHS_PER_YEAR {

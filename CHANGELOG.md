@@ -1,5 +1,25 @@
 # CHANGELOG
 
+0.2.4 (2025-03-10)
+==================
+This is another small release that fixes a problem where Jiff could break
+builds if they relied on inference for integer comparisons. Specifically, Jiff
+uses internal trait impls to make comparing its internal ranged integers
+more convenient. But Rust the language has no concept of "internal" trait
+impls, and thus this can impact type inference. If code was written in a way
+that relies on a singular trait impl that is available, then adding Jiff to
+the project can cause it to break.
+
+This isn't arguably Jiff's fault per se, but since these trait impls were just
+about internal convenience and not essential to Jiff's design, we adopt a
+pragmatic approach and just remove them.
+
+Bug fixes:
+
+* [#293](https://github.com/BurntSushi/jiff/issues/293):
+Remove internal trait impls that can cause breaks due to inference failures.
+
+
 0.2.3 (2025-03-07)
 ==================
 This is a small release that fixes a bug in the handling of POSIX time zones
