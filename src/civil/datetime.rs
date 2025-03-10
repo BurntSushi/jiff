@@ -3248,9 +3248,9 @@ impl DateTimeDifference {
             // then it's impossible for `sign < 0` since the max date is at
             // least as big as every other date. And thus, d2.tomorrow() is
             // never reached in cases where it would fail.
-            if sign > 0 {
+            if sign > C(0) {
                 d2 = d2.yesterday().unwrap();
-            } else if sign < 0 {
+            } else if sign < C(0) {
                 d2 = d2.tomorrow().unwrap();
             }
             time_diff +=
@@ -3536,7 +3536,7 @@ impl DateTimeRound {
                 ));
             }
             // We don't do any rounding in this case, so just bail now.
-            Unit::Nanosecond if increment == 1 => {
+            Unit::Nanosecond if increment == C(1) => {
                 return Ok(dt);
             }
             _ => {}

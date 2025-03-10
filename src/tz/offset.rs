@@ -14,7 +14,7 @@ use crate::{
     util::{
         array_str::ArrayStr,
         rangeint::{self, Composite, RFrom, RInto, TryRFrom},
-        t,
+        t::{self, C},
     },
     RoundMode, SignedDuration, SignedDurationRound, Unit,
 };
@@ -377,7 +377,7 @@ impl Offset {
     /// assert!(!tz::offset(-5).is_positive());
     /// ```
     pub fn is_positive(self) -> bool {
-        self.seconds_ranged() > 0
+        self.seconds_ranged() > C(0)
     }
 
     /// Returns true if and only if this offset is less than zero.
@@ -392,7 +392,7 @@ impl Offset {
     /// assert!(tz::offset(-5).is_negative());
     /// ```
     pub fn is_negative(self) -> bool {
-        self.seconds_ranged() < 0
+        self.seconds_ranged() < C(0)
     }
 
     /// Returns true if and only if this offset is zero.
@@ -409,7 +409,7 @@ impl Offset {
     /// assert!(!tz::offset(-5).is_zero());
     /// ```
     pub fn is_zero(self) -> bool {
-        self.seconds_ranged() == 0
+        self.seconds_ranged() == C(0)
     }
 
     /// Converts this offset into a [`TimeZone`].
@@ -1107,7 +1107,7 @@ impl Offset {
 
 impl core::fmt::Debug for Offset {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        let sign = if self.seconds_ranged() < 0 { "-" } else { "" };
+        let sign = if self.seconds_ranged() < C(0) { "-" } else { "" };
         write!(
             f,
             "{sign}{:02}:{:02}:{:02}",
@@ -1120,7 +1120,7 @@ impl core::fmt::Debug for Offset {
 
 impl core::fmt::Display for Offset {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        let sign = if self.span < 0 { "-" } else { "+" };
+        let sign = if self.span < C(0) { "-" } else { "+" };
         let hours = self.part_hours_ranged().abs().get();
         let minutes = self.part_minutes_ranged().abs().get();
         let seconds = self.part_seconds_ranged().abs().get();

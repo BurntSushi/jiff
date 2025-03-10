@@ -9,7 +9,7 @@ use crate::{
         Write, WriteExt,
     },
     tz::Offset,
-    util::{escape, utf8},
+    util::{escape, t::C, utf8},
     Error,
 };
 
@@ -480,7 +480,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
         if ext.width == Some(0) {
             return Err(err!("zero precision with %f is not allowed"));
         }
-        if subsec == 0 && ext.width.is_none() {
+        if subsec == C(0) && ext.width.is_none() {
             self.wtr.write_str("0")?;
             return Ok(());
         }
@@ -491,7 +491,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     /// %.f
     fn fmt_dot_fractional(&mut self, ext: Extension) -> Result<(), Error> {
         let Some(subsec) = self.tm.subsec else { return Ok(()) };
-        if subsec == 0 && ext.width.is_none() || ext.width == Some(0) {
+        if subsec == C(0) && ext.width.is_none() || ext.width == Some(0) {
             return Ok(());
         }
         ext.write_str(Case::AsIs, ".", self.wtr)?;

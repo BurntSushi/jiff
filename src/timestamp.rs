@@ -952,7 +952,7 @@ impl Timestamp {
         // ... but we do have to check that the *combination* of seconds and
         // nanoseconds aren't out of bounds, which is possible even when both
         // are, on their own, legal values.
-        if second == UnixSeconds::MIN_REPR && nanosecond < 0 {
+        if second == UnixSeconds::MIN_SELF && nanosecond < C(0) {
             return Err(Error::range(
                 "seconds and nanoseconds",
                 nanosecond,
@@ -1515,7 +1515,7 @@ impl Timestamp {
         //
         // Note that this only works when *both* the span and timestamp lack
         // fractional seconds.
-        if self.subsec_nanosecond_ranged() == 0 {
+        if self.subsec_nanosecond_ranged() == C(0) {
             if let Some(span_seconds) = span.to_invariant_seconds() {
                 let time_seconds = self.as_second_ranged();
                 let sum = time_seconds
@@ -2258,7 +2258,7 @@ impl Timestamp {
         nanosecond: impl RInto<FractionalNanosecond>,
     ) -> Result<Timestamp, Error> {
         let (second, nanosecond) = (second.rinto(), nanosecond.rinto());
-        if second == UnixSeconds::MIN_REPR && nanosecond < 0 {
+        if second == UnixSeconds::MIN_SELF && nanosecond < C(0) {
             return Err(Error::range(
                 "seconds and nanoseconds",
                 nanosecond,
@@ -2272,8 +2272,8 @@ impl Timestamp {
         //
         // But first, if we're already normalized, we're done!
         if second.signum() == nanosecond.signum()
-            || second == 0
-            || nanosecond == 0
+            || second == C(0)
+            || nanosecond == C(0)
         {
             return Ok(Timestamp { second, nanosecond });
         }
@@ -2282,9 +2282,9 @@ impl Timestamp {
         let [delta_second, delta_nanosecond] = t::NoUnits::vary_many(
             [second, nanosecond],
             |[second, nanosecond]| {
-                if second < 0 && nanosecond > 0 {
+                if second < C(0) && nanosecond > C(0) {
                     [C(1), (-t::NANOS_PER_SECOND).rinto()]
-                } else if second > 0 && nanosecond < 0 {
+                } else if second > C(0) && nanosecond < C(0) {
                     [C(-1), t::NANOS_PER_SECOND.rinto()]
                 } else {
                     [C(0), C(0)]
@@ -2385,7 +2385,7 @@ impl Timestamp {
         // second value is the minimum.
         let [second, nanosecond] =
             NoUnits::vary_many([second, nanosecond], |[second, nanosecond]| {
-                if second == UnixSeconds::MIN_REPR && nanosecond < 0 {
+                if second == UnixSeconds::MIN_SELF && nanosecond < C(0) {
                     [second, C(0).rinto()]
                 } else {
                     [second, nanosecond]
@@ -2408,7 +2408,7 @@ impl Timestamp {
         // second value is the minimum.
         let [second, nanosecond] =
             NoUnits::vary_many([second, nanosecond], |[second, nanosecond]| {
-                if second == UnixSeconds::MIN_REPR && nanosecond < 0 {
+                if second == UnixSeconds::MIN_SELF && nanosecond < C(0) {
                     [second, C(0).rinto()]
                 } else {
                     [second, nanosecond]
@@ -2432,7 +2432,7 @@ impl Timestamp {
         let [second, nanosecond] = NoUnits128::vary_many(
             [second, nanosecond],
             |[second, nanosecond]| {
-                if second == UnixSeconds::MIN_REPR && nanosecond < 0 {
+                if second == UnixSeconds::MIN_SELF && nanosecond < C(0) {
                     [second, C(0).rinto()]
                 } else {
                     [second, nanosecond]
@@ -2896,7 +2896,7 @@ impl quickcheck::Arbitrary for Timestamp {
         let mut nanoseconds: FractionalNanosecond = Arbitrary::arbitrary(g);
         // nanoseconds must be zero for the minimum second value,
         // so just clamp it to 0.
-        if seconds == UnixSeconds::MIN_REPR && nanoseconds < 0 {
+        if seconds == UnixSeconds::MIN_SELF && nanoseconds < C(0) {
             nanoseconds = C(0).rinto();
         }
         Timestamp::new_ranged(seconds, nanoseconds).unwrap_or_default()
@@ -2907,7 +2907,7 @@ impl quickcheck::Arbitrary for Timestamp {
         let nanosecond = self.subsec_nanosecond_ranged();
         alloc::boxed::Box::new((second, nanosecond).shrink().filter_map(
             |(second, nanosecond)| {
-                if second == UnixSeconds::MIN_REPR && nanosecond > 0 {
+                if second == UnixSeconds::MIN_SELF && nanosecond > C(0) {
                     None
                 } else {
                     Timestamp::new_ranged(second, nanosecond).ok()
@@ -3816,7 +3816,7 @@ mod tests {
     fn nanosecond_roundtrip_boundaries() {
         let inst = Timestamp::MIN;
         let nanos = inst.as_nanosecond_ranged();
-        assert_eq!(0, nanos % t::NANOS_PER_SECOND);
+        assert_eq!(C(0), nanos % t::NANOS_PER_SECOND);
         let got = Timestamp::from_nanosecond_ranged(nanos);
         assert_eq!(inst, got);
 

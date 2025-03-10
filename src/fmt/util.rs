@@ -1,7 +1,11 @@
 use crate::{
     error::{err, ErrorContext},
     fmt::Parsed,
-    util::{escape, parse, rangeint::RFrom, t},
+    util::{
+        escape, parse,
+        rangeint::RFrom,
+        t::{self, C},
+    },
     Error, SignedDuration, Span, Unit,
 };
 
@@ -466,7 +470,7 @@ pub(crate) fn fractional_time_to_span(
         _ => unreachable!("unsupported unit: {unit:?}"),
     };
 
-    if unit >= Unit::Hour && nanos > 0 {
+    if unit >= Unit::Hour && nanos > C(0) {
         let mut hours = nanos / t::NANOS_PER_HOUR;
         nanos %= t::NANOS_PER_HOUR;
         if hours > t::SpanHours::MAX_SELF {
@@ -476,7 +480,7 @@ pub(crate) fn fractional_time_to_span(
         // OK because we just checked that our units are in range.
         span = span.try_hours_ranged(hours).unwrap();
     }
-    if unit >= Unit::Minute && nanos > 0 {
+    if unit >= Unit::Minute && nanos > C(0) {
         let mut minutes = nanos / t::NANOS_PER_MINUTE;
         nanos %= t::NANOS_PER_MINUTE;
         if minutes > t::SpanMinutes::MAX_SELF {
@@ -487,7 +491,7 @@ pub(crate) fn fractional_time_to_span(
         // OK because we just checked that our units are in range.
         span = span.try_minutes_ranged(minutes).unwrap();
     }
-    if unit >= Unit::Second && nanos > 0 {
+    if unit >= Unit::Second && nanos > C(0) {
         let mut seconds = nanos / t::NANOS_PER_SECOND;
         nanos %= t::NANOS_PER_SECOND;
         if seconds > t::SpanSeconds::MAX_SELF {
@@ -498,7 +502,7 @@ pub(crate) fn fractional_time_to_span(
         // OK because we just checked that our units are in range.
         span = span.try_seconds_ranged(seconds).unwrap();
     }
-    if unit >= Unit::Millisecond && nanos > 0 {
+    if unit >= Unit::Millisecond && nanos > C(0) {
         let mut millis = nanos / t::NANOS_PER_MILLI;
         nanos %= t::NANOS_PER_MILLI;
         if millis > t::SpanMilliseconds::MAX_SELF {
@@ -509,7 +513,7 @@ pub(crate) fn fractional_time_to_span(
         // OK because we just checked that our units are in range.
         span = span.try_milliseconds_ranged(millis).unwrap();
     }
-    if unit >= Unit::Microsecond && nanos > 0 {
+    if unit >= Unit::Microsecond && nanos > C(0) {
         let mut micros = nanos / t::NANOS_PER_MICRO;
         nanos %= t::NANOS_PER_MICRO;
         if micros > t::SpanMicroseconds::MAX_SELF {
@@ -520,7 +524,7 @@ pub(crate) fn fractional_time_to_span(
         // OK because we just checked that our units are in range.
         span = span.try_microseconds_ranged(micros).unwrap();
     }
-    if nanos > 0 {
+    if nanos > C(0) {
         span = span.try_nanoseconds_ranged(nanos).with_context(|| {
             err!(
                 "failed to set nanosecond value {nanos} on span \

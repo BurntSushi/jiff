@@ -8,7 +8,10 @@ use crate::{
     },
     span::Span,
     tz::{Offset, TimeZone},
-    util::{rangeint::RFrom, t},
+    util::{
+        rangeint::RFrom,
+        t::{self, C},
+    },
     SignedDuration, Timestamp, Zoned,
 };
 
@@ -290,7 +293,7 @@ impl DateTimePrinter {
         // to suggest that the number of minutes should be "as close as
         // possible" to the actual offset. So we just do basic rounding
         // here.
-        if offset.part_seconds_ranged().abs() >= 30 {
+        if offset.part_seconds_ranged().abs() >= C(30) {
             if minutes == 59 {
                 hours = hours.saturating_add(1);
                 minutes = 0;
@@ -411,29 +414,29 @@ impl SpanPrinter {
         wtr.write_str("P")?;
 
         let mut non_zero_greater_than_second = false;
-        if span.get_years_ranged() != 0 {
+        if span.get_years_ranged() != C(0) {
             wtr.write_int(&FMT_INT, span.get_years_ranged().get().abs())?;
             wtr.write_char(self.label('Y'))?;
             non_zero_greater_than_second = true;
         }
-        if span.get_months_ranged() != 0 {
+        if span.get_months_ranged() != C(0) {
             wtr.write_int(&FMT_INT, span.get_months_ranged().get().abs())?;
             wtr.write_char(self.label('M'))?;
             non_zero_greater_than_second = true;
         }
-        if span.get_weeks_ranged() != 0 {
+        if span.get_weeks_ranged() != C(0) {
             wtr.write_int(&FMT_INT, span.get_weeks_ranged().get().abs())?;
             wtr.write_char(self.label('W'))?;
             non_zero_greater_than_second = true;
         }
-        if span.get_days_ranged() != 0 {
+        if span.get_days_ranged() != C(0) {
             wtr.write_int(&FMT_INT, span.get_days_ranged().get().abs())?;
             wtr.write_char(self.label('D'))?;
             non_zero_greater_than_second = true;
         }
 
         let mut printed_time_prefix = false;
-        if span.get_hours_ranged() != 0 {
+        if span.get_hours_ranged() != C(0) {
             if !printed_time_prefix {
                 wtr.write_str("T")?;
                 printed_time_prefix = true;
@@ -442,7 +445,7 @@ impl SpanPrinter {
             wtr.write_char(self.label('H'))?;
             non_zero_greater_than_second = true;
         }
-        if span.get_minutes_ranged() != 0 {
+        if span.get_minutes_ranged() != C(0) {
             if !printed_time_prefix {
                 wtr.write_str("T")?;
                 printed_time_prefix = true;
@@ -462,17 +465,17 @@ impl SpanPrinter {
             span.get_microseconds_ranged().abs(),
             span.get_nanoseconds_ranged().abs(),
         );
-        if (seconds != 0 || !non_zero_greater_than_second)
-            && millis == 0
-            && micros == 0
-            && nanos == 0
+        if (seconds != C(0) || !non_zero_greater_than_second)
+            && millis == C(0)
+            && micros == C(0)
+            && nanos == C(0)
         {
             if !printed_time_prefix {
                 wtr.write_str("T")?;
             }
             wtr.write_int(&FMT_INT, seconds.get())?;
             wtr.write_char(self.label('S'))?;
-        } else if millis != 0 || micros != 0 || nanos != 0 {
+        } else if millis != C(0) || micros != C(0) || nanos != C(0) {
             if !printed_time_prefix {
                 wtr.write_str("T")?;
             }
@@ -496,7 +499,7 @@ impl SpanPrinter {
                 combined_as_nanos % t::NANOS_PER_SECOND,
             );
             wtr.write_int(&FMT_INT, fraction_second.get())?;
-            if fraction_nano != 0 {
+            if fraction_nano != C(0) {
                 wtr.write_str(".")?;
                 wtr.write_fraction(&FMT_FRACTION, fraction_nano.get())?;
             }

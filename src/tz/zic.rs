@@ -2011,62 +2011,62 @@ mod tests {
     #[test]
     fn parse_rule_in_ok() {
         let inn: RuleInP = "Ja".parse().unwrap();
-        assert_eq!(inn.month, 1);
+        assert_eq!(inn.month.get(), 1);
         let inn: RuleInP = "January".parse().unwrap();
-        assert_eq!(inn.month, 1);
+        assert_eq!(inn.month.get(), 1);
 
         let inn: RuleInP = "F".parse().unwrap();
-        assert_eq!(inn.month, 2);
+        assert_eq!(inn.month.get(), 2);
         let inn: RuleInP = "February".parse().unwrap();
-        assert_eq!(inn.month, 2);
+        assert_eq!(inn.month.get(), 2);
 
         let inn: RuleInP = "Mar".parse().unwrap();
-        assert_eq!(inn.month, 3);
+        assert_eq!(inn.month.get(), 3);
         let inn: RuleInP = "March".parse().unwrap();
-        assert_eq!(inn.month, 3);
+        assert_eq!(inn.month.get(), 3);
 
         let inn: RuleInP = "Ap".parse().unwrap();
-        assert_eq!(inn.month, 4);
+        assert_eq!(inn.month.get(), 4);
         let inn: RuleInP = "April".parse().unwrap();
-        assert_eq!(inn.month, 4);
+        assert_eq!(inn.month.get(), 4);
 
         let inn: RuleInP = "May".parse().unwrap();
-        assert_eq!(inn.month, 5);
+        assert_eq!(inn.month.get(), 5);
 
         let inn: RuleInP = "Jun".parse().unwrap();
-        assert_eq!(inn.month, 6);
+        assert_eq!(inn.month.get(), 6);
         let inn: RuleInP = "June".parse().unwrap();
-        assert_eq!(inn.month, 6);
+        assert_eq!(inn.month.get(), 6);
 
         let inn: RuleInP = "Jul".parse().unwrap();
-        assert_eq!(inn.month, 7);
+        assert_eq!(inn.month.get(), 7);
         let inn: RuleInP = "July".parse().unwrap();
-        assert_eq!(inn.month, 7);
+        assert_eq!(inn.month.get(), 7);
 
         let inn: RuleInP = "Au".parse().unwrap();
-        assert_eq!(inn.month, 8);
+        assert_eq!(inn.month.get(), 8);
         let inn: RuleInP = "August".parse().unwrap();
-        assert_eq!(inn.month, 8);
+        assert_eq!(inn.month.get(), 8);
 
         let inn: RuleInP = "S".parse().unwrap();
-        assert_eq!(inn.month, 9);
+        assert_eq!(inn.month.get(), 9);
         let inn: RuleInP = "September".parse().unwrap();
-        assert_eq!(inn.month, 9);
+        assert_eq!(inn.month.get(), 9);
 
         let inn: RuleInP = "O".parse().unwrap();
-        assert_eq!(inn.month, 10);
+        assert_eq!(inn.month.get(), 10);
         let inn: RuleInP = "October".parse().unwrap();
-        assert_eq!(inn.month, 10);
+        assert_eq!(inn.month.get(), 10);
 
         let inn: RuleInP = "N".parse().unwrap();
-        assert_eq!(inn.month, 11);
+        assert_eq!(inn.month.get(), 11);
         let inn: RuleInP = "November".parse().unwrap();
-        assert_eq!(inn.month, 11);
+        assert_eq!(inn.month.get(), 11);
 
         let inn: RuleInP = "D".parse().unwrap();
-        assert_eq!(inn.month, 12);
+        assert_eq!(inn.month.get(), 12);
         let inn: RuleInP = "December".parse().unwrap();
-        assert_eq!(inn.month, 12);
+        assert_eq!(inn.month.get(), 12);
     }
 
     #[test]
@@ -2576,12 +2576,12 @@ mod tests {
 
     #[test]
     fn parse_year_ok() {
-        assert_eq!(parse_year("0").unwrap(), 0);
-        assert_eq!(parse_year("1").unwrap(), 1);
-        assert_eq!(parse_year("-1").unwrap(), -1);
-        assert_eq!(parse_year("2025").unwrap(), 2025);
-        assert_eq!(parse_year("9999").unwrap(), 9999);
-        assert_eq!(parse_year("-9999").unwrap(), -9999);
+        assert_eq!(parse_year("0").unwrap().get(), 0);
+        assert_eq!(parse_year("1").unwrap().get(), 1);
+        assert_eq!(parse_year("-1").unwrap().get(), -1);
+        assert_eq!(parse_year("2025").unwrap().get(), 2025);
+        assert_eq!(parse_year("9999").unwrap().get(), 9999);
+        assert_eq!(parse_year("-9999").unwrap().get(), -9999);
     }
 
     #[test]
@@ -2665,15 +2665,15 @@ mod tests {
 
     #[test]
     fn parse_day_ok() {
-        assert_eq!(parse_day("1").unwrap(), 1);
-        assert_eq!(parse_day("2").unwrap(), 2);
-        assert_eq!(parse_day("20").unwrap(), 20);
-        assert_eq!(parse_day("30").unwrap(), 30);
-        assert_eq!(parse_day("31").unwrap(), 31);
+        assert_eq!(parse_day("1").unwrap().get(), 1);
+        assert_eq!(parse_day("2").unwrap().get(), 2);
+        assert_eq!(parse_day("20").unwrap().get(), 20);
+        assert_eq!(parse_day("30").unwrap().get(), 30);
+        assert_eq!(parse_day("31").unwrap().get(), 31);
 
-        assert_eq!(parse_day("01").unwrap(), 1);
-        assert_eq!(parse_day("00000001").unwrap(), 1);
-        assert_eq!(parse_day("0000000000000000000001").unwrap(), 1);
+        assert_eq!(parse_day("01").unwrap().get(), 1);
+        assert_eq!(parse_day("00000001").unwrap().get(), 1);
+        assert_eq!(parse_day("0000000000000000000001").unwrap().get(), 1);
     }
 
     #[test]

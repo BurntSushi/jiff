@@ -664,7 +664,7 @@ impl ISOWeekDate {
         // a little trickier if the range of ISOYear is different from Year.
         debug_assert_eq!(t::Year::MIN, ISOYear::MIN);
         debug_assert_eq!(t::Year::MAX, ISOYear::MAX);
-        if week == 53 && !is_long_year(year) {
+        if week == C(53) && !is_long_year(year) {
             return Err(err!(
                 "ISO week number `{week}` is invalid for year `{year}`"
             ));
@@ -678,7 +678,7 @@ impl ISOWeekDate {
         // (-9999-01-01) corresponds also to the minimum possible combination
         // of an ISO week date's fields: -9999 W01 Monday. Nice.
         if year == ISOYear::MAX_SELF
-            && week == 52
+            && week == C(52)
             && weekday.to_monday_zero_offset()
                 > Weekday::Friday.to_monday_zero_offset()
         {
@@ -707,11 +707,11 @@ impl ISOWeekDate {
         let mut week = week.rinto();
         debug_assert_eq!(t::Year::MIN, ISOYear::MIN);
         debug_assert_eq!(t::Year::MAX, ISOYear::MAX);
-        if week == 53 && !is_long_year(year) {
+        if week == C(53) && !is_long_year(year) {
             week = ISOWeek::new(52).unwrap();
         }
         if year == ISOYear::MAX_SELF
-            && week == 52
+            && week == C(52)
             && weekday.to_monday_zero_offset()
                 > Weekday::Friday.to_monday_zero_offset()
         {

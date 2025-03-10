@@ -16,7 +16,10 @@ use crate::{
         AmbiguousZoned, Disambiguation, Offset, OffsetConflict, TimeZone,
         TimeZoneDatabase,
     },
-    util::{escape, parse, t},
+    util::{
+        escape, parse,
+        t::{self, C},
+    },
     SignedDuration, Timestamp, Unit, Zoned,
 };
 
@@ -116,7 +119,7 @@ impl<'i> ParsedDateTime<'i> {
             }
             // If the candidate offset we're considering is a whole minute,
             // then we never need rounding.
-            if candidate.part_seconds_ranged() == 0 {
+            if candidate.part_seconds_ranged() == C(0) {
                 return parsed == candidate;
             }
             let Ok(candidate) = candidate.round(Unit::Minute) else {
@@ -805,7 +808,7 @@ impl DateTimeParser {
             })?;
             let year =
                 t::Year::try_new("year", year).context("year is not valid")?;
-            if year == 0 && sign < 0 {
+            if year == C(0) && sign < C(0) {
                 return Err(err!(
                     "year zero must be written without a sign or a \
                      positive sign, but not a negative sign",
@@ -1160,7 +1163,7 @@ impl SpanParser {
                  in {original:?}, but did not find any units",
             ));
         }
-        if sign < 0 {
+        if sign < C(0) {
             span = span.negate();
         }
         Ok(Parsed { value: span, input })
@@ -1183,7 +1186,7 @@ impl SpanParser {
             ));
         }
         let Parsed { value: dur, input } =
-            self.parse_time_units_duration(input, sign == -1)?;
+            self.parse_time_units_duration(input, sign == C(-1))?;
         Ok(Parsed { value: dur, input })
     }
 

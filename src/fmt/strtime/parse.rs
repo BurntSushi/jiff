@@ -903,7 +903,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         let year = Year2Digit::try_new("year (2 digits)", year)
             .context("year number is invalid")?;
         let mut year = t::Year::rfrom(year);
-        if year <= 68 {
+        if year <= C(68) {
             year += C(2000);
         } else {
             year += C(1900);
@@ -968,7 +968,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         let year = Year2Digit::try_new("year (2 digits)", year)
             .context("ISO 8601 week-based year number is invalid")?;
         let mut year = t::ISOYear::rfrom(year);
-        if year <= 68 {
+        if year <= C(68) {
             year += C(2000);
         } else {
             year += C(1900);

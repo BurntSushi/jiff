@@ -8,7 +8,10 @@ use crate::{
         },
         Parsed,
     },
-    util::{escape, t},
+    util::{
+        escape,
+        t::{self, C},
+    },
     Error, SignedDuration, Span, Unit,
 };
 
@@ -331,7 +334,7 @@ impl SpanParser {
             let parsed = self.parse_suffix_sign(sign, input)?;
             (parsed.value, parsed.input)
         };
-        if sign < 0 {
+        if sign < C(0) {
             sdur = -sdur;
         }
 
