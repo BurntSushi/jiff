@@ -1,6 +1,6 @@
 [package]
 name = "jiff"
-version = "0.2.3"  #:version
+version = "0.2.4"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 license = "Unlicense OR MIT"
 repository = "https://github.com/BurntSushi/jiff"
@@ -201,7 +201,7 @@ serde = { version = "1.0.203", optional = true, default-features = false }
 #
 # See: https://github.com/matklad/macro-dep-test
 [target.'cfg(any())'.dependencies]
-jiff-static = { version = "=0.2.3", path = "crates/jiff-static" }
+jiff-static = { version = "=0.2.4", path = "crates/jiff-static" }
 
 # Note that the `cfg` gate for the `tzdb-bundle-platform` must repeat the
 # target gate on this dependency. The intent is that `tzdb-bundle-platform`
