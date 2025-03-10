@@ -1,17 +1,19 @@
-jiff-tzdb
-=========
-This is an optional dependency of `jiff` that embeds the entire [IANA Time Zone
-Database] into the compiled binary. Specifically, it embeds the binary [TZif]
-for each time zone.
+jiff-static
+===========
+This is an optional dependency of `jiff` that embeds time zone data into your
+binary via procedural macros. It unlocks the use case of creating a `TimeZone`
+value in core-only environments without dynamic memory allocation.
 
-This is most typically used on Windows where there is no standard location
-for a system copy of the Time Zone Database. On macOS and Linux, one must
-explicitly opt into using `jiff-tzdb`. By default, in Unix environments, Jiff
-will look for a system copy of the Time Zone Database.
+Users should generally not depend on this directly, but instead use it
+through Jiff. Namely, all of the procedural macros defined in this crate
+are re-exported through Jiff's public API. For example, one can enable the
+`static` or `static-tz` crate features in `jiff` to get `jiff::tz::get!` and
+`jiff::tz::include!`.
 
-[IANA Time Zone Database]: https://www.iana.org/time-zones
-[TZif]: https://datatracker.ietf.org/doc/html/rfc8536
+**WARNING**: The `src/shared` directory in this crate is copied from the
+`../src/shared` directory. This copy is managed by `jiff-cli generate shared`.
+See the comments in the code for why this is done.
 
 ### Documentation
 
-https://docs.rs/jiff-tzdb
+https://docs.rs/jiff-static
