@@ -22,16 +22,19 @@ pub(crate) use self::sys::*;
 )))]
 mod sys {
     pub(crate) fn system_time() -> std::time::SystemTime {
-        // `SystemTime::now()` should continue to panic on this exact target in the future
-        // as well; Instead of letting `std` panic, we panic first with a more informative
-        // error message.
+        // `SystemTime::now()` should continue to panic on this exact target in
+        // the future as well; Instead of letting `std` panic, we panic first
+        // with a more informative error message.
         #[cfg(all(
             not(feature = "js"),
             any(target_arch = "wasm32", target_arch = "wasm64"),
             target_os = "unknown"
         ))]
-        panic!("getting the current time in wasm32-unknown-unknown is not possible, \
-                enable jiff's `js` feature if you are targeting a browser environment");
+        panic!(
+            "getting the current time in wasm32-unknown-unknown \
+             is not possible, enable jiff's `js` feature if you are \
+             targeting a browser environment",
+        );
 
         std::time::SystemTime::now()
     }
