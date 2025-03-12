@@ -36,6 +36,11 @@ mod sys {
              targeting a browser environment",
         );
 
+        #[cfg(not(all(
+            not(feature = "js"),
+            any(target_arch = "wasm32", target_arch = "wasm64"),
+            target_os = "unknown"
+        )))]
         std::time::SystemTime::now()
     }
 
@@ -54,6 +59,11 @@ mod sys {
         panic!("getting the current time in wasm32-unknown-unknown is not possible, \
                 enable jiff's `js` feature if you are targeting a browser environment");
 
+        #[cfg(not(all(
+            not(feature = "js"),
+            any(target_arch = "wasm32", target_arch = "wasm64"),
+            target_os = "unknown"
+        )))]
         Some(std::time::Instant::now())
     }
 }
