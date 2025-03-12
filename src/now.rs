@@ -50,14 +50,15 @@ mod sys {
         feature = "tzdb-concatenated"
     ))]
     pub(crate) fn monotonic_time() -> Option<std::time::Instant> {
-        // See above for rationale behind this panic.
+        // Same reasoning as above, but we return `None` instead of panicking,
+        // because `jiff` can deal with environments that don't provide
+        // monotonic time.
         #[cfg(all(
             not(feature = "js"),
             any(target_arch = "wasm32", target_arch = "wasm64"),
             target_os = "unknown"
         ))]
-        panic!("getting the current time in wasm32-unknown-unknown is not possible, \
-                enable jiff's `js` feature if you are targeting a browser environment");
+        None
 
         #[cfg(not(all(
             not(feature = "js"),
