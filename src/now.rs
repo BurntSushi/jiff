@@ -25,23 +25,19 @@ mod sys {
         // `SystemTime::now()` should continue to panic on this exact target in
         // the future as well; Instead of letting `std` panic, we panic first
         // with a more informative error message.
-        #[cfg(all(
+        if cfg!(all(
             not(feature = "js"),
             any(target_arch = "wasm32", target_arch = "wasm64"),
             target_os = "unknown"
-        ))]
-        panic!(
-            "getting the current time in wasm32-unknown-unknown \
-             is not possible, enable jiff's `js` feature if you are \
-             targeting a browser environment",
-        );
-
-        #[cfg(not(all(
-            not(feature = "js"),
-            any(target_arch = "wasm32", target_arch = "wasm64"),
-            target_os = "unknown"
-        )))]
-        std::time::SystemTime::now()
+        )) {
+            panic!(
+                "getting the current time in wasm32-unknown-unknown \
+                 is not possible, enable jiff's `js` feature if you are \
+                 targeting a browser environment",
+            );
+        } else {
+            std::time::SystemTime::now()
+        }
     }
 
     #[cfg(any(
@@ -53,19 +49,15 @@ mod sys {
         // Same reasoning as above, but we return `None` instead of panicking,
         // because `jiff` can deal with environments that don't provide
         // monotonic time.
-        #[cfg(all(
+        if cfg!(all(
             not(feature = "js"),
             any(target_arch = "wasm32", target_arch = "wasm64"),
             target_os = "unknown"
-        ))]
-        None
-
-        #[cfg(not(all(
-            not(feature = "js"),
-            any(target_arch = "wasm32", target_arch = "wasm64"),
-            target_os = "unknown"
-        )))]
-        Some(std::time::Instant::now())
+        )) {
+            None
+        } else {
+            Some(std::time::Instant::now())
+        }
     }
 }
 
