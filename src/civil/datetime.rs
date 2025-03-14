@@ -1868,6 +1868,9 @@ impl DateTime {
     /// Depending on the input provided, the span returned is rounded. It may
     /// also be balanced up to bigger units than the default. By default, the
     /// span returned is balanced such that the biggest possible unit is days.
+    /// This default is an API guarantee. Users can rely on the default not
+    /// returning any calendar units bigger than days in the default
+    /// configuration.
     ///
     /// This operation is configured by providing a [`DateTimeDifference`]
     /// value. Since this routine accepts anything that implements
@@ -2647,7 +2650,8 @@ impl core::ops::SubAssign<Span> for DateTime {
 ///
 /// Since this uses the default configuration for calculating a span between
 /// two datetimes (no rounding and largest units is days), this will never
-/// panic or fail in any way.
+/// panic or fail in any way. It is guaranteed that the largest non-zero
+/// unit in the `Span` returned will be days.
 ///
 /// To configure the largest unit or enable rounding, use [`DateTime::since`].
 ///
