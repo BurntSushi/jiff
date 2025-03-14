@@ -2391,6 +2391,8 @@ impl Zoned {
     /// Depending on the input provided, the span returned is rounded. It may
     /// also be balanced up to bigger units than the default. By default, the
     /// span returned is balanced such that the biggest possible unit is hours.
+    /// This default is an API guarantee. Users can rely on the default not
+    /// returning any calendar units in the default configuration.
     ///
     /// This operation is configured by providing a [`ZonedDifference`]
     /// value. Since this routine accepts anything that implements
@@ -3331,8 +3333,9 @@ impl core::ops::SubAssign<Span> for Zoned {
 /// is greater.
 ///
 /// Since this uses the default configuration for calculating a span between
-/// two zoned datetimes (no rounding and largest units is days), this will
-/// never panic or fail in any way.
+/// two zoned datetimes (no rounding and largest units is hours), this will
+/// never panic or fail in any way. It is guaranteed that the largest non-zero
+/// unit in the `Span` returned will be hours.
 ///
 /// To configure the largest unit or enable rounding, use [`Zoned::since`].
 impl<'a> core::ops::Sub for &'a Zoned {
