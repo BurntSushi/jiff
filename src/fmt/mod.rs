@@ -93,7 +93,7 @@ Jiff and the latter provides a [`BrokenDownTime`] for granular parsing.
 | ------- | ------------- |
 | `2025-05-20` | `%Y-%m-%d` |
 | `2025-05-20` | `%F` |
-| `2025-W21-2` | `%G-W%V-%w` |
+| `2025-W21-2` | `%G-W%V-%u` |
 | `05/20/25` | `%m/%d/%y` |
 | `Monday, February 10, 2025 at 9:01pm -0500` | `%A, %B %d, %Y at %-I:%M%P %z` |
 | `Monday, February 10, 2025 at 9:01pm EST` | `%A, %B %d, %Y at %-I:%M%P %Z` |

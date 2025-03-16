@@ -1564,7 +1564,7 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::{civil::{Weekday, date}, fmt::strtime::BrokenDownTime};
     ///
-    /// let tm = BrokenDownTime::parse("%G-W%V-%w", "2020-W01-1")?;
+    /// let tm = BrokenDownTime::parse("%G-W%V-%u", "2020-W01-1")?;
     /// assert_eq!(tm.iso_week_year(), Some(2020));
     /// assert_eq!(tm.iso_week(), Some(1));
     /// assert_eq!(tm.weekday(), Some(Weekday::Monday));
@@ -2076,7 +2076,7 @@ impl BrokenDownTime {
     /// tm.set_iso_week_year(Some(2020))?;
     /// tm.set_iso_week(Some(1))?;
     /// tm.set_weekday(Some(Weekday::Monday));
-    /// assert_eq!(tm.to_string("%G-W%V-%w")?, "2020-W01-1");
+    /// assert_eq!(tm.to_string("%G-W%V-%u")?, "2020-W01-1");
     /// assert_eq!(tm.to_string("%F")?, "2019-12-30");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
