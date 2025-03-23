@@ -208,7 +208,7 @@ jiff-static = { version = "=0.2.4", path = "crates/jiff-static" }
 # is enabled by default, but that the `tzdb-bundle-platform` crate is only
 # actually used on platforms without a system tzdb (i.e., Windows and wasm).
 [target.'cfg(any(windows, target_family = "wasm"))'.dependencies]
-jiff-tzdb-platform = { version = "0.1.2", path = "crates/jiff-tzdb-platform", optional = true }
+jiff-tzdb-platform = { version = "0.1.3", path = "crates/jiff-tzdb-platform", optional = true }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = ">=0.52.0, <=0.59.*"
