@@ -141,7 +141,7 @@ pub fn get(name: &str) -> Option<(&'static str, &'static [u8])> {
 /// available:
 ///
 /// ```
-/// assert_eq!(jiff_tzdb::available().count(), 597);
+/// assert_eq!(jiff_tzdb::available().count(), 598);
 /// ```
 ///
 /// Note that this number may change in subsequent releases of the Time Zone
