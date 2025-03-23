@@ -22,4 +22,4 @@ bench = false
 path = "lib.rs"
 
 [dependencies]
-jiff-tzdb = { version = "0.1.2", path = "../jiff-tzdb" }
+jiff-tzdb = { version = "0.1.4", path = "../jiff-tzdb" }

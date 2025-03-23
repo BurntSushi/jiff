@@ -184,7 +184,7 @@ js = ["dep:wasm-bindgen", "dep:js-sys"]
 
 [dependencies]
 jiff-static = { version = "0.2", path = "crates/jiff-static", optional = true }
-jiff-tzdb = { version = "0.1.2", path = "crates/jiff-tzdb", optional = true }
+jiff-tzdb = { version = "0.1.4", path = "crates/jiff-tzdb", optional = true }
 log = { version = "0.4.21", optional = true, default-features = false }
 serde = { version = "1.0.203", optional = true, default-features = false }
 

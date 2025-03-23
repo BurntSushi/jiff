@@ -32,7 +32,7 @@ tzdb = ["dep:jiff-tzdb"]
 tz-fat = []
 
 [dependencies]
-jiff-tzdb = { version = "0.1.2", path = "../jiff-tzdb", optional = true }
+jiff-tzdb = { version = "0.1.4", path = "../jiff-tzdb", optional = true }
 proc-macro2 = "1.0.93"
 quote = "1.0.38"
 syn = "2.0.98"
