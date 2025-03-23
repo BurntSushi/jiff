@@ -1,5 +1,18 @@
 # CHANGELOG
 
+0.2.5 (2025-03-22)
+==================
+This release updates Jiff's bundled copy of the [IANA Time Zone Database] to
+`2025b`. See the [`2025b` release announcement] for more details.
+
+Enhancements:
+
+* [#300](https://github.com/BurntSushi/jiff/pull/300):
+Update `jiff-tzdb` to `2025b`.
+
+[`2025b` release announcement]: https://lists.iana.org/hyperkitty/list/tz-announce@iana.org/thread/6JVHNHLB6I2WAYTQ75L6KEPEQHFXAJK3/
+
+
 0.2.4 (2025-03-10)
 ==================
 This is another small release that fixes a problem where Jiff could break
