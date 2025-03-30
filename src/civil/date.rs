@@ -1762,7 +1762,7 @@ impl Date {
         other: A,
     ) -> Result<Span, Error> {
         let args: DateDifference = other.into();
-        let span = args.until_with_largest_unit(self)?;
+        let span = args.since_with_largest_unit(self)?;
         if args.rounding_may_change_span() {
             span.round(args.round.relative(self))
         } else {
@@ -1798,7 +1798,7 @@ impl Date {
         other: A,
     ) -> Result<Span, Error> {
         let args: DateDifference = other.into();
-        let span = -args.until_with_largest_unit(self)?;
+        let span = -args.since_with_largest_unit(self)?;
         if args.rounding_may_change_span() {
             span.round(args.round.relative(self))
         } else {
@@ -2915,11 +2915,11 @@ impl DateDifference {
         self.round.rounding_may_change_span_ignore_largest()
     }
 
-    /// Returns the span of time from `d1` to the date in this configuration.
+    /// Returns the span of time since `d1` to the date in this configuration.
     /// The biggest units allowed are determined by the `smallest` and
     /// `largest` settings, but defaults to `Unit::Day`.
     #[inline]
-    fn until_with_largest_unit(&self, d1: Date) -> Result<Span, Error> {
+    fn since_with_largest_unit(&self, d1: Date) -> Result<Span, Error> {
         let d2 = self.date;
         let largest = self
             .round
@@ -2976,11 +2976,11 @@ impl DateDifference {
             } else {
                 Sign::rfrom(months.signum())
             };
-            let mut days_in_month1 =
+            let mut days_in_month2 =
                 t::SpanDays::rfrom(days_in_month(year2, month2));
             let mut day_correct = t::SpanDays::N::<0>();
             if days.signum() == -sign {
-                let original_days_in_month1 = days_in_month1;
+                let original_days_in_month1 = days_in_month2;
                 let (y, m) = month_add_one(year2, month2, -sign).unwrap();
                 year2 = y;
                 month2 = m;
@@ -2989,15 +2989,15 @@ impl DateDifference {
                     t::SpanYears::rfrom(year2) - t::SpanYears::rfrom(year1);
                 months = t::SpanMonths::rfrom(month2)
                     - t::SpanMonths::rfrom(month1);
-                days_in_month1 = days_in_month(year2, month2).rinto();
+                days_in_month2 = days_in_month(year2, month2).rinto();
                 day_correct = if sign < C(0) {
                     -original_days_in_month1
                 } else {
-                    days_in_month1
+                    days_in_month2
                 };
             }
 
-            let day0_trunc = t::SpanDays::rfrom(day1.min(days_in_month1));
+            let day0_trunc = t::SpanDays::rfrom(day1.min(days_in_month2));
             days = t::SpanDays::rfrom(day2) - day0_trunc + day_correct;
 
             if years != C(0) {
