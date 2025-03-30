@@ -6088,9 +6088,8 @@ impl<'a> Relative<'a> {
                 if smallest >= Unit::Day {
                     Nudge::relative_calendar(
                         relspan.span,
-                        // FIXME: Find a way to drop these clones.
-                        &Relative::Zoned(start.clone()),
-                        &Relative::Zoned(end.clone()),
+                        &Relative::Zoned(start.borrowed()),
+                        &Relative::Zoned(end.borrowed()),
                         smallest,
                         increment,
                         mode,
@@ -6363,6 +6362,12 @@ impl<'a> RelativeZoned<'a> {
                 zdt2 = other.zoned,
             )
         })
+    }
+
+    /// Returns the borrowed version of self; useful when you need to convert
+    /// `&RelativeZoned` into `RelativeZoned` without cloning anything.
+    fn borrowed(&self) -> RelativeZoned {
+        RelativeZoned { zoned: self.zoned.borrowed() }
     }
 }
 
