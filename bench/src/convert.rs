@@ -112,6 +112,13 @@ impl ConvertFrom<jiff::Timestamp> for time::OffsetDateTime {
     }
 }
 
+impl ConvertFrom<jiff::Timestamp> for time::UtcDateTime {
+    fn convert_from(x: jiff::Timestamp) -> time::UtcDateTime {
+        time::UtcDateTime::from_unix_timestamp_nanos(x.as_nanosecond())
+            .unwrap()
+    }
+}
+
 impl ConvertFrom<jiff::tz::Offset> for time::UtcOffset {
     fn convert_from(x: jiff::tz::Offset) -> time::UtcOffset {
         time::UtcOffset::from_whole_seconds(x.seconds()).unwrap()

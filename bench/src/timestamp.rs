@@ -13,6 +13,7 @@ use crate::{benchmark, convert::ConvertFrom};
 pub(super) fn define(c: &mut Criterion) {
     add_time_secs(c);
     add_time_subsec(c);
+    from_seconds(c);
     every_hour_in_week(c);
     to_civil_datetime_offset_conversion(c);
     to_civil_datetime_offset_holistic(c);
@@ -113,6 +114,45 @@ fn add_time_subsec(c: &mut Criterion) {
             b.iter(|| {
                 let end = bb(start).checked_add(bb(duration)).unwrap();
                 assert_eq!(end, expected);
+            })
+        });
+    }
+}
+
+/// Measures how long it takes to build the library's canonical "timestamp"
+/// type from an actual integer number of seconds.
+fn from_seconds(c: &mut Criterion) {
+    const NAME: &str = "timestamp/from_seconds";
+    const SECONDS: i64 = 1719755160;
+    const EXPECTED: Timestamp = Timestamp::constant(SECONDS, 0);
+
+    {
+        benchmark(c, format!("{NAME}/span/jiff"), |b| {
+            b.iter(|| {
+                let got = Timestamp::from_second(bb(SECONDS)).unwrap();
+                assert_eq!(got, EXPECTED);
+            })
+        });
+    }
+
+    {
+        let expected = chrono::DateTime::convert_from(EXPECTED);
+        benchmark(c, format!("{NAME}/duration/chrono"), |b| {
+            b.iter(|| {
+                let got =
+                    chrono::DateTime::from_timestamp(bb(SECONDS), 0).unwrap();
+                assert_eq!(got, expected);
+            })
+        });
+    }
+
+    {
+        let expected = time::UtcDateTime::convert_from(EXPECTED);
+        benchmark(c, format!("{NAME}/duration/time"), |b| {
+            b.iter(|| {
+                let got = time::UtcDateTime::from_unix_timestamp(bb(SECONDS))
+                    .unwrap();
+                assert_eq!(got, expected);
             })
         });
     }
