@@ -2335,7 +2335,7 @@ impl DateTime {
         options: R,
     ) -> Result<DateTime, Error> {
         let options: DateTimeRound = options.into();
-        options.round(t::NANOS_PER_CIVIL_DAY, self)
+        options.round(self)
     }
 
     /// Return an iterator of periodic datetimes determined by the given span.
@@ -3518,14 +3518,9 @@ impl DateTimeRound {
     /// datetimes, this should always be `NANOS_PER_CIVIL_DAY`. But this
     /// rounding routine is also used for `Zoned` rounding, and in that
     /// context, the length of a day can vary based on the time zone.
-    pub(crate) fn round(
-        &self,
-        day_length: impl RInto<t::ZonedDayNanoseconds>,
-        dt: DateTime,
-    ) -> Result<DateTime, Error> {
+    pub(crate) fn round(&self, dt: DateTime) -> Result<DateTime, Error> {
         // ref: https://tc39.es/proposal-temporal/#sec-temporal.plaindatetime.prototype.round
 
-        let day_length = t::NoUnits128::rfrom(day_length.rinto());
         let increment =
             increment::for_datetime(self.smallest, self.increment)?;
         // We permit rounding to any time unit and days, but nothing else.
@@ -3553,8 +3548,8 @@ impl DateTimeRound {
             self.smallest,
             increment,
         );
-        let days = sign * time_rounded.div_ceil(day_length);
-        let time_nanos = time_rounded.rem_ceil(day_length);
+        let days = sign * time_rounded.div_ceil(t::NANOS_PER_CIVIL_DAY);
+        let time_nanos = time_rounded.rem_ceil(t::NANOS_PER_CIVIL_DAY);
         let time = Time::from_nanosecond(time_nanos.rinto());
 
         let date_days = t::SpanDays::rfrom(dt.date().day_ranged());
@@ -3578,6 +3573,18 @@ impl DateTimeRound {
                 err!("adding {days_len} days to {start} failed")
             })?;
         Ok(DateTime::from_parts(end, time))
+    }
+
+    pub(crate) fn get_smallest(&self) -> Unit {
+        self.smallest
+    }
+
+    pub(crate) fn get_mode(&self) -> RoundMode {
+        self.mode
+    }
+
+    pub(crate) fn get_increment(&self) -> i64 {
+        self.increment
     }
 }
 

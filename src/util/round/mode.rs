@@ -106,7 +106,8 @@ impl RoundMode {
         rounded
     }
 
-    fn round(
+    /// Rounds `quantity` to the nearest `increment` in units of nanoseconds.
+    pub(crate) fn round(
         self,
         quantity: impl RInto<NoUnits128>,
         increment: impl RInto<NoUnits128>,
