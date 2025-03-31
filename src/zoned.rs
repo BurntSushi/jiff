@@ -14,6 +14,7 @@ use crate::{
     tz::{AmbiguousOffset, Disambiguation, Offset, OffsetConflict, TimeZone},
     util::{
         rangeint::{RInto, TryRFrom},
+        round::increment,
         t::{self, ZonedDayNanoseconds, C},
     },
     RoundMode, SignedDuration, Span, SpanRound, Timestamp, Unit,
@@ -2905,6 +2906,58 @@ impl Zoned {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
+    /// # Example: rounding to nearest day takes length of day into account
+    ///
+    /// Some days are shorter than 24 hours, and so rounding down will occur
+    /// even when the time is past noon:
+    ///
+    /// ```
+    /// use jiff::{Unit, Zoned};
+    ///
+    /// let zdt1: Zoned = "2025-03-09T12:15-04[America/New_York]".parse()?;
+    /// let zdt2 = zdt1.round(Unit::Day)?;
+    /// assert_eq!(
+    ///     zdt2.to_string(),
+    ///     "2025-03-09T00:00:00-05:00[America/New_York]",
+    /// );
+    ///
+    /// // For 23 hour days, 12:30 is the tipping point to round up in the
+    /// // default rounding configuration:
+    /// let zdt1: Zoned = "2025-03-09T12:30-04[America/New_York]".parse()?;
+    /// let zdt2 = zdt1.round(Unit::Day)?;
+    /// assert_eq!(
+    ///     zdt2.to_string(),
+    ///     "2025-03-10T00:00:00-04:00[America/New_York]",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// And some days are longer than 24 hours, and so rounding _up_ will occur
+    /// even when the time is before noon:
+    ///
+    /// ```
+    /// use jiff::{Unit, Zoned};
+    ///
+    /// let zdt1: Zoned = "2025-11-02T11:45-05[America/New_York]".parse()?;
+    /// let zdt2 = zdt1.round(Unit::Day)?;
+    /// assert_eq!(
+    ///     zdt2.to_string(),
+    ///     "2025-11-03T00:00:00-05:00[America/New_York]",
+    /// );
+    ///
+    /// // For 25 hour days, 11:30 is the tipping point to round up in the
+    /// // default rounding configuration. So 11:29 will round down:
+    /// let zdt1: Zoned = "2025-11-02T11:29-05[America/New_York]".parse()?;
+    /// let zdt2 = zdt1.round(Unit::Day)?;
+    /// assert_eq!(
+    ///     zdt2.to_string(),
+    ///     "2025-11-02T00:00:00-04:00[America/New_York]",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
     /// # Example: overflow error
     ///
     /// This example demonstrates that it's possible for this operation to
@@ -4192,9 +4245,10 @@ impl ZonedRound {
     /// Most of the work is farmed out to civil datetime rounding.
     pub(crate) fn round(&self, zdt: &Zoned) -> Result<Zoned, Error> {
         let start = zdt.datetime();
-        let day_length = day_length(start, zdt.time_zone().clone())
-            .with_context(|| err!("failed to find length of day for {zdt}"))?;
-        let end = self.round.round(day_length, start)?;
+        if self.round.get_smallest() == Unit::Day {
+            return self.round_days(zdt);
+        }
+        let end = self.round.round(start)?;
         // Like in the ZonedWith API, in order to avoid small changes to clock
         // time hitting a 1 hour disambiguation shift, we use offset conflict
         // resolution to do our best to "prefer" the offset we already have.
@@ -4204,6 +4258,61 @@ impl ZonedRound {
             zdt.time_zone().clone(),
         )?;
         amb.compatible()
+    }
+
+    /// Does rounding when the smallest unit is equal to days. We don't reuse
+    /// civil datetime rounding for this since the length of a day for a zoned
+    /// datetime might not be 24 hours.
+    ///
+    /// Ref: https://tc39.es/proposal-temporal/#sec-temporal.zoneddatetime.prototype.round
+    fn round_days(&self, zdt: &Zoned) -> Result<Zoned, Error> {
+        debug_assert_eq!(self.round.get_smallest(), Unit::Day);
+
+        // Rounding by days requires an increment of 1. We just re-use the
+        // civil datetime rounding checks, which has the same constraint
+        // although it does check for other things that aren't relevant here.
+        increment::for_datetime(Unit::Day, self.round.get_increment())?;
+
+        // FIXME: We should be doing this with a &TimeZone, but will need a
+        // refactor so that we do zone-aware arithmetic using just a Timestamp
+        // and a &TimeZone. Fixing just this should just be some minor annoying
+        // work. The grander refactor is something like an `Unzoned` type, but
+        // I'm not sure that's really worth it. ---AG
+        let start = zdt.start_of_day().with_context(move || {
+            err!("failed to find start of day for {zdt}")
+        })?;
+        let end = start
+            .checked_add(Span::new().days_ranged(C(1)))
+            .with_context(|| {
+                err!("failed to add 1 day to {start} to find length of day")
+            })?;
+        let span = start
+            .timestamp()
+            .until((Unit::Nanosecond, end.timestamp()))
+            .with_context(|| {
+                err!(
+                    "failed to compute span in nanoseconds \
+                     from {start} until {end}"
+                )
+            })?;
+        let nanos = span.get_nanoseconds_ranged();
+        let day_length =
+            ZonedDayNanoseconds::try_rfrom("nanoseconds-per-zoned-day", nanos)
+                .with_context(|| {
+                    err!(
+                        "failed to convert span between {start} until {end} \
+                         to nanoseconds",
+                    )
+                })?;
+        let progress = zdt.timestamp().as_nanosecond_ranged()
+            - start.timestamp().as_nanosecond_ranged();
+        let rounded = self.round.get_mode().round(progress, day_length);
+        let nanos = start
+            .timestamp()
+            .as_nanosecond_ranged()
+            .try_checked_add("timestamp-nanos", rounded)?;
+        Ok(Timestamp::from_nanosecond_ranged(nanos)
+            .to_zoned(zdt.time_zone().clone()))
     }
 }
 
@@ -5316,41 +5425,6 @@ impl ZonedWith {
     }
 }
 
-#[inline]
-fn day_length(
-    dt: DateTime,
-    tz: TimeZone,
-) -> Result<ZonedDayNanoseconds, Error> {
-    // FIXME: We should be doing this with a &TimeZone, but will need a
-    // refactor so that we do zone-aware arithmetic using just a Timestamp and
-    // a &TimeZone.
-    let tz2 = tz.clone();
-    let start = dt.start_of_day().to_zoned(tz).with_context(move || {
-        let tzname = tz2.diagnostic_name();
-        err!("failed to find start of day for {dt} in time zone {tzname}")
-    })?;
-    let end = start.checked_add(Span::new().days_ranged(C(1))).with_context(
-        || err!("failed to add 1 day to {start} to find length of day"),
-    )?;
-    let span = start
-        .timestamp()
-        .until((Unit::Nanosecond, end.timestamp()))
-        .with_context(|| {
-            err!(
-                "failed to compute span in nanoseconds \
-                 from {start} until {end}"
-            )
-        })?;
-    let nanos = span.get_nanoseconds_ranged();
-    ZonedDayNanoseconds::try_rfrom("nanoseconds-per-zoned-day", nanos)
-        .with_context(|| {
-            err!(
-                "failed to convert span between {start} until {end} \
-                 to nanoseconds",
-            )
-        })
-}
-
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
@@ -5615,5 +5689,53 @@ mod tests {
         assert_eq!(zdt.offset(), super::Offset::constant(11));
         let roundtrip = zdt.time_zone().to_zoned(zdt.datetime()).unwrap();
         assert_eq!(zdt, roundtrip);
+    }
+
+    // See: https://github.com/BurntSushi/jiff/issues/305
+    #[test]
+    fn zoned_round_dst_day_length() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let zdt1: Zoned =
+            "2025-03-09T12:15[America/New_York]".parse().unwrap();
+        let zdt2 = zdt1.round(Unit::Day).unwrap();
+        // Since this day is only 23 hours long, it should round down instead
+        // of up (as it would on a normal 24 hour day). Interestingly, the bug
+        // was causing this to not only round up, but to a datetime that wasn't
+        // the start of a day. Specifically, 2025-03-10T01:00:00-04:00.
+        assert_eq!(
+            zdt2.to_string(),
+            "2025-03-09T00:00:00-05:00[America/New_York]"
+        );
+    }
+
+    #[test]
+    fn zoned_round_errors() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let zdt: Zoned = "2025-03-09T12:15[America/New_York]".parse().unwrap();
+
+        insta::assert_snapshot!(
+            zdt.round(Unit::Year).unwrap_err(),
+            @"datetime rounding does not support years"
+        );
+        insta::assert_snapshot!(
+            zdt.round(Unit::Month).unwrap_err(),
+            @"datetime rounding does not support months"
+        );
+        insta::assert_snapshot!(
+            zdt.round(Unit::Week).unwrap_err(),
+            @"datetime rounding does not support weeks"
+        );
+
+        let options = ZonedRound::new().smallest(Unit::Day).increment(2);
+        insta::assert_snapshot!(
+            zdt.round(options).unwrap_err(),
+            @"increment 2 for rounding datetime to days must be 1) less than 2, 2) divide into it evenly and 3) greater than zero"
+        );
     }
 }

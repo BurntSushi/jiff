@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.2.6 (TBD)
+===========
+TODO
+
+Bug fixes:
+
+* [#305](https://github.com/BurntSushi/jiff/issues/305):
+Fixed `Zoned` rounding on days with DST time zone transitions.
+
+
 0.2.5 (2025-03-22)
 ==================
 This release updates Jiff's bundled copy of the [IANA Time Zone Database] to
