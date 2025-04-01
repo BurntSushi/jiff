@@ -2843,8 +2843,14 @@ impl serde::Serialize for Timestamp {
         if serializer.is_human_readable() {
             return serializer.collect_str(self);
         }
+        use serde::ser::SerializeTuple;
 
-        serializer.serialize_i128(self.as_nanosecond())
+        let mut tuple = serializer.serialize_tuple(2)?;
+
+        tuple.serialize_element(&self.second.get_unchecked())?;
+        tuple.serialize_element(&self.nanosecond.get_unchecked())?;
+
+        tuple.end()
     }
 }
 
@@ -2854,7 +2860,7 @@ impl<'de> serde::Deserialize<'de> for Timestamp {
     fn deserialize<D: serde::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Timestamp, D::Error> {
-        use serde::de;
+        use serde::de::{self, Error as _};
 
         if deserializer.is_human_readable() {
             struct HumanReadableVisitor;
@@ -2905,17 +2911,25 @@ impl<'de> serde::Deserialize<'de> for Timestamp {
             }
 
             #[inline]
-            fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E>
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
             where
-                E: serde::de::Error,
+                A: serde::de::SeqAccess<'de>,
             {
-                Timestamp::from_nanosecond(v).map_err(|_| {
-                    E::custom("Failed to create timestamp from nanoseconds.")
+                Timestamp::new(
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("seconds"))?,
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("nanoseconds"))?,
+                )
+                .map_err(|_| {
+                    A::Error::custom(
+                        "Deserialized instant is outsided of supported range.",
+                    )
                 })
             }
         }
 
-        deserializer.deserialize_i128(CompactVisitor)
+        deserializer.deserialize_tuple(2, CompactVisitor)
     }
 }
 

@@ -3655,8 +3655,24 @@ impl serde::Serialize for Span {
         if serializer.is_human_readable() {
             return serializer.collect_str(self);
         }
+        use serde::ser::SerializeTuple;
 
-        SignedDuration::serialize(&self.to_duration_invariant(), serializer)
+        let mut tuple = serializer.serialize_tuple(12)?;
+
+        tuple.serialize_element(&self.sign.get_unchecked())?;
+        tuple.serialize_element(&self.units.0)?;
+        tuple.serialize_element(&self.years.get_unchecked())?;
+        tuple.serialize_element(&self.months.get_unchecked())?;
+        tuple.serialize_element(&self.weeks.get_unchecked())?;
+        tuple.serialize_element(&self.days.get_unchecked())?;
+        tuple.serialize_element(&self.hours.get_unchecked())?;
+        tuple.serialize_element(&self.minutes.get_unchecked())?;
+        tuple.serialize_element(&self.seconds.get_unchecked())?;
+        tuple.serialize_element(&self.milliseconds.get_unchecked())?;
+        tuple.serialize_element(&self.microseconds.get_unchecked())?;
+        tuple.serialize_element(&self.nanoseconds.get_unchecked())?;
+
+        tuple.end()
     }
 }
 
@@ -3701,9 +3717,79 @@ impl<'de> serde::Deserialize<'de> for Span {
             return deserializer.deserialize_str(HumanReadableVisitor);
         }
 
-        SignedDuration::deserialize(deserializer)?.try_into().map_err(|_| {
-            D::Error::custom("Failed to convert signed duration to span.")
-        })
+        struct CompactVisitor;
+
+        impl<'de> de::Visitor<'de> for CompactVisitor {
+            type Value = Span;
+
+            #[inline]
+            fn expecting(
+                &self,
+                f: &mut core::fmt::Formatter,
+            ) -> core::fmt::Result {
+                f.write_str("a span")
+            }
+
+            #[inline]
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let sign = seq
+                    .next_element::<i8>()?
+                    .ok_or(A::Error::missing_field("sign"))?;
+                let unit = seq
+                    .next_element::<u16>()?
+                    .ok_or(A::Error::missing_field("unit"))?;
+
+                let mut span = Span::new()
+                    .years(
+                        seq.next_element::<i16>()?
+                            .ok_or(A::Error::missing_field("years"))?,
+                    )
+                    .months(
+                        seq.next_element::<i32>()?
+                            .ok_or(A::Error::missing_field("months"))?,
+                    )
+                    .days(
+                        seq.next_element::<i32>()?
+                            .ok_or(A::Error::missing_field("days"))?,
+                    )
+                    .hours(
+                        seq.next_element::<i32>()?
+                            .ok_or(A::Error::missing_field("hours"))?,
+                    )
+                    .minutes(
+                        seq.next_element::<i64>()?
+                            .ok_or(A::Error::missing_field("minutes"))?,
+                    )
+                    .seconds(
+                        seq.next_element::<i64>()?
+                            .ok_or(A::Error::missing_field("seconds"))?,
+                    )
+                    .milliseconds(
+                        seq.next_element::<i64>()?
+                            .ok_or(A::Error::missing_field("milliseconds"))?,
+                    )
+                    .microseconds(
+                        seq.next_element::<i64>()?
+                            .ok_or(A::Error::missing_field("microseconds"))?,
+                    )
+                    .nanoseconds(
+                        seq.next_element::<i64>()?
+                            .ok_or(A::Error::missing_field("nanoseconds"))?,
+                    );
+
+                span.sign = Sign::try_new("span factor", sign)
+                    .map_err(|_| A::Error::custom("Invlid sign?"))?;
+
+                span.units = UnitSet(unit);
+
+                Ok(span)
+            }
+        }
+
+        deserializer.deserialize_tuple(12, CompactVisitor)
     }
 }
 

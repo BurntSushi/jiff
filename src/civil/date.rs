@@ -2491,7 +2491,15 @@ impl serde::Serialize for Date {
             return serializer.collect_str(self);
         }
 
-        serializer.serialize_i32(self.to_unix_epoch_day().get())
+        use serde::ser::SerializeTuple;
+
+        let mut tuple = serializer.serialize_tuple(3)?;
+
+        tuple.serialize_element(&self.year.get_unchecked())?;
+        tuple.serialize_element(&self.month.get_unchecked())?;
+        tuple.serialize_element(&self.day.get_unchecked())?;
+
+        tuple.end()
     }
 }
 
@@ -2501,7 +2509,7 @@ impl<'de> serde::Deserialize<'de> for Date {
     fn deserialize<D: serde::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Date, D::Error> {
-        use serde::de;
+        use serde::de::{self, Error as _};
 
         if deserializer.is_human_readable() {
             struct HumanReadableVisitor;
@@ -2552,18 +2560,23 @@ impl<'de> serde::Deserialize<'de> for Date {
             }
 
             #[inline]
-            fn visit_i32<E>(self, v: i32) -> Result<Self::Value, E>
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
             where
-                E: serde::de::Error,
+                A: serde::de::SeqAccess<'de>,
             {
-                let epoch_day = UnixEpochDay::new(v)
-                    .ok_or(E::custom("Epoch day is invalid."))?;
-
-                Ok(Date::from_unix_epoch_day(epoch_day))
+                Date::new(
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("year"))?,
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("month"))?,
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("day"))?,
+                )
+                .map_err(|_| A::Error::custom("Invalid date."))
             }
         }
 
-        deserializer.deserialize_i32(CompactVisitor)
+        deserializer.deserialize_tuple(3, CompactVisitor)
     }
 }
 

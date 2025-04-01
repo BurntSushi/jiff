@@ -2109,8 +2109,16 @@ impl serde::Serialize for Time {
         if serializer.is_human_readable() {
             return serializer.collect_str(self);
         }
+        use serde::ser::SerializeTuple;
 
-        serializer.serialize_i64(self.to_nanosecond().get())
+        let mut tuple = serializer.serialize_tuple(4)?;
+
+        tuple.serialize_element(&self.hour.get_unchecked())?;
+        tuple.serialize_element(&self.minute.get_unchecked())?;
+        tuple.serialize_element(&self.second.get_unchecked())?;
+        tuple.serialize_element(&self.subsec_nanosecond.get_unchecked())?;
+
+        tuple.end()
     }
 }
 
@@ -2120,7 +2128,7 @@ impl<'de> serde::Deserialize<'de> for Time {
     fn deserialize<D: serde::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Time, D::Error> {
-        use serde::de;
+        use serde::de::{self, Error as _};
 
         if deserializer.is_human_readable() {
             struct HumanReadableVisitor;
@@ -2171,18 +2179,25 @@ impl<'de> serde::Deserialize<'de> for Time {
             }
 
             #[inline]
-            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
             where
-                E: serde::de::Error,
+                A: serde::de::SeqAccess<'de>,
             {
-                let epoch_day = CivilDayNanosecond::new(v)
-                    .ok_or(E::custom("number of nanoseconds is invalid."))?;
-
-                Ok(Time::from_nanosecond(epoch_day))
+                Time::new(
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("hour"))?,
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("minute"))?,
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("second"))?,
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("subsec_nanosecond"))?,
+                )
+                .map_err(|_| A::Error::custom("Invalid time."))
             }
         }
 
-        deserializer.deserialize_i64(CompactVisitor)
+        deserializer.deserialize_tuple(4, CompactVisitor)
     }
 }
 
