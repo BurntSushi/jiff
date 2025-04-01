@@ -2487,7 +2487,11 @@ impl serde::Serialize for Date {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            return serializer.collect_str(self);
+        }
+
+        serializer.serialize_i32(self.to_unix_epoch_day().get())
     }
 }
 
@@ -2499,35 +2503,67 @@ impl<'de> serde::Deserialize<'de> for Date {
     ) -> Result<Date, D::Error> {
         use serde::de;
 
-        struct DateVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for DateVisitor {
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = Date;
+
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a date string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<Date, E> {
+                    DEFAULT_DATETIME_PARSER
+                        .parse_date(value)
+                        .map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<Date, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
+            }
+
+            return deserializer.deserialize_str(HumanReadableVisitor);
+        }
+
+        struct CompactVisitor;
+
+        impl<'de> de::Visitor<'de> for CompactVisitor {
             type Value = Date;
 
+            #[inline]
             fn expecting(
                 &self,
                 f: &mut core::fmt::Formatter,
             ) -> core::fmt::Result {
-                f.write_str("a date string")
+                f.write_str("")
             }
 
             #[inline]
-            fn visit_bytes<E: de::Error>(
-                self,
-                value: &[u8],
-            ) -> Result<Date, E> {
-                DEFAULT_DATETIME_PARSER
-                    .parse_date(value)
-                    .map_err(de::Error::custom)
-            }
+            fn visit_i32<E>(self, v: i32) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                let epoch_day = UnixEpochDay::new(v)
+                    .ok_or(E::custom("Epoch day is invalid."))?;
 
-            #[inline]
-            fn visit_str<E: de::Error>(self, value: &str) -> Result<Date, E> {
-                self.visit_bytes(value.as_bytes())
+                Ok(Date::from_unix_epoch_day(epoch_day))
             }
         }
 
-        deserializer.deserialize_str(DateVisitor)
+        deserializer.deserialize_i32(CompactVisitor)
     }
 }
 

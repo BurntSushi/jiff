@@ -2106,7 +2106,11 @@ impl serde::Serialize for Time {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            return serializer.collect_str(self);
+        }
+
+        serializer.serialize_i64(self.to_nanosecond().get())
     }
 }
 
@@ -2118,35 +2122,67 @@ impl<'de> serde::Deserialize<'de> for Time {
     ) -> Result<Time, D::Error> {
         use serde::de;
 
-        struct TimeVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for TimeVisitor {
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = Time;
+
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a time string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<Time, E> {
+                    DEFAULT_DATETIME_PARSER
+                        .parse_time(value)
+                        .map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<Time, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
+            }
+
+            return deserializer.deserialize_str(HumanReadableVisitor);
+        }
+
+        struct CompactVisitor;
+
+        impl<'de> de::Visitor<'de> for CompactVisitor {
             type Value = Time;
 
+            #[inline]
             fn expecting(
                 &self,
                 f: &mut core::fmt::Formatter,
             ) -> core::fmt::Result {
-                f.write_str("a time string")
+                f.write_str("the number of nanoseconds")
             }
 
             #[inline]
-            fn visit_bytes<E: de::Error>(
-                self,
-                value: &[u8],
-            ) -> Result<Time, E> {
-                DEFAULT_DATETIME_PARSER
-                    .parse_time(value)
-                    .map_err(de::Error::custom)
-            }
+            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                let epoch_day = CivilDayNanosecond::new(v)
+                    .ok_or(E::custom("number of nanoseconds is invalid."))?;
 
-            #[inline]
-            fn visit_str<E: de::Error>(self, value: &str) -> Result<Time, E> {
-                self.visit_bytes(value.as_bytes())
+                Ok(Time::from_nanosecond(epoch_day))
             }
         }
 
-        deserializer.deserialize_str(TimeVisitor)
+        deserializer.deserialize_i64(CompactVisitor)
     }
 }
 

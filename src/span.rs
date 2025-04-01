@@ -3652,7 +3652,11 @@ impl serde::Serialize for Span {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            return serializer.collect_str(self);
+        }
+
+        SignedDuration::serialize(&self.to_duration_invariant(), serializer)
     }
 }
 
@@ -3662,35 +3666,44 @@ impl<'de> serde::Deserialize<'de> for Span {
     fn deserialize<D: serde::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Span, D::Error> {
-        use serde::de;
+        use serde::de::{self, Error as _};
 
-        struct SpanVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for SpanVisitor {
-            type Value = Span;
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = Span;
 
-            fn expecting(
-                &self,
-                f: &mut core::fmt::Formatter,
-            ) -> core::fmt::Result {
-                f.write_str("a span duration string")
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a span duration string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<Span, E> {
+                    parse_iso_or_friendly(value).map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<Span, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
             }
 
-            #[inline]
-            fn visit_bytes<E: de::Error>(
-                self,
-                value: &[u8],
-            ) -> Result<Span, E> {
-                parse_iso_or_friendly(value).map_err(de::Error::custom)
-            }
-
-            #[inline]
-            fn visit_str<E: de::Error>(self, value: &str) -> Result<Span, E> {
-                self.visit_bytes(value.as_bytes())
-            }
+            return deserializer.deserialize_str(HumanReadableVisitor);
         }
 
-        deserializer.deserialize_str(SpanVisitor)
+        SignedDuration::deserialize(deserializer)?.try_into().map_err(|_| {
+            D::Error::custom("Failed to convert signed duration to span.")
+        })
     }
 }
 

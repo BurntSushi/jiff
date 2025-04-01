@@ -18,7 +18,7 @@ use crate::{
         t::{self, C},
     },
     zoned::Zoned,
-    RoundMode, SignedDuration, Span, SpanRound, Unit,
+    RoundMode, SignedDuration, Span, SpanRound, Timestamp, Unit,
 };
 
 /// A representation of a civil datetime in the Gregorian calendar.
@@ -2773,7 +2773,18 @@ impl serde::Serialize for DateTime {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            return serializer.collect_str(self);
+        }
+
+        use serde::ser::SerializeTuple;
+
+        let mut tuple = serializer.serialize_tuple(2)?;
+
+        tuple.serialize_element(&self.date)?;
+        tuple.serialize_element(&self.time)?;
+
+        tuple.end()
     }
 }
 
@@ -2783,40 +2794,82 @@ impl<'de> serde::Deserialize<'de> for DateTime {
     fn deserialize<D: serde::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<DateTime, D::Error> {
-        use serde::de;
+        use serde::de::{self, Error as _};
 
-        struct DateTimeVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for DateTimeVisitor {
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = DateTime;
+
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a datetime string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<DateTime, E> {
+                    DEFAULT_DATETIME_PARSER
+                        .parse_datetime(value)
+                        .map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<DateTime, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
+            }
+
+            return deserializer.deserialize_str(HumanReadableVisitor);
+        }
+
+        struct CompactVisitor;
+
+        impl<'de> de::Visitor<'de> for CompactVisitor {
             type Value = DateTime;
 
+            #[inline]
             fn expecting(
                 &self,
                 f: &mut core::fmt::Formatter,
             ) -> core::fmt::Result {
-                f.write_str("a datetime string")
+                f.write_str("the number of nanoseconds since the unix epoch")
             }
 
             #[inline]
-            fn visit_bytes<E: de::Error>(
-                self,
-                value: &[u8],
-            ) -> Result<DateTime, E> {
-                DEFAULT_DATETIME_PARSER
-                    .parse_datetime(value)
-                    .map_err(de::Error::custom)
+            fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Timestamp::from_nanosecond(v)
+                    .map_err(|e| E::custom(e))?
+                    .to_zoned(TimeZone::UTC)
+                    .into())
             }
 
             #[inline]
-            fn visit_str<E: de::Error>(
-                self,
-                value: &str,
-            ) -> Result<DateTime, E> {
-                self.visit_bytes(value.as_bytes())
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                Ok(DateTime::from_parts(
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("date"))?,
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("time"))?,
+                ))
             }
         }
 
-        deserializer.deserialize_str(DateTimeVisitor)
+        deserializer.deserialize_tuple(2, CompactVisitor)
     }
 }
 
