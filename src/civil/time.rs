@@ -2113,10 +2113,10 @@ impl serde::Serialize for Time {
 
         let mut tuple = serializer.serialize_tuple(4)?;
 
-        tuple.serialize_element(&self.hour.get_unchecked())?;
-        tuple.serialize_element(&self.minute.get_unchecked())?;
-        tuple.serialize_element(&self.second.get_unchecked())?;
-        tuple.serialize_element(&self.subsec_nanosecond.get_unchecked())?;
+        tuple.serialize_element(&self.hour.get())?;
+        tuple.serialize_element(&self.minute.get())?;
+        tuple.serialize_element(&self.second.get())?;
+        tuple.serialize_element(&self.subsec_nanosecond.get())?;
 
         tuple.end()
     }

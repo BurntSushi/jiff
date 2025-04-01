@@ -2847,8 +2847,8 @@ impl serde::Serialize for Timestamp {
 
         let mut tuple = serializer.serialize_tuple(2)?;
 
-        tuple.serialize_element(&self.second.get_unchecked())?;
-        tuple.serialize_element(&self.nanosecond.get_unchecked())?;
+        tuple.serialize_element(&self.second.get())?;
+        tuple.serialize_element(&self.nanosecond.get())?;
 
         tuple.end()
     }

@@ -2495,9 +2495,9 @@ impl serde::Serialize for Date {
 
         let mut tuple = serializer.serialize_tuple(3)?;
 
-        tuple.serialize_element(&self.year.get_unchecked())?;
-        tuple.serialize_element(&self.month.get_unchecked())?;
-        tuple.serialize_element(&self.day.get_unchecked())?;
+        tuple.serialize_element(&self.year.get())?;
+        tuple.serialize_element(&self.month.get())?;
+        tuple.serialize_element(&self.day.get())?;
 
         tuple.end()
     }

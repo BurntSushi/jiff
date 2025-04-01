@@ -3659,18 +3659,18 @@ impl serde::Serialize for Span {
 
         let mut tuple = serializer.serialize_tuple(12)?;
 
-        tuple.serialize_element(&self.sign.get_unchecked())?;
+        tuple.serialize_element(&self.sign.get())?;
         tuple.serialize_element(&self.units.0)?;
-        tuple.serialize_element(&self.years.get_unchecked())?;
-        tuple.serialize_element(&self.months.get_unchecked())?;
-        tuple.serialize_element(&self.weeks.get_unchecked())?;
-        tuple.serialize_element(&self.days.get_unchecked())?;
-        tuple.serialize_element(&self.hours.get_unchecked())?;
-        tuple.serialize_element(&self.minutes.get_unchecked())?;
-        tuple.serialize_element(&self.seconds.get_unchecked())?;
-        tuple.serialize_element(&self.milliseconds.get_unchecked())?;
-        tuple.serialize_element(&self.microseconds.get_unchecked())?;
-        tuple.serialize_element(&self.nanoseconds.get_unchecked())?;
+        tuple.serialize_element(&self.years.get())?;
+        tuple.serialize_element(&self.months.get())?;
+        tuple.serialize_element(&self.weeks.get())?;
+        tuple.serialize_element(&self.days.get())?;
+        tuple.serialize_element(&self.hours.get())?;
+        tuple.serialize_element(&self.minutes.get())?;
+        tuple.serialize_element(&self.seconds.get())?;
+        tuple.serialize_element(&self.milliseconds.get())?;
+        tuple.serialize_element(&self.microseconds.get())?;
+        tuple.serialize_element(&self.nanoseconds.get())?;
 
         tuple.end()
     }
