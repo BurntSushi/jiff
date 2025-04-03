@@ -3652,7 +3652,27 @@ impl serde::Serialize for Span {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            return serializer.collect_str(self);
+        }
+        use serde::ser::SerializeTuple;
+
+        let mut tuple = serializer.serialize_tuple(12)?;
+
+        tuple.serialize_element(&self.sign.get())?;
+        tuple.serialize_element(&self.units.0)?;
+        tuple.serialize_element(&self.years.get())?;
+        tuple.serialize_element(&self.months.get())?;
+        tuple.serialize_element(&self.weeks.get())?;
+        tuple.serialize_element(&self.days.get())?;
+        tuple.serialize_element(&self.hours.get())?;
+        tuple.serialize_element(&self.minutes.get())?;
+        tuple.serialize_element(&self.seconds.get())?;
+        tuple.serialize_element(&self.milliseconds.get())?;
+        tuple.serialize_element(&self.microseconds.get())?;
+        tuple.serialize_element(&self.nanoseconds.get())?;
+
+        tuple.end()
     }
 }
 
@@ -3662,35 +3682,114 @@ impl<'de> serde::Deserialize<'de> for Span {
     fn deserialize<D: serde::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Span, D::Error> {
-        use serde::de;
+        use serde::de::{self, Error as _};
 
-        struct SpanVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for SpanVisitor {
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = Span;
+
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a span duration string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<Span, E> {
+                    parse_iso_or_friendly(value).map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<Span, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
+            }
+
+            return deserializer.deserialize_str(HumanReadableVisitor);
+        }
+
+        struct CompactVisitor;
+
+        impl<'de> de::Visitor<'de> for CompactVisitor {
             type Value = Span;
 
+            #[inline]
             fn expecting(
                 &self,
                 f: &mut core::fmt::Formatter,
             ) -> core::fmt::Result {
-                f.write_str("a span duration string")
+                f.write_str("a span")
             }
 
             #[inline]
-            fn visit_bytes<E: de::Error>(
-                self,
-                value: &[u8],
-            ) -> Result<Span, E> {
-                parse_iso_or_friendly(value).map_err(de::Error::custom)
-            }
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let sign = seq
+                    .next_element::<i8>()?
+                    .ok_or(A::Error::missing_field("sign"))?;
+                let unit = seq
+                    .next_element::<u16>()?
+                    .ok_or(A::Error::missing_field("unit"))?;
 
-            #[inline]
-            fn visit_str<E: de::Error>(self, value: &str) -> Result<Span, E> {
-                self.visit_bytes(value.as_bytes())
+                let mut span = Span::new()
+                    .years(
+                        seq.next_element::<i16>()?
+                            .ok_or(A::Error::missing_field("years"))?,
+                    )
+                    .months(
+                        seq.next_element::<i32>()?
+                            .ok_or(A::Error::missing_field("months"))?,
+                    )
+                    .days(
+                        seq.next_element::<i32>()?
+                            .ok_or(A::Error::missing_field("days"))?,
+                    )
+                    .hours(
+                        seq.next_element::<i32>()?
+                            .ok_or(A::Error::missing_field("hours"))?,
+                    )
+                    .minutes(
+                        seq.next_element::<i64>()?
+                            .ok_or(A::Error::missing_field("minutes"))?,
+                    )
+                    .seconds(
+                        seq.next_element::<i64>()?
+                            .ok_or(A::Error::missing_field("seconds"))?,
+                    )
+                    .milliseconds(
+                        seq.next_element::<i64>()?
+                            .ok_or(A::Error::missing_field("milliseconds"))?,
+                    )
+                    .microseconds(
+                        seq.next_element::<i64>()?
+                            .ok_or(A::Error::missing_field("microseconds"))?,
+                    )
+                    .nanoseconds(
+                        seq.next_element::<i64>()?
+                            .ok_or(A::Error::missing_field("nanoseconds"))?,
+                    );
+
+                span.sign = Sign::try_new("span factor", sign)
+                    .map_err(|_| A::Error::custom("Invlid sign?"))?;
+
+                span.units = UnitSet(unit);
+
+                Ok(span)
             }
         }
 
-        deserializer.deserialize_str(SpanVisitor)
+        deserializer.deserialize_tuple(12, CompactVisitor)
     }
 }
 

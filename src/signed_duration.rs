@@ -2218,7 +2218,18 @@ impl serde::Serialize for SignedDuration {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            return serializer.collect_str(self);
+        }
+
+        use serde::ser::SerializeTuple;
+
+        let mut tuple = serializer.serialize_tuple(2)?;
+
+        tuple.serialize_element(&self.secs)?;
+        tuple.serialize_element(&self.nanos)?;
+
+        tuple.end()
     }
 }
 
@@ -2228,38 +2239,69 @@ impl<'de> serde::Deserialize<'de> for SignedDuration {
     fn deserialize<D: serde::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<SignedDuration, D::Error> {
-        use serde::de;
+        use serde::de::{self, Error as _};
 
-        struct SignedDurationVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for SignedDurationVisitor {
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = SignedDuration;
+
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a signed duration string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<SignedDuration, E> {
+                    parse_iso_or_friendly(value).map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<SignedDuration, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
+            }
+
+            return deserializer.deserialize_str(HumanReadableVisitor);
+        }
+
+        struct CompactVisitor;
+
+        impl<'de> de::Visitor<'de> for CompactVisitor {
             type Value = SignedDuration;
 
+            #[inline]
             fn expecting(
                 &self,
                 f: &mut core::fmt::Formatter,
             ) -> core::fmt::Result {
-                f.write_str("a signed duration string")
+                f.write_str("the number of seconds and nanoseconds")
             }
 
             #[inline]
-            fn visit_bytes<E: de::Error>(
-                self,
-                value: &[u8],
-            ) -> Result<SignedDuration, E> {
-                parse_iso_or_friendly(value).map_err(de::Error::custom)
-            }
-
-            #[inline]
-            fn visit_str<E: de::Error>(
-                self,
-                value: &str,
-            ) -> Result<SignedDuration, E> {
-                self.visit_bytes(value.as_bytes())
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                Ok(SignedDuration::new(
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("seconds"))?,
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("nanoseconds"))?,
+                ))
             }
         }
 
-        deserializer.deserialize_str(SignedDurationVisitor)
+        deserializer.deserialize_tuple(2, CompactVisitor)
     }
 }
 
