@@ -8,6 +8,9 @@ Bug fixes:
 
 * [#305](https://github.com/BurntSushi/jiff/issues/305):
 Fixed `Zoned` rounding on days with DST time zone transitions.
+* [#309](https://github.com/BurntSushi/jiff/issues/309):
+Fixed bug where `TimeZone::preceding` could omit historical time zone
+transitions for time zones that have eliminated DST in the present.
 
 
 0.2.5 (2025-03-22)
