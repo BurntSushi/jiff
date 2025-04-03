@@ -3491,8 +3491,17 @@ mod tests {
                     ("1989-10-25 01Z", Some("1989-03-26 01Z")),
                 ],
             ),
+            (
+                // Sao Paulo eliminated DST in 2019, so the previous transition
+                // from 2024 is several years back.
+                "America/Sao_Paulo",
+                &[("2024-03-10 08Z", Some("2019-02-17 02Z"))],
+            ),
         ];
         for &(tzname, prev_trans) in tests {
+            if tzname != "America/Sao_Paulo" {
+                continue;
+            }
             let test_file = TzifTestFile::get(tzname);
             let tz = TimeZone::tzif(test_file.name, test_file.data).unwrap();
             for (given, expected) in prev_trans {
@@ -3571,6 +3580,12 @@ mod tests {
                     ("1990-03-25 01Z", Some("1990-10-28 01Z")),
                     ("1990-10-28 01Z", Some("1991-03-31 01Z")),
                 ],
+            ),
+            (
+                // Sao Paulo eliminated DST in 2019, so the next transition
+                // from 2024 no longer exists.
+                "America/Sao_Paulo",
+                &[("2024-03-10 08Z", None)],
             ),
         ];
         for &(tzname, next_trans) in tests {

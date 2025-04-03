@@ -64,6 +64,13 @@ pub(crate) static TZIF_TEST_FILES: &[TzifTestFile] = &[
         name: "Australia/Sydney/RHEL8",
         data: include_bytes!("testdata/australia-sydney-rhel8.tzif"),
     },
+    // I added this to test finding previous time zone transitions in a time
+    // zone that had somewhat recently eliminated DST. The bug was that Jiff
+    // wasn't reporting *any* previous time zone transitions.
+    TzifTestFile {
+        name: "America/Sao_Paulo",
+        data: include_bytes!("testdata/america-sao-paulo.tzif"),
+    },
     TzifTestFile { name: "UTC", data: include_bytes!("testdata/utc.tzif") },
 ];
 
