@@ -411,7 +411,16 @@ impl<
                 // What if this returns `None` though? I'm not sure in which
                 // cases that could matter, and I think it might be a violation
                 // of the TZif format if it does.
-                return posix_tz.previous_transition(ts);
+                //
+                // It can return `None`! In the case of a time zone that
+                // has eliminated DST, it might have historical time zone
+                // transitions but a POSIX time zone without DST. (For example,
+                // `America/Sao_Paulo`.) And thus, this would return `None`.
+                // So if it does, we pretend as if the POSIX time zone doesn't
+                // exist.
+                if let Some(trans) = posix_tz.previous_transition(ts) {
+                    return Some(trans);
+                }
             }
             index
         } else {
@@ -454,6 +463,13 @@ impl<
                 // What if this returns `None` though? I'm not sure in which
                 // cases that could matter, and I think it might be a violation
                 // of the TZif format if it does.
+                //
+                // In the "previous" case above, this could return `None` even
+                // when there are historical time zone transitions in the case
+                // of a time zone eliminating DST (e.g., `America/Sao_Paulo`).
+                // But unlike the previous case, if we get `None` here, then
+                // that is the real answer because there are no other known
+                // future time zone transitions.
                 return posix_tz.next_transition(ts);
             }
             self.timestamps().len() - 1
