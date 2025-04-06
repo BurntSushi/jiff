@@ -813,6 +813,11 @@ mod tests {
         let wday = IWeekday::from_sunday_zero_offset(1);
         assert!(d1.nth_weekday_of_month(5, wday).is_err());
         assert!(d1.nth_weekday_of_month(-5, wday).is_err());
+
+        let d1 = IDate { year: 1998, month: 1, day: 1 };
+        let wday = IWeekday::from_sunday_zero_offset(6);
+        let d2 = d1.nth_weekday_of_month(5, wday).unwrap();
+        assert_eq!(d2, IDate { year: 1998, month: 1, day: 31 });
     }
 
     #[test]
