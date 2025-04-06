@@ -901,12 +901,10 @@ impl Date {
         weekday: Weekday,
     ) -> Result<Date, Error> {
         let weekday = weekday.to_iweekday();
-        let idate = self
-            .to_idate()
-            .map(|x| x.nth_weekday_of_month(nth, weekday))
-            .transpose()
-            .map_err(Error::shared)?;
-        Ok(Date::from_idate(idate))
+        let idate = self.to_idate_const();
+        Ok(Date::from_idate_const(
+            idate.nth_weekday_of_month(nth, weekday).map_err(Error::shared)?,
+        ))
     }
 
     /// Returns the "nth" weekday from this date, not including itself.
@@ -4065,5 +4063,14 @@ mod tests {
         let deserialized: Date = serde_yaml::from_reader(cursor).unwrap();
 
         assert_eq!(deserialized, expected);
+    }
+
+    /// Regression test where converting to `IDate` and back to do the
+    /// calculation was FUBAR.
+    #[test]
+    fn nth_weekday_of_month() {
+        let d1 = date(1998, 1, 1);
+        let d2 = d1.nth_weekday_of_month(5, Weekday::Saturday).unwrap();
+        assert_eq!(d2, date(1998, 1, 31));
     }
 }

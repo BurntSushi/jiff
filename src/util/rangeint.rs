@@ -2439,34 +2439,6 @@ impl<T, U> Composite<(T, U)> {
     }
 }
 
-impl<T, E> Composite<Result<T, E>> {
-    #[inline]
-    pub(crate) fn transpose(self) -> Result<Composite<T>, E> {
-        #[cfg(not(debug_assertions))]
-        {
-            Ok(Composite { val: self.val? })
-        }
-        #[cfg(debug_assertions)]
-        {
-            Ok(Composite { val: self.val?, min: self.min?, max: self.max? })
-        }
-    }
-}
-
-impl<T> Composite<Option<T>> {
-    #[inline]
-    pub(crate) fn transpose(self) -> Option<Composite<T>> {
-        #[cfg(not(debug_assertions))]
-        {
-            Some(Composite { val: self.val? })
-        }
-        #[cfg(debug_assertions)]
-        {
-            Some(Composite { val: self.val?, min: self.min?, max: self.max? })
-        }
-    }
-}
-
 impl Composite<i8> {
     pub(crate) const fn to_rint<const MIN: i128, const MAX: i128>(
         self,
