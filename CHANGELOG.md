@@ -4,6 +4,11 @@
 ===========
 TODO
 
+Enhancements:
+
+* [#315](https://github.com/BurntSushi/jiff/issues/315):
+Add support for automatically finding the tzdb on Illumos.
+
 Bug fixes:
 
 * [#305](https://github.com/BurntSushi/jiff/issues/305):
