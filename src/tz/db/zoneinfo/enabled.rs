@@ -22,7 +22,7 @@ use crate::{
 const DEFAULT_TTL: Duration = Duration::new(5 * 60, 0);
 
 static ZONEINFO_DIRECTORIES: &[&str] =
-    &["/usr/share/zoneinfo", "/etc/zoneinfo"];
+    &["/usr/share/zoneinfo", "/usr/share/lib/zoneinfo", "/etc/zoneinfo"];
 
 pub(crate) struct Database {
     dir: Option<PathBuf>,
