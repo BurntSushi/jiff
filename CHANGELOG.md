@@ -1,8 +1,9 @@
 # CHANGELOG
 
-0.2.6 (TBD)
-===========
-TODO
+0.2.6 (2025-04-07)
+==================
+This release includes a few bug fixes and support for discovering the IANA Time
+Zone Database automatically on Illumos.
 
 Enhancements:
 
