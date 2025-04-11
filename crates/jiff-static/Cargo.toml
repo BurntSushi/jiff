@@ -30,6 +30,10 @@ tzdb = ["dep:jiff-tzdb"]
 # See the `tz-fat` feature in this repository's root `Cargo.toml` for more
 # context.
 tz-fat = []
+# Equivalent to the eponymous feature in `jiff` proper. Except it isn't
+# enabled by default here, since we don't really care about that level of
+# perf at compile time.
+perf-inline = []
 
 [dependencies]
 jiff-tzdb = { version = "0.1.4", path = "../jiff-tzdb", optional = true }
