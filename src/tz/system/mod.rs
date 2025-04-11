@@ -175,7 +175,8 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
 
     let Some(tzenv) = std::env::var_os("TZ") else { return Ok(None) };
     if tzenv.is_empty() {
-        return Ok(None);
+        // It is commonly agreed (but not standard) that setting an empty `TZ=` uses UTC.
+        return Ok(Some(TimeZone::UTC));
     }
     let tz_name_or_path = match PosixTzEnv::parse_os_str(&tzenv) {
         Err(_err) => {
