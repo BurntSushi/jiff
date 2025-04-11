@@ -23,8 +23,7 @@ impl PosixTimeZone<Abbreviation> {
         // `0..=24`.) Requiring strict POSIX rules doesn't seem necessary
         // since the extension is a strict superset. Plus, GNU tooling
         // seems to accept the extension.
-        let parser =
-            Parser { ianav3plus: true, ..Parser::new(bytes.as_ref()) };
+        let parser = Parser { ianav3plus: true, ..Parser::new(bytes) };
         parser.parse()
     }
 }

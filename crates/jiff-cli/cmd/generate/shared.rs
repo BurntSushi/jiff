@@ -40,7 +40,7 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
 
     let jiff = config.jiff();
     let jiff_dir = jiff.join("src");
-    let macro_dir = jiff.join("crates/jiff-static");
+    let macro_dir = jiff.join("crates/jiff-static/src");
     let dir = Path::new("shared");
     copy(&jiff_dir, &macro_dir, dir)?;
 
