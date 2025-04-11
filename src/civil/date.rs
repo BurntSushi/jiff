@@ -2485,7 +2485,19 @@ impl serde::Serialize for Date {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            return serializer.collect_str(self);
+        }
+
+        use serde::ser::SerializeTuple;
+
+        let mut tuple = serializer.serialize_tuple(3)?;
+
+        tuple.serialize_element(&self.year.get())?;
+        tuple.serialize_element(&self.month.get())?;
+        tuple.serialize_element(&self.day.get())?;
+
+        tuple.end()
     }
 }
 
@@ -2495,37 +2507,74 @@ impl<'de> serde::Deserialize<'de> for Date {
     fn deserialize<D: serde::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Date, D::Error> {
-        use serde::de;
+        use serde::de::{self, Error as _};
 
-        struct DateVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for DateVisitor {
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = Date;
+
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a date string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<Date, E> {
+                    DEFAULT_DATETIME_PARSER
+                        .parse_date(value)
+                        .map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<Date, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
+            }
+
+            return deserializer.deserialize_str(HumanReadableVisitor);
+        }
+
+        struct CompactVisitor;
+
+        impl<'de> de::Visitor<'de> for CompactVisitor {
             type Value = Date;
 
+            #[inline]
             fn expecting(
                 &self,
                 f: &mut core::fmt::Formatter,
             ) -> core::fmt::Result {
-                f.write_str("a date string")
+                f.write_str("")
             }
 
             #[inline]
-            fn visit_bytes<E: de::Error>(
-                self,
-                value: &[u8],
-            ) -> Result<Date, E> {
-                DEFAULT_DATETIME_PARSER
-                    .parse_date(value)
-                    .map_err(de::Error::custom)
-            }
-
-            #[inline]
-            fn visit_str<E: de::Error>(self, value: &str) -> Result<Date, E> {
-                self.visit_bytes(value.as_bytes())
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                Date::new(
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("year"))?,
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("month"))?,
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("day"))?,
+                )
+                .map_err(|_| A::Error::custom("Invalid date."))
             }
         }
 
-        deserializer.deserialize_str(DateVisitor)
+        deserializer.deserialize_tuple(3, CompactVisitor)
     }
 }
 
