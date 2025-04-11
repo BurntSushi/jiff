@@ -270,6 +270,7 @@ use crate::{
         self,
         array_str::Abbreviation,
         escape,
+        rangeint::RInto,
         t::{self, C},
     },
     Error, Timestamp, Zoned,
@@ -1083,7 +1084,8 @@ impl BrokenDownTime {
     ) -> Result<Option<Date>, Error> {
         let Some(doy) = self.day_of_year else { return Ok(None) };
         Ok(Some({
-            let first = Date::new_ranged(year, C(1), C(1)).unwrap();
+            let first =
+                Date::new_ranged(year, C(1).rinto(), C(1).rinto()).unwrap();
             first
                 .with()
                 .day_of_year(doy.get())
@@ -1114,8 +1116,8 @@ impl BrokenDownTime {
         };
         let week = i16::from(week);
         let wday = i16::from(weekday.to_sunday_zero_offset());
-        let first_of_year =
-            Date::new_ranged(year, C(1), C(1)).context("invalid date")?;
+        let first_of_year = Date::new_ranged(year, C(1).rinto(), C(1).rinto())
+            .context("invalid date")?;
         let first_sunday = first_of_year
             .nth_weekday_of_month(1, Weekday::Sunday)
             .map(|d| d.day_of_year())
@@ -1162,8 +1164,8 @@ impl BrokenDownTime {
         };
         let week = i16::from(week);
         let wday = i16::from(weekday.to_monday_zero_offset());
-        let first_of_year =
-            Date::new_ranged(year, C(1), C(1)).context("invalid date")?;
+        let first_of_year = Date::new_ranged(year, C(1).rinto(), C(1).rinto())
+            .context("invalid date")?;
         let first_monday = first_of_year
             .nth_weekday_of_month(1, Weekday::Monday)
             .map(|d| d.day_of_year())

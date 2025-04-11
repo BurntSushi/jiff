@@ -918,7 +918,7 @@ impl Span {
     pub fn try_months<I: Into<i64>>(self, months: I) -> Result<Span, Error> {
         type Range = ri64<{ t::SpanMonths::MIN }, { t::SpanMonths::MAX }>;
         let months = Range::try_new("months", months)?;
-        Ok(self.months_ranged(months))
+        Ok(self.months_ranged(months.rinto()))
     }
 
     /// Set the number of weeks on this span. The value may be negative.
@@ -934,7 +934,7 @@ impl Span {
     pub fn try_weeks<I: Into<i64>>(self, weeks: I) -> Result<Span, Error> {
         type Range = ri64<{ t::SpanWeeks::MIN }, { t::SpanWeeks::MAX }>;
         let weeks = Range::try_new("weeks", weeks)?;
-        Ok(self.weeks_ranged(weeks))
+        Ok(self.weeks_ranged(weeks.rinto()))
     }
 
     /// Set the number of days on this span. The value may be negative.
@@ -950,7 +950,7 @@ impl Span {
     pub fn try_days<I: Into<i64>>(self, days: I) -> Result<Span, Error> {
         type Range = ri64<{ t::SpanDays::MIN }, { t::SpanDays::MAX }>;
         let days = Range::try_new("days", days)?;
-        Ok(self.days_ranged(days))
+        Ok(self.days_ranged(days.rinto()))
     }
 
     /// Set the number of hours on this span. The value may be negative.
@@ -966,7 +966,7 @@ impl Span {
     pub fn try_hours<I: Into<i64>>(self, hours: I) -> Result<Span, Error> {
         type Range = ri64<{ t::SpanHours::MIN }, { t::SpanHours::MAX }>;
         let hours = Range::try_new("hours", hours)?;
-        Ok(self.hours_ranged(hours))
+        Ok(self.hours_ranged(hours.rinto()))
     }
 
     /// Set the number of minutes on this span. The value may be negative.
@@ -2482,8 +2482,7 @@ impl Span {
 /// Crate internal APIs that operate on ranged integer types.
 impl Span {
     #[inline]
-    pub(crate) fn years_ranged(self, years: impl RInto<t::SpanYears>) -> Span {
-        let years = years.rinto();
+    pub(crate) fn years_ranged(self, years: t::SpanYears) -> Span {
         let mut span = Span { years: years.abs(), ..self };
         span.sign = self.resign(years, &span);
         span.units = span.units.set(Unit::Year, years == C(0));
@@ -2491,11 +2490,7 @@ impl Span {
     }
 
     #[inline]
-    pub(crate) fn months_ranged(
-        self,
-        months: impl RInto<t::SpanMonths>,
-    ) -> Span {
-        let months = months.rinto();
+    pub(crate) fn months_ranged(self, months: t::SpanMonths) -> Span {
         let mut span = Span { months: months.abs(), ..self };
         span.sign = self.resign(months, &span);
         span.units = span.units.set(Unit::Month, months == C(0));
@@ -2503,8 +2498,7 @@ impl Span {
     }
 
     #[inline]
-    pub(crate) fn weeks_ranged(self, weeks: impl RInto<t::SpanWeeks>) -> Span {
-        let weeks = weeks.rinto();
+    pub(crate) fn weeks_ranged(self, weeks: t::SpanWeeks) -> Span {
         let mut span = Span { weeks: weeks.abs(), ..self };
         span.sign = self.resign(weeks, &span);
         span.units = span.units.set(Unit::Week, weeks == C(0));
@@ -2512,8 +2506,7 @@ impl Span {
     }
 
     #[inline]
-    pub(crate) fn days_ranged(self, days: impl RInto<t::SpanDays>) -> Span {
-        let days = days.rinto();
+    pub(crate) fn days_ranged(self, days: t::SpanDays) -> Span {
         let mut span = Span { days: days.abs(), ..self };
         span.sign = self.resign(days, &span);
         span.units = span.units.set(Unit::Day, days == C(0));
@@ -2521,8 +2514,7 @@ impl Span {
     }
 
     #[inline]
-    pub(crate) fn hours_ranged(self, hours: impl RInto<t::SpanHours>) -> Span {
-        let hours = hours.rinto();
+    pub(crate) fn hours_ranged(self, hours: t::SpanHours) -> Span {
         let mut span = Span { hours: hours.abs(), ..self };
         span.sign = self.resign(hours, &span);
         span.units = span.units.set(Unit::Hour, hours == C(0));
@@ -2530,11 +2522,7 @@ impl Span {
     }
 
     #[inline]
-    pub(crate) fn minutes_ranged(
-        self,
-        minutes: impl RInto<t::SpanMinutes>,
-    ) -> Span {
-        let minutes = minutes.rinto();
+    pub(crate) fn minutes_ranged(self, minutes: t::SpanMinutes) -> Span {
         let mut span = Span { minutes: minutes.abs(), ..self };
         span.sign = self.resign(minutes, &span);
         span.units = span.units.set(Unit::Minute, minutes == C(0));
@@ -2542,11 +2530,7 @@ impl Span {
     }
 
     #[inline]
-    pub(crate) fn seconds_ranged(
-        self,
-        seconds: impl RInto<t::SpanSeconds>,
-    ) -> Span {
-        let seconds = seconds.rinto();
+    pub(crate) fn seconds_ranged(self, seconds: t::SpanSeconds) -> Span {
         let mut span = Span { seconds: seconds.abs(), ..self };
         span.sign = self.resign(seconds, &span);
         span.units = span.units.set(Unit::Second, seconds == C(0));
@@ -2554,11 +2538,7 @@ impl Span {
     }
 
     #[inline]
-    fn milliseconds_ranged(
-        self,
-        milliseconds: impl RInto<t::SpanMilliseconds>,
-    ) -> Span {
-        let milliseconds = milliseconds.rinto();
+    fn milliseconds_ranged(self, milliseconds: t::SpanMilliseconds) -> Span {
         let mut span = Span { milliseconds: milliseconds.abs(), ..self };
         span.sign = self.resign(milliseconds, &span);
         span.units = span.units.set(Unit::Millisecond, milliseconds == C(0));
@@ -2566,11 +2546,7 @@ impl Span {
     }
 
     #[inline]
-    fn microseconds_ranged(
-        self,
-        microseconds: impl RInto<t::SpanMicroseconds>,
-    ) -> Span {
-        let microseconds = microseconds.rinto();
+    fn microseconds_ranged(self, microseconds: t::SpanMicroseconds) -> Span {
         let mut span = Span { microseconds: microseconds.abs(), ..self };
         span.sign = self.resign(microseconds, &span);
         span.units = span.units.set(Unit::Microsecond, microseconds == C(0));
@@ -2580,40 +2556,12 @@ impl Span {
     #[inline]
     pub(crate) fn nanoseconds_ranged(
         self,
-        nanoseconds: impl RInto<t::SpanNanoseconds>,
+        nanoseconds: t::SpanNanoseconds,
     ) -> Span {
-        let nanoseconds = nanoseconds.rinto();
         let mut span = Span { nanoseconds: nanoseconds.abs(), ..self };
         span.sign = self.resign(nanoseconds, &span);
         span.units = span.units.set(Unit::Nanosecond, nanoseconds == C(0));
         span
-    }
-
-    #[inline]
-    fn try_years_ranged(
-        self,
-        years: impl TryRInto<t::SpanYears>,
-    ) -> Result<Span, Error> {
-        let years = years.try_rinto("years")?;
-        Ok(self.years_ranged(years))
-    }
-
-    #[inline]
-    fn try_months_ranged(
-        self,
-        months: impl TryRInto<t::SpanMonths>,
-    ) -> Result<Span, Error> {
-        let months = months.try_rinto("months")?;
-        Ok(self.months_ranged(months))
-    }
-
-    #[inline]
-    fn try_weeks_ranged(
-        self,
-        weeks: impl TryRInto<t::SpanWeeks>,
-    ) -> Result<Span, Error> {
-        let weeks = weeks.try_rinto("weeks")?;
-        Ok(self.weeks_ranged(weeks))
     }
 
     #[inline]
@@ -2683,21 +2631,26 @@ impl Span {
     pub(crate) fn try_units_ranged(
         self,
         unit: Unit,
-        value: impl RInto<NoUnits>,
+        value: NoUnits,
     ) -> Result<Span, Error> {
-        let value = value.rinto();
-        match unit {
-            Unit::Year => self.try_years_ranged(value),
-            Unit::Month => self.try_months_ranged(value),
-            Unit::Week => self.try_weeks_ranged(value),
-            Unit::Day => self.try_days_ranged(value),
-            Unit::Hour => self.try_hours_ranged(value),
-            Unit::Minute => self.try_minutes_ranged(value),
-            Unit::Second => self.try_seconds_ranged(value),
-            Unit::Millisecond => self.try_milliseconds_ranged(value),
-            Unit::Microsecond => self.try_microseconds_ranged(value),
-            Unit::Nanosecond => self.try_nanoseconds_ranged(value),
-        }
+        Ok(match unit {
+            Unit::Year => self.years_ranged(value.try_rinto("years")?),
+            Unit::Month => self.months_ranged(value.try_rinto("months")?),
+            Unit::Week => self.weeks_ranged(value.try_rinto("weeks")?),
+            Unit::Day => self.days_ranged(value.try_rinto("days")?),
+            Unit::Hour => self.hours_ranged(value.try_rinto("hours")?),
+            Unit::Minute => self.minutes_ranged(value.try_rinto("minutes")?),
+            Unit::Second => self.seconds_ranged(value.try_rinto("seconds")?),
+            Unit::Millisecond => {
+                self.milliseconds_ranged(value.try_rinto("milliseconds")?)
+            }
+            Unit::Microsecond => {
+                self.microseconds_ranged(value.try_rinto("microseconds")?)
+            }
+            Unit::Nanosecond => {
+                self.nanoseconds_ranged(value.try_rinto("nanoseconds")?)
+            }
+        })
     }
 
     #[inline]
@@ -2788,9 +2741,8 @@ impl Span {
     /// `largest` unit bigger than `Unit::Hour`.
     pub(crate) fn from_invariant_nanoseconds(
         largest: Unit,
-        nanos: impl RInto<NoUnits128>,
+        nanos: NoUnits128,
     ) -> Result<Span, Error> {
-        let nanos = nanos.rinto();
         let mut span = Span::new();
         match largest {
             Unit::Week => {
@@ -2820,7 +2772,7 @@ impl Span {
                 let weeks = days.div_ceil(t::DAYS_PER_CIVIL_WEEK);
                 span = span
                     .try_days_ranged(days.rem_ceil(t::DAYS_PER_CIVIL_WEEK))?;
-                span = span.try_weeks_ranged(weeks)?;
+                span = span.weeks_ranged(weeks.try_rinto("weeks")?);
                 Ok(span)
             }
             Unit::Year | Unit::Month | Unit::Day => {
@@ -3076,31 +3028,31 @@ impl Span {
         let mut span = self;
         // Unit::Nanosecond is the minimum, so nothing can be smaller than it.
         if unit <= Unit::Microsecond {
-            span = span.microseconds_ranged(C(0));
+            span = span.microseconds_ranged(C(0).rinto());
         }
         if unit <= Unit::Millisecond {
-            span = span.milliseconds_ranged(C(0));
+            span = span.milliseconds_ranged(C(0).rinto());
         }
         if unit <= Unit::Second {
-            span = span.seconds_ranged(C(0));
+            span = span.seconds_ranged(C(0).rinto());
         }
         if unit <= Unit::Minute {
-            span = span.minutes_ranged(C(0));
+            span = span.minutes_ranged(C(0).rinto());
         }
         if unit <= Unit::Hour {
-            span = span.hours_ranged(C(0));
+            span = span.hours_ranged(C(0).rinto());
         }
         if unit <= Unit::Day {
-            span = span.days_ranged(C(0));
+            span = span.days_ranged(C(0).rinto());
         }
         if unit <= Unit::Week {
-            span = span.weeks_ranged(C(0));
+            span = span.weeks_ranged(C(0).rinto());
         }
         if unit <= Unit::Month {
-            span = span.months_ranged(C(0));
+            span = span.months_ranged(C(0).rinto());
         }
         if unit <= Unit::Year {
-            span = span.years_ranged(C(0));
+            span = span.years_ranged(C(0).rinto());
         }
         span
     }
@@ -3111,31 +3063,31 @@ impl Span {
     pub(crate) fn without_lower(self, unit: Unit) -> Span {
         let mut span = self;
         if unit > Unit::Nanosecond {
-            span = span.nanoseconds_ranged(C(0));
+            span = span.nanoseconds_ranged(C(0).rinto());
         }
         if unit > Unit::Microsecond {
-            span = span.microseconds_ranged(C(0));
+            span = span.microseconds_ranged(C(0).rinto());
         }
         if unit > Unit::Millisecond {
-            span = span.milliseconds_ranged(C(0));
+            span = span.milliseconds_ranged(C(0).rinto());
         }
         if unit > Unit::Second {
-            span = span.seconds_ranged(C(0));
+            span = span.seconds_ranged(C(0).rinto());
         }
         if unit > Unit::Minute {
-            span = span.minutes_ranged(C(0));
+            span = span.minutes_ranged(C(0).rinto());
         }
         if unit > Unit::Hour {
-            span = span.hours_ranged(C(0));
+            span = span.hours_ranged(C(0).rinto());
         }
         if unit > Unit::Day {
-            span = span.days_ranged(C(0));
+            span = span.days_ranged(C(0).rinto());
         }
         if unit > Unit::Week {
-            span = span.weeks_ranged(C(0));
+            span = span.weeks_ranged(C(0).rinto());
         }
         if unit > Unit::Month {
-            span = span.months_ranged(C(0));
+            span = span.months_ranged(C(0).rinto());
         }
         // Unit::Year is the max, so nothing can be bigger than it.
         span
@@ -3231,35 +3183,37 @@ impl Span {
     /// new units, this determines the what the sign of `new` should be.
     #[inline]
     fn resign(&self, units: impl RInto<NoUnits>, new: &Span) -> Sign {
-        let units = units.rinto();
-        // Negative units anywhere always makes the entire span negative.
-        if units < C(0) {
-            return Sign::N::<-1>();
+        fn imp(span: &Span, units: NoUnits, new: &Span) -> Sign {
+            // Negative units anywhere always makes the entire span negative.
+            if units < C(0) {
+                return Sign::N::<-1>();
+            }
+            let mut new_is_zero = new.sign == C(0) && units == C(0);
+            // When `units == 0` and it was previously non-zero, then
+            // `new.sign` won't be `0` and thus `new_is_zero` will be false
+            // when it should be true. So in this case, we need to re-check all
+            // the units to set the sign correctly.
+            if units == C(0) {
+                new_is_zero = new.years == C(0)
+                    && new.months == C(0)
+                    && new.weeks == C(0)
+                    && new.days == C(0)
+                    && new.hours == C(0)
+                    && new.minutes == C(0)
+                    && new.seconds == C(0)
+                    && new.milliseconds == C(0)
+                    && new.microseconds == C(0)
+                    && new.nanoseconds == C(0);
+            }
+            match (span.is_zero(), new_is_zero) {
+                (_, true) => Sign::N::<0>(),
+                (true, false) => units.signum().rinto(),
+                // If the old and new span are both non-zero, and we know our new
+                // units are not negative, then the sign remains unchanged.
+                (false, false) => new.sign,
+            }
         }
-        let mut new_is_zero = new.sign == C(0) && units == C(0);
-        // When `units == 0` and it was previously non-zero, then `new.sign`
-        // won't be `0` and thus `new_is_zero` will be false when it should
-        // be true. So in this case, we need to re-check all the units to set
-        // the sign correctly.
-        if units == C(0) {
-            new_is_zero = new.years == C(0)
-                && new.months == C(0)
-                && new.weeks == C(0)
-                && new.days == C(0)
-                && new.hours == C(0)
-                && new.minutes == C(0)
-                && new.seconds == C(0)
-                && new.milliseconds == C(0)
-                && new.microseconds == C(0)
-                && new.nanoseconds == C(0);
-        }
-        match (self.is_zero(), new_is_zero) {
-            (_, true) => Sign::N::<0>(),
-            (true, false) => units.signum().rinto(),
-            // If the old and new span are both non-zero, and we know our new
-            // units are not negative, then the sign remains unchanged.
-            (false, false) => new.sign,
-        }
+        imp(self, units.rinto(), new)
     }
 }
 
@@ -6479,7 +6433,7 @@ impl Nudge {
             * balanced.get_units_ranged(smallest).div_ceil(increment);
         let span = balanced
             .without_lower(smallest)
-            .try_units_ranged(smallest, truncated)
+            .try_units_ranged(smallest, truncated.rinto())
             .with_context(|| {
                 err!(
                     "failed to set {unit} to {truncated} on span {balanced}",
@@ -6506,8 +6460,9 @@ impl Nudge {
         let grew_big_unit =
             ((rounded.get() as f64) - exact).signum() == (sign.get() as f64);
 
-        let span =
-            span.try_units_ranged(smallest, rounded).with_context(|| {
+        let span = span
+            .try_units_ranged(smallest, rounded.rinto())
+            .with_context(|| {
                 err!(
                     "failed to set {unit} to {truncated} on span {span}",
                     unit = smallest.singular()

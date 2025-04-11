@@ -704,7 +704,8 @@ impl RuleOnP {
             RuleOnP::Day { day } => Date::new_ranged(year, month, day),
             RuleOnP::Last { weekday } => {
                 // Always a valid month given that year/month are valid.
-                let date = Date::new_ranged(year, month, C(1)).unwrap();
+                let date =
+                    Date::new_ranged(year, month, C(1).rinto()).unwrap();
                 date.nth_weekday_of_month(-1, weekday)
             }
             RuleOnP::OnOrBefore { weekday, day } => {
@@ -1268,7 +1269,7 @@ fn parse_span(span: &str) -> Result<Span, Error> {
     let minutes_ranged = t::Minute::new(minutes).ok_or_else(|| {
         err!("duration minutes '{minutes:?}' is out of range")
     })?;
-    span = span.minutes_ranged(minutes_ranged * sign);
+    span = span.minutes_ranged((minutes_ranged * sign).rinto());
     if rest.is_empty() {
         return Ok(span);
     }
@@ -1290,7 +1291,7 @@ fn parse_span(span: &str) -> Result<Span, Error> {
     let seconds_ranged = t::Second::new(seconds).ok_or_else(|| {
         err!("duration seconds '{seconds:?}' is out of range")
     })?;
-    span = span.seconds_ranged(seconds_ranged * sign);
+    span = span.seconds_ranged((seconds_ranged * sign).rinto());
     if rest.is_empty() {
         return Ok(span);
     }
@@ -1317,7 +1318,7 @@ fn parse_span(span: &str) -> Result<Span, Error> {
         .ok_or_else(|| {
             err!("duration nanoseconds '{nanoseconds:?}' is out of range")
         })?;
-    span = span.nanoseconds_ranged(nanoseconds_ranged * sign);
+    span = span.nanoseconds_ranged((nanoseconds_ranged * sign).rinto());
 
     // We should have consumed everything at this point.
     if !rest.is_empty() {

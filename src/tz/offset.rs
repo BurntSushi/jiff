@@ -820,8 +820,8 @@ impl Offset {
     /// ```
     #[inline]
     pub fn until(self, other: Offset) -> Span {
-        Span::new()
-            .seconds_ranged(other.seconds_ranged() - self.seconds_ranged())
+        let diff = other.seconds_ranged() - self.seconds_ranged();
+        Span::new().seconds_ranged(diff.rinto())
     }
 
     /// Returns the span of time since the other offset given from this offset.

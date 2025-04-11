@@ -4038,12 +4038,15 @@ impl<'a> ZonedDifference<'a> {
         dt2 = mid;
 
         let date_span = dt1.date().until((largest, dt2.date()))?;
-        Ok(Span::from_invariant_nanoseconds(Unit::Hour, remainder_nano)
-            .expect("difference between time always fits in span")
-            .years_ranged(date_span.get_years_ranged())
-            .months_ranged(date_span.get_months_ranged())
-            .weeks_ranged(date_span.get_weeks_ranged())
-            .days_ranged(date_span.get_days_ranged()))
+        Ok(Span::from_invariant_nanoseconds(
+            Unit::Hour,
+            remainder_nano.rinto(),
+        )
+        .expect("difference between time always fits in span")
+        .years_ranged(date_span.get_years_ranged())
+        .months_ranged(date_span.get_months_ranged())
+        .weeks_ranged(date_span.get_weeks_ranged())
+        .days_ranged(date_span.get_days_ranged()))
     }
 }
 
@@ -4282,7 +4285,7 @@ impl ZonedRound {
             err!("failed to find start of day for {zdt}")
         })?;
         let end = start
-            .checked_add(Span::new().days_ranged(C(1)))
+            .checked_add(Span::new().days_ranged(C(1).rinto()))
             .with_context(|| {
                 err!("failed to add 1 day to {start} to find length of day")
             })?;

@@ -2590,8 +2590,9 @@ impl TimeDifference {
         }
         let start = t1.to_nanosecond();
         let end = t2.to_nanosecond();
-        let span = Span::from_invariant_nanoseconds(largest, end - start)
-            .expect("difference in civil times is always in bounds");
+        let span =
+            Span::from_invariant_nanoseconds(largest, (end - start).rinto())
+                .expect("difference in civil times is always in bounds");
         Ok(span)
     }
 }
