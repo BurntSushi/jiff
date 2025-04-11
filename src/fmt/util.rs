@@ -318,7 +318,7 @@ impl Fractional {
 /// misnomer, but the range of possible values is still correct. (That is, the
 /// fractional component of an hour is still limited to 9 decimal places per
 /// the Temporal spec.)
-#[inline(always)]
+#[cfg_attr(feature = "perf-inline", inline(always))]
 pub(crate) fn parse_temporal_fraction<'i>(
     input: &'i [u8],
 ) -> Result<Parsed<'i, Option<t::SubsecNanosecond>>, Error> {

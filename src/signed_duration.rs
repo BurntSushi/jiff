@@ -2490,7 +2490,7 @@ impl From<(Unit, i64)> for SignedDurationRound {
 /// in order to ensure good error messages.
 ///
 /// (We do the same thing for `Span`.)
-#[inline(always)]
+#[cfg_attr(feature = "perf-inline", inline(always))]
 fn parse_iso_or_friendly(bytes: &[u8]) -> Result<SignedDuration, Error> {
     if bytes.is_empty() {
         return Err(err!(

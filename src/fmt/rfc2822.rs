@@ -360,7 +360,7 @@ impl DateTimeParser {
     ///
     /// Note that this doesn't check that the input has been completely
     /// consumed.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_zoned_internal<'i>(
         &self,
         input: &'i [u8],
@@ -378,7 +378,7 @@ impl DateTimeParser {
     ///
     /// Note that this doesn't check that the input has been completely
     /// consumed.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_timestamp_internal<'i>(
         &self,
         input: &'i [u8],
@@ -395,7 +395,7 @@ impl DateTimeParser {
     /// datetime and its offset.
     ///
     /// This also consumes any trailing (superfluous) whitespace.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_datetime_offset<'i>(
         &self,
         input: &'i [u8],
@@ -419,7 +419,7 @@ impl DateTimeParser {
     /// one whitespace character.
     ///
     /// This basically parses everything except for the zone.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_datetime<'i>(
         &self,
         input: &'i [u8],
@@ -491,7 +491,7 @@ impl DateTimeParser {
     ///
     /// If a weekday is parsed, then this also skips any trailing whitespace
     /// (and requires at least one whitespace character).
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_weekday<'i>(
         &self,
         input: &'i [u8],
@@ -563,7 +563,7 @@ impl DateTimeParser {
     ///
     /// This also parses at least one mandatory whitespace character after the
     /// day.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_day<'i>(
         &self,
         input: &'i [u8],
@@ -594,7 +594,7 @@ impl DateTimeParser {
     ///
     /// This also parses at least one mandatory whitespace character after the
     /// month name.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_month<'i>(
         &self,
         input: &'i [u8],
@@ -663,7 +663,7 @@ impl DateTimeParser {
     /// > ending up with a value between 2000 and 2049. If a two digit year is
     /// > encountered with a value between 50 and 99, or any three digit year
     /// > is encountered, the year is interpreted by adding 1900.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_year<'i>(
         &self,
         input: &'i [u8],
@@ -708,7 +708,7 @@ impl DateTimeParser {
     ///
     /// This parses a mandatory trailing `:`, advancing the input to
     /// immediately after it.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_hour<'i>(
         &self,
         input: &'i [u8],
@@ -729,7 +729,7 @@ impl DateTimeParser {
 
     /// Parses a 2-digit minute. This assumes the input begins with what should
     /// be an ASCII digit. (i.e., It doesn't trim leading whitespace.)
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_minute<'i>(
         &self,
         input: &'i [u8],
@@ -750,7 +750,7 @@ impl DateTimeParser {
 
     /// Parses a 2-digit second. This assumes the input begins with what should
     /// be an ASCII digit. (i.e., It doesn't trim leading whitespace.)
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_second<'i>(
         &self,
         input: &'i [u8],
@@ -776,7 +776,7 @@ impl DateTimeParser {
     ///
     /// This assumes the offset must begin at the beginning of `input`. That
     /// is, any leading whitespace should already have been trimmed.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_offset<'i>(
         &self,
         input: &'i [u8],
@@ -913,7 +913,7 @@ impl DateTimeParser {
 
     /// Parses a time separator. This returns an error if one couldn't be
     /// found.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_time_separator<'i>(
         &self,
         input: &'i [u8],
@@ -934,7 +934,7 @@ impl DateTimeParser {
 
     /// Parses at least one whitespace character. If no whitespace was found,
     /// then this returns an error.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_whitespace<'i>(
         &self,
         input: &'i [u8],
@@ -954,7 +954,7 @@ impl DateTimeParser {
     /// Skips over any ASCII whitespace at the beginning of `input`.
     ///
     /// This returns the input unchanged if it does not begin with whitespace.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn skip_whitespace<'i>(&self, mut input: &'i [u8]) -> Parsed<'i, ()> {
         while input.first().map_or(false, |&b| is_whitespace(b)) {
             input = &input[1..];

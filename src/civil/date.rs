@@ -2167,12 +2167,12 @@ impl Date {
         (end - start).rinto()
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn to_unix_epoch_day(self) -> UnixEpochDay {
         self.to_idate().map(|x| x.to_epoch_day().epoch_day).to_rint()
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn from_unix_epoch_day(epoch_day: UnixEpochDay) -> Date {
         let epoch_day = rangeint::composite!((epoch_day) => {
             IEpochDay { epoch_day }

@@ -2661,7 +2661,7 @@ impl Extension {
     /// Parses an optional directive flag from the beginning of `fmt`. This
     /// assumes `fmt` is not empty and guarantees that the return unconsumed
     /// slice is also non-empty.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_flag<'i>(
         fmt: &'i [u8],
     ) -> Result<(Option<Flag>, &'i [u8]), Error> {
@@ -2694,7 +2694,7 @@ impl Extension {
     /// and `%.f`. In the former case, the width is just re-interpreted as
     /// a precision setting. In the latter case, something like `%5.9f` is
     /// technically valid, but the `5` is ignored.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_width<'i>(
         fmt: &'i [u8],
     ) -> Result<(Option<u8>, &'i [u8]), Error> {

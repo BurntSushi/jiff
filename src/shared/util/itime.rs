@@ -46,7 +46,7 @@ impl ITimestamp {
     ///
     /// The offset should correspond to the number of seconds required to
     /// add to this timestamp to get the local time.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) const fn to_datetime(&self, offset: IOffset) -> IDateTime {
         let ITimestamp { mut second, mut nanosecond } = *self;
         second += offset.second as i64;
@@ -93,7 +93,7 @@ impl IDateTime {
     ///
     /// The offset should correspond to the number of seconds required to
     /// subtract from this datetime in order to get to UTC.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn to_timestamp(&self, offset: IOffset) -> ITimestamp {
         let epoch_day = self.date.to_epoch_day().epoch_day;
         let mut second = (epoch_day as i64) * 86_400
@@ -114,7 +114,7 @@ impl IDateTime {
     ///
     /// The offset should correspond to the number of seconds required to
     /// subtract from this datetime in order to get to UTC.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn to_timestamp_checked(
         &self,
         offset: IOffset,
@@ -126,7 +126,7 @@ impl IDateTime {
         Some(ts)
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn saturating_add_seconds(&self, seconds: i32) -> IDateTime {
         self.checked_add_seconds(seconds).unwrap_or_else(|_| {
             if seconds < 0 {
@@ -137,7 +137,7 @@ impl IDateTime {
         })
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn checked_add_seconds(
         &self,
         seconds: i32,
@@ -168,7 +168,7 @@ impl IEpochDay {
     /// This is Neri-Schneider. There's no branching or divisions.
     ///
     /// Ref: <https://github.com/cassioneri/eaf/blob/684d3cc32d14eee371d0abe4f683d6d6a49ed5c1/algorithms/neri_schneider.hpp#L40C3-L40C34>
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     #[allow(non_upper_case_globals, non_snake_case)] // to mimic source
     pub(crate) const fn to_date(&self) -> IDate {
         const s: u32 = 82;
@@ -200,7 +200,7 @@ impl IEpochDay {
     }
 
     /// Returns the day of the week for this epoch day.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) const fn weekday(&self) -> IWeekday {
         // Based on Hinnant's approach here, although we use ISO weekday
         // numbering by default. Basically, this works by using the knowledge
@@ -346,7 +346,7 @@ impl IDate {
     /// This is Neri-Schneider. There's no branching or divisions.
     ///
     /// Ref: https://github.com/cassioneri/eaf/blob/684d3cc32d14eee371d0abe4f683d6d6a49ed5c1/algorithms/neri_schneider.hpp#L83
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     #[allow(non_upper_case_globals, non_snake_case)] // to mimic source
     pub(crate) const fn to_epoch_day(&self) -> IEpochDay {
         const s: u32 = 82;
@@ -562,7 +562,7 @@ impl ITime {
         subsec_nanosecond: 999_999_999,
     };
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) const fn to_second(&self) -> ITimeSecond {
         let mut second: i32 = 0;
         second += (self.hour as i32) * 3600;
@@ -571,7 +571,7 @@ impl ITime {
         ITimeSecond { second }
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) const fn to_nanosecond(&self) -> ITimeNanosecond {
         let mut nanosecond: i64 = 0;
         nanosecond += (self.hour as i64) * 3_600_000_000_000;
@@ -589,7 +589,7 @@ pub(crate) struct ITimeSecond {
 }
 
 impl ITimeSecond {
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) const fn to_time(&self) -> ITime {
         let mut second = self.second;
         let mut time = ITime::ZERO;
@@ -612,7 +612,7 @@ pub(crate) struct ITimeNanosecond {
 }
 
 impl ITimeNanosecond {
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) const fn to_time(&self) -> ITime {
         let mut nanosecond = self.nanosecond;
         let mut time = ITime::ZERO;

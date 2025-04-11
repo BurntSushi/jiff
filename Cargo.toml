@@ -46,6 +46,7 @@ default = [
   "tzdb-bundle-platform",
   "tzdb-zoneinfo",
   "tzdb-concatenated",
+  "perf-inline",
 ]
 std = ["alloc", "log?/std", "serde?/std"]
 alloc = ["serde?/alloc", "portable-atomic-util/alloc"]
@@ -170,6 +171,11 @@ tzdb-concatenated = ["std"]
 #
 # (This is the same dependency setup that the `getrandom` crate uses.)
 js = ["dep:wasm-bindgen", "dep:js-sys"]
+
+# When enabled, more aggressive inline annotations are used. This can
+# improve performance in some cases, particularly around the areas of parsing
+# and formatting.
+perf-inline = []
 
 [dependencies]
 jiff-static = { version = "0.2", path = "crates/jiff-static", optional = true }

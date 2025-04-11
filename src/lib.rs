@@ -675,6 +675,15 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
   This takes a TZif file path, like `/usr/share/zoneinfo/Israel`, as input and
   returns a `TimeZone` value at compile time.
 
+### Performance features
+
+* **perf-inline** (enabled by default) -
+  When enabled, a number of `inline(always)` annotations are used inside of
+  Jiff to improve performance. This can especially impact formatting and
+  parsing of datetimes. If the extra performance isn't needed or if you want
+  to prioritize smaller binary sizes and shorter compilation times over
+  runtime performance, then it can be useful to disable this feature.
+
 [`jiff-static`]: https://docs.rs/jiff-static
 [`jiff-tzdb`]: https://docs.rs/jiff-tzdb
 [Concatenated Time Zone Database]: https://android.googlesource.com/platform/libcore/+/jb-mr2-release/luni/src/main/java/libcore/util/ZoneInfoDB.java

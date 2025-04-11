@@ -42,7 +42,7 @@ pub(super) struct ParsedDateTime<'i> {
 }
 
 impl<'i> ParsedDateTime<'i> {
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(super) fn to_pieces(&self) -> Result<Pieces<'i>, Error> {
         let mut pieces = Pieces::from(self.date.date);
         if let Some(ref time) = self.time {
@@ -57,7 +57,7 @@ impl<'i> ParsedDateTime<'i> {
         Ok(pieces)
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(super) fn to_zoned(
         &self,
         db: &TimeZoneDatabase,
@@ -68,7 +68,7 @@ impl<'i> ParsedDateTime<'i> {
             .disambiguate(disambiguation)
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(super) fn to_ambiguous_zoned(
         &self,
         db: &TimeZoneDatabase,
@@ -134,7 +134,7 @@ impl<'i> ParsedDateTime<'i> {
         )
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(super) fn to_timestamp(&self) -> Result<Timestamp, Error> {
         let time = self.time.as_ref().map(|p| p.time).ok_or_else(|| {
             err!(
@@ -161,7 +161,7 @@ impl<'i> ParsedDateTime<'i> {
         Ok(timestamp)
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(super) fn to_datetime(&self) -> Result<DateTime, Error> {
         if self.offset.as_ref().map_or(false, |o| o.is_zulu()) {
             return Err(err!(
@@ -173,7 +173,7 @@ impl<'i> ParsedDateTime<'i> {
         Ok(DateTime::from_parts(self.date.date, self.time()))
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(super) fn to_date(&self) -> Result<Date, Error> {
         if self.offset.as_ref().map_or(false, |o| o.is_zulu()) {
             return Err(err!(
@@ -185,7 +185,7 @@ impl<'i> ParsedDateTime<'i> {
         Ok(self.date.date)
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn time(&self) -> Time {
         self.time.as_ref().map(|p| p.time).unwrap_or(Time::midnight())
     }
@@ -315,7 +315,7 @@ impl DateTimeParser {
     // DateTime :::
     //   Date
     //   Date DateTimeSeparator TimeSpec DateTimeUTCOffset[opt]
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(super) fn parse_temporal_datetime<'i>(
         &self,
         input: &'i [u8],
@@ -373,7 +373,7 @@ impl DateTimeParser {
     //
     // TimeDesignator ::: one of
     //   T t
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(super) fn parse_temporal_time<'i>(
         &self,
         mut input: &'i [u8],
@@ -463,7 +463,7 @@ impl DateTimeParser {
         Ok(Parsed { value: time, input })
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(super) fn parse_time_zone<'i>(
         &self,
         mut input: &'i [u8],
@@ -554,7 +554,7 @@ impl DateTimeParser {
     // Date :::
     //   DateYear - DateMonth - DateDay
     //   DateYear DateMonth DateDay
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_date_spec<'i>(
         &self,
         input: &'i [u8],
@@ -604,7 +604,7 @@ impl DateTimeParser {
     //   TimeHour TimeMinute
     //   TimeHour : TimeMinute : TimeSecond TimeFraction[opt]
     //   TimeHour TimeMinute TimeSecond TimeFraction[opt]
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_time_spec<'i>(
         &self,
         input: &'i [u8],
@@ -698,7 +698,7 @@ impl DateTimeParser {
     //
     // NOTE: Jiff doesn't have a "month-day" type, but we still have a parsing
     // function for it so that we can detect ambiguous time strings.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_month_day<'i>(
         &self,
         input: &'i [u8],
@@ -741,7 +741,7 @@ impl DateTimeParser {
     //
     // NOTE: Jiff doesn't have a "year-month" type, but we still have a parsing
     // function for it so that we can detect ambiguous time strings.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_year_month<'i>(
         &self,
         input: &'i [u8],
@@ -787,7 +787,7 @@ impl DateTimeParser {
     // sticking with the Temporal spec. But I may loosen this in the future. We
     // should be careful not to introduce any possible ambiguities, though, I
     // don't think there are any?
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_year<'i>(
         &self,
         input: &'i [u8],
@@ -839,7 +839,7 @@ impl DateTimeParser {
     //   10
     //   11
     //   12
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_month<'i>(
         &self,
         input: &'i [u8],
@@ -864,7 +864,7 @@ impl DateTimeParser {
     //   2 DecimalDigit
     //   30
     //   31
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_day<'i>(
         &self,
         input: &'i [u8],
@@ -892,7 +892,7 @@ impl DateTimeParser {
     //   21
     //   22
     //   23
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_hour<'i>(
         &self,
         input: &'i [u8],
@@ -921,7 +921,7 @@ impl DateTimeParser {
     //   3 DecimalDigit
     //   4 DecimalDigit
     //   5 DecimalDigit
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_minute<'i>(
         &self,
         input: &'i [u8],
@@ -951,7 +951,7 @@ impl DateTimeParser {
     //   3 DecimalDigit
     //   4 DecimalDigit
     //   5 DecimalDigit
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_second<'i>(
         &self,
         input: &'i [u8],
@@ -975,7 +975,7 @@ impl DateTimeParser {
         Ok(Parsed { value: second, input })
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_offset<'i>(
         &self,
         input: &'i [u8],
@@ -985,7 +985,7 @@ impl DateTimeParser {
         P.parse_optional(input)
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_annotations<'i>(
         &self,
         input: &'i [u8],
@@ -1003,7 +1003,7 @@ impl DateTimeParser {
     ///
     /// When in extended mode, a `-` is expected. When not in extended mode,
     /// no input is consumed and this routine never fails.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_date_separator<'i>(
         &self,
         mut input: &'i [u8],
@@ -1045,7 +1045,7 @@ impl DateTimeParser {
     ///
     /// When in basic mode (not extended), then a subsequent component is only
     /// expected when `input` begins with two ASCII digits.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_time_separator<'i>(
         &self,
         mut input: &'i [u8],
@@ -1075,7 +1075,7 @@ impl DateTimeParser {
     // require it?[1]
     //
     // [1]: https://github.com/tc39/proposal-temporal/issues/2843
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_year_sign<'i>(
         &self,
         mut input: &'i [u8],
@@ -1110,7 +1110,7 @@ impl SpanParser {
         SpanParser { _priv: () }
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(super) fn parse_temporal_duration<'i>(
         &self,
         input: &'i [u8],
@@ -1121,7 +1121,7 @@ impl SpanParser {
         )
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(super) fn parse_signed_duration<'i>(
         &self,
         input: &'i [u8],
@@ -1132,7 +1132,7 @@ impl SpanParser {
         )
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_span<'i>(
         &self,
         input: &'i [u8],
@@ -1169,7 +1169,7 @@ impl SpanParser {
         Ok(Parsed { value: span, input })
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_duration<'i>(
         &self,
         input: &'i [u8],
@@ -1196,7 +1196,7 @@ impl SpanParser {
     /// If 1 or more units were found, then `true` is also returned. Otherwise,
     /// `false` indicates that no units were parsed. (Which the caller may want
     /// to treat as an error.)
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_date_units<'i>(
         &self,
         mut input: &'i [u8],
@@ -1243,7 +1243,7 @@ impl SpanParser {
     /// If 1 or more units were found, then `true` is also returned. Otherwise,
     /// `false` indicates that no units were parsed. (Which the caller may want
     /// to treat as an error.)
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_time_units<'i>(
         &self,
         mut input: &'i [u8],
@@ -1321,7 +1321,7 @@ impl SpanParser {
     /// a Jiff signed duration.
     ///
     /// If no time units are found, then this returns an error.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_time_units_duration<'i>(
         &self,
         mut input: &'i [u8],
@@ -1432,7 +1432,7 @@ impl SpanParser {
         Ok(Parsed { value: dur, input })
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_unit_value<'i>(
         &self,
         mut input: &'i [u8],
@@ -1461,7 +1461,7 @@ impl SpanParser {
         Ok(Parsed { value: Some(value), input })
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_unit_date_designator<'i>(
         &self,
         input: &'i [u8],
@@ -1488,7 +1488,7 @@ impl SpanParser {
         Ok(Parsed { value: unit, input: &input[1..] })
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_unit_time_designator<'i>(
         &self,
         input: &'i [u8],
@@ -1516,7 +1516,7 @@ impl SpanParser {
 
     // DurationDesignator ::: one of
     //   P p
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_duration_designator<'i>(
         &self,
         input: &'i [u8],
@@ -1539,7 +1539,7 @@ impl SpanParser {
 
     // TimeDesignator ::: one of
     //   T t
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_time_designator<'i>(&self, input: &'i [u8]) -> Parsed<'i, bool> {
         if input.is_empty() || !matches!(input[0], b'T' | b't') {
             return Parsed { value: false, input };
@@ -1553,7 +1553,7 @@ impl SpanParser {
     //
     // NOTE: Like with other things with signs, we don't support the Unicode
     // <MINUS> sign. Just ASCII.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_sign<'i>(&self, input: &'i [u8]) -> Parsed<'i, t::Sign> {
         let Some(sign) = input.get(0).copied() else {
             return Parsed { value: t::Sign::N::<1>(), input };
