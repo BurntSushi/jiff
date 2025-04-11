@@ -1,8 +1,6 @@
-/Cargo.lock
-/examples/**/Cargo.lock
-/target
-/examples/**/target
 /tmp
+Cargo.lock
+target
 /ecma-test262
 /BREADCRUMBS
 # Criterion seems to vomit this out to CWD. wat.

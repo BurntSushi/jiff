@@ -346,16 +346,26 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
-    - name: Build sqlx-postgres example
-      run: cargo build --manifest-path ./examples/sqlx-postgres/Cargo.toml
-    - name: Run sqlx-sqlite example
-      run: cargo run --manifest-path ./examples/sqlx-sqlite/Cargo.toml
-    - name: Build diesel-mysql example
-      run: cargo build --manifest-path ./examples/diesel-mysql/Cargo.toml
-    - name: Build diesel-postgres example
-      run: cargo build --manifest-path ./examples/diesel-postgres/Cargo.toml
-    - name: Run diesel-sqlite example
-      run: cargo build --manifest-path ./examples/diesel-sqlite/Cargo.toml
+    - name: Build all examples
+      run: ./scripts/test-examples
+
+  # This job builds and runs tests for Jiff's "integration" crates. That is,
+  # the crates that provide wrappers or traits for integrating with other
+  # crates in the ecosystem. For example, `jiff-diesel`.
+  #
+  # These are outside the workspace because their dependency graphs are
+  # absolutely ludicrous.
+  integrations:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+    - name: Build all examples
+      run: ./scripts/test-integrations
 
   # Generic testing for most cross targets. Some get special treatment in
   # other jobs.

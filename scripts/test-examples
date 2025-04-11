@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# This script tests that every example builds.
+#
+# This isn't done as part of, e.g., `cargo build --all`, because we split the
+# examples out of the main workspace to keep dependency trees smaller.
+
+set -e
+
+# cd to the directory containing this crate's Cargo.toml so that we don't need
+# to pass --manifest-path to every `cargo` command.
+cd "$(dirname "$0")/.."
+
+for d in ./examples/*; do
+  echo "===== BUILDING EXAMPLE: $d ====="
+  cargo build --manifest-path "$d/Cargo.toml"
+done
