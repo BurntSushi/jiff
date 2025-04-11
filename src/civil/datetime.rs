@@ -3261,7 +3261,7 @@ impl DateTimeDifference {
                 t::SpanNanoseconds::rfrom(t::NANOS_PER_CIVIL_DAY) * sign;
         }
         let date_span = d1.until((largest, d2))?;
-        Ok(Span::from_invariant_nanoseconds(largest, time_diff)
+        Ok(Span::from_invariant_nanoseconds(largest, time_diff.rinto())
             // Unlike in the <=Unit::Day case, this always succeeds because
             // every unit except for nanoseconds (which is not used here) can
             // represent all possible spans of time between any two civil

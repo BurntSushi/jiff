@@ -834,7 +834,7 @@ impl quickcheck::Arbitrary for ISOWeekDate {
 /// with 52 weeks.
 fn is_long_year(year: ISOYear) -> bool {
     // Inspired by: https://en.wikipedia.org/wiki/ISO_week_date#Weeks_per_year
-    let last = Date::new_ranged(year, C(12), C(31))
+    let last = Date::new_ranged(year.rinto(), C(12).rinto(), C(31).rinto())
         .expect("last day of year is always valid");
     let weekday = last.weekday();
     weekday == Weekday::Thursday

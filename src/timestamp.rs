@@ -2254,10 +2254,9 @@ impl Timestamp {
 impl Timestamp {
     #[inline]
     pub(crate) fn new_ranged(
-        second: impl RInto<UnixSeconds>,
-        nanosecond: impl RInto<FractionalNanosecond>,
+        second: UnixSeconds,
+        nanosecond: FractionalNanosecond,
     ) -> Result<Timestamp, Error> {
-        let (second, nanosecond) = (second.rinto(), nanosecond.rinto());
         if second == UnixSeconds::MIN_SELF && nanosecond < C(0) {
             return Err(Error::range(
                 "seconds and nanoseconds",

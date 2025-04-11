@@ -1133,13 +1133,15 @@ impl Date {
         let year = t::NoUnits32::rfrom(self.year_ranged());
         let week_start = t::NoUnits32::vary([days, year], |[days, year]| {
             let mut week_start =
-                t::NoUnits32::rfrom(iso_week_start_from_year(year));
+                t::NoUnits32::rfrom(iso_week_start_from_year(year.rinto()));
             if days < week_start {
-                week_start =
-                    t::NoUnits32::rfrom(iso_week_start_from_year(year - C(1)));
+                week_start = t::NoUnits32::rfrom(iso_week_start_from_year(
+                    (year - C(1)).rinto(),
+                ));
             } else {
-                let next_year_week_start =
-                    t::NoUnits32::rfrom(iso_week_start_from_year(year + C(1)));
+                let next_year_week_start = t::NoUnits32::rfrom(
+                    iso_week_start_from_year((year + C(1)).rinto()),
+                );
                 if days >= next_year_week_start {
                     week_start = next_year_week_start;
                 }
@@ -2105,11 +2107,10 @@ impl Date {
 impl Date {
     #[inline]
     pub(crate) fn new_ranged(
-        year: impl RInto<Year>,
-        month: impl RInto<Month>,
-        day: impl RInto<Day>,
+        year: Year,
+        month: Month,
+        day: Day,
     ) -> Result<Date, Error> {
-        let (year, month, day) = (year.rinto(), month.rinto(), day.rinto());
         if day > C(28) {
             let max_day = days_in_month(year, month);
             if day > max_day {
@@ -2129,11 +2130,7 @@ impl Date {
     }
 
     #[inline]
-    fn constrain_ranged(
-        year: impl RInto<Year>,
-        month: impl RInto<Month>,
-        day: impl RInto<Day>,
-    ) -> Date {
+    fn constrain_ranged(year: Year, month: Month, day: Day) -> Date {
         let (year, month, mut day) =
             (year.rinto(), month.rinto(), day.rinto());
         day = saturate_day_in_month(year, month, day);
@@ -3597,13 +3594,13 @@ enum DateWithDay {
 /// week year given.
 ///
 /// Ref: http://howardhinnant.github.io/date_algorithms.html
-fn iso_week_start_from_year(year: impl RInto<t::ISOYear>) -> UnixEpochDay {
-    let year = year.rinto();
+fn iso_week_start_from_year(year: t::ISOYear) -> UnixEpochDay {
     // A week's year always corresponds to the Gregorian year in which the
     // Thursday of that week falls. Therefore, Jan 4 is *always* in the first
     // week of any ISO week year.
-    let date_in_first_week = Date::new_ranged(year, C(1), C(4))
-        .expect("Jan 4 is valid for all valid years");
+    let date_in_first_week =
+        Date::new_ranged(year.rinto(), C(1).rinto(), C(4).rinto())
+            .expect("Jan 4 is valid for all valid years");
     // The start of the first week is a Monday, so find the number of days
     // since Monday from a date that we know is in the first ISO week of
     // `year`.
@@ -3617,14 +3614,10 @@ fn iso_week_start_from_year(year: impl RInto<t::ISOYear>) -> UnixEpochDay {
 /// If month overflows in either direction, then the `year` returned is
 /// adjusted as appropriate.
 fn month_add_one(
-    year: impl RInto<Year>,
-    month: impl RInto<Month>,
-    sign: impl RInto<Sign>,
+    mut year: Year,
+    mut month: Month,
+    delta: Sign,
 ) -> Result<(Year, Month), Error> {
-    let mut year = year.rinto();
-    let mut month = month.rinto();
-    let delta = sign.rinto();
-
     month += delta;
     if month < C(1) {
         year -= C(1);
@@ -3645,11 +3638,10 @@ fn month_add_one(
 /// example, adding 14 months to the month `3` (March) will result in returning
 /// the month `5` (May) with `1` year of overflow.
 fn month_add_overflowing(
-    month: impl RInto<t::Month>,
-    span: impl RInto<t::SpanMonths>,
+    month: t::Month,
+    span: t::SpanMonths,
 ) -> (t::Month, t::SpanYears) {
-    let month = t::SpanMonths::rfrom(month.rinto());
-    let span = span.rinto();
+    let month = t::SpanMonths::rfrom(month);
     let total = month - C(1) + span;
     let years = total / C(12);
     let month = (total % C(12)) + C(1);
