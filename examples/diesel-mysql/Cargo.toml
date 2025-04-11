@@ -4,9 +4,9 @@ name = "diesel-mysql-test"
 version = "0.0.1"
 edition = "2021"
 
-# This example has very fat dependencies. And running it requires a PostgreSQL
-# dataabase connection. This makes it so this example won't get compiled or run
-# with `cargo test --all`.
+# Examples in Jiff are explicitly isolated from the workspace to avoid
+# dev-dependencies accumulating. (Not all examples have big dependency trees,
+# but we still exclude them from the workspace as a general rule.)
 [workspace]
 
 [dependencies]

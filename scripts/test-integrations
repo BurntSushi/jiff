@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# This script tests "integration" crates explicitly.
+#
+# This isn't done as part of, e.g., `cargo build --all`, because we split these
+# specific crates out of the main workspace to keep dependency trees smaller.
+
+set -e
+
+# cd to the directory containing this crate's Cargo.toml so that we don't need
+# to pass --manifest-path to every `cargo` command.
+cd "$(dirname "$0")/.."
+
+integrations=(
+  "jiff-diesel mysql"
+  "jiff-diesel postgres"
+  "jiff-icu std"
+  "jiff-sqlx postgres"
+  # This is just utter nonsense, but
+  # sqlx-sqlite does not compile in it
+  # default feature configuration. This
+  # is utterly asinine. And it's completely
+  # undocumented. I had to go trawling through
+  # the top-level sqlx Cargo.toml to figure
+  # out which feature to enable.
+  "jiff-sqlx sqlite,sqlx-sqlite/bundled"
+)
+for v in "${integrations[@]}"; do
+  crate="$(echo $v | awk '{print $1}')"
+  feature="$(echo $v | awk '{print $2}')"
+  echo "===== TESTING INTEGRATION CRATE: $crate[$feature] ====="
+  cargo test \
+    --no-default-features \
+    --features "$feature" \
+    --manifest-path "crates/$crate/Cargo.toml"
+done
+
+# Same as above, but with `--lib` only. This is useful when we don't expect
+# doctests to pass for certain feature combinations.
+integrations=(
+  "jiff-icu alloc"
+)
+for v in "${integrations[@]}"; do
+  crate="$(echo $v | awk '{print $1}')"
+  feature="$(echo $v | awk '{print $2}')"
+  echo "===== TESTING INTEGRATION CRATE (--lib only): $crate[$feature] ====="
+  cargo test \
+    --lib \
+    --no-default-features \
+    --features "$feature" \
+    --manifest-path "crates/$crate/Cargo.toml"
+done

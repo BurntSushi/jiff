@@ -1,7 +1,5 @@
-/Cargo.lock
-/examples/**/Cargo.lock
-/target
-/examples/**/target
+Cargo.lock
+target
 /tmp
 /ecma-test262
 /BREADCRUMBS
