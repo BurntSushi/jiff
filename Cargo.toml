@@ -31,20 +31,9 @@ include = [
 [workspace]
 members = [
   "crates/jiff-cli",
-  "crates/jiff-diesel",
-  "crates/jiff-icu",
-  "crates/jiff-sqlx",
   "crates/jiff-static",
   "crates/jiff-tzdb",
   "crates/jiff-tzdb-platform",
-  "examples/*",
-]
-exclude = [
-  "examples/diesel-mysql",
-  "examples/diesel-postgres",
-  "examples/diesel-sqlite",
-  "examples/sqlx-postgres",
-  "examples/sqlx-sqlite",
 ]
 
 # Features are documented in the "Crate features" section of the crate docs:
@@ -236,17 +225,10 @@ chrono = { version = "0.4.38", features = ["serde"] }
 chrono-tz = "0.10.0"
 clap = { version = "4.5.23", features = ["derive"] }
 humantime = "2.1.0"
-# This adds approximately 50 new compilation units when running `cargo test`
-# locally on Unix. Blech.
-icu = { version = "1.5.0", features = ["std"] }
 insta = "1.39.0"
 # We force `serde` to be enabled in dev mode so that the docs render and test
 # correctly. We also enable `static` so that we can test our proc macros.
 jiff = { path = "./", default-features = false, features = ["serde", "static"] }
-# Uncomment if you want to remove `ignore` from `jiff_icu` tests in
-# `COMPARE.md`. Otherwise, this creates a circular dependency and causes
-# `jiff-icu` to get re-compiled all the time.
-# jiff-icu = { path = "./crates/jiff-icu" }
 quickcheck = { version = "1.0.3", default-features = false }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
@@ -255,6 +237,12 @@ tabwriter = "1.4.0"
 time = { version = "0.3.36", features = ["local-offset", "macros", "parsing"] }
 tzfile = "0.1.3"
 walkdir = "2.5.0"
+
+# Uncomment if you want to activate doc tests that import from `jiff_icu`
+# (currently only in `COMPARE.md`). Otherwise, this creates a circular
+# dependency and causes `jiff-icu` to get re-compiled all the time.
+# icu = { version = "1.5.0", features = ["std"] }
+# jiff-icu = { path = "./crates/jiff-icu" }
 
 # hifitime doesn't build on wasm for some reason, so exclude it there.
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies.hifitime]
