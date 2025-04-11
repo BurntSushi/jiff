@@ -1,5 +1,22 @@
 # CHANGELOG
 
+0.2.7 (TBD)
+===========
+TODO
+
+Enhancements:
+
+* [#xxx](https://github.com/BurntSushi/jiff/pull/xxx):
+Remove some internal uses of generics to mildly improve compile times.
+* [#xxx](https://github.com/BurntSushi/jiff/pull/xxx):
+Add `perf-literal` crate feature for controlling `inline(always)` annotations.
+
+Bug fixes:
+
+* [#311](https://github.com/BurntSushi/jiff/issues/311):
+Make `TZ=` indistinguishable from `TZ=UTC`.
+
+
 0.2.6 (2025-04-07)
 ==================
 This release includes a few bug fixes and support for discovering the IANA Time
