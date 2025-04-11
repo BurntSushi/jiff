@@ -995,7 +995,7 @@ impl Extension {
     ///
     /// The remaining input is returned. This returns an error if the given
     /// input is empty.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_number<'i>(
         self,
         default_pad_width: usize,
@@ -1052,7 +1052,7 @@ impl Extension {
 /// found, then the sign returned is positive.
 ///
 /// This also returns the remaining unparsed input.
-#[inline(always)]
+#[cfg_attr(feature = "perf-inline", inline(always))]
 fn parse_optional_sign<'i>(input: &'i [u8]) -> (i64, &'i [u8]) {
     if input.is_empty() {
         (1, input)
@@ -1069,7 +1069,7 @@ fn parse_optional_sign<'i>(input: &'i [u8]) -> (i64, &'i [u8]) {
 /// found, then the sign returned is positive.
 ///
 /// This also returns the remaining unparsed input.
-#[inline(always)]
+#[cfg_attr(feature = "perf-inline", inline(always))]
 fn parse_required_sign<'i>(
     input: &'i [u8],
 ) -> Result<(t::Sign, &'i [u8]), Error> {
@@ -1133,7 +1133,7 @@ fn parse_choice<'i>(
 ///
 /// This exists because AM/PM is common and we can take advantage of the fact
 /// that they are both exactly two bytes.
-#[inline(always)]
+#[cfg_attr(feature = "perf-inline", inline(always))]
 fn parse_ampm<'i>(input: &'i [u8]) -> Result<(usize, &'i [u8]), Error> {
     if input.len() < 2 {
         return Err(err!(
@@ -1163,7 +1163,7 @@ fn parse_ampm<'i>(input: &'i [u8]) -> Result<(usize, &'i [u8]), Error> {
 ///
 /// This exists because weekday abbreviations are common and we can take
 /// advantage of the fact that they are all exactly three bytes.
-#[inline(always)]
+#[cfg_attr(feature = "perf-inline", inline(always))]
 fn parse_weekday_abbrev<'i>(
     input: &'i [u8],
 ) -> Result<(usize, &'i [u8]), Error> {
@@ -1204,7 +1204,7 @@ fn parse_weekday_abbrev<'i>(
 ///
 /// This exists because month name abbreviations are common and we can take
 /// advantage of the fact that they are all exactly three bytes.
-#[inline(always)]
+#[cfg_attr(feature = "perf-inline", inline(always))]
 fn parse_month_name_abbrev<'i>(
     input: &'i [u8],
 ) -> Result<(usize, &'i [u8]), Error> {
@@ -1246,7 +1246,7 @@ fn parse_month_name_abbrev<'i>(
     Ok((index, input))
 }
 
-#[inline(always)]
+#[cfg_attr(feature = "perf-inline", inline(always))]
 fn parse_iana<'i>(input: &'i [u8]) -> Result<(&'i str, &'i [u8]), Error> {
     let mkiana = parse::slicer(input);
     let (_, mut input) = parse_iana_component(input)?;
@@ -1266,7 +1266,7 @@ fn parse_iana<'i>(input: &'i [u8]) -> Result<(&'i str, &'i [u8]), Error> {
 /// Parses a single IANA name component. That is, the thing that leads all IANA
 /// time zone identifiers and the thing that must always come after a `/`. This
 /// returns an error if no component could be found.
-#[inline(always)]
+#[cfg_attr(feature = "perf-inline", inline(always))]
 fn parse_iana_component<'i>(
     mut input: &'i [u8],
 ) -> Result<(&'i [u8], &'i [u8]), Error> {

@@ -395,7 +395,7 @@ impl Parser {
     ///
     /// Basically, if `input` is empty, or is not one of `z`, `Z`, `+` or `-`
     /// then this returns `None`.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn parse_optional<'i>(
         &self,
         input: &'i [u8],
@@ -414,7 +414,7 @@ impl Parser {
     ///
     /// The beginning of the input is expected to start with a `+` or a `-`.
     /// Any other case (including an empty string) will result in an error.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_numeric<'i>(
         &self,
         input: &'i [u8],
@@ -531,7 +531,7 @@ impl Parser {
         Ok(Parsed { value: numeric, input })
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_sign<'i>(
         &self,
         input: &'i [u8],
@@ -553,7 +553,7 @@ impl Parser {
         Ok(Parsed { value: sign, input: &input[1..] })
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_hours<'i>(
         &self,
         input: &'i [u8],
@@ -577,7 +577,7 @@ impl Parser {
         Ok(Parsed { value: hours, input })
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_minutes<'i>(
         &self,
         input: &'i [u8],
@@ -599,7 +599,7 @@ impl Parser {
         Ok(Parsed { value: minutes, input })
     }
 
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_seconds<'i>(
         &self,
         input: &'i [u8],
@@ -631,7 +631,7 @@ impl Parser {
     ///
     /// When in basic mode (not extended), then a subsequent component is only
     /// expected when `input` begins with two ASCII digits.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_separator<'i>(
         &self,
         mut input: &'i [u8],

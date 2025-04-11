@@ -2977,7 +2977,7 @@ impl Span {
 
     /// Returns an equivalent span, but with all non-calendar (units below
     /// days) set to zero.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn only_calendar(self) -> Span {
         let mut span = self;
         span.hours = t::SpanHours::N::<0>();
@@ -3000,7 +3000,7 @@ impl Span {
 
     /// Returns an equivalent span, but with all calendar (units above
     /// hours) set to zero.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn only_time(self) -> Span {
         let mut span = self;
         span.years = t::SpanYears::N::<0>();
@@ -3023,7 +3023,7 @@ impl Span {
 
     /// Returns an equivalent span, but with all units greater than or equal to
     /// the one given set to zero.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn only_lower(self, unit: Unit) -> Span {
         let mut span = self;
         // Unit::Nanosecond is the minimum, so nothing can be smaller than it.
@@ -3059,7 +3059,7 @@ impl Span {
 
     /// Returns an equivalent span, but with all units less than the one given
     /// set to zero.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn without_lower(self, unit: Unit) -> Span {
         let mut span = self;
         if unit > Unit::Nanosecond {
@@ -3096,7 +3096,7 @@ impl Span {
     /// Returns an error corresponding to the smallest non-time non-zero unit.
     ///
     /// If all non-time units are zero, then this returns `None`.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn smallest_non_time_non_zero_unit_error(
         &self,
     ) -> Option<Error> {
@@ -6691,7 +6691,7 @@ fn clamp_relative_span(
 /// in order to ensure good error messages.
 ///
 /// (We do the same thing for `SignedDuration`.)
-#[inline(always)]
+#[cfg_attr(feature = "perf-inline", inline(always))]
 fn parse_iso_or_friendly(bytes: &[u8]) -> Result<Span, Error> {
     if bytes.is_empty() {
         return Err(err!(

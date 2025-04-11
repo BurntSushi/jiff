@@ -1775,7 +1775,7 @@ impl Time {
     /// Converts the given second to a time value. The second should correspond
     /// to the number of seconds that have elapsed since `00:00:00`. The
     /// fractional second component of the `Time` returned is always `0`.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn from_second(second: CivilDaySecond) -> Time {
         let second = rangeint::composite!((second) => {
             ITimeSecond { second }
@@ -1796,7 +1796,7 @@ impl Time {
     /// Converts the given nanosecond to a time value. The nanosecond should
     /// correspond to the number of nanoseconds that have elapsed since
     /// `00:00:00.000000000`.
-    #[inline(always)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn from_nanosecond(nanosecond: CivilDayNanosecond) -> Time {
         let nano = rangeint::composite!((nanosecond) => {
             ITimeNanosecond { nanosecond }

@@ -12,7 +12,7 @@ use crate::{
 /// integer. (We use `i64` because everything in this crate uses signed
 /// integers, and because a higher level routine might want to parse the sign
 /// and then apply it to the result of this routine.)
-#[inline(always)]
+#[cfg_attr(feature = "perf-inline", inline(always))]
 pub(crate) fn i64(bytes: &[u8]) -> Result<i64, Error> {
     if bytes.is_empty() {
         return Err(err!("invalid number, no digits found"));
@@ -166,7 +166,7 @@ where
 ///
 /// If the position is greater than the length of the slice given, then this
 /// returns `None`.
-#[inline(always)]
+#[cfg_attr(feature = "perf-inline", inline(always))]
 pub(crate) fn split(input: &[u8], at: usize) -> Option<(&[u8], &[u8])> {
     if at > input.len() {
         None
