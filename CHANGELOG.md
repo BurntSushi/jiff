@@ -609,7 +609,7 @@ support. Here are some examples:
 To quickly demonstrate this new feature, here's a simple CLI program using
 Clap:
 
-```rust,no_run
+```ignore
 use clap::Parser;
 use jiff::{Span, Zoned};
 
