@@ -354,7 +354,6 @@ pub enum TzifTransitionKind {
 /// extremely cheap. This is especially useful since we do a binary search on
 /// `&[TzifDateTime]` when doing a TZ lookup for a civil datetime.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-#[repr(align(8))]
 pub struct TzifDateTime {
     bits: i64,
 }

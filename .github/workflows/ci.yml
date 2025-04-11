@@ -559,21 +559,21 @@ jobs:
       run: |
         jiff-cli generate shared
         if ! git diff --exit-code; then
-          echo 'Please run `jiff-cli generated shared`'
+          echo 'Please run `jiff-cli generate shared`'
           exit 1
         fi
     - name: Generate crc32 code
       run: |
         jiff-cli generate crc32
         if ! git diff --exit-code; then
-          echo 'Please run `jiff-cli generated crc32`'
+          echo 'Please run `jiff-cli generate crc32`'
           exit 1
         fi
     - name: Generate unit designator match expression
       run: |
         jiff-cli generate unit-designator-match
         if ! git diff --exit-code; then
-          echo 'Please run `jiff-cli generated unit-designator-match`'
+          echo 'Please run `jiff-cli generate unit-designator-match`'
           exit 1
         fi
     - name: Generate mapping from Windows zones to IANA time zone identifiers
@@ -583,6 +583,13 @@ jobs:
         if ! git diff --exit-code; then
           echo 'In a separate PR, please download windowsZones.xml'
           echo 'from github.com/unicode-org/cldr and run'
-          echo '`jiff-cli generated windows-zones`'
+          echo '`jiff-cli generate windows-zones`'
+          exit 1
+        fi
+    - name: Generate shared code used in both `jiff` and `jiff-static`
+      run: |
+        jiff-cli generate shared
+        if ! git diff --exit-code; then
+          echo 'Please run `jiff-cli generate shared`'
           exit 1
         fi
