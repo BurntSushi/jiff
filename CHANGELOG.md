@@ -1,15 +1,19 @@
 # CHANGELOG
 
-0.2.7 (TBD)
-===========
-TODO
+0.2.7 (2025-04-13)
+==================
+This release includes a bug fix that changes how an empty but set `TZ`
+environment variable is interpreted (as indistinguishable from `TZ=UTC`).
+This also includes a new enabled by default create feature, `perf-inline`,
+which allows toggling Jiff's use of `inline(always)`. This may help improve
+compile times or decrease binary size.
 
 Enhancements:
 
-* [#xxx](https://github.com/BurntSushi/jiff/pull/xxx):
+* [#320](https://github.com/BurntSushi/jiff/pull/320):
 Remove some internal uses of generics to mildly improve compile times.
-* [#xxx](https://github.com/BurntSushi/jiff/pull/xxx):
-Add `perf-literal` crate feature for controlling `inline(always)` annotations.
+* [#321](https://github.com/BurntSushi/jiff/pull/321):
+Add `perf-inline` crate feature for controlling `inline(always)` annotations.
 
 Bug fixes:
 
