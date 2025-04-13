@@ -1603,61 +1603,61 @@ mod tests {
             input: "",
         }
         "###);
-        insta::assert_debug_snapshot!(p(b"PT60s"), @r###"
+        insta::assert_debug_snapshot!(p(b"PT60s"), @r#"
         Parsed {
-            value: 1m,
+            value: 60s,
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"PT1m"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"PT1m"), @r#"
         Parsed {
-            value: 1m,
+            value: 60s,
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"PT1m0.000000001s"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"PT1m0.000000001s"), @r#"
         Parsed {
-            value: 1m 1ns,
+            value: 60s 1ns,
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"PT1.25m"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"PT1.25m"), @r#"
         Parsed {
-            value: 1m 15s,
+            value: 75s,
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"PT1h"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"PT1h"), @r#"
         Parsed {
-            value: 1h,
+            value: 3600s,
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"PT1h0.000000001s"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"PT1h0.000000001s"), @r#"
         Parsed {
-            value: 1h 1ns,
+            value: 3600s 1ns,
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"PT1.25h"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"PT1.25h"), @r#"
         Parsed {
-            value: 1h 15m,
+            value: 4500s,
             input: "",
         }
-        "###);
+        "#);
 
-        insta::assert_debug_snapshot!(p(b"-PT2562047788015215h30m8.999999999s"), @r###"
+        insta::assert_debug_snapshot!(p(b"-PT2562047788015215h30m8.999999999s"), @r#"
         Parsed {
-            value: 2562047788015215h 30m 8s 999ms 999µs 999ns ago,
+            value: -9223372036854775808s 999999999ns,
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"PT2562047788015215h30m7.999999999s"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"PT2562047788015215h30m7.999999999s"), @r#"
         Parsed {
-            value: 2562047788015215h 30m 7s 999ms 999µs 999ns,
+            value: 9223372036854775807s 999999999ns,
             input: "",
         }
-        "###);
+        "#);
     }
 
     #[test]
