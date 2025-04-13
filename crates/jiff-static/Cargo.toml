@@ -1,6 +1,6 @@
 [package]
 name = "jiff-static"
-version = "0.2.6"  #:version
+version = "0.2.7"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 license = "Unlicense OR MIT"
 homepage = "https://github.com/BurntSushi/jiff/tree/master/crates/jiff-static"
