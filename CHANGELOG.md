@@ -1,5 +1,16 @@
 # CHANGELOG
 
+0.2.8 (TBD)
+===========
+TODO
+
+Bug fixes:
+
+* [#324](https://github.com/BurntSushi/jiff/issues/324):
+Fix a bug that could produce a panic or incorrect results in
+`SignedDuration::(try_)?from_secs_{f32,f64}`.
+
+
 0.2.7 (2025-04-13)
 ==================
 This release includes a bug fix that changes how an empty but set `TZ`
