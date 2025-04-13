@@ -1,8 +1,12 @@
 # CHANGELOG
 
-0.2.8 (TBD)
-===========
-TODO
+0.2.8 (2025-04-13)
+==================
+This release fixes a bug where the constructors on `SignedDuration`
+for floating point durations could panic (in debug mode) or produce
+incorrect results (in release mode). This bug only impacts users of
+the `try_from_secs_{f32,f64}` and `from_secs_{f32,f64}` methods on
+`SignedDuration`.
 
 Enhancements:
 
