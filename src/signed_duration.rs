@@ -463,6 +463,8 @@ impl SignedDuration {
     ///
     /// This might produce tighter code in some cases.
     ///
+    /// # Panics
+    ///
     /// In debug mode only, when `|nanos|` is greater than or equal to 1
     /// second.
     ///
@@ -1350,9 +1352,24 @@ impl SignedDuration {
                 SignedDuration::MAX,
             ));
         }
-        let nanos = (secs.fract() * (NANOS_PER_SEC as f64)).round() as i32;
-        let secs = secs.trunc() as i64;
-        Ok(SignedDuration::new_unchecked(secs, nanos))
+
+        let mut int_secs = secs.trunc() as i64;
+        let mut int_nanos =
+            (secs.fract() * (NANOS_PER_SEC as f64)).round() as i32;
+        if int_nanos.unsigned_abs() == 1_000_000_000 {
+            let increment = i64::from(int_nanos.signum());
+            int_secs = int_secs.checked_add(increment).ok_or_else(|| {
+                err!(
+                    "floating point seconds {secs} overflows signed duration \
+                     maximum value of {max:?} after rounding its fractional \
+                     component of {fract:?}",
+                    max = SignedDuration::MAX,
+                    fract = secs.fract(),
+                )
+            })?;
+            int_nanos = 0;
+        }
+        Ok(SignedDuration::new_unchecked(int_secs, int_nanos))
     }
 
     /// Returns a signed duration corresponding to the number of seconds
@@ -1407,9 +1424,24 @@ impl SignedDuration {
                 SignedDuration::MAX,
             ));
         }
-        let nanos = (secs.fract() * (NANOS_PER_SEC as f32)).round() as i32;
-        let secs = secs.trunc() as i64;
-        Ok(SignedDuration::new_unchecked(secs, nanos))
+        let mut int_nanos =
+            (secs.fract() * (NANOS_PER_SEC as f32)).round() as i32;
+        let mut int_secs = secs.trunc() as i64;
+        if int_nanos.unsigned_abs() == 1_000_000_000 {
+            let increment = i64::from(int_nanos.signum());
+            // N.B. I haven't found a way to trigger this error path in tests.
+            int_secs = int_secs.checked_add(increment).ok_or_else(|| {
+                err!(
+                    "floating point seconds {secs} overflows signed duration \
+                     maximum value of {max:?} after rounding its fractional \
+                     component of {fract:?}",
+                    max = SignedDuration::MAX,
+                    fract = secs.fract(),
+                )
+            })?;
+            int_nanos = 0;
+        }
+        Ok(SignedDuration::new_unchecked(int_secs, int_nanos))
     }
 
     /// Returns the result of multiplying this duration by the given 64-bit
@@ -2814,5 +2846,52 @@ mod tests {
         ]
         .iter()
         .sum::<SignedDuration>();
+    }
+
+    /// Regression test for a case where this routine could panic, even though
+    /// it is fallible and should never panic.
+    ///
+    /// This occurred when rounding the fractional part of f64 could result in
+    /// a number of nanoseconds equivalent to 1 second. This was then fed to
+    /// a `SignedDuration` constructor that expected no nanosecond overflow.
+    /// And this triggered a panic in debug mode (and an incorrect result in
+    /// release mode).
+    ///
+    /// See: https://github.com/BurntSushi/jiff/issues/324
+    #[test]
+    fn panic_try_from_secs_f64() {
+        let sdur = SignedDuration::try_from_secs_f64(0.999999999999).unwrap();
+        assert_eq!(sdur, SignedDuration::from_secs(1));
+
+        let sdur = SignedDuration::try_from_secs_f64(-0.999999999999).unwrap();
+        assert_eq!(sdur, SignedDuration::from_secs(-1));
+
+        let max = 9223372036854775807.999999999f64;
+        let sdur = SignedDuration::try_from_secs_f64(max).unwrap();
+        assert_eq!(sdur, SignedDuration::new(9223372036854775807, 0));
+
+        let min = -9223372036854775808.999999999f64;
+        let sdur = SignedDuration::try_from_secs_f64(min).unwrap();
+        assert_eq!(sdur, SignedDuration::new(-9223372036854775808, 0));
+    }
+
+    /// See `panic_try_from_secs_f32`.
+    ///
+    /// Although note that I could never get this to panic. Perhaps the
+    /// particulars of f32 prevent the fractional part from rounding up to
+    /// 1_000_000_000?
+    #[test]
+    fn panic_try_from_secs_f32() {
+        let sdur = SignedDuration::try_from_secs_f32(0.999999999).unwrap();
+        assert_eq!(sdur, SignedDuration::from_secs(1));
+
+        let sdur = SignedDuration::try_from_secs_f32(-0.999999999).unwrap();
+        assert_eq!(sdur, SignedDuration::from_secs(-1));
+
+        // Indeed, this is why the above never panicked.
+        let x: f32 = 1.0;
+        let y: f32 = 0.999999999;
+        assert_eq!(x, y);
+        assert_eq!(y.fract(), 0.0f32);
     }
 }
