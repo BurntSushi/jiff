@@ -4,6 +4,13 @@
 ===========
 TODO
 
+Enhancements:
+
+* [#326](https://github.com/BurntSushi/jiff/pull/326):
+Add an alternate `Debug` impl for `SignedDuration` that only shows its second
+and nanosecond components (while using only one component when the other is
+zero).
+
 Bug fixes:
 
 * [#324](https://github.com/BurntSushi/jiff/issues/324):
