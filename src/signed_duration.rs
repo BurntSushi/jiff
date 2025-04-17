@@ -2890,7 +2890,7 @@ mod tests {
         assert_eq!(sdur, SignedDuration::new(-9223372036854775808, 0));
     }
 
-    /// See `panic_try_from_secs_f32`.
+    /// See `panic_try_from_secs_f64`.
     ///
     /// Although note that I could never get this to panic. Perhaps the
     /// particulars of f32 prevent the fractional part from rounding up to
