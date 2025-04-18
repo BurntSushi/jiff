@@ -32,7 +32,8 @@ mod sys {
         )) {
             panic!(
                 "getting the current time in wasm32-unknown-unknown \
-                 is not possible, enable jiff's `js` feature if you are \
+                 is not possible with just the standard library, \
+                 enable Jiff's `js` feature if you are \
                  targeting a browser environment",
             );
         } else {
@@ -47,7 +48,7 @@ mod sys {
     ))]
     pub(crate) fn monotonic_time() -> Option<std::time::Instant> {
         // Same reasoning as above, but we return `None` instead of panicking,
-        // because `jiff` can deal with environments that don't provide
+        // because Jiff can deal with environments that don't provide
         // monotonic time.
         if cfg!(all(
             not(feature = "js"),
