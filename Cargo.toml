@@ -32,6 +32,7 @@ include = [
 members = [
   "crates/jiff-cli",
   "crates/jiff-static",
+  "crates/jiff-aws",
   "crates/jiff-tzdb",
   "crates/jiff-tzdb-platform",
 ]
