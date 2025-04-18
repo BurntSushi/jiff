@@ -2839,7 +2839,17 @@ impl serde::Serialize for Timestamp {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            return serializer.collect_str(self);
+        }
+        use serde::ser::SerializeTuple;
+
+        let mut tuple = serializer.serialize_tuple(2)?;
+
+        tuple.serialize_element(&self.second.get())?;
+        tuple.serialize_element(&self.nanosecond.get())?;
+
+        tuple.end()
     }
 }
 
@@ -2849,40 +2859,76 @@ impl<'de> serde::Deserialize<'de> for Timestamp {
     fn deserialize<D: serde::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Timestamp, D::Error> {
-        use serde::de;
+        use serde::de::{self, Error as _};
 
-        struct TimestampVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for TimestampVisitor {
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = Timestamp;
+
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a timestamp string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<Timestamp, E> {
+                    DEFAULT_DATETIME_PARSER
+                        .parse_timestamp(value)
+                        .map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<Timestamp, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
+            }
+
+            return deserializer.deserialize_str(HumanReadableVisitor);
+        }
+
+        struct CompactVisitor;
+
+        impl<'de> de::Visitor<'de> for CompactVisitor {
             type Value = Timestamp;
 
+            #[inline]
             fn expecting(
                 &self,
                 f: &mut core::fmt::Formatter,
             ) -> core::fmt::Result {
-                f.write_str("a timestamp string")
+                f.write_str("the number of nanoseconds since the unix epoch")
             }
 
             #[inline]
-            fn visit_bytes<E: de::Error>(
-                self,
-                value: &[u8],
-            ) -> Result<Timestamp, E> {
-                DEFAULT_DATETIME_PARSER
-                    .parse_timestamp(value)
-                    .map_err(de::Error::custom)
-            }
-
-            #[inline]
-            fn visit_str<E: de::Error>(
-                self,
-                value: &str,
-            ) -> Result<Timestamp, E> {
-                self.visit_bytes(value.as_bytes())
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                Timestamp::new(
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("seconds"))?,
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("nanoseconds"))?,
+                )
+                .map_err(|_| {
+                    A::Error::custom(
+                        "Deserialized instant is outsided of supported range.",
+                    )
+                })
             }
         }
 
-        deserializer.deserialize_str(TimestampVisitor)
+        deserializer.deserialize_tuple(2, CompactVisitor)
     }
 }
 
