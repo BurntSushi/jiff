@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.2.9 (TBD)
+===========
+TODO
+
+Enhancements:
+
+* [#296](https://github.com/BurntSushi/jiff/issues/296):
+Provide a better panic message when `Zoned::now()` fails on WASM.
+
+
 0.2.8 (2025-04-13)
 ==================
 This release fixes a bug where the constructors on `SignedDuration`
