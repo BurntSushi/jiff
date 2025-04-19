@@ -22,7 +22,7 @@ macro_rules! define_ranged {
         smaller { $($smaller_name:ident $smaller_repr:ty),* },
         bigger { $($bigger_name:ident $bigger_repr:ty),* }
     ) => {
-        #[derive(Clone, Copy, Hash)]
+        #[derive(Clone, Copy)]
         pub(crate) struct $name<const MIN: i128, const MAX: i128> {
             /// The actual value of the integer.
             ///
@@ -922,6 +922,16 @@ macro_rules! define_ranged {
 
             pub(crate) fn debug(self) -> RangedDebug<MIN, MAX> {
                 RangedDebug { rint: self.rinto() }
+            }
+        }
+
+        // We hand-write the `Hash` impl to avoid the min/max values
+        // influencing the hash. Only the actual value should be hashed.
+        //
+        // See: https://github.com/BurntSushi/jiff/issues/330
+        impl<const MIN: i128, const MAX: i128> core::hash::Hash for $name<MIN, MAX> {
+            fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+                self.val.hash(state);
             }
         }
 
