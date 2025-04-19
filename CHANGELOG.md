@@ -1,8 +1,14 @@
 # CHANGELOG
 
-0.2.9 (TBD)
-===========
-TODO
+0.2.9 (2025-04-19)
+==================
+This release includes a bug fix that, in debug mode, could result in datetime
+types having different hashes for the same value. This could cause problems,
+for example, if you are using datetimes as keys in a hash map. This problem
+didn't exist when Jiff was compiled in release mode.
+
+This release also improves the panic message shown when the `js` feature isn't
+enabled and the current time is requested on `wasm32-unknown-unknown` targets.
 
 Enhancements:
 
