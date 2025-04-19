@@ -9,6 +9,12 @@ Enhancements:
 * [#296](https://github.com/BurntSushi/jiff/issues/296):
 Provide a better panic message when `Zoned::now()` fails on WASM.
 
+Bug fixes:
+
+* [#330](https://github.com/BurntSushi/jiff/issues/330):
+Fix bug where `Hash` on datetime types could yield different hash values for
+the same underlying date/time.
+
 
 0.2.8 (2025-04-13)
 ==================
