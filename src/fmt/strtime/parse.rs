@@ -773,7 +773,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         static CHOICES: &'static [&'static [u8]] = &[
             b"Sunday",
             b"Monday",
-            b"Tueday",
+            b"Tuesday",
             b"Wednesday",
             b"Thursday",
             b"Friday",
@@ -1814,7 +1814,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("%A %m/%d/%y", "Mon 7/14/24"),
-            @r###"strptime parsing failed: %A failed: unrecognized weekday abbreviation: failed to find expected choice at beginning of "Mon 7/14/24", available choices are: Sunday, Monday, Tueday, Wednesday, Thursday, Friday, Saturday"###,
+            @r#"strptime parsing failed: %A failed: unrecognized weekday abbreviation: failed to find expected choice at beginning of "Mon 7/14/24", available choices are: Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday"#,
         );
         insta::assert_snapshot!(
             p("%b", "Bad"),

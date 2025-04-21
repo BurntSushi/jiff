@@ -1,5 +1,17 @@
 # CHANGELOG
 
+0.2.10 (2025-04-21)
+===================
+This release includes a bug fix for parsing `Tuesday` when using `%A` via
+Jiff's `strptime` APIs. Specifically, it would recognize `Tueday` instead of
+`Tuesday`.
+
+Bug fixes:
+
+* [#333](https://github.com/BurntSushi/jiff/issues/333):
+Fix typo in `strptime` parsing from `Tueday` to `Tuesday`.
+
+
 0.2.9 (2025-04-19)
 ==================
 This release includes a bug fix that, in debug mode, could result in datetime
