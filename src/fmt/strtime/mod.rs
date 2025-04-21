@@ -601,7 +601,7 @@ impl BrokenDownTime {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
-    /// # Example: how to parse a only parse of a timestamp
+    /// # Example: how to parse only a part of a timestamp
     ///
     /// If you only need, for example, the date from a timestamp, then you
     /// can parse it as a prefix:
