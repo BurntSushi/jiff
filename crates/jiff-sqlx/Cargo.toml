@@ -33,7 +33,7 @@ sqlite = ["sqlx/sqlite"]
 
 [dependencies]
 # The `std` feature is necessary for the `std::error::Error` impl.
-jiff = { version = "0.2.0", path = "../..", default-features = false, features=["std"] }
+jiff = { version = "0.2.0", path = "../..", default-features = false, features = ["std"] }
 sqlx = { version = "0.8.0", default-features = false }
 
 [dev-dependencies]
