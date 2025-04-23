@@ -28,14 +28,13 @@ path = "src/lib.rs"
 
 [features]
 default = []
-postgres = ["dep:sqlx-postgres"]
-sqlite = ["dep:sqlx-sqlite"]
+postgres = ["sqlx/postgres"]
+sqlite = ["sqlx/sqlite"]
 
 [dependencies]
-jiff = { version = "0.2.0", path = "../..", default-features = false }
-sqlx-core = { version = "0.8.0", default-features = false }
-sqlx-postgres = { version = "0.8.0", default-features = false, optional = true }
-sqlx-sqlite = { version = "0.8.0", default-features = false, optional = true }
+# The `std` feature is necessary for the `std::error::Error` impl.
+jiff = { version = "0.2.0", path = "../..", default-features = false, features = ["std"] }
+sqlx = { version = "0.8.0", default-features = false }
 
 [dev-dependencies]
 jiff = { version = "0.2.0", path = "../..", default-features = true }

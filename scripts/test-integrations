@@ -16,14 +16,7 @@ integrations=(
   "jiff-diesel postgres"
   "jiff-icu std"
   "jiff-sqlx postgres"
-  # This is just utter nonsense, but
-  # sqlx-sqlite does not compile in it
-  # default feature configuration. This
-  # is utterly asinine. And it's completely
-  # undocumented. I had to go trawling through
-  # the top-level sqlx Cargo.toml to figure
-  # out which feature to enable.
-  "jiff-sqlx sqlite,sqlx-sqlite/bundled"
+  "jiff-sqlx sqlite"
 )
 for v in "${integrations[@]}"; do
   crate="$(echo $v | awk '{print $1}')"

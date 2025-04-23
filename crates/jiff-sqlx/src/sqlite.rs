@@ -1,12 +1,12 @@
 use jiff::fmt::temporal::DateTimeParser;
-use sqlx_core::{
+use sqlx::sqlite::{
+    Sqlite, SqliteArgumentValue, SqliteTypeInfo, SqliteValueRef,
+};
+use sqlx::{
     decode::Decode,
     encode::{Encode, IsNull},
     error::BoxDynError,
     types::Type,
-};
-use sqlx_sqlite::{
-    Sqlite, SqliteArgumentValue, SqliteTypeInfo, SqliteValueRef,
 };
 
 use crate::{Date, DateTime, Time, Timestamp, ToSqlx};
