@@ -1,14 +1,14 @@
 use jiff::{civil, tz};
-use sqlx_core::{
+use sqlx::postgres::{
+    types::{Oid, PgInterval},
+    PgArgumentBuffer, PgHasArrayType, PgTypeInfo, PgValueFormat, PgValueRef,
+    Postgres,
+};
+use sqlx::{
     decode::Decode,
     encode::{Encode, IsNull},
     error::BoxDynError,
     types::Type,
-};
-use sqlx_postgres::{
-    types::{Oid, PgInterval},
-    PgArgumentBuffer, PgHasArrayType, PgTypeInfo, PgValueFormat, PgValueRef,
-    Postgres,
 };
 
 use crate::{Date, DateTime, Span, Time, Timestamp, ToSqlx};
