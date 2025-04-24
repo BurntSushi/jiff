@@ -1,6 +1,6 @@
 /*!
 This crate provides conversion routines between [`jiff`] and
-[`icu`](https://docs.rs/icu/1/).
+[`icu`](https://docs.rs/icu/2.0.0-beta.2/).
 
 The conversion routines are implemented via conversion traits defined in this
 crate. The traits mirror the [`From`], [`Into`], [`TryFrom`] and [`TryInto`]
@@ -9,16 +9,16 @@ traits from the standard library.
 # Available conversions
 
 * [`jiff::civil::DateTime`] infallibly converts to
-[`icu::calendar::DateTime`](icu_calendar::DateTime).
+[`icu::time::DateTime`](icu_time::DateTime).
 The reverse is fallible.
 * [`jiff::civil::Date`] infallibly converts to
 [`icu::calendar::Date`](icu_calendar::Date).
 The reverse is fallible.
 * [`jiff::civil::Time`] infallibly converts to
-[`icu::calendar::Time`](icu_calendar::Time).
+[`icu::time::Time`](icu_time::Time).
 The reverse is fallible.
 * [`jiff::civil::Weekday`] infallibly converts to
-[`icu::calendar::types::IsoWeekday`](icu_calendar::types::IsoWeekday).
+[`icu::calendar::types::Weekday`](icu_calendar::types::Weekday).
 The reverse is also infallible.
 
 # Format a datetime in another locale
@@ -26,38 +26,38 @@ The reverse is also infallible.
 This example shows how one can bridge `jiff` to `icu` in order to format a
 datetime in a particular locale. This makes use of the infallible
 [`ConvertFrom`] trait to convert a [`jiff::civil::DateTime`] into a
-[`icu::calendar::DateTime`](icu_calendar::DateTime).
+[`icu::time::DateTime`](icu_time::DateTime).
 
 ```
 use icu::{
-    calendar::{gregorian::Gregorian, DateTime},
-    datetime::TypedDateTimeFormatter,
-    locid::locale,
+    time::DateTime,
+    datetime::{fieldsets, DateTimeFormatter},
+    locale::locale,
 };
 use jiff::Zoned;
 use jiff_icu::{ConvertFrom as _};
 
 let zdt: Zoned = "2024-09-10T23:37:20-04[America/New_York]".parse()?;
-let icu_datetime = DateTime::convert_from(zdt.datetime()).to_calendar(Gregorian);
+let icu_datetime = DateTime::convert_from(zdt.datetime());
 
 // Format for the en-GB locale:
-let formatter = TypedDateTimeFormatter::try_new(
-    &locale!("en-GB").into(),
-    Default::default(),
+let formatter = DateTimeFormatter::try_new(
+    locale!("en-GB").into(),
+    fieldsets::YMDET::medium(),
 )?;
 assert_eq!(
     formatter.format(&icu_datetime).to_string(),
-    "10 Sept 2024, 23:37:20",
+    "Tue, 10 Sept 2024, 23:37:20",
 );
 
 // Or in the en-US locale:
-let formatter = TypedDateTimeFormatter::try_new(
-    &locale!("en-US").into(),
-    Default::default(),
+let formatter = DateTimeFormatter::try_new(
+    locale!("en-US").into(),
+    fieldsets::YMDET::medium(),
 )?;
 assert_eq!(
     formatter.format(&icu_datetime).to_string(),
-    "Sep 10, 2024, 11:37:20 PM",
+    "Tue, Sep 10, 2024, 11:37:20 PM",
 );
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -69,17 +69,21 @@ While Jiff only supports the Gregorian calendar (technically the ISO
 8601 calendar), ICU4X supports [many calendars](icu_calendar). This
 example shows how to convert a date in the Hebrew calendar to a Jiff
 date. This makes use of the fallible [`ConvertTryFrom`] trait to
-convert a [`icu::calendar::DateTime`](icu_calendar::DateTime) into a
+convert a [`icu::time::DateTime`](icu_time::DateTime) into a
 [`jiff::civil::DateTime`]:
 
 ```
 use icu::{
-    calendar::{DateTime as IcuDateTime},
+    calendar::Date as IcuDate,
+    time::{DateTime as IcuDateTime, Time as IcuTime},
 };
 use jiff::civil::DateTime;
 use jiff_icu::{ConvertTryFrom as _};
 
-let datetime = IcuDateTime::try_new_hebrew_datetime(5785, 5, 4, 17, 30, 0)?;
+let datetime = IcuDateTime {
+    date: IcuDate::try_new_hebrew(5785, 5, 4)?,
+    time: IcuTime::try_new(17, 30, 0, 0)?,
+};
 let zdt = DateTime::convert_try_from(datetime)?.in_tz("America/New_York")?;
 assert_eq!(zdt.to_string(), "2025-02-02T17:30:00-05:00[America/New_York]");
 
@@ -90,16 +94,18 @@ assert_eq!(zdt.to_string(), "2025-02-02T17:30:00-05:00[America/New_York]");
 #![no_std]
 #![deny(missing_docs)]
 
-#[cfg(any(test, feature = "std"))]
+#[cfg(test)]
 extern crate std;
 
 #[cfg(any(test, feature = "alloc"))]
 extern crate alloc;
 
 use icu_calendar::{
-    types::IsoWeekday as IcuWeekday, AsCalendar as IcuAsCalendar,
-    Date as IcuDate, DateTime as IcuDateTime, Iso, Time as IcuTime,
+    types::Weekday as IcuWeekday, AsCalendar as IcuAsCalendar,
+    Date as IcuDate, Iso,
 };
+#[cfg(feature = "time")]
+use icu_time::{DateTime as IcuDateTime, Time as IcuTime};
 use jiff::civil::{
     Date as JiffDate, DateTime as JiffDateTime, Time as JiffTime,
     Weekday as JiffWeekday,
@@ -114,7 +120,7 @@ pub use self::{
 mod error;
 mod traits;
 
-/// Converts from a [`icu_calendar::DateTime<Iso>`](icu_calendar::DateTime) to
+/// Converts from a [`icu_time::DateTime<Iso>`](icu_time::DateTime) to
 /// a [`jiff::civil::DateTime`].
 ///
 /// # Examples
@@ -122,36 +128,44 @@ mod traits;
 /// ```
 /// use jiff_icu::{ConvertTryFrom as _};
 ///
-/// let icu_datetime = icu_calendar::DateTime::local_unix_epoch();
+/// let icu_datetime = icu_time::DateTime {
+///     date: icu_calendar::Date::try_new_iso(1970, 1, 1).unwrap(),
+///     time: icu_time::Time::try_new(0, 0, 0, 0).unwrap(),
+/// };
 /// let jiff_datetime = jiff::civil::DateTime::convert_try_from(icu_datetime)?;
 /// assert_eq!(jiff_datetime.to_string(), "1970-01-01T00:00:00");
 ///
-/// let icu_datetime = icu_calendar::DateTime::try_new_iso_datetime(
-///     2025, 1, 30, 17, 58, 30,
-/// ).unwrap();
+/// let icu_datetime = icu_time::DateTime {
+///     date: icu_calendar::Date::try_new_iso(2025, 1, 30).unwrap(),
+///     time: icu_time::Time::try_new(17, 58, 30, 0).unwrap(),
+/// };
 /// let jiff_datetime = jiff::civil::DateTime::convert_try_from(icu_datetime)?;
 /// assert_eq!(jiff_datetime.to_string(), "2025-01-30T17:58:30");
 ///
-/// let icu_datetime = icu_calendar::DateTime::try_new_iso_datetime(
-///     -9999, 1, 1, 0, 0, 0,
-/// ).unwrap();
+/// let icu_datetime = icu_time::DateTime {
+///     date: icu_calendar::Date::try_new_iso(-9999, 1, 1).unwrap(),
+///     time: icu_time::Time::try_new(0, 0, 0, 0).unwrap(),
+/// };
 /// let jiff_datetime = jiff::civil::DateTime::convert_try_from(icu_datetime)?;
 /// assert_eq!(jiff_datetime.to_string(), "-009999-01-01T00:00:00");
 ///
-/// let icu_datetime = icu_calendar::DateTime::try_new_iso_datetime(
-///     9999, 12, 31, 23, 59, 59,
-/// ).unwrap();
+/// let icu_datetime = icu_time::DateTime {
+///     date: icu_calendar::Date::try_new_iso(9999, 12, 31).unwrap(),
+///     time: icu_time::Time::try_new(23, 59, 59, 999_999_999).unwrap(),
+/// };
 /// let jiff_datetime = jiff::civil::DateTime::convert_try_from(icu_datetime)?;
-/// assert_eq!(jiff_datetime.to_string(), "9999-12-31T23:59:59");
+/// assert_eq!(jiff_datetime.to_string(), "9999-12-31T23:59:59.999999999");
 ///
-/// let icu_datetime = icu_calendar::DateTime::try_new_iso_datetime(
-///     0, 1, 30, 0, 0, 0,
-/// ).unwrap();
+/// let icu_datetime = icu_time::DateTime {
+///     date: icu_calendar::Date::try_new_iso(0, 1, 30).unwrap(),
+///     time: icu_time::Time::try_new(0, 0, 0, 0).unwrap(),
+/// };
 /// let jiff_datetime = jiff::civil::DateTime::convert_try_from(icu_datetime)?;
 /// assert_eq!(jiff_datetime.to_string(), "0000-01-30T00:00:00");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+#[cfg(feature = "time")]
 impl<C: IcuAsCalendar> ConvertTryFrom<IcuDateTime<C>> for JiffDateTime {
     type Error = Error;
 
@@ -163,7 +177,7 @@ impl<C: IcuAsCalendar> ConvertTryFrom<IcuDateTime<C>> for JiffDateTime {
 }
 
 /// Converts from a [`jiff::civil::DateTime`] to a
-/// [`icu_calendar::DateTime<Iso>`](icu_calendar::DateTime).
+/// [`icu_time::DateTime<Iso>`](icu_time::DateTime).
 ///
 /// # Examples
 ///
@@ -171,54 +185,55 @@ impl<C: IcuAsCalendar> ConvertTryFrom<IcuDateTime<C>> for JiffDateTime {
 /// use jiff_icu::{ConvertFrom as _};
 ///
 /// let jiff_datetime = jiff::civil::date(2025, 1, 30).at(17, 58, 30, 0);
-/// let icu_datetime = icu_calendar::DateTime::convert_from(jiff_datetime);
+/// let icu_datetime = icu_time::DateTime::convert_from(jiff_datetime);
 /// assert_eq!(
 ///     format!("{:?}", icu_datetime.date),
 ///     "Date(2025-1-30, default era, for calendar ISO)",
 /// );
 /// assert_eq!(
 ///     format!("{:?}", icu_datetime.time),
-///     "Time { hour: IsoHour(17), minute: IsoMinute(58), second: IsoSecond(30), nanosecond: NanoSecond(0) }",
+///     "Time { hour: Hour(17), minute: Minute(58), second: Second(30), subsecond: Nanosecond(0) }",
 /// );
 ///
 /// let jiff_datetime = jiff::civil::DateTime::MIN;
-/// let icu_datetime = icu_calendar::DateTime::convert_from(jiff_datetime);
+/// let icu_datetime = icu_time::DateTime::convert_from(jiff_datetime);
 /// assert_eq!(
 ///     format!("{:?}", icu_datetime.date),
 ///     "Date(-9999-1-1, default era, for calendar ISO)",
 /// );
 /// assert_eq!(
 ///     format!("{:?}", icu_datetime.time),
-///     "Time { hour: IsoHour(0), minute: IsoMinute(0), second: IsoSecond(0), nanosecond: NanoSecond(0) }",
+///     "Time { hour: Hour(0), minute: Minute(0), second: Second(0), subsecond: Nanosecond(0) }",
 /// );
 ///
 /// let jiff_datetime = jiff::civil::DateTime::MAX;
-/// let icu_datetime = icu_calendar::DateTime::convert_from(jiff_datetime);
+/// let icu_datetime = icu_time::DateTime::convert_from(jiff_datetime);
 /// assert_eq!(
 ///     format!("{:?}", icu_datetime.date),
 ///     "Date(9999-12-31, default era, for calendar ISO)",
 /// );
 /// assert_eq!(
 ///     format!("{:?}", icu_datetime.time),
-///     "Time { hour: IsoHour(23), minute: IsoMinute(59), second: IsoSecond(59), nanosecond: NanoSecond(999999999) }",
+///     "Time { hour: Hour(23), minute: Minute(59), second: Second(59), subsecond: Nanosecond(999999999) }",
 /// );
 ///
 /// let jiff_datetime = jiff::civil::date(0, 1, 30).at(0, 0, 0, 0);
-/// let icu_datetime = icu_calendar::DateTime::convert_from(jiff_datetime);
+/// let icu_datetime = icu_time::DateTime::convert_from(jiff_datetime);
 /// assert_eq!(
 ///     format!("{:?}", icu_datetime.date),
 ///     "Date(0-1-30, default era, for calendar ISO)",
 /// );
 /// assert_eq!(
 ///     format!("{:?}", icu_datetime.time),
-///     "Time { hour: IsoHour(0), minute: IsoMinute(0), second: IsoSecond(0), nanosecond: NanoSecond(0) }",
+///     "Time { hour: Hour(0), minute: Minute(0), second: Second(0), subsecond: Nanosecond(0) }",
 /// );
 /// ```
+#[cfg(feature = "time")]
 impl ConvertFrom<JiffDateTime> for IcuDateTime<Iso> {
     fn convert_from(v: JiffDateTime) -> IcuDateTime<Iso> {
         let date: IcuDate<Iso> = v.date().convert_into();
         let time: IcuTime = v.time().convert_into();
-        IcuDateTime::new(date, time)
+        IcuDateTime { date, time }
     }
 }
 
@@ -229,23 +244,23 @@ impl ConvertFrom<JiffDateTime> for IcuDateTime<Iso> {
 /// ```
 /// use jiff_icu::{ConvertTryFrom as _};
 ///
-/// let icu_date = icu_calendar::Date::unix_epoch();
+/// let icu_date = icu_calendar::Date::try_new_iso(1970, 1, 1).unwrap();
 /// let jiff_date = jiff::civil::Date::convert_try_from(icu_date)?;
 /// assert_eq!(jiff_date.to_string(), "1970-01-01");
 ///
-/// let icu_date = icu_calendar::Date::try_new_iso_date(2025, 1, 30).unwrap();
+/// let icu_date = icu_calendar::Date::try_new_iso(2025, 1, 30).unwrap();
 /// let jiff_date = jiff::civil::Date::convert_try_from(icu_date)?;
 /// assert_eq!(jiff_date.to_string(), "2025-01-30");
 ///
-/// let icu_date = icu_calendar::Date::try_new_iso_date(-9999, 1, 1).unwrap();
+/// let icu_date = icu_calendar::Date::try_new_iso(-9999, 1, 1).unwrap();
 /// let jiff_date = jiff::civil::Date::convert_try_from(icu_date)?;
 /// assert_eq!(jiff_date.to_string(), "-009999-01-01");
 ///
-/// let icu_date = icu_calendar::Date::try_new_iso_date(9999, 12, 31).unwrap();
+/// let icu_date = icu_calendar::Date::try_new_iso(9999, 12, 31).unwrap();
 /// let jiff_date = jiff::civil::Date::convert_try_from(icu_date)?;
 /// assert_eq!(jiff_date.to_string(), "9999-12-31");
 ///
-/// let icu_date = icu_calendar::Date::try_new_iso_date(0, 1, 30).unwrap();
+/// let icu_date = icu_calendar::Date::try_new_iso(0, 1, 30).unwrap();
 /// let jiff_date = jiff::civil::Date::convert_try_from(icu_date)?;
 /// assert_eq!(jiff_date.to_string(), "0000-01-30");
 ///
@@ -257,7 +272,7 @@ impl ConvertFrom<JiffDateTime> for IcuDateTime<Iso> {
 /// ```
 /// use jiff_icu::{ConvertTryFrom as _};
 ///
-/// let icu_date = icu_calendar::Date::try_new_hebrew_date(5785, 5, 4).unwrap();
+/// let icu_date = icu_calendar::Date::try_new_hebrew(5785, 5, 4).unwrap();
 /// let jiff_date = jiff::civil::Date::convert_try_from(icu_date)?;
 /// assert_eq!(jiff_date.to_string(), "2025-02-02");
 ///
@@ -268,7 +283,7 @@ impl<C: IcuAsCalendar> ConvertTryFrom<IcuDate<C>> for JiffDate {
 
     fn convert_try_from(v: IcuDate<C>) -> Result<JiffDate, Error> {
         let v = v.to_iso();
-        let year = v.year().number;
+        let year = v.year().extended_year;
         let year = i16::try_from(year).map_err(|_| {
             err!("failed to convert `icu` year of {year} to `i16`")
         })?;
@@ -331,7 +346,7 @@ impl<C: IcuAsCalendar> ConvertTryFrom<IcuDate<C>> for JiffDate {
 ///
 /// let jiff_date = jiff::civil::date(2025, 2, 2);
 /// let icu_iso_date = icu_calendar::Date::convert_from(jiff_date);
-/// let icu_hebrew_date = icu_iso_date.to_calendar(icu_calendar::hebrew::Hebrew);
+/// let icu_hebrew_date = icu_iso_date.to_calendar(icu_calendar::cal::Hebrew);
 /// assert_eq!(
 ///     format!("{icu_hebrew_date:?}"),
 ///     "Date(5785-5-4, hebrew era, for calendar Hebrew)",
@@ -343,31 +358,32 @@ impl ConvertFrom<JiffDate> for IcuDate<Iso> {
         let month = v.month().unsigned_abs();
         let day = v.day().unsigned_abs();
         // All Jiff civil dates are valid ICU4X dates.
-        IcuDate::try_new_iso_date(year, month, day).unwrap()
+        IcuDate::try_new_iso(year, month, day).unwrap()
     }
 }
 
-/// Converts from a [`icu_calendar::Time`] to a [`jiff::civil::Time`].
+/// Converts from a [`icu_time::Time`] to a [`jiff::civil::Time`].
 ///
 /// # Examples
 ///
 /// ```
 /// use jiff_icu::{ConvertTryFrom as _};
 ///
-/// let icu_time = icu_calendar::Time::try_new(0, 0, 0, 0).unwrap();
+/// let icu_time = icu_time::Time::try_new(0, 0, 0, 0).unwrap();
 /// let jiff_time = jiff::civil::Time::convert_try_from(icu_time)?;
 /// assert_eq!(jiff_time, jiff::civil::time(0, 0, 0, 0));
 ///
-/// let icu_time = icu_calendar::Time::try_new(24, 0, 0, 0).unwrap();
+/// let icu_time = icu_time::Time::try_new(23, 59, 59, 999_999_999).unwrap();
 /// let jiff_time = jiff::civil::Time::convert_try_from(icu_time)?;
-/// assert_eq!(jiff_time, jiff::civil::time(0, 0, 0, 0));
+/// assert_eq!(jiff_time, jiff::civil::time(23, 59, 59, 999_999_999));
 ///
-/// let icu_time = icu_calendar::Time::try_new(17, 59, 4, 0).unwrap();
+/// let icu_time = icu_time::Time::try_new(17, 59, 4, 0).unwrap();
 /// let jiff_time = jiff::civil::Time::convert_try_from(icu_time)?;
 /// assert_eq!(jiff_time, jiff::civil::time(17, 59, 4, 0));
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+#[cfg(feature = "time")]
 impl ConvertTryFrom<IcuTime> for JiffTime {
     type Error = Error;
 
@@ -385,13 +401,13 @@ impl ConvertTryFrom<IcuTime> for JiffTime {
         let second = i8::try_from(v.second.number()).unwrap();
 
         // OK because it's guaranteed by API docs.
-        let subsec_nano = i32::try_from(v.nanosecond.number()).unwrap();
+        let subsec_nano = i32::try_from(v.subsecond.number()).unwrap();
 
         Ok(JiffTime::new(hour, minute, second, subsec_nano)?)
     }
 }
 
-/// Converts from a [`jiff::civil::Time`] to a [`icu_calendar::Time`].
+/// Converts from a [`jiff::civil::Time`] to a [`icu_time::Time`].
 ///
 /// # Examples
 ///
@@ -399,19 +415,20 @@ impl ConvertTryFrom<IcuTime> for JiffTime {
 /// use jiff_icu::{ConvertFrom as _};
 ///
 /// let jiff_time = jiff::civil::time(0, 0, 0, 0);
-/// let icu_time = icu_calendar::Time::convert_from(jiff_time);
+/// let icu_time = icu_time::Time::convert_from(jiff_time);
 /// assert_eq!(
 ///     format!("{icu_time:?}"),
-///     "Time { hour: IsoHour(0), minute: IsoMinute(0), second: IsoSecond(0), nanosecond: NanoSecond(0) }",
+///     "Time { hour: Hour(0), minute: Minute(0), second: Second(0), subsecond: Nanosecond(0) }",
 /// );
 ///
 /// let jiff_time = jiff::civil::time(17, 59, 4, 0);
-/// let icu_time = icu_calendar::Time::convert_from(jiff_time);
+/// let icu_time = icu_time::Time::convert_from(jiff_time);
 /// assert_eq!(
 ///     format!("{icu_time:?}"),
-///     "Time { hour: IsoHour(17), minute: IsoMinute(59), second: IsoSecond(4), nanosecond: NanoSecond(0) }",
+///     "Time { hour: Hour(17), minute: Minute(59), second: Second(4), subsecond: Nanosecond(0) }",
 /// );
 /// ```
+#[cfg(feature = "time")]
 impl ConvertFrom<JiffTime> for IcuTime {
     fn convert_from(v: JiffTime) -> IcuTime {
         let hour = v.hour().unsigned_abs();
@@ -423,7 +440,7 @@ impl ConvertFrom<JiffTime> for IcuTime {
     }
 }
 
-/// Converts from a [`icu_calendar::types::IsoWeekday`] to a
+/// Converts from a [`icu_calendar::types::Weekday`] to a
 /// [`jiff::civil::Weekday`].
 ///
 /// # Examples
@@ -431,7 +448,7 @@ impl ConvertFrom<JiffTime> for IcuTime {
 /// ```
 /// use jiff_icu::{ConvertFrom as _};
 ///
-/// let icu_weekday = icu_calendar::types::IsoWeekday::Wednesday;
+/// let icu_weekday = icu_calendar::types::Weekday::Wednesday;
 /// let jiff_weekday = jiff::civil::Weekday::convert_from(icu_weekday);
 /// assert_eq!(jiff_weekday, jiff::civil::Weekday::Wednesday);
 /// ```
@@ -450,7 +467,7 @@ impl ConvertFrom<IcuWeekday> for JiffWeekday {
 }
 
 /// Converts from a [`jiff::civil::Weekday`] to a
-/// [`icu_calendar::types::IsoWeekday`].
+/// [`icu_calendar::types::Weekday`].
 ///
 /// # Examples
 ///
@@ -458,8 +475,8 @@ impl ConvertFrom<IcuWeekday> for JiffWeekday {
 /// use jiff_icu::{ConvertFrom as _};
 ///
 /// let jiff_weekday = jiff::civil::Weekday::Wednesday;
-/// let icu_weekday = icu_calendar::types::IsoWeekday::convert_from(jiff_weekday);
-/// assert_eq!(icu_weekday, icu_calendar::types::IsoWeekday::Wednesday);
+/// let icu_weekday = icu_calendar::types::Weekday::convert_from(jiff_weekday);
+/// assert_eq!(icu_weekday, icu_calendar::types::Weekday::Wednesday);
 /// ```
 impl ConvertFrom<JiffWeekday> for IcuWeekday {
     fn convert_from(v: JiffWeekday) -> IcuWeekday {
@@ -504,6 +521,7 @@ mod tests {
     ///
     /// We skip nanoseconds because it would take too long to exhaustively
     /// test. Without nanoseconds, this is quick enough to run in debug mode.
+    #[cfg(feature = "time")]
     #[test]
     fn all_jiff_times_are_valid_icu_times() {
         for jiff_time in jiff::civil::Time::MIN.series(1.second()) {
