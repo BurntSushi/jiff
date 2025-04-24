@@ -10,7 +10,7 @@ description = "Conversion routines between Jiff and ICU4X."
 categories = ["date-and-time"]
 keywords = ["date", "time", "temporal", "zone", "icu"]
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.82"
 include = ["/src/*.rs", "/*.dat", "COPYING", "LICENSE-MIT", "UNLICENSE"]
 
 # Integration crates in Jiff are explicitly isolated from the workspace to
@@ -27,14 +27,15 @@ bench = false
 path = "src/lib.rs"
 
 [features]
-default = ["std"]
-std = ["alloc", "icu_calendar/std", "jiff/std"]
-alloc = ["jiff/alloc"]
+default = ["alloc", "time"]
+alloc = ["jiff/alloc", "icu_calendar/alloc", "icu_time?/alloc"]
+time = ["dep:icu_time"]
 
 [dependencies]
 jiff = { version = "0.2.0", path = "../..", default-features = false }
-icu_calendar = { version = "1.5.2", default-features = false }
+icu_calendar = { version = "2.0.0-beta.2", default-features = false }
+icu_time = { version = "2.0.0-beta.2", optional = true, default-features = false }
 
 [dev-dependencies]
 jiff = { version = "0.2.0", path = "../..", default-features = true }
-icu = { version = "1.5.0", features = ["std"] }
+icu = { version = "2.0.0-beta.2" }

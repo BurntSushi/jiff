@@ -14,7 +14,7 @@ cd "$(dirname "$0")/.."
 integrations=(
   "jiff-diesel mysql"
   "jiff-diesel postgres"
-  "jiff-icu std"
+  "jiff-icu alloc,time"
   "jiff-sqlx postgres"
   "jiff-sqlx sqlite"
 )
