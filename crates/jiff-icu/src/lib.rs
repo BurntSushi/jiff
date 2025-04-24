@@ -8,6 +8,9 @@ traits from the standard library.
 
 # Available conversions
 
+* [`jiff::Zoned`] infallibly converts to
+[`icu::time::ZonedDateTime`](icu_time::ZonedDateTime).
+The reverse is unavailable.
 * [`jiff::civil::DateTime`] infallibly converts to
 [`icu::time::DateTime`](icu_time::DateTime).
 The reverse is fallible.
@@ -20,8 +23,64 @@ The reverse is fallible.
 * [`jiff::civil::Weekday`] infallibly converts to
 [`icu::calendar::types::Weekday`](icu_calendar::types::Weekday).
 The reverse is also infallible.
+* [`jiff::tz::TimeZone`] infallibly converts to
+[`icu::time::TimeZone`](icu_time::TimeZone). The reverse is unavailable.
 
-# Format a datetime in another locale
+# Format a zoned datetime in another locale
+
+This example shows how one can bridge `jiff` to `icu` in order to
+format a zoned datetime in a particular locale. This makes use of the
+infallible [`ConvertFrom`] trait to convert a [`jiff::Zoned`] into a
+[`icu::time::ZonedDateTime`](icu_time::ZonedDateTime). In order to get `icu` to
+emit the time zone information, we need to add a zone marker to our fieldset:
+
+```
+use icu::{
+    calendar::Iso,
+    time::ZonedDateTime,
+    datetime::{fieldsets, DateTimeFormatter},
+    locale::locale,
+};
+use jiff::Zoned;
+use jiff_icu::{ConvertFrom as _};
+
+let zdt: Zoned = "2024-09-10T23:37:20-04[America/New_York]".parse()?;
+let icu_zdt = ZonedDateTime::<Iso, _>::convert_from(&zdt);
+
+// Format for the en-GB locale:
+let formatter = DateTimeFormatter::try_new(
+    locale!("en-GB").into(),
+    fieldsets::YMDET::medium().zone(fieldsets::zone::SpecificLong),
+)?;
+assert_eq!(
+    formatter.format(&icu_zdt).to_string(),
+    "Tue, 10 Sept 2024, 23:37:20 Eastern Daylight Time",
+);
+
+// Or in the en-US locale:
+let formatter = DateTimeFormatter::try_new(
+    locale!("en-US").into(),
+    fieldsets::YMDET::medium().zone(fieldsets::zone::SpecificShort),
+)?;
+assert_eq!(
+    formatter.format(&icu_zdt).to_string(),
+    "Tue, Sep 10, 2024, 11:37:20 PM EDT",
+);
+
+// Or in the default or "unknown" locale:
+let formatter = DateTimeFormatter::try_new(
+    icu::locale::Locale::default().into(),
+    fieldsets::YMDET::medium().zone(fieldsets::zone::SpecificShort),
+)?;
+assert_eq!(
+    formatter.format(&icu_zdt).to_string(),
+    "2024 M09 10, Tue 23:37:20 GMT-4",
+);
+
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+# Format a civil datetime in another locale
 
 This example shows how one can bridge `jiff` to `icu` in order to format a
 datetime in a particular locale. This makes use of the infallible
@@ -105,10 +164,19 @@ use icu_calendar::{
     Date as IcuDate, Iso,
 };
 #[cfg(feature = "time")]
-use icu_time::{DateTime as IcuDateTime, Time as IcuTime};
-use jiff::civil::{
-    Date as JiffDate, DateTime as JiffDateTime, Time as JiffTime,
-    Weekday as JiffWeekday,
+use icu_time::{
+    provider::TimeZoneVariant,
+    zone::{models::Full, UtcOffset as IcuUtcOffset},
+    DateTime as IcuDateTime, Time as IcuTime, TimeZone as IcuTimeZone,
+    TimeZoneInfo as IcuTimeZoneInfo, ZonedDateTime as IcuZonedDateTime,
+};
+use jiff::{
+    civil::{
+        Date as JiffDate, DateTime as JiffDateTime, Time as JiffTime,
+        Weekday as JiffWeekday,
+    },
+    tz::{Offset as JiffOffset, TimeZone as JiffTimeZone},
+    Zoned as JiffZoned,
 };
 
 use self::error::err;
@@ -489,6 +557,154 @@ impl ConvertFrom<JiffWeekday> for IcuWeekday {
             JiffWeekday::Saturday => IcuWeekday::Saturday,
             JiffWeekday::Sunday => IcuWeekday::Sunday,
         }
+    }
+}
+
+/// Converts from a [`jiff::tz::Offset`] to a [`icu_time::zone::UtcOffset`].
+///
+/// # Examples
+///
+/// ```
+/// use jiff_icu::{ConvertTryFrom as _};
+///
+/// let jiff_offset = jiff::tz::Offset::from_seconds(
+///     5 * 60 * 60 + 30 * 60,
+/// ).unwrap();
+/// let icu_tz = icu_time::zone::UtcOffset::convert_try_from(jiff_offset)?;
+/// assert_eq!(
+///     format!("{icu_tz:?}"),
+///     "UtcOffset(19800)",
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[cfg(feature = "time")]
+impl ConvertTryFrom<JiffOffset> for IcuUtcOffset {
+    type Error = Error;
+
+    fn convert_try_from(v: JiffOffset) -> Result<IcuUtcOffset, Error> {
+        // I considered just rounding to the nearest eighth of a second,
+        // but Jiff's `Offset` supports a larger range than ICU4X's
+        // `UtcOffset`. In practice, this generally shouldn't matter, since
+        // all extant offsets will fit in ICU4X's `UtcOffset` anyway. But it's
+        // kinda hard to get a reasonable value in the case of failure.
+        IcuUtcOffset::try_from_seconds(v.seconds()).map_err(|err| {
+            err!(
+                "failed to convert Jiff UTC offset of \
+                 `{v}` to ICU4X offset: {err}",
+            )
+        })
+    }
+}
+
+/// Converts from a [`jiff::tz::TimeZone`] to a [`icu_time::TimeZone`].
+///
+/// # Examples
+///
+/// ```
+/// use jiff_icu::{ConvertFrom as _};
+///
+/// let jiff_tz = jiff::tz::TimeZone::get("America/New_York")?;
+/// let icu_tz = icu_time::TimeZone::convert_from(jiff_tz);
+/// assert_eq!(
+///     format!("{icu_tz:?}"),
+///     "TimeZone(\"usnyc\")",
+/// );
+///
+/// let jiff_tz = jiff::tz::TimeZone::get("us/eastern")?;
+/// let icu_tz = icu_time::TimeZone::convert_from(jiff_tz);
+/// assert_eq!(
+///     format!("{icu_tz:?}"),
+///     "TimeZone(\"usnyc\")",
+/// );
+///
+/// // If there's no IANA identifier for the Jiff time zone, then
+/// // this automatically results in an "unknown" ICU4X time zone:
+/// let jiff_tz = jiff::tz::TimeZone::fixed(jiff::tz::offset(-5));
+/// let icu_tz = icu_time::TimeZone::convert_from(jiff_tz);
+/// assert_eq!(
+///     format!("{icu_tz:?}"),
+///     "TimeZone(\"unk\")",
+/// );
+///
+/// // An explicitly unknown Jiff time zone is equivalent to an
+/// // unknown ICU4X time zone:
+/// let jiff_tz = jiff::tz::TimeZone::unknown();
+/// let icu_tz = icu_time::TimeZone::convert_from(jiff_tz);
+/// assert_eq!(
+///     format!("{icu_tz:?}"),
+///     "TimeZone(\"unk\")",
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[cfg(feature = "time")]
+impl ConvertFrom<JiffTimeZone> for IcuTimeZone {
+    fn convert_from(v: JiffTimeZone) -> IcuTimeZone {
+        IcuTimeZone::convert_from(&v)
+    }
+}
+
+/// Converts from a [`&jiff::tz::TimeZone`](jiff::tz::TimeZone) to a
+/// [`icu_time::TimeZone`].
+#[cfg(feature = "time")]
+impl<'a> ConvertFrom<&'a JiffTimeZone> for IcuTimeZone {
+    fn convert_from(v: &'a JiffTimeZone) -> IcuTimeZone {
+        let Some(iana_name) = v.iana_name() else {
+            return IcuTimeZone::unknown();
+        };
+        icu_time::zone::iana::IanaParser::new().parse(iana_name)
+    }
+}
+
+/// Converts from a [`jiff::Zoned`] to a
+/// [`icu_time::ZonedDateTime<Iso, TimeZoneInfo<Full>>`](icu_time::ZonedDateTime).
+///
+/// # Examples
+///
+/// ```
+/// use jiff_icu::{ConvertFrom as _};
+///
+/// let jiff_zdt = jiff::civil::date(2025, 1, 30)
+///     .at(17, 58, 30, 0)
+///     .in_tz("America/New_York")?;
+/// let icu_zdt = icu_time::ZonedDateTime::convert_from(&jiff_zdt);
+/// assert_eq!(
+///     format!("{:?}", icu_zdt.date),
+///     "Date(2025-1-30, default era, for calendar ISO)",
+/// );
+/// assert_eq!(
+///     format!("{:?}", icu_zdt.time),
+///     "Time { hour: Hour(17), minute: Minute(58), second: Second(30), subsecond: Nanosecond(0) }",
+/// );
+/// assert_eq!(
+///     format!("{:?}", (icu_zdt.zone.time_zone_id(), icu_zdt.zone.offset())),
+///     "(TimeZone(\"usnyc\"), Some(UtcOffset(-18000)))",
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[cfg(feature = "time")]
+impl<'a> ConvertFrom<&'a JiffZoned>
+    for IcuZonedDateTime<Iso, IcuTimeZoneInfo<Full>>
+{
+    fn convert_from(
+        v: &'a JiffZoned,
+    ) -> IcuZonedDateTime<Iso, IcuTimeZoneInfo<Full>> {
+        let date = IcuDate::convert_from(v.date());
+        let time = IcuTime::convert_from(v.time());
+
+        let tz = IcuTimeZone::convert_from(v.time_zone());
+        let offset = IcuUtcOffset::convert_try_from(v.offset()).ok();
+        let dst = v.time_zone().to_offset_info(v.timestamp()).dst().is_dst();
+        let tz_info_base = tz.with_offset(offset);
+        let tz_info_at = tz_info_base.at_time((date, time));
+        let zone = tz_info_at.with_zone_variant(if dst {
+            TimeZoneVariant::Daylight
+        } else {
+            TimeZoneVariant::Standard
+        });
+        IcuZonedDateTime { date, time, zone }
     }
 }
 

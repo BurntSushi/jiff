@@ -701,6 +701,15 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
     ),
     deny(rustdoc::broken_intra_doc_links)
 )]
+#![cfg_attr(
+    not(all(
+        feature = "std",
+        feature = "serde",
+        feature = "static",
+        feature = "tzdb-zoneinfo"
+    )),
+    allow(rustdoc::broken_intra_doc_links)
+)]
 // These are just too annoying to squash otherwise.
 #![cfg_attr(
     not(all(
