@@ -465,12 +465,6 @@ pub fn format(
 // only catch is that you can't omit time units bigger than any present time
 // unit. For example, only `%M` doesn't fly. If you want to parse minutes, you
 // also have to parse hours.
-//
-// This design does also let us possibly do "incomplete" parsing by asking
-// the caller for a datetime to "seed" a `Fields` struct, and then execute
-// parsing. But Jiff doesn't currently expose an API to do that. But this
-// implementation was intentionally designed to support that use case, C
-// style, if it comes up.
 #[derive(Debug, Default)]
 pub struct BrokenDownTime {
     year: Option<t::Year>,
