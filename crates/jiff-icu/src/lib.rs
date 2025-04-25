@@ -170,11 +170,10 @@ use icu_time::{
     DateTime as IcuDateTime, Time as IcuTime, TimeZone as IcuTimeZone,
     TimeZoneInfo as IcuTimeZoneInfo, ZonedDateTime as IcuZonedDateTime,
 };
+use jiff::civil::{Date as JiffDate, Weekday as JiffWeekday};
+#[cfg(feature = "time")]
 use jiff::{
-    civil::{
-        Date as JiffDate, DateTime as JiffDateTime, Time as JiffTime,
-        Weekday as JiffWeekday,
-    },
+    civil::{DateTime as JiffDateTime, Time as JiffTime},
     tz::{Offset as JiffOffset, TimeZone as JiffTimeZone},
     Zoned as JiffZoned,
 };
