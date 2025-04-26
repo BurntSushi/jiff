@@ -22,6 +22,8 @@ Add a "lenient" mode for `strtime` formatting APIs that ignores most errors.
 
 Bug fixes:
 
+* [#340](https://github.com/BurntSushi/jiff/issues/340):
+Allow whitespace in more places in RFC 2822 parser (improves spec compliance).
 * [#346](https://github.com/BurntSushi/jiff/issues/346):
 `TimeZone::get("UTC")` should now always return `TimeZone::UTC`.
 

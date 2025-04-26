@@ -442,18 +442,32 @@ impl DateTimeParser {
         let Parsed { value: year, input } = self.parse_year(input)?;
 
         let Parsed { value: hour, input } = self.parse_hour(input)?;
+        let Parsed { input, .. } = self.skip_whitespace(input);
         let Parsed { input, .. } = self.parse_time_separator(input)?;
+        let Parsed { input, .. } = self.skip_whitespace(input);
         let Parsed { value: minute, input } = self.parse_minute(input)?;
+
+        let Parsed { value: whitespace_after_minute, input } =
+            self.skip_whitespace(input);
         let (second, input) = if !input.starts_with(b":") {
+            if !whitespace_after_minute {
+                return Err(err!(
+                    "expected whitespace after parsing time: \
+                     expected at least one whitespace character \
+                     (space or tab), but found none",
+                ));
+            }
             (t::Second::N::<0>(), input)
         } else {
             let Parsed { input, .. } = self.parse_time_separator(input)?;
+            let Parsed { input, .. } = self.skip_whitespace(input);
             let Parsed { value: second, input } = self.parse_second(input)?;
+            let Parsed { input, .. } =
+                self.parse_whitespace(input).with_context(|| {
+                    err!("expected whitespace after parsing time")
+                })?;
             (second, input)
         };
-        let Parsed { input, .. } = self
-            .parse_whitespace(input)
-            .with_context(|| err!("expected whitespace after parsing time"))?;
 
         let date =
             Date::new_ranged(year, month, day).context("invalid date")?;
@@ -513,10 +527,14 @@ impl DateTimeParser {
                 length = input.len(),
             ));
         }
-        let b1 = input[0].to_ascii_lowercase();
-        let b2 = input[1].to_ascii_lowercase();
-        let b3 = input[2].to_ascii_lowercase();
-        let wd = match &[b1, b2, b3] {
+        let b1 = input[0];
+        let b2 = input[1];
+        let b3 = input[2];
+        let wd = match &[
+            b1.to_ascii_lowercase(),
+            b2.to_ascii_lowercase(),
+            b3.to_ascii_lowercase(),
+        ] {
             b"sun" => Weekday::Sunday,
             b"mon" => Weekday::Monday,
             b"tue" => Weekday::Tuesday,
@@ -535,24 +553,19 @@ impl DateTimeParser {
                 ));
             }
         };
-        if input[3] != b',' {
+        let Parsed { input, .. } = self.skip_whitespace(&input[3..]);
+        if input[0] != b',' {
             return Err(err!(
                 "expected day at beginning of RFC 2822 datetime \
                  since first non-whitespace byte, {first:?}, \
                  is not a digit, but found {got:?} after parsed \
                  weekday {wd:?} and expected a comma",
-                first = escape::Byte(input[0]),
-                got = escape::Byte(input[3]),
-                wd = escape::Bytes(&input[..3]),
+                first = escape::Byte(b1),
+                got = escape::Byte(input[0]),
+                wd = escape::Bytes(&[b1, b2, b3]),
             ));
         }
-        let Parsed { input, .. } =
-            self.parse_whitespace(&input[4..]).with_context(|| {
-                err!(
-                    "expected whitespace after parsing {got:?}",
-                    got = escape::Bytes(&input[..4]),
-                )
-            })?;
+        let Parsed { input, .. } = self.skip_whitespace(&input[1..]);
         Ok(Parsed { value: Some(wd), input })
     }
 
@@ -939,27 +952,30 @@ impl DateTimeParser {
         &self,
         input: &'i [u8],
     ) -> Result<Parsed<'i, ()>, Error> {
-        let oldlen = input.len();
-        let parsed = self.skip_whitespace(input);
-        let newlen = parsed.input.len();
-        if oldlen == newlen {
+        let Parsed { input, value: had_whitespace } =
+            self.skip_whitespace(input);
+        if !had_whitespace {
             return Err(err!(
                 "expected at least one whitespace character (space or tab), \
                  but found none",
             ));
         }
-        Ok(parsed)
+        Ok(Parsed { value: (), input })
     }
 
     /// Skips over any ASCII whitespace at the beginning of `input`.
     ///
     /// This returns the input unchanged if it does not begin with whitespace.
+    /// The resulting value is `true` if any whitespace was consumed,
+    /// and `false` if none was.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn skip_whitespace<'i>(&self, mut input: &'i [u8]) -> Parsed<'i, ()> {
+    fn skip_whitespace<'i>(&self, mut input: &'i [u8]) -> Parsed<'i, bool> {
+        let mut found_whitespace = false;
         while input.first().map_or(false, |&b| is_whitespace(b)) {
             input = &input[1..];
+            found_whitespace = true;
         }
-        Parsed { value: (), input }
+        Parsed { value: found_whitespace, input }
     }
 
     /// This attempts to parse and skip any trailing "comment" in an RFC 2822
@@ -1013,7 +1029,8 @@ impl DateTimeParser {
                  no matching closing parenthesis"
             ));
         }
-        Ok(self.skip_whitespace(input))
+        let Parsed { input, .. } = self.skip_whitespace(input);
+        Ok(Parsed { value: (), input })
     }
 }
 
@@ -1686,6 +1703,32 @@ mod tests {
             p("Wed, 10 Jan 2024 05:34:45 -0500 "),
             @"2024-01-10T05:34:45-05:00[-05:00]",
         );
+        // Whitespace around the comma is optional
+        insta::assert_debug_snapshot!(
+            p("Wed,10 Jan 2024 05:34:45 -0500"),
+            @"2024-01-10T05:34:45-05:00[-05:00]",
+        );
+        insta::assert_debug_snapshot!(
+            p("Wed    ,     10 Jan 2024 05:34:45 -0500"),
+            @"2024-01-10T05:34:45-05:00[-05:00]",
+        );
+        insta::assert_debug_snapshot!(
+            p("Wed    ,10 Jan 2024 05:34:45 -0500"),
+            @"2024-01-10T05:34:45-05:00[-05:00]",
+        );
+        // Whitespace is allowed around the time components
+        insta::assert_debug_snapshot!(
+            p("Wed, 10 Jan 2024 05   :34:  45 -0500"),
+            @"2024-01-10T05:34:45-05:00[-05:00]",
+        );
+        insta::assert_debug_snapshot!(
+            p("Wed, 10 Jan 2024 05:  34 :45 -0500"),
+            @"2024-01-10T05:34:45-05:00[-05:00]",
+        );
+        insta::assert_debug_snapshot!(
+            p("Wed, 10 Jan 2024 05 :  34 :   45 -0500"),
+            @"2024-01-10T05:34:45-05:00[-05:00]",
+        );
     }
 
     #[test]
@@ -1713,6 +1756,11 @@ mod tests {
         insta::assert_snapshot!(
             p("Sun, 30 Jun 2024 24:00:00 -0500"),
             @"failed to parse RFC 2822 datetime into Jiff zoned datetime: hour is not valid: parameter 'hour' with value 24 is not in the required range of 0..=23",
+        );
+        // No whitespace after time
+        insta::assert_snapshot!(
+            p("Wed, 10 Jan 2024 05:34MST"),
+            @r###"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected whitespace after parsing time: expected at least one whitespace character (space or tab), but found none"###,
         );
     }
 
