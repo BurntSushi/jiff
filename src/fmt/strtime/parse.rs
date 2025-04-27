@@ -112,6 +112,20 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                         }
                     }
                 }
+                b'c' => {
+                    return Err(err!("cannot parse locale date and time"));
+                }
+                b'r' => {
+                    return Err(err!(
+                        "cannot parse locale 12-hour clock time"
+                    ));
+                }
+                b'X' => {
+                    return Err(err!("cannot parse locale clock time"));
+                }
+                b'x' => {
+                    return Err(err!("cannot parse locale date"));
+                }
                 b'Z' => {
                     return Err(err!("cannot parse time zone abbreviations"));
                 }
@@ -997,7 +1011,7 @@ impl Extension {
     /// input is empty.
     #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_number<'i>(
-        self,
+        &self,
         default_pad_width: usize,
         default_flag: Flag,
         mut inp: &'i [u8],

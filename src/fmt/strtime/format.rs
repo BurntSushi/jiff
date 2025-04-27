@@ -3,7 +3,8 @@ use crate::{
     fmt::{
         strtime::{
             month_name_abbrev, month_name_full, weekday_name_abbrev,
-            weekday_name_full, BrokenDownTime, Extension, Flag,
+            weekday_name_full, BrokenDownTime, Config, Custom, Extension,
+            Flag,
         },
         util::{DecimalFormatter, FractionalFormatter},
         Write, WriteExt,
@@ -13,13 +14,14 @@ use crate::{
     Error,
 };
 
-pub(super) struct Formatter<'f, 't, 'w, W> {
+pub(super) struct Formatter<'c, 'f, 't, 'w, W, L> {
+    pub(super) config: &'c Config<L>,
     pub(super) fmt: &'f [u8],
     pub(super) tm: &'t BrokenDownTime,
     pub(super) wtr: &'w mut W,
 }
 
-impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
+impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     pub(super) fn format(&mut self) -> Result<(), Error> {
         while !self.fmt.is_empty() {
             if self.f() != b'%' {
@@ -42,43 +44,47 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
             let ext = self.parse_extension()?;
             match self.f() {
                 b'%' => self.wtr.write_str("%").context("%% failed")?,
-                b'A' => self.fmt_weekday_full(ext).context("%A failed")?,
-                b'a' => self.fmt_weekday_abbrev(ext).context("%a failed")?,
-                b'B' => self.fmt_month_full(ext).context("%B failed")?,
-                b'b' => self.fmt_month_abbrev(ext).context("%b failed")?,
-                b'C' => self.fmt_century(ext).context("%C failed")?,
-                b'D' => self.fmt_american_date(ext).context("%D failed")?,
-                b'd' => self.fmt_day_zero(ext).context("%d failed")?,
-                b'e' => self.fmt_day_space(ext).context("%e failed")?,
-                b'F' => self.fmt_iso_date(ext).context("%F failed")?,
-                b'f' => self.fmt_fractional(ext).context("%f failed")?,
-                b'G' => self.fmt_iso_week_year(ext).context("%G failed")?,
-                b'g' => self.fmt_iso_week_year2(ext).context("%g failed")?,
-                b'H' => self.fmt_hour24_zero(ext).context("%H failed")?,
-                b'h' => self.fmt_month_abbrev(ext).context("%b failed")?,
-                b'I' => self.fmt_hour12_zero(ext).context("%H failed")?,
-                b'j' => self.fmt_day_of_year(ext).context("%j failed")?,
-                b'k' => self.fmt_hour24_space(ext).context("%k failed")?,
-                b'l' => self.fmt_hour12_space(ext).context("%l failed")?,
-                b'M' => self.fmt_minute(ext).context("%M failed")?,
-                b'm' => self.fmt_month(ext).context("%m failed")?,
+                b'A' => self.fmt_weekday_full(&ext).context("%A failed")?,
+                b'a' => self.fmt_weekday_abbrev(&ext).context("%a failed")?,
+                b'B' => self.fmt_month_full(&ext).context("%B failed")?,
+                b'b' => self.fmt_month_abbrev(&ext).context("%b failed")?,
+                b'C' => self.fmt_century(&ext).context("%C failed")?,
+                b'c' => self.fmt_datetime(&ext).context("%c failed")?,
+                b'D' => self.fmt_american_date(&ext).context("%D failed")?,
+                b'd' => self.fmt_day_zero(&ext).context("%d failed")?,
+                b'e' => self.fmt_day_space(&ext).context("%e failed")?,
+                b'F' => self.fmt_iso_date(&ext).context("%F failed")?,
+                b'f' => self.fmt_fractional(&ext).context("%f failed")?,
+                b'G' => self.fmt_iso_week_year(&ext).context("%G failed")?,
+                b'g' => self.fmt_iso_week_year2(&ext).context("%g failed")?,
+                b'H' => self.fmt_hour24_zero(&ext).context("%H failed")?,
+                b'h' => self.fmt_month_abbrev(&ext).context("%b failed")?,
+                b'I' => self.fmt_hour12_zero(&ext).context("%H failed")?,
+                b'j' => self.fmt_day_of_year(&ext).context("%j failed")?,
+                b'k' => self.fmt_hour24_space(&ext).context("%k failed")?,
+                b'l' => self.fmt_hour12_space(&ext).context("%l failed")?,
+                b'M' => self.fmt_minute(&ext).context("%M failed")?,
+                b'm' => self.fmt_month(&ext).context("%m failed")?,
                 b'n' => self.fmt_literal("\n").context("%n failed")?,
-                b'P' => self.fmt_ampm_lower(ext).context("%P failed")?,
-                b'p' => self.fmt_ampm_upper(ext).context("%p failed")?,
+                b'P' => self.fmt_ampm_lower(&ext).context("%P failed")?,
+                b'p' => self.fmt_ampm_upper(&ext).context("%p failed")?,
                 b'Q' => self.fmt_iana_nocolon().context("%Q failed")?,
-                b'R' => self.fmt_clock_nosecs(ext).context("%R failed")?,
-                b'S' => self.fmt_second(ext).context("%S failed")?,
-                b's' => self.fmt_timestamp(ext).context("%s failed")?,
-                b'T' => self.fmt_clock_secs(ext).context("%T failed")?,
+                b'R' => self.fmt_clock_nosecs(&ext).context("%R failed")?,
+                b'r' => self.fmt_12hour_time(&ext).context("%r failed")?,
+                b'S' => self.fmt_second(&ext).context("%S failed")?,
+                b's' => self.fmt_timestamp(&ext).context("%s failed")?,
+                b'T' => self.fmt_clock_secs(&ext).context("%T failed")?,
                 b't' => self.fmt_literal("\t").context("%t failed")?,
-                b'U' => self.fmt_week_sun(ext).context("%U failed")?,
-                b'u' => self.fmt_weekday_mon(ext).context("%u failed")?,
-                b'V' => self.fmt_week_iso(ext).context("%V failed")?,
-                b'W' => self.fmt_week_mon(ext).context("%W failed")?,
-                b'w' => self.fmt_weekday_sun(ext).context("%w failed")?,
-                b'Y' => self.fmt_year(ext).context("%Y failed")?,
-                b'y' => self.fmt_year2(ext).context("%y failed")?,
-                b'Z' => self.fmt_tzabbrev(ext).context("%Z failed")?,
+                b'U' => self.fmt_week_sun(&ext).context("%U failed")?,
+                b'u' => self.fmt_weekday_mon(&ext).context("%u failed")?,
+                b'V' => self.fmt_week_iso(&ext).context("%V failed")?,
+                b'W' => self.fmt_week_mon(&ext).context("%W failed")?,
+                b'w' => self.fmt_weekday_sun(&ext).context("%w failed")?,
+                b'X' => self.fmt_time(&ext).context("%X failed")?,
+                b'x' => self.fmt_date(&ext).context("%x failed")?,
+                b'Y' => self.fmt_year(&ext).context("%Y failed")?,
+                b'y' => self.fmt_year2(&ext).context("%y failed")?,
+                b'Z' => self.fmt_tzabbrev(&ext).context("%Z failed")?,
                 b'z' => self.fmt_offset_nocolon().context("%z failed")?,
                 b':' => {
                     if !self.bump_fmt() {
@@ -113,7 +119,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
                     let ext = Extension { width: self.parse_width()?, ..ext };
                     match self.f() {
                         b'f' => self
-                            .fmt_dot_fractional(ext)
+                            .fmt_dot_fractional(&ext)
                             .context("%.f failed")?,
                         unk => {
                             return Err(err!(
@@ -221,7 +227,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     // of course, doing the actual formatting.
 
     /// %P
-    fn fmt_ampm_lower(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_ampm_lower(&mut self, ext: &Extension) -> Result<(), Error> {
         let hour = self
             .tm
             .hour
@@ -235,7 +241,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %p
-    fn fmt_ampm_upper(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_ampm_upper(&mut self, ext: &Extension) -> Result<(), Error> {
         let hour = self
             .tm
             .hour
@@ -249,7 +255,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %D
-    fn fmt_american_date(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_american_date(&mut self, ext: &Extension) -> Result<(), Error> {
         self.fmt_month(ext)?;
         self.wtr.write_char('/')?;
         self.fmt_day_zero(ext)?;
@@ -259,7 +265,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %R
-    fn fmt_clock_nosecs(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_clock_nosecs(&mut self, ext: &Extension) -> Result<(), Error> {
         self.fmt_hour24_zero(ext)?;
         self.wtr.write_char(':')?;
         self.fmt_minute(ext)?;
@@ -267,7 +273,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %T
-    fn fmt_clock_secs(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_clock_secs(&mut self, ext: &Extension) -> Result<(), Error> {
         self.fmt_hour24_zero(ext)?;
         self.wtr.write_char(':')?;
         self.fmt_minute(ext)?;
@@ -277,7 +283,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %d
-    fn fmt_day_zero(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_day_zero(&mut self, ext: &Extension) -> Result<(), Error> {
         let day = self
             .tm
             .day
@@ -288,7 +294,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %e
-    fn fmt_day_space(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_day_space(&mut self, ext: &Extension) -> Result<(), Error> {
         let day = self
             .tm
             .day
@@ -299,7 +305,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %I
-    fn fmt_hour12_zero(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_hour12_zero(&mut self, ext: &Extension) -> Result<(), Error> {
         let mut hour = self
             .tm
             .hour
@@ -314,7 +320,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %H
-    fn fmt_hour24_zero(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_hour24_zero(&mut self, ext: &Extension) -> Result<(), Error> {
         let hour = self
             .tm
             .hour
@@ -324,7 +330,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %l
-    fn fmt_hour12_space(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_hour12_space(&mut self, ext: &Extension) -> Result<(), Error> {
         let mut hour = self
             .tm
             .hour
@@ -339,7 +345,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %k
-    fn fmt_hour24_space(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_hour24_space(&mut self, ext: &Extension) -> Result<(), Error> {
         let hour = self
             .tm
             .hour
@@ -349,7 +355,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %F
-    fn fmt_iso_date(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_iso_date(&mut self, ext: &Extension) -> Result<(), Error> {
         self.fmt_year(ext)?;
         self.wtr.write_char('-')?;
         self.fmt_month(ext)?;
@@ -359,7 +365,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %M
-    fn fmt_minute(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_minute(&mut self, ext: &Extension) -> Result<(), Error> {
         let minute = self
             .tm
             .minute
@@ -369,7 +375,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %m
-    fn fmt_month(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_month(&mut self, ext: &Extension) -> Result<(), Error> {
         let month = self
             .tm
             .month
@@ -380,7 +386,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %B
-    fn fmt_month_full(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_month_full(&mut self, ext: &Extension) -> Result<(), Error> {
         let month = self
             .tm
             .month
@@ -390,7 +396,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %b, %h
-    fn fmt_month_abbrev(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_month_abbrev(&mut self, ext: &Extension) -> Result<(), Error> {
         let month = self
             .tm
             .month
@@ -446,7 +452,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %S
-    fn fmt_second(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_second(&mut self, ext: &Extension) -> Result<(), Error> {
         let second = self
             .tm
             .second
@@ -456,7 +462,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %s
-    fn fmt_timestamp(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_timestamp(&mut self, ext: &Extension) -> Result<(), Error> {
         let timestamp = self.tm.to_timestamp().map_err(|_| {
             err!(
                 "requires instant (a date, time and offset) \
@@ -467,7 +473,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %f
-    fn fmt_fractional(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_fractional(&mut self, ext: &Extension) -> Result<(), Error> {
         let subsec = self.tm.subsec.ok_or_else(|| {
             err!("requires time to format subsecond nanoseconds")
         })?;
@@ -489,7 +495,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %.f
-    fn fmt_dot_fractional(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_dot_fractional(&mut self, ext: &Extension) -> Result<(), Error> {
         let Some(subsec) = self.tm.subsec else { return Ok(()) };
         if subsec == C(0) && ext.width.is_none() || ext.width == Some(0) {
             return Ok(());
@@ -500,7 +506,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %Z
-    fn fmt_tzabbrev(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_tzabbrev(&mut self, ext: &Extension) -> Result<(), Error> {
         let tzabbrev = self.tm.tzabbrev.as_ref().ok_or_else(|| {
             err!("requires time zone abbreviation in broken down time")
         })?;
@@ -508,7 +514,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %A
-    fn fmt_weekday_full(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_weekday_full(&mut self, ext: &Extension) -> Result<(), Error> {
         let weekday = self
             .tm
             .weekday
@@ -518,7 +524,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %a
-    fn fmt_weekday_abbrev(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_weekday_abbrev(&mut self, ext: &Extension) -> Result<(), Error> {
         let weekday = self
             .tm
             .weekday
@@ -528,7 +534,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %u
-    fn fmt_weekday_mon(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_weekday_mon(&mut self, ext: &Extension) -> Result<(), Error> {
         let weekday = self
             .tm
             .weekday
@@ -538,7 +544,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %w
-    fn fmt_weekday_sun(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_weekday_sun(&mut self, ext: &Extension) -> Result<(), Error> {
         let weekday = self
             .tm
             .weekday
@@ -548,7 +554,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %U
-    fn fmt_week_sun(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_week_sun(&mut self, ext: &Extension) -> Result<(), Error> {
         // Short circuit if the week number was explicitly set.
         if let Some(weeknum) = self.tm.week_sun {
             return ext.write_int(b'0', Some(2), weeknum, self.wtr);
@@ -579,7 +585,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %V
-    fn fmt_week_iso(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_week_iso(&mut self, ext: &Extension) -> Result<(), Error> {
         let weeknum = self
             .tm
             .iso_week
@@ -593,7 +599,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %W
-    fn fmt_week_mon(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_week_mon(&mut self, ext: &Extension) -> Result<(), Error> {
         // Short circuit if the week number was explicitly set.
         if let Some(weeknum) = self.tm.week_mon {
             return ext.write_int(b'0', Some(2), weeknum, self.wtr);
@@ -624,7 +630,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %Y
-    fn fmt_year(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_year(&mut self, ext: &Extension) -> Result<(), Error> {
         let year = self
             .tm
             .year
@@ -635,7 +641,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %y
-    fn fmt_year2(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_year2(&mut self, ext: &Extension) -> Result<(), Error> {
         let year = self
             .tm
             .year
@@ -653,7 +659,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %C
-    fn fmt_century(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_century(&mut self, ext: &Extension) -> Result<(), Error> {
         let year = self
             .tm
             .year
@@ -665,7 +671,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %G
-    fn fmt_iso_week_year(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_iso_week_year(&mut self, ext: &Extension) -> Result<(), Error> {
         let year = self
             .tm
             .iso_week_year
@@ -680,7 +686,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %g
-    fn fmt_iso_week_year2(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_iso_week_year2(&mut self, ext: &Extension) -> Result<(), Error> {
         let year = self
             .tm
             .iso_week_year
@@ -706,7 +712,7 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     }
 
     /// %j
-    fn fmt_day_of_year(&mut self, ext: Extension) -> Result<(), Error> {
+    fn fmt_day_of_year(&mut self, ext: &Extension) -> Result<(), Error> {
         let day = self
             .tm
             .day_of_year
@@ -719,6 +725,31 @@ impl<'f, 't, 'w, W: Write> Formatter<'f, 't, 'w, W> {
     /// %n, %t
     fn fmt_literal(&mut self, literal: &str) -> Result<(), Error> {
         self.wtr.write_str(literal)
+    }
+
+    /// %c
+    fn fmt_datetime(&mut self, ext: &Extension) -> Result<(), Error> {
+        self.config.custom.format_datetime(self.config, ext, self.tm, self.wtr)
+    }
+
+    /// %x
+    fn fmt_date(&mut self, ext: &Extension) -> Result<(), Error> {
+        self.config.custom.format_date(self.config, ext, self.tm, self.wtr)
+    }
+
+    /// %X
+    fn fmt_time(&mut self, ext: &Extension) -> Result<(), Error> {
+        self.config.custom.format_time(self.config, ext, self.tm, self.wtr)
+    }
+
+    /// %r
+    fn fmt_12hour_time(&mut self, ext: &Extension) -> Result<(), Error> {
+        self.config.custom.format_12hour_time(
+            self.config,
+            ext,
+            self.tm,
+            self.wtr,
+        )
     }
 }
 
@@ -756,7 +787,7 @@ impl Extension {
     /// Writes the given string using the default case rule provided, unless
     /// an option in this extension config overrides the default case.
     fn write_str<W: Write>(
-        self,
+        &self,
         default: Case,
         string: &str,
         wtr: &mut W,
@@ -791,7 +822,7 @@ impl Extension {
     /// Writes the given integer using the given padding width and byte, unless
     /// an option in this extension config overrides a default setting.
     fn write_int<W: Write>(
-        self,
+        &self,
         pad_byte: u8,
         pad_width: Option<u8>,
         number: impl Into<i64>,
@@ -821,7 +852,7 @@ impl Extension {
     ///
     /// The `width` setting on `Extension` is treated as a precision setting.
     fn write_fractional_seconds<W: Write>(
-        self,
+        &self,
         number: impl Into<i64>,
         wtr: &mut W,
     ) -> Result<(), Error> {
@@ -856,7 +887,7 @@ impl Case {
 mod tests {
     use crate::{
         civil::{date, time, Date, DateTime, Time},
-        fmt::strtime::format,
+        fmt::strtime::{format, BrokenDownTime, Config, PosixCustom},
         Timestamp, Zoned,
     };
 
@@ -1124,6 +1155,100 @@ mod tests {
         insta::assert_snapshot!(f("%C", date(-2024, 7, 14)), @"-20");
         insta::assert_snapshot!(f("%C", date(-1815, 7, 14)), @"-18");
         insta::assert_snapshot!(f("%C", date(-915, 7, 14)), @"-9");
+    }
+
+    #[test]
+    fn ok_format_default_locale() {
+        let f = |fmt: &str, date: DateTime| format(fmt, date).unwrap();
+
+        insta::assert_snapshot!(
+            f("%c", date(2024, 7, 14).at(0, 0, 0, 0)),
+            @"2024 M07 14, Sun 00:00:00",
+        );
+        insta::assert_snapshot!(
+            f("%c", date(24, 7, 14).at(0, 0, 0, 0)),
+            @"0024 M07 14, Sun 00:00:00",
+        );
+        insta::assert_snapshot!(
+            f("%c", date(-24, 7, 14).at(0, 0, 0, 0)),
+            @"-0024 M07 14, Wed 00:00:00",
+        );
+        insta::assert_snapshot!(
+            f("%c", date(2024, 7, 14).at(17, 31, 59, 123_456_789)),
+            @"2024 M07 14, Sun 17:31:59",
+        );
+
+        insta::assert_snapshot!(
+            f("%r", date(2024, 7, 14).at(8, 30, 0, 0)),
+            @"8:30:00 AM",
+        );
+        insta::assert_snapshot!(
+            f("%r", date(2024, 7, 14).at(17, 31, 59, 123_456_789)),
+            @"5:31:59 PM",
+        );
+
+        insta::assert_snapshot!(
+            f("%x", date(2024, 7, 14).at(0, 0, 0, 0)),
+            @"2024 M07 14",
+        );
+
+        insta::assert_snapshot!(
+            f("%X", date(2024, 7, 14).at(8, 30, 0, 0)),
+            @"08:30:00",
+        );
+        insta::assert_snapshot!(
+            f("%X", date(2024, 7, 14).at(17, 31, 59, 123_456_789)),
+            @"17:31:59",
+        );
+    }
+
+    #[test]
+    fn ok_format_posix_locale() {
+        let f = |fmt: &str, date: DateTime| {
+            let config = Config::new().custom(PosixCustom::default());
+            let tm = BrokenDownTime::from(date);
+            tm.to_string_with_config(&config, fmt).unwrap()
+        };
+
+        insta::assert_snapshot!(
+            f("%c", date(2024, 7, 14).at(0, 0, 0, 0)),
+            @"Sun Jul 14 00:00:00 2024",
+        );
+        insta::assert_snapshot!(
+            f("%c", date(24, 7, 14).at(0, 0, 0, 0)),
+            @"Sun Jul 14 00:00:00 0024",
+        );
+        insta::assert_snapshot!(
+            f("%c", date(-24, 7, 14).at(0, 0, 0, 0)),
+            @"Wed Jul 14 00:00:00 -0024",
+        );
+        insta::assert_snapshot!(
+            f("%c", date(2024, 7, 14).at(17, 31, 59, 123_456_789)),
+            @"Sun Jul 14 17:31:59 2024",
+        );
+
+        insta::assert_snapshot!(
+            f("%r", date(2024, 7, 14).at(8, 30, 0, 0)),
+            @"08:30:00 AM",
+        );
+        insta::assert_snapshot!(
+            f("%r", date(2024, 7, 14).at(17, 31, 59, 123_456_789)),
+            @"05:31:59 PM",
+        );
+
+        insta::assert_snapshot!(
+            f("%x", date(2024, 7, 14).at(0, 0, 0, 0)),
+            @"07/14/24",
+        );
+
+        insta::assert_snapshot!(
+            f("%X", date(2024, 7, 14).at(8, 30, 0, 0)),
+            @"08:30:00",
+        );
+        insta::assert_snapshot!(
+            f("%X", date(2024, 7, 14).at(17, 31, 59, 123_456_789)),
+            @"17:31:59",
+        );
     }
 
     #[test]

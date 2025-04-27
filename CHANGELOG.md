@@ -1,5 +1,18 @@
 # CHANGELOG
 
+0.2.11 (TBD)
+============
+This release includes new APIs for customizing Jiff's `strtime` behavior.
+
+This release also coincides with the publication of `jiff-icu 0.2.0-beta.2`,
+which has support for `icu 2.0.0-beta.2`.
+
+Enhancements:
+
+* [#338](https://github.com/BurntSushi/jiff/pull/338):
+Add support for the `%c`, `%r`, `%X` and `%x` conversion specifiers.
+
+
 0.2.10 (2025-04-21)
 ===================
 This release includes a bug fix for parsing `Tuesday` when using `%A` via
