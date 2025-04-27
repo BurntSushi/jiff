@@ -110,13 +110,33 @@ enum ErrorKind {
 }
 
 impl Error {
+    /// Creates a new error value from `core::fmt::Arguments`.
+    ///
+    /// It is expected to use [`format_args!`](format_args) from
+    /// Rust's standard library (available in `core`) to create a
+    /// `core::fmt::Arguments`.
+    ///
+    /// Callers should generally use their own error types. But in some
+    /// circumstances, it can be convenient to manufacture a Jiff error value
+    /// specifically.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::Error;
+    ///
+    /// let err = Error::from_args(format_args!("something failed"));
+    /// assert_eq!(err.to_string(), "something failed");
+    /// ```
+    pub fn from_args<'a>(message: core::fmt::Arguments<'a>) -> Error {
+        Error::from(ErrorKind::Adhoc(AdhocError::from_args(message)))
+    }
+}
+
+impl Error {
     /// Creates a new "ad hoc" error value.
     ///
-    /// An ad hoc error value is just an opaque string. In theory we should
-    /// avoid creating such error values, but in practice, they are extremely
-    /// convenient. And the alternative is quite brutal given the varied ways
-    /// in which things in a datetime library can fail. (Especially parsing
-    /// errors.)
+    /// An ad hoc error value is just an opaque string.
     #[cfg(feature = "alloc")]
     pub(crate) fn adhoc<'a>(message: impl core::fmt::Display + 'a) -> Error {
         Error::from(ErrorKind::Adhoc(AdhocError::from_display(message)))
