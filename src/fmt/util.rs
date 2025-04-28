@@ -100,10 +100,40 @@ impl Decimal {
 
     /// Using the given formatter, turn the value given into a decimal
     /// representation using ASCII bytes.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) const fn new(
         formatter: &DecimalFormatter,
-        value: i64,
+        mut value: i64,
     ) -> Decimal {
+        // Specialize the common case to generate tighter codegen.
+        if value >= 0 && formatter.force_sign.is_none() {
+            let mut decimal = Decimal {
+                buf: [0; Self::MAX_I64_LEN as usize],
+                start: Self::MAX_I64_LEN,
+                end: Self::MAX_I64_LEN,
+            };
+            loop {
+                decimal.start -= 1;
+
+                let digit = (value % 10) as u8;
+                value /= 10;
+                decimal.buf[decimal.start as usize] = b'0' + digit;
+                if value == 0 {
+                    break;
+                }
+            }
+            while decimal.len() < formatter.minimum_digits {
+                decimal.start -= 1;
+                decimal.buf[decimal.start as usize] = formatter.padding_byte;
+            }
+            return decimal;
+        }
+        Decimal::new_cold(formatter, value)
+    }
+
+    #[cold]
+    #[inline(never)]
+    const fn new_cold(formatter: &DecimalFormatter, value: i64) -> Decimal {
         let sign = value.signum();
         let Some(mut value) = value.checked_abs() else {
             let buf = [

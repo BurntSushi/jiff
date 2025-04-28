@@ -174,6 +174,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     ///
     /// When `self.fmt` is empty. i.e., Only call this when you know there is
     /// some remaining bytes to parse.
+    #[cold]
     #[inline(never)]
     fn utf8_decode_and_bump(&mut self) -> Result<char, Error> {
         match utf8::decode(self.fmt).expect("non-empty fmt") {
@@ -192,6 +193,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     /// Parses optional extensions before a specifier directive. That is, right
     /// after the `%`. If any extensions are parsed, the parser is bumped
     /// to the next byte. (If no next byte exists, then an error is returned.)
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_extension(&mut self) -> Result<Extension, Error> {
         let flag = self.parse_flag()?;
         let width = self.parse_width()?;
@@ -200,6 +202,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
 
     /// Parses an optional flag. And if one is parsed, the parser is bumped
     /// to the next byte. (If no next byte exists, then an error is returned.)
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_flag(&mut self) -> Result<Option<Flag>, Error> {
         let (flag, fmt) = Extension::parse_flag(self.fmt)?;
         self.fmt = fmt;
@@ -215,6 +218,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     /// `%.f`. In the former case, the width is just re-interpreted as a
     /// precision setting. In the latter case, something like `%5.9f` is
     /// technically valid, but the `5` is ignored.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_width(&mut self) -> Result<Option<u8>, Error> {
         let (width, fmt) = Extension::parse_width(self.fmt)?;
         self.fmt = fmt;
@@ -247,11 +251,21 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
             .hour
             .ok_or_else(|| err!("requires time to format AM/PM"))?
             .get();
-        ext.write_str(
-            Case::Upper,
-            if hour < 12 { "AM" } else { "PM" },
-            self.wtr,
-        )
+        // Manually specialize this case to avoid hitting `write_str_cold`.
+        let s = if matches!(ext.flag, Some(Flag::Swapcase)) {
+            if hour < 12 {
+                "am"
+            } else {
+                "pm"
+            }
+        } else {
+            if hour < 12 {
+                "AM"
+            } else {
+                "PM"
+            }
+        };
+        self.wtr.write_str(s)
     }
 
     /// %D
@@ -507,10 +521,16 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
 
     /// %Z
     fn fmt_tzabbrev(&mut self, ext: &Extension) -> Result<(), Error> {
-        let tzabbrev = self.tm.tzabbrev.as_ref().ok_or_else(|| {
-            err!("requires time zone abbreviation in broken down time")
-        })?;
-        ext.write_str(Case::Upper, tzabbrev.as_str(), self.wtr)
+        let tz =
+            self.tm.tz.as_ref().ok_or_else(|| {
+                err!("requires time zone in broken down time")
+            })?;
+        let ts = self
+            .tm
+            .timestamp
+            .ok_or_else(|| err!("requires timestamp in broken down time"))?;
+        let oinfo = tz.to_offset_info(ts);
+        ext.write_str(Case::Upper, oinfo.abbreviation(), self.wtr)
     }
 
     /// %A
@@ -786,7 +806,22 @@ fn write_offset<W: Write>(
 impl Extension {
     /// Writes the given string using the default case rule provided, unless
     /// an option in this extension config overrides the default case.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn write_str<W: Write>(
+        &self,
+        default: Case,
+        string: &str,
+        wtr: &mut W,
+    ) -> Result<(), Error> {
+        if self.flag.is_none() && matches!(default, Case::AsIs) {
+            return wtr.write_str(string);
+        }
+        self.write_str_cold(default, string, wtr)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn write_str_cold<W: Write>(
         &self,
         default: Case,
         string: &str,
@@ -821,6 +856,7 @@ impl Extension {
 
     /// Writes the given integer using the given padding width and byte, unless
     /// an option in this extension config overrides a default setting.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn write_int<W: Write>(
         &self,
         pad_byte: u8,
