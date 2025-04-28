@@ -279,9 +279,7 @@ use crate::{
     },
     tz::{Offset, OffsetConflict, TimeZone, TimeZoneDatabase},
     util::{
-        self,
-        array_str::Abbreviation,
-        escape,
+        self, escape,
         rangeint::RInto,
         t::{self, C},
     },
@@ -430,7 +428,8 @@ pub fn format(
 ) -> Result<alloc::string::String, Error> {
     let broken_down_time: BrokenDownTime = broken_down_time.into();
 
-    let mut buf = alloc::string::String::new();
+    let format = format.as_ref();
+    let mut buf = alloc::string::String::with_capacity(format.len());
     broken_down_time.format(format, &mut buf)?;
     Ok(buf)
 }
@@ -810,9 +809,13 @@ pub struct BrokenDownTime {
     // be used with, say, %H. In that case, AM will
     // turn 13 o'clock to 1 o'clock.
     meridiem: Option<Meridiem>,
-    // The time zone abbreviation. Used only when
+    // A timestamp. Set only when converting from
+    // a `Zoned` or `Timestamp`. Currently used only
+    // to get time zone offset info.
+    timestamp: Option<Timestamp>,
+    // The time zone. Currently used only when
     // formatting a `Zoned`.
-    tzabbrev: Option<Abbreviation>,
+    tz: Option<TimeZone>,
     // The IANA time zone identifier. Used only when
     // formatting a `Zoned`.
     #[cfg(feature = "alloc")]
@@ -1113,7 +1116,8 @@ impl BrokenDownTime {
         &self,
         format: impl AsRef<[u8]>,
     ) -> Result<alloc::string::String, Error> {
-        let mut buf = alloc::string::String::new();
+        let format = format.as_ref();
+        let mut buf = alloc::string::String::with_capacity(format.len());
         self.format(format, &mut buf)?;
         Ok(buf)
     }
@@ -1165,7 +1169,8 @@ impl BrokenDownTime {
         config: &Config<L>,
         format: impl AsRef<[u8]>,
     ) -> Result<alloc::string::String, Error> {
-        let mut buf = alloc::string::String::new();
+        let format = format.as_ref();
+        let mut buf = alloc::string::String::with_capacity(format.len());
         self.format_with_config(config, format, &mut buf)?;
         Ok(buf)
     }
@@ -2876,7 +2881,7 @@ impl BrokenDownTime {
 
 impl<'a> From<&'a Zoned> for BrokenDownTime {
     fn from(zdt: &'a Zoned) -> BrokenDownTime {
-        let offset_info = zdt.time_zone().to_offset_info(zdt.timestamp());
+        // let offset_info = zdt.time_zone().to_offset_info(zdt.timestamp());
         #[cfg(feature = "alloc")]
         let iana = {
             use alloc::string::ToString;
@@ -2884,10 +2889,8 @@ impl<'a> From<&'a Zoned> for BrokenDownTime {
         };
         BrokenDownTime {
             offset: Some(zdt.offset()),
-            // In theory, this could fail, but I've never seen a time zone
-            // abbreviation longer than a few bytes. Please file an issue if
-            // this is a problem for you.
-            tzabbrev: Abbreviation::new(offset_info.abbreviation()),
+            timestamp: Some(zdt.timestamp()),
+            tz: Some(zdt.time_zone().clone()),
             #[cfg(feature = "alloc")]
             iana,
             ..BrokenDownTime::from(zdt.datetime())
@@ -2900,6 +2903,7 @@ impl From<Timestamp> for BrokenDownTime {
         let dt = Offset::UTC.to_datetime(ts);
         BrokenDownTime {
             offset: Some(Offset::UTC),
+            timestamp: Some(ts),
             ..BrokenDownTime::from(dt)
         }
     }

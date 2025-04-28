@@ -12,6 +12,12 @@ Enhancements:
 * [#338](https://github.com/BurntSushi/jiff/pull/338):
 Add support for the `%c`, `%r`, `%X` and `%x` conversion specifiers.
 
+Performance:
+
+* [#338](https://github.com/BurntSushi/jiff/pull/338):
+Jiff's `strftime` APIs are now approximately twice as fast as they were.
+Performance should be comparable to `chrono` and `time`'s prebuilt APIs.
+
 
 0.2.10 (2025-04-21)
 ===================
