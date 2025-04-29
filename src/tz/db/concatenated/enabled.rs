@@ -15,7 +15,10 @@ use std::{
 use crate::{
     error::{err, Error},
     timestamp::Timestamp,
-    tz::{concatenated::ConcatenatedTzif, TimeZone, TimeZoneNameIter},
+    tz::{
+        concatenated::ConcatenatedTzif, db::special_time_zone, TimeZone,
+        TimeZoneNameIter,
+    },
     util::{self, array_str::ArrayStr, cache::Expiration, utf8},
 };
 
@@ -89,14 +92,8 @@ impl Database {
     }
 
     pub(crate) fn get(&self, query: &str) -> Option<TimeZone> {
-        // We just always assume UTC exists and map it to our special const
-        // TimeZone::UTC value.
-        if query == "UTC" {
-            return Some(TimeZone::UTC);
-        }
-        // Similarly for the special `Etc/Unknown` value.
-        if query == "Etc/Unknown" {
-            return Some(TimeZone::unknown());
+        if let Some(tz) = special_time_zone(query) {
+            return Some(tz);
         }
         let path = self.path.as_ref()?;
         // The fast path is when the query matches a pre-existing unexpired

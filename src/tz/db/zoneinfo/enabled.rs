@@ -15,7 +15,10 @@ use std::{
 use crate::{
     error::{err, Error},
     timestamp::Timestamp,
-    tz::{tzif::is_possibly_tzif, TimeZone, TimeZoneNameIter},
+    tz::{
+        db::special_time_zone, tzif::is_possibly_tzif, TimeZone,
+        TimeZoneNameIter,
+    },
     util::{self, cache::Expiration, parse, utf8},
 };
 
@@ -87,14 +90,8 @@ impl Database {
     }
 
     pub(crate) fn get(&self, query: &str) -> Option<TimeZone> {
-        // We just always assume UTC exists and map it to our special const
-        // TimeZone::UTC value.
-        if query == "UTC" {
-            return Some(TimeZone::UTC);
-        }
-        // Similarly for the special `Etc/Unknown` value.
-        if query == "Etc/Unknown" {
-            return Some(TimeZone::unknown());
+        if let Some(tz) = special_time_zone(query) {
+            return Some(tz);
         }
         // If we couldn't build any time zone names, then every lookup will
         // fail. So just bail now.

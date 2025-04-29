@@ -1,4 +1,4 @@
-use crate::tz::{TimeZone, TimeZoneNameIter};
+use crate::tz::{db::special_time_zone, TimeZone, TimeZoneNameIter};
 
 pub(crate) struct Database;
 
@@ -17,10 +17,8 @@ impl Database {
         if let Some(tz) = self::global::get(name) {
             return Some(tz);
         }
-        // Check for the special `Etc/Unknown` value, which isn't in the
-        // IANA time zone database.
-        if name == "Etc/Unknown" {
-            return Some(TimeZone::unknown());
+        if let Some(tz) = special_time_zone(name) {
+            return Some(tz);
         }
         let (canonical_name, tzif) = lookup(name)?;
         let tz = match TimeZone::tzif(canonical_name, tzif) {

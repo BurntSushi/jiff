@@ -1,7 +1,7 @@
 use crate::{
     error::{err, Error},
     tz::TimeZone,
-    util::sync::Arc,
+    util::{sync::Arc, utf8},
 };
 
 mod bundled;
@@ -442,6 +442,10 @@ impl TimeZoneDatabase {
     /// To see a list of all available time zone identifiers for this database,
     /// use [`TimeZoneDatabase::available`].
     ///
+    /// It is guaranteed that if the given time zone name is case insensitively
+    /// equivalent to `UTC`, then the time zone returned will be equivalent to
+    /// `TimeZone::UTC`. Similarly for `Etc/Unknown` and `TimeZone::unknown()`.
+    ///
     /// # Example
     ///
     /// ```
@@ -687,6 +691,20 @@ impl<'d> core::fmt::Display for TimeZoneName<'d> {
     }
 }
 
+/// Checks if `name` is a "special" time zone and returns one if so.
+///
+/// This is limited to special constants that should have consistent values
+/// across time zone database implementations. For example, `UTC`.
+fn special_time_zone(name: &str) -> Option<TimeZone> {
+    if utf8::cmp_ignore_ascii_case("utc", name).is_eq() {
+        return Some(TimeZone::UTC);
+    }
+    if utf8::cmp_ignore_ascii_case("etc/unknown", name).is_eq() {
+        return Some(TimeZone::unknown());
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -709,5 +727,48 @@ mod tests {
         {
             assert_eq!(1, core::mem::size_of::<TimeZoneDatabase>());
         }
+    }
+
+    /// Time zone databases should always return `TimeZone::UTC` if the time
+    /// zone is known to be UTC.
+    ///
+    /// Regression test for: https://github.com/BurntSushi/jiff/issues/346
+    #[test]
+    fn bundled_returns_utc_constant() {
+        let db = TimeZoneDatabase::bundled();
+        if db.is_definitively_empty() {
+            return;
+        }
+        assert_eq!(db.get("UTC").unwrap(), TimeZone::UTC);
+        assert_eq!(db.get("utc").unwrap(), TimeZone::UTC);
+        assert_eq!(db.get("uTc").unwrap(), TimeZone::UTC);
+        assert_eq!(db.get("UtC").unwrap(), TimeZone::UTC);
+
+        // Also, similarly, for `Etc/Unknown`.
+        assert_eq!(db.get("Etc/Unknown").unwrap(), TimeZone::unknown());
+        assert_eq!(db.get("etc/UNKNOWN").unwrap(), TimeZone::unknown());
+    }
+
+    /// Time zone databases should always return `TimeZone::UTC` if the time
+    /// zone is known to be UTC.
+    ///
+    /// Regression test for: https://github.com/BurntSushi/jiff/issues/346
+    #[cfg(all(feature = "std", not(miri)))]
+    #[test]
+    fn zoneinfo_returns_utc_constant() {
+        let Ok(db) = TimeZoneDatabase::from_dir("/usr/share/zoneinfo") else {
+            return;
+        };
+        if db.is_definitively_empty() {
+            return;
+        }
+        assert_eq!(db.get("UTC").unwrap(), TimeZone::UTC);
+        assert_eq!(db.get("utc").unwrap(), TimeZone::UTC);
+        assert_eq!(db.get("uTc").unwrap(), TimeZone::UTC);
+        assert_eq!(db.get("UtC").unwrap(), TimeZone::UTC);
+
+        // Also, similarly, for `Etc/Unknown`.
+        assert_eq!(db.get("Etc/Unknown").unwrap(), TimeZone::unknown());
+        assert_eq!(db.get("etc/UNKNOWN").unwrap(), TimeZone::unknown());
     }
 }
