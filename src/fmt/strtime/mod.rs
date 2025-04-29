@@ -182,6 +182,7 @@ strings, the strings are matched without regard to ASCII case.
 | `%p` | `PM` | Whether the time is in the AM or PM, uppercase. |
 | `%Q` | `America/New_York`, `+0530` | An IANA time zone identifier, or `%z` if one doesn't exist. |
 | `%:Q` | `America/New_York`, `+05:30` | An IANA time zone identifier, or `%:z` if one doesn't exist. |
+| `%q` | `4` | The quarter of the year. Supported when formatting only. |
 | `%R` | `23:30` | Equivalent to `%H:%M`. |
 | `%r` | `8:30:00 AM` | The 12-hour clock time via [`Custom`]. Supported when formatting only. |
 | `%S` | `59` | The second. Zero padded. |

@@ -70,6 +70,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 b'P' => self.fmt_ampm_lower(&ext).context("%P failed")?,
                 b'p' => self.fmt_ampm_upper(&ext).context("%p failed")?,
                 b'Q' => self.fmt_iana_nocolon().context("%Q failed")?,
+                b'q' => self.fmt_quarter(&ext).context("%q failed")?,
                 b'R' => self.fmt_clock_nosecs(&ext).context("%R failed")?,
                 b'r' => self.fmt_12hour_time(&ext).context("%r failed")?,
                 b'S' => self.fmt_second(&ext).context("%S failed")?,
@@ -750,6 +751,24 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         ext.write_int(b'0', Some(2), year, self.wtr)
     }
 
+    /// %q
+    fn fmt_quarter(&mut self, ext: &Extension) -> Result<(), Error> {
+        let month = self
+            .tm
+            .month
+            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
+            .ok_or_else(|| err!("requires date to format quarter"))?
+            .get();
+        let quarter = match month {
+            1..=3 => 1,
+            4..=6 => 2,
+            7..=9 => 3,
+            10..=12 => 4,
+            _ => unreachable!(),
+        };
+        ext.write_int(b'0', None, quarter, self.wtr)
+    }
+
     /// %j
     fn fmt_day_of_year(&mut self, ext: &Extension) -> Result<(), Error> {
         let day = self
@@ -1362,6 +1381,20 @@ mod tests {
 
         let ts = "2025-01-20T13:09-05[US/Eastern]".parse().unwrap();
         insta::assert_snapshot!(f("%s", ts), @"1737396540");
+    }
+
+    #[test]
+    fn ok_format_quarter() {
+        let f = |fmt: &str, date: Date| format(fmt, date).unwrap();
+
+        insta::assert_snapshot!(f("%q", date(2024, 3, 31)), @"1");
+        insta::assert_snapshot!(f("%q", date(2024, 4, 1)), @"2");
+        insta::assert_snapshot!(f("%q", date(2024, 7, 14)), @"3");
+        insta::assert_snapshot!(f("%q", date(2024, 12, 31)), @"4");
+
+        insta::assert_snapshot!(f("%2q", date(2024, 3, 31)), @"01");
+        insta::assert_snapshot!(f("%02q", date(2024, 3, 31)), @"01");
+        insta::assert_snapshot!(f("%_2q", date(2024, 3, 31)), @" 1");
     }
 
     #[test]
