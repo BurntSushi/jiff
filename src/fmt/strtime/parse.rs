@@ -72,6 +72,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                 b'l' => self.parse_hour12(ext).context("%l failed")?,
                 b'M' => self.parse_minute(ext).context("%M failed")?,
                 b'm' => self.parse_month(ext).context("%m failed")?,
+                b'N' => self.parse_fractional(ext).context("%N failed")?,
                 b'n' => self.parse_whitespace().context("%n failed")?,
                 b'P' => self.parse_ampm().context("%P failed")?,
                 b'p' => self.parse_ampm().context("%p failed")?,
@@ -659,9 +660,9 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         Ok(())
     }
 
-    /// Parses `%f`, which is equivalent to a fractional second up to
-    /// nanosecond precision. This must always parse at least one decimal digit
-    /// and does not parse any leading dot.
+    /// Parses `%f` (or `%N`, which is an alias), which is equivalent to a
+    /// fractional second up to nanosecond precision. This must always parse at
+    /// least one decimal digit and does not parse any leading dot.
     ///
     /// At present, we don't use any flags/width/precision settings to
     /// influence parsing. That is, `%3f` will parse the fractional component
@@ -1700,6 +1701,19 @@ mod tests {
         );
 
         insta::assert_debug_snapshot!(
+            p("%H:%M:%S.%N", "15:48:01.1"),
+            @"15:48:01.1",
+        );
+        insta::assert_debug_snapshot!(
+            p("%H:%M:%S.%3N", "15:48:01.123"),
+            @"15:48:01.123",
+        );
+        insta::assert_debug_snapshot!(
+            p("%H:%M:%S.%3N", "15:48:01.123456"),
+            @"15:48:01.123456",
+        );
+
+        insta::assert_debug_snapshot!(
             p("%H", "09"),
             @"09:00:00",
         );
@@ -1919,6 +1933,18 @@ mod tests {
         insta::assert_snapshot!(
             p("%H:%M:%S.%f", "15:59:01.a"),
             @"strptime parsing failed: %f failed: expected at least one fractional decimal digit, but did not find any",
+        );
+        insta::assert_snapshot!(
+            p("%H:%M:%S.%N", "15:59:01."),
+            @"strptime parsing failed: expected non-empty input for directive %N, but found end of input",
+        );
+        insta::assert_snapshot!(
+            p("%H:%M:%S.%N", "15:59:01"),
+            @r###"strptime parsing failed: expected to match literal byte "." from format string, but found end of input"###,
+        );
+        insta::assert_snapshot!(
+            p("%H:%M:%S.%N", "15:59:01.a"),
+            @"strptime parsing failed: %N failed: expected at least one fractional decimal digit, but did not find any",
         );
 
         insta::assert_snapshot!(
