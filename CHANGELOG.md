@@ -12,6 +12,11 @@ Enhancements:
 * [#338](https://github.com/BurntSushi/jiff/pull/338):
 Add support for the `%c`, `%r`, `%X` and `%x` conversion specifiers.
 
+Bug fixes:
+
+* [#346](https://github.com/BurntSushi/jiff/issues/346):
+`TimeZone::get("UTC")` should now always return `TimeZone::UTC`.
+
 Performance:
 
 * [#338](https://github.com/BurntSushi/jiff/pull/338):

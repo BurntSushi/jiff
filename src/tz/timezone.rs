@@ -400,6 +400,10 @@ impl TimeZone {
     /// the given time zone identifier. It uses the default global time zone
     /// database via [`tz::db()`](crate::tz::db()).
     ///
+    /// It is guaranteed that if the given time zone name is case insensitively
+    /// equivalent to `UTC`, then the time zone returned will be equivalent to
+    /// `TimeZone::UTC`. Similarly for `Etc/Unknown` and `TimeZone::unknown()`.
+    ///
     /// # Errors
     ///
     /// This returns an error if the given time zone identifier could not be
