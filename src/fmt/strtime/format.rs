@@ -65,6 +65,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 b'l' => self.fmt_hour12_space(&ext).context("%l failed")?,
                 b'M' => self.fmt_minute(&ext).context("%M failed")?,
                 b'm' => self.fmt_month(&ext).context("%m failed")?,
+                b'N' => self.fmt_nanoseconds(&ext).context("%N failed")?,
                 b'n' => self.fmt_literal("\n").context("%n failed")?,
                 b'P' => self.fmt_ampm_lower(&ext).context("%P failed")?,
                 b'p' => self.fmt_ampm_upper(&ext).context("%p failed")?,
@@ -515,6 +516,24 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
             return Ok(());
         }
         ext.write_str(Case::AsIs, ".", self.wtr)?;
+        ext.write_fractional_seconds(subsec, self.wtr)?;
+        Ok(())
+    }
+
+    /// %N
+    fn fmt_nanoseconds(&mut self, ext: &Extension) -> Result<(), Error> {
+        let subsec = self.tm.subsec.ok_or_else(|| {
+            err!("requires time to format subsecond nanoseconds")
+        })?;
+        if ext.width == Some(0) {
+            return Err(err!("zero precision with %N is not allowed"));
+        }
+        // Since `%N` is actually an alias for `%9f`, when the precision
+        // is missing, we default to 9.
+        if ext.width.is_none() {
+            let formatter = FractionalFormatter::new().precision(Some(9));
+            return self.wtr.write_fraction(&formatter, subsec);
+        }
         ext.write_fractional_seconds(subsec, self.wtr)?;
         Ok(())
     }
@@ -1108,6 +1127,14 @@ mod tests {
         insta::assert_snapshot!(f("%.3f", mk(123_456_789)), @".123");
         insta::assert_snapshot!(f("%.6f", mk(123_456_789)), @".123456");
         insta::assert_snapshot!(f("%.9f", mk(123_456_789)), @".123456789");
+
+        insta::assert_snapshot!(f("%N", mk(123_000_000)), @"123000000");
+        insta::assert_snapshot!(f("%N", mk(0)), @"000000000");
+        insta::assert_snapshot!(f("%3N", mk(0)), @"000");
+        insta::assert_snapshot!(f("%3N", mk(123_000_000)), @"123");
+        insta::assert_snapshot!(f("%6N", mk(123_000_000)), @"123000");
+        insta::assert_snapshot!(f("%9N", mk(123_000_000)), @"123000000");
+        insta::assert_snapshot!(f("%255N", mk(123_000_000)), @"123000000");
     }
 
     #[test]

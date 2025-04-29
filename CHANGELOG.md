@@ -11,6 +11,8 @@ Enhancements:
 
 * [#338](https://github.com/BurntSushi/jiff/pull/338):
 Add support for the `%c`, `%r`, `%X` and `%x` conversion specifiers.
+* [#344](https://github.com/BurntSushi/jiff/issues/344):
+Add support for `%N` in `jiff::fmt::strtime` (alias for `%9f`).
 
 Bug fixes:
 

@@ -166,7 +166,7 @@ strings, the strings are matched without regard to ASCII case.
 | `%D` | `7/14/24` | Equivalent to `%m/%d/%y`. |
 | `%d`, `%e` | `25`, ` 5` | The day of the month. `%d` is zero-padded, `%e` is space padded. |
 | `%F` | `2024-07-14` | Equivalent to `%Y-%m-%d`. |
-| `%f` | `000456` | Fractional seconds, up to nanosecond precision. |
+| `%f`, `%N` | `000456` | Fractional seconds, up to nanosecond precision. |
 | `%.f` | `.000456` | Optional fractional seconds, with dot, up to nanosecond precision. |
 | `%G` | `2024` | An [ISO 8601 week-based] year. Zero padded to 4 digits. |
 | `%g` | `24` | A two-digit [ISO 8601 week-based] year. Represents only 1969-2068. Zero padded. |
