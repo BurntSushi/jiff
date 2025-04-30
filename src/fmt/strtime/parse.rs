@@ -660,9 +660,9 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         Ok(())
     }
 
-    /// Parses `%f` (or `%N`, which is an alias), which is equivalent to a
-    /// fractional second up to nanosecond precision. This must always parse at
-    /// least one decimal digit and does not parse any leading dot.
+    /// Parses `%f` (or `%N`, which is an alias for `%9f`), which is equivalent
+    /// to a fractional second up to nanosecond precision. This must always
+    /// parse at least one decimal digit and does not parse any leading dot.
     ///
     /// At present, we don't use any flags/width/precision settings to
     /// influence parsing. That is, `%3f` will parse the fractional component
