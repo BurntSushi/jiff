@@ -290,6 +290,7 @@ impl core::fmt::Debug for Numeric {
 pub(crate) struct Parser {
     zulu: bool,
     require_minute: bool,
+    require_second: bool,
     subminute: bool,
     subsecond: bool,
     colon: Colon,
@@ -301,6 +302,7 @@ impl Parser {
         Parser {
             zulu: true,
             require_minute: false,
+            require_second: false,
             subminute: true,
             subsecond: true,
             colon: Colon::Optional,
@@ -324,6 +326,16 @@ impl Parser {
     /// This is disabled by default.
     pub(crate) const fn require_minute(self, yes: bool) -> Parser {
         Parser { require_minute: yes, ..self }
+    }
+
+    /// When enabled, the second component of a time zone offset is required.
+    /// If no seconds (or minutes) are found, then an error is returned.
+    ///
+    /// When `subminute` is disabled, this setting has no effect.
+    ///
+    /// This is disabled by default.
+    pub(crate) const fn require_second(self, yes: bool) -> Parser {
+        Parser { require_second: yes, ..self }
     }
 
     /// When enabled, offsets with precision greater than integral minutes
@@ -462,7 +474,7 @@ impl Parser {
                     return Err(err!(
                         "parsed hour component of time zone offset from \
                          {original:?}, but could not find required colon \
-                         component",
+                         separator",
                     ));
                 }
                 true
@@ -497,7 +509,7 @@ impl Parser {
                 )
             })?;
         if !has_minutes {
-            if self.require_minute {
+            if self.require_minute || (self.subminute && self.require_second) {
                 return Err(err!(
                     "parsed hour component of time zone offset from \
                      {original:?}, but could not find required minute \
@@ -544,6 +556,13 @@ impl Parser {
                 )
             })?;
         if !has_seconds {
+            if self.require_second {
+                return Err(err!(
+                    "parsed hour and minute components of time zone offset \
+                     from {original:?}, but could not find required second \
+                     component",
+                ));
+            }
             return Ok(Parsed { value: numeric, input });
         }
 

@@ -202,6 +202,8 @@ strings, the strings are matched without regard to ASCII case.
 | `%Z` | `EDT` | A time zone abbreviation. Supported when formatting only. |
 | `%z` | `+0530` | A time zone offset in the format `[+-]HHMM[SS]`. |
 | `%:z` | `+05:30` | A time zone offset in the format `[+-]HH:MM[:SS]`. |
+| `%::z` | `+05:30:00` | A time zone offset in the format `[+-]HH:MM:SS`. |
+| `%:::z` | `-04`, `+05:30` | A time zone offset in the format `[+-]HH:[MM[:SS]]`. |
 
 When formatting, the following flags can be inserted immediately after the `%`
 and before the directive:
@@ -253,7 +255,6 @@ is variable width data. If you have a use case for this, please
 The following things are currently unsupported:
 
 * Parsing or formatting fractional seconds in the time time zone offset.
-* The `%::z` and `%:::z` specifiers found in GNU date.
 * The `%+` conversion specifier is not supported since there doesn't seem to
   be any consistent definition for it.
 * With only Jiff, the `%c`, `%r`, `%X` and `%x` locale oriented specifiers
@@ -3084,6 +3085,7 @@ impl From<Time> for Meridiem {
 pub struct Extension {
     flag: Option<Flag>,
     width: Option<u8>,
+    colons: u8,
 }
 
 impl Extension {
@@ -3147,6 +3149,22 @@ impl Extension {
             ));
         }
         Ok((Some(width), fmt))
+    }
+
+    /// Parses an optional number of colons.
+    ///
+    /// This is meant to be used immediately before the conversion specifier
+    /// (after the flag and width has been parsed).
+    ///
+    /// This supports parsing up to 3 colons. The colons are used in some cases
+    /// for alternate specifiers. e.g., `%:Q` or `%:::z`.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    fn parse_colons<'i>(fmt: &'i [u8]) -> (u8, &'i [u8]) {
+        let mut colons = 0;
+        while colons < 3 && colons < fmt.len() && fmt[colons] == b':' {
+            colons += 1;
+        }
+        (u8::try_from(colons).unwrap(), &fmt[usize::from(colons)..])
     }
 }
 
