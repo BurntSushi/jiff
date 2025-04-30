@@ -962,6 +962,7 @@ mod tests {
     use crate::{
         civil::{date, time, Date, DateTime, Time},
         fmt::strtime::{format, BrokenDownTime, Config, PosixCustom},
+        tz::Offset,
         Timestamp, Zoned,
     };
 
@@ -1087,7 +1088,7 @@ mod tests {
     }
 
     #[test]
-    fn ok_format_offset() {
+    fn ok_format_offset_from_zoned() {
         if crate::tz::db().is_definitively_empty() {
             return;
         }
@@ -1104,6 +1105,25 @@ mod tests {
         let zdt = zdt.checked_add(crate::Span::new().months(5)).unwrap();
         insta::assert_snapshot!(f("%z", &zdt), @"-0500");
         insta::assert_snapshot!(f("%:z", &zdt), @"-05:00");
+    }
+
+    #[test]
+    fn ok_format_offset_plain() {
+        let o = |h: i8, m: i8, s: i8| -> Offset { Offset::hms(h, m, s) };
+        let f = |fmt: &str, offset: Offset| {
+            let mut tm = BrokenDownTime::default();
+            tm.set_offset(Some(offset));
+            tm.to_string(fmt).unwrap()
+        };
+
+        insta::assert_snapshot!(f("%z", o(0, 0, 0)), @"+0000");
+        insta::assert_snapshot!(f("%:z", o(0, 0, 0)), @"+00:00");
+        insta::assert_snapshot!(f("%z", -o(4, 0, 0)), @"-0400");
+        insta::assert_snapshot!(f("%:z", -o(4, 0, 0)), @"-04:00");
+        insta::assert_snapshot!(f("%z", o(5, 30, 0)), @"+0530");
+        insta::assert_snapshot!(f("%:z", o(5, 30, 0)), @"+05:30");
+        insta::assert_snapshot!(f("%z", o(5, 30, 15)), @"+053015");
+        insta::assert_snapshot!(f("%:z", o(5, 30, 15)), @"+05:30:15");
     }
 
     #[test]

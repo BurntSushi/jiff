@@ -1804,6 +1804,50 @@ mod tests {
     }
 
     #[test]
+    fn ok_parse_offset() {
+        let p = |fmt: &str, input: &str| {
+            BrokenDownTime::parse_mono(fmt.as_bytes(), input.as_bytes())
+                .unwrap()
+                .to_offset()
+                .unwrap()
+        };
+
+        insta::assert_debug_snapshot!(
+            p("%z", "+0530"),
+            @"05:30:00",
+        );
+        insta::assert_debug_snapshot!(
+            p("%z", "-0530"),
+            @"-05:30:00",
+        );
+        insta::assert_debug_snapshot!(
+            p("%z", "-0500"),
+            @"-05:00:00",
+        );
+        insta::assert_debug_snapshot!(
+            p("%z", "+053015"),
+            @"05:30:15",
+        );
+
+        insta::assert_debug_snapshot!(
+            p("%:z", "+05:30"),
+            @"05:30:00",
+        );
+        insta::assert_debug_snapshot!(
+            p("%:z", "-05:30"),
+            @"-05:30:00",
+        );
+        insta::assert_debug_snapshot!(
+            p("%:z", "-05:00"),
+            @"-05:00:00",
+        );
+        insta::assert_debug_snapshot!(
+            p("%:z", "+05:30:15"),
+            @"05:30:15",
+        );
+    }
+
+    #[test]
     fn err_parse() {
         let p = |fmt: &str, input: &str| {
             BrokenDownTime::parse_mono(fmt.as_bytes(), input.as_bytes())
@@ -2094,6 +2138,33 @@ mod tests {
         insta::assert_snapshot!(
             p("%H:%S", "15:59"),
             @"parsing format did not include minute directive, but did include second directive (cannot have smaller time units with bigger time units missing)",
+        );
+    }
+
+    #[test]
+    fn err_parse_offset() {
+        let p = |fmt: &str, input: &str| {
+            BrokenDownTime::parse_mono(fmt.as_bytes(), input.as_bytes())
+                .unwrap_err()
+                .to_string()
+        };
+
+        insta::assert_snapshot!(
+            p("%z", "+05:30"),
+            @"strptime parsing failed: %z failed: failed to parse minutes from time zone offset 05:3: invalid digit, expected 0-9 but got :",
+        );
+        insta::assert_snapshot!(
+            p("%:z", "+0530"),
+            @"strptime parsing failed: %:z failed: expected at least HH:MM digits for time zone offset after sign, but found only 4 bytes remaining",
+        );
+
+        insta::assert_snapshot!(
+            p("%z", "+05"),
+            @"strptime parsing failed: %z failed: expected at least 4 digits for time zone offset after sign, but found only 2 bytes remaining",
+        );
+        insta::assert_snapshot!(
+            p("%:z", "+05"),
+            @"strptime parsing failed: %:z failed: expected at least HH:MM digits for time zone offset after sign, but found only 2 bytes remaining",
         );
     }
 }
