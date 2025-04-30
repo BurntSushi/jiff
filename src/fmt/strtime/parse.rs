@@ -3,7 +3,11 @@ use core::fmt::Write;
 use crate::{
     civil::Weekday,
     error::{err, ErrorContext},
-    fmt::strtime::{BrokenDownTime, Extension, Flag, Meridiem},
+    fmt::{
+        offset,
+        strtime::{BrokenDownTime, Extension, Flag, Meridiem},
+        Parsed,
+    },
     tz::Offset,
     util::{
         escape, parse,
@@ -12,13 +16,6 @@ use crate::{
     },
     Error, Timestamp,
 };
-
-// Custom offset value ranges. They're the same as what we use for `Offset`,
-// but always positive since parsing proceeds by getting the absolute value
-// and then applying the sign.
-type ParsedOffsetHours = ri8<0, { t::SpanZoneOffsetHours::MAX }>;
-type ParsedOffsetMinutes = ri8<0, { t::SpanZoneOffsetMinutes::MAX }>;
-type ParsedOffsetSeconds = ri8<0, { t::SpanZoneOffsetSeconds::MAX }>;
 
 pub(super) struct Parser<'f, 'i, 't> {
     pub(super) fmt: &'f [u8],
@@ -454,67 +451,16 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
 
     /// Parse `%z`, which is a time zone offset without colons.
     fn parse_offset_nocolon(&mut self) -> Result<(), Error> {
-        let (sign, inp) = parse_required_sign(self.inp)
-            .context("sign is required for time zone offset")?;
-        let (hhmm, inp) = parse::split(inp, 4).ok_or_else(|| {
-            err!(
-                "expected at least 4 digits for time zone offset \
-                 after sign, but found only {len} bytes remaining",
-                len = inp.len(),
-            )
-        })?;
+        static PARSER: offset::Parser = offset::Parser::new()
+            .zulu(false)
+            .require_minute(true)
+            .subminute(true)
+            .subsecond(false)
+            .colon(offset::Colon::Absent);
 
-        let hh = parse::i64(&hhmm[0..2]).with_context(|| {
-            err!(
-                "failed to parse hours from time zone offset {hhmm}",
-                hhmm = escape::Bytes(hhmm)
-            )
-        })?;
-        let hh = ParsedOffsetHours::try_new("zone-offset-hours", hh)
-            .context("time zone offset hours are not valid")?;
-        let hh = t::SpanZoneOffset::rfrom(hh);
-
-        let mm = parse::i64(&hhmm[2..4]).with_context(|| {
-            err!(
-                "failed to parse minutes from time zone offset {hhmm}",
-                hhmm = escape::Bytes(hhmm)
-            )
-        })?;
-        let mm = ParsedOffsetMinutes::try_new("zone-offset-minutes", mm)
-            .context("time zone offset minutes are not valid")?;
-        let mm = t::SpanZoneOffset::rfrom(mm);
-
-        let (ss, inp) = if inp.len() < 2
-            || !inp[..2].iter().all(u8::is_ascii_digit)
-        {
-            (t::SpanZoneOffset::N::<0>(), inp)
-        } else {
-            let (ss, inp) = parse::split(inp, 2).unwrap();
-            let ss = parse::i64(ss).with_context(|| {
-                err!(
-                    "failed to parse seconds from time zone offset {ss}",
-                    ss = escape::Bytes(ss)
-                )
-            })?;
-            let ss = ParsedOffsetSeconds::try_new("zone-offset-seconds", ss)
-                .context("time zone offset seconds are not valid")?;
-            if inp.starts_with(b".") {
-                // I suppose we could parse them and then round, but meh...
-                // (At time of writing, the precision of tz::Offset is
-                // seconds. If that improves to nanoseconds, then yes, let's
-                // parse fractional seconds here.)
-                return Err(err!(
-                    "parsing fractional seconds in time zone offset \
-                     is not supported",
-                ));
-            }
-            (t::SpanZoneOffset::rfrom(ss), inp)
-        };
-
-        let seconds = hh * C(3_600) + mm * C(60) + ss;
-        let offset = Offset::from_seconds_ranged(seconds * sign);
-        self.tm.offset = Some(offset);
-        self.inp = inp;
+        let Parsed { value, input } = PARSER.parse(self.inp)?;
+        self.tm.offset = Some(value.to_offset()?);
+        self.inp = input;
         self.bump_fmt();
 
         Ok(())
@@ -522,75 +468,16 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
 
     /// Parse `%:z`, which is a time zone offset with colons.
     fn parse_offset_colon(&mut self) -> Result<(), Error> {
-        let (sign, inp) = parse_required_sign(self.inp)
-            .context("sign is required for time zone offset")?;
-        let (hhmm, inp) = parse::split(inp, 5).ok_or_else(|| {
-            err!(
-                "expected at least HH:MM digits for time zone offset \
-                 after sign, but found only {len} bytes remaining",
-                len = inp.len(),
-            )
-        })?;
-        if hhmm[2] != b':' {
-            return Err(err!(
-                "expected colon after between HH and MM in time zone \
-                 offset, but found {found:?} instead",
-                found = escape::Byte(hhmm[2]),
-            ));
-        }
+        static PARSER: offset::Parser = offset::Parser::new()
+            .zulu(false)
+            .require_minute(true)
+            .subminute(true)
+            .subsecond(false)
+            .colon(offset::Colon::Required);
 
-        let hh = parse::i64(&hhmm[0..2]).with_context(|| {
-            err!(
-                "failed to parse hours from time zone offset {hhmm}",
-                hhmm = escape::Bytes(hhmm)
-            )
-        })?;
-        let hh = ParsedOffsetHours::try_new("zone-offset-hours", hh)
-            .context("time zone offset hours are not valid")?;
-        let hh = t::SpanZoneOffset::rfrom(hh);
-
-        let mm = parse::i64(&hhmm[3..5]).with_context(|| {
-            err!(
-                "failed to parse minutes from time zone offset {hhmm}",
-                hhmm = escape::Bytes(hhmm)
-            )
-        })?;
-        let mm = ParsedOffsetMinutes::try_new("zone-offset-minutes", mm)
-            .context("time zone offset minutes are not valid")?;
-        let mm = t::SpanZoneOffset::rfrom(mm);
-
-        let (ss, inp) = if inp.len() < 3
-            || inp[0] != b':'
-            || !inp[1..3].iter().all(u8::is_ascii_digit)
-        {
-            (t::SpanZoneOffset::N::<0>(), inp)
-        } else {
-            let (ss, inp) = parse::split(&inp[1..], 2).unwrap();
-            let ss = parse::i64(ss).with_context(|| {
-                err!(
-                    "failed to parse seconds from time zone offset {ss}",
-                    ss = escape::Bytes(ss)
-                )
-            })?;
-            let ss = ParsedOffsetSeconds::try_new("zone-offset-seconds", ss)
-                .context("time zone offset seconds are not valid")?;
-            if inp.starts_with(b".") {
-                // I suppose we could parse them and then round, but meh...
-                // (At time of writing, the precision of tz::Offset is
-                // seconds. If that improves to nanoseconds, then yes, let's
-                // parse fractional seconds here.)
-                return Err(err!(
-                    "parsing fractional seconds in time zone offset \
-                     is not supported",
-                ));
-            }
-            (t::SpanZoneOffset::rfrom(ss), inp)
-        };
-
-        let seconds = hh * C(3_600) + mm * C(60) + ss;
-        let offset = Offset::from_seconds_ranged(seconds * sign);
-        self.tm.offset = Some(offset);
-        self.inp = inp;
+        let Parsed { value, input } = PARSER.parse(self.inp)?;
+        self.tm.offset = Some(value.to_offset()?);
+        self.inp = input;
         self.bump_fmt();
 
         Ok(())
@@ -1077,28 +964,6 @@ fn parse_optional_sign<'i>(input: &'i [u8]) -> (i64, &'i [u8]) {
         (1, &input[1..])
     } else {
         (1, input)
-    }
-}
-
-/// Parses an optional sign from the beginning of the input. If one isn't
-/// found, then the sign returned is positive.
-///
-/// This also returns the remaining unparsed input.
-#[cfg_attr(feature = "perf-inline", inline(always))]
-fn parse_required_sign<'i>(
-    input: &'i [u8],
-) -> Result<(t::Sign, &'i [u8]), Error> {
-    if input.is_empty() {
-        Err(err!("expected +/- sign, but found end of input"))
-    } else if input[0] == b'-' {
-        Ok((t::Sign::N::<-1>(), &input[1..]))
-    } else if input[0] == b'+' {
-        Ok((t::Sign::N::<1>(), &input[1..]))
-    } else {
-        Err(err!(
-            "expected +/- sign, but found {found:?} instead",
-            found = escape::Byte(input[0])
-        ))
     }
 }
 
@@ -1993,19 +1858,19 @@ mod tests {
 
         insta::assert_snapshot!(
             p("%Q", "+America/New_York"),
-            @"strptime parsing failed: %Q failed: failed to parse hours from time zone offset Amer: invalid digit, expected 0-9 but got A",
+            @r#"strptime parsing failed: %Q failed: failed to parse hours in UTC numeric offset "+America/New_York": failed to parse "Am" as hours (a two digit integer): invalid digit, expected 0-9 but got A"#,
         );
         insta::assert_snapshot!(
             p("%Q", "-America/New_York"),
-            @"strptime parsing failed: %Q failed: failed to parse hours from time zone offset Amer: invalid digit, expected 0-9 but got A",
+            @r#"strptime parsing failed: %Q failed: failed to parse hours in UTC numeric offset "-America/New_York": failed to parse "Am" as hours (a two digit integer): invalid digit, expected 0-9 but got A"#,
         );
         insta::assert_snapshot!(
             p("%:Q", "+0400"),
-            @"strptime parsing failed: %:Q failed: expected at least HH:MM digits for time zone offset after sign, but found only 4 bytes remaining",
+            @r#"strptime parsing failed: %:Q failed: parsed hour component of time zone offset from "+0400", but could not find required colon component"#,
         );
         insta::assert_snapshot!(
             p("%Q", "+04:00"),
-            @"strptime parsing failed: %Q failed: failed to parse minutes from time zone offset 04:0: invalid digit, expected 0-9 but got :",
+            @r#"strptime parsing failed: %Q failed: parsed hour component of time zone offset from "+04:00", but found colon after hours which is not allowed"#,
         );
         insta::assert_snapshot!(
             p("%Q", "America/"),
@@ -2151,20 +2016,29 @@ mod tests {
 
         insta::assert_snapshot!(
             p("%z", "+05:30"),
-            @"strptime parsing failed: %z failed: failed to parse minutes from time zone offset 05:3: invalid digit, expected 0-9 but got :",
+            @r#"strptime parsing failed: %z failed: parsed hour component of time zone offset from "+05:30", but found colon after hours which is not allowed"#,
         );
         insta::assert_snapshot!(
             p("%:z", "+0530"),
-            @"strptime parsing failed: %:z failed: expected at least HH:MM digits for time zone offset after sign, but found only 4 bytes remaining",
+            @r#"strptime parsing failed: %:z failed: parsed hour component of time zone offset from "+0530", but could not find required colon component"#,
         );
 
         insta::assert_snapshot!(
             p("%z", "+05"),
-            @"strptime parsing failed: %z failed: expected at least 4 digits for time zone offset after sign, but found only 2 bytes remaining",
+            @r#"strptime parsing failed: %z failed: parsed hour component of time zone offset from "+05", but could not find required minute component"#,
         );
         insta::assert_snapshot!(
             p("%:z", "+05"),
-            @"strptime parsing failed: %:z failed: expected at least HH:MM digits for time zone offset after sign, but found only 2 bytes remaining",
+            @r#"strptime parsing failed: %:z failed: parsed hour component of time zone offset from "+05", but could not find required minute component"#,
+        );
+
+        insta::assert_snapshot!(
+            p("%z", "+0530:15"),
+            @r#"strptime expects to consume the entire input, but ":15" remains unparsed"#,
+        );
+        insta::assert_snapshot!(
+            p("%:z", "+05:3015"),
+            @r#"strptime expects to consume the entire input, but "15" remains unparsed"#,
         );
     }
 }
