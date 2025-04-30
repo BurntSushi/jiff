@@ -166,7 +166,7 @@ strings, the strings are matched without regard to ASCII case.
 | `%D` | `7/14/24` | Equivalent to `%m/%d/%y`. |
 | `%d`, `%e` | `25`, ` 5` | The day of the month. `%d` is zero-padded, `%e` is space padded. |
 | `%F` | `2024-07-14` | Equivalent to `%Y-%m-%d`. |
-| `%f`, `%N` | `000456` | Fractional seconds, up to nanosecond precision. |
+| `%f` | `000456` | Fractional seconds, up to nanosecond precision. |
 | `%.f` | `.000456` | Optional fractional seconds, with dot, up to nanosecond precision. |
 | `%G` | `2024` | An [ISO 8601 week-based] year. Zero padded to 4 digits. |
 | `%g` | `24` | A two-digit [ISO 8601 week-based] year. Represents only 1969-2068. Zero padded. |
@@ -177,6 +177,7 @@ strings, the strings are matched without regard to ASCII case.
 | `%l` | ` 3` | The hour in a 12 hour clock. Space padded. |
 | `%M` | `04` | The minute. Zero padded. |
 | `%m` | `01` | The month. Zero padded. |
+| `%N` | `123456000` | Fractional seconds, up to nanosecond precision. Alias for `%9f`. |
 | `%n` | `\n` | Formats as a newline character. Parses arbitrary whitespace. |
 | `%P` | `am` | Whether the time is in the AM or PM, lowercase. |
 | `%p` | `PM` | Whether the time is in the AM or PM, uppercase. |

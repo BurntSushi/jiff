@@ -1149,6 +1149,7 @@ mod tests {
 
         insta::assert_snapshot!(f("%N", mk(123_000_000)), @"123000000");
         insta::assert_snapshot!(f("%N", mk(0)), @"000000000");
+        insta::assert_snapshot!(f("%N", mk(000_123_000)), @"000123000");
         insta::assert_snapshot!(f("%3N", mk(0)), @"000");
         insta::assert_snapshot!(f("%3N", mk(123_000_000)), @"123");
         insta::assert_snapshot!(f("%6N", mk(123_000_000)), @"123000");
