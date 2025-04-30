@@ -69,7 +69,15 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 b'n' => self.fmt_literal("\n").context("%n failed")?,
                 b'P' => self.fmt_ampm_lower(&ext).context("%P failed")?,
                 b'p' => self.fmt_ampm_upper(&ext).context("%p failed")?,
-                b'Q' => self.fmt_iana_nocolon().context("%Q failed")?,
+                b'Q' => match ext.colons {
+                    0 => self.fmt_iana_nocolon().context("%Q failed")?,
+                    1 => self.fmt_iana_colon().context("%:Q failed")?,
+                    _ => {
+                        return Err(err!(
+                            "invalid number of `:` in `%Q` directive"
+                        ))
+                    }
+                },
                 b'q' => self.fmt_quarter(&ext).context("%q failed")?,
                 b'R' => self.fmt_clock_nosecs(&ext).context("%R failed")?,
                 b'r' => self.fmt_12hour_time(&ext).context("%r failed")?,
@@ -87,28 +95,17 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 b'Y' => self.fmt_year(&ext).context("%Y failed")?,
                 b'y' => self.fmt_year2(&ext).context("%y failed")?,
                 b'Z' => self.fmt_tzabbrev(&ext).context("%Z failed")?,
-                b'z' => self.fmt_offset_nocolon().context("%z failed")?,
-                b':' => {
-                    if !self.bump_fmt() {
+                b'z' => match ext.colons {
+                    0 => self.fmt_offset_nocolon().context("%z failed")?,
+                    1 => self.fmt_offset_colon().context("%:z failed")?,
+                    2 => self.fmt_offset_colon2().context("%::z failed")?,
+                    3 => self.fmt_offset_colon3().context("%:::z failed")?,
+                    _ => {
                         return Err(err!(
-                            "invalid format string, expected directive \
-                             after '%:'",
-                        ));
+                            "invalid number of `:` in `%z` directive"
+                        ))
                     }
-                    match self.f() {
-                        b'Q' => self.fmt_iana_colon().context("%:Q failed")?,
-                        b'z' => {
-                            self.fmt_offset_colon().context("%:z failed")?
-                        }
-                        unk => {
-                            return Err(err!(
-                                "found unrecognized directive %{unk} \
-                                 following %:",
-                                unk = escape::Byte(unk),
-                            ));
-                        }
-                    }
-                }
+                },
                 b'.' => {
                     if !self.bump_fmt() {
                         return Err(err!(
@@ -199,7 +196,8 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     fn parse_extension(&mut self) -> Result<Extension, Error> {
         let flag = self.parse_flag()?;
         let width = self.parse_width()?;
-        Ok(Extension { flag, width })
+        let colons = self.parse_colons();
+        Ok(Extension { flag, width, colons })
     }
 
     /// Parses an optional flag. And if one is parsed, the parser is bumped
@@ -225,6 +223,15 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let (width, fmt) = Extension::parse_width(self.fmt)?;
         self.fmt = fmt;
         Ok(width)
+    }
+
+    /// Parses an optional number of colons (up to 3) immediately before a
+    /// conversion specifier.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    fn parse_colons(&mut self) -> u8 {
+        let (colons, fmt) = Extension::parse_colons(self.fmt);
+        self.fmt = fmt;
+        colons
     }
 
     // These are the formatting functions. They are pretty much responsible
@@ -430,7 +437,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                      zone offset, but none were present"
                 )
             })?;
-            return write_offset(offset, false, &mut self.wtr);
+            return write_offset(offset, false, true, false, &mut self.wtr);
         };
         self.wtr.write_str(iana)?;
         Ok(())
@@ -445,7 +452,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                      zone offset, but none were present"
                 )
             })?;
-            return write_offset(offset, true, &mut self.wtr);
+            return write_offset(offset, true, true, false, &mut self.wtr);
         };
         self.wtr.write_str(iana)?;
         Ok(())
@@ -456,7 +463,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let offset = self.tm.offset.ok_or_else(|| {
             err!("requires offset to format time zone offset")
         })?;
-        write_offset(offset, false, self.wtr)
+        write_offset(offset, false, true, false, self.wtr)
     }
 
     /// %:z
@@ -464,7 +471,23 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let offset = self.tm.offset.ok_or_else(|| {
             err!("requires offset to format time zone offset")
         })?;
-        write_offset(offset, true, self.wtr)
+        write_offset(offset, true, true, false, self.wtr)
+    }
+
+    /// %::z
+    fn fmt_offset_colon2(&mut self) -> Result<(), Error> {
+        let offset = self.tm.offset.ok_or_else(|| {
+            err!("requires offset to format time zone offset")
+        })?;
+        write_offset(offset, true, true, true, self.wtr)
+    }
+
+    /// %:::z
+    fn fmt_offset_colon3(&mut self) -> Result<(), Error> {
+        let offset = self.tm.offset.ok_or_else(|| {
+            err!("requires offset to format time zone offset")
+        })?;
+        write_offset(offset, true, false, false, self.wtr)
     }
 
     /// %S
@@ -815,9 +838,18 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
 ///
 /// When `colon` is true, the hour, minute and optional second components are
 /// delimited by a colon. Otherwise, no delimiter is used.
+///
+/// When `minute` is true, the minute component is always printed. When
+/// false, the minute component is only printed when it is non-zero (or if
+/// the second component is non-zero).
+///
+/// When `second` is true, the second component is always printed. When false,
+/// the second component is only printed when it is non-zero.
 fn write_offset<W: Write>(
     offset: Offset,
     colon: bool,
+    minute: bool,
+    second: bool,
     wtr: &mut W,
 ) -> Result<(), Error> {
     static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
@@ -828,15 +860,17 @@ fn write_offset<W: Write>(
 
     wtr.write_str(if offset.is_negative() { "-" } else { "+" })?;
     wtr.write_int(&FMT_TWO, hours)?;
-    if colon {
-        wtr.write_str(":")?;
-    }
-    wtr.write_int(&FMT_TWO, minutes)?;
-    if seconds != 0 {
+    if minute || minutes != 0 || seconds != 0 {
         if colon {
             wtr.write_str(":")?;
         }
-        wtr.write_int(&FMT_TWO, seconds)?;
+        wtr.write_int(&FMT_TWO, minutes)?;
+        if second || seconds != 0 {
+            if colon {
+                wtr.write_str(":")?;
+            }
+            wtr.write_int(&FMT_TWO, seconds)?;
+        }
     }
     Ok(())
 }
@@ -1118,12 +1152,28 @@ mod tests {
 
         insta::assert_snapshot!(f("%z", o(0, 0, 0)), @"+0000");
         insta::assert_snapshot!(f("%:z", o(0, 0, 0)), @"+00:00");
+        insta::assert_snapshot!(f("%::z", o(0, 0, 0)), @"+00:00:00");
+        insta::assert_snapshot!(f("%:::z", o(0, 0, 0)), @"+00");
+
         insta::assert_snapshot!(f("%z", -o(4, 0, 0)), @"-0400");
         insta::assert_snapshot!(f("%:z", -o(4, 0, 0)), @"-04:00");
+        insta::assert_snapshot!(f("%::z", -o(4, 0, 0)), @"-04:00:00");
+        insta::assert_snapshot!(f("%:::z", -o(4, 0, 0)), @"-04");
+
         insta::assert_snapshot!(f("%z", o(5, 30, 0)), @"+0530");
         insta::assert_snapshot!(f("%:z", o(5, 30, 0)), @"+05:30");
+        insta::assert_snapshot!(f("%::z", o(5, 30, 0)), @"+05:30:00");
+        insta::assert_snapshot!(f("%:::z", o(5, 30, 0)), @"+05:30");
+
         insta::assert_snapshot!(f("%z", o(5, 30, 15)), @"+053015");
         insta::assert_snapshot!(f("%:z", o(5, 30, 15)), @"+05:30:15");
+        insta::assert_snapshot!(f("%::z", o(5, 30, 15)), @"+05:30:15");
+        insta::assert_snapshot!(f("%:::z", o(5, 30, 15)), @"+05:30:15");
+
+        insta::assert_snapshot!(f("%z", o(5, 0, 15)), @"+050015");
+        insta::assert_snapshot!(f("%:z", o(5, 0, 15)), @"+05:00:15");
+        insta::assert_snapshot!(f("%::z", o(5, 0, 15)), @"+05:00:15");
+        insta::assert_snapshot!(f("%:::z", o(5, 0, 15)), @"+05:00:15");
     }
 
     #[test]

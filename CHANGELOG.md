@@ -13,6 +13,8 @@ Enhancements:
 Add support for the `%c`, `%r`, `%X` and `%x` conversion specifiers.
 * [#341](https://github.com/BurntSushi/jiff/issues/341):
 Add support for `%q` in `jiff::fmt::strtime` (prints quarter of year).
+* [#342](https://github.com/BurntSushi/jiff/issues/342):
+Add support for `%::z` and `%:::z` in `jiff::fmt::strtime`.
 * [#344](https://github.com/BurntSushi/jiff/issues/344):
 Add support for `%N` in `jiff::fmt::strtime` (alias for `%9f`).
 
