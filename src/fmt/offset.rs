@@ -289,14 +289,22 @@ impl core::fmt::Debug for Numeric {
 #[derive(Debug)]
 pub(crate) struct Parser {
     zulu: bool,
+    require_minute: bool,
     subminute: bool,
     subsecond: bool,
+    colon: Colon,
 }
 
 impl Parser {
     /// Create a new UTC offset parser with the default configuration.
     pub(crate) const fn new() -> Parser {
-        Parser { zulu: true, subminute: true, subsecond: true }
+        Parser {
+            zulu: true,
+            require_minute: false,
+            subminute: true,
+            subsecond: true,
+            colon: Colon::Optional,
+        }
     }
 
     /// When enabled, the `z` and `Z` designators are recognized as a "zulu"
@@ -308,6 +316,14 @@ impl Parser {
     /// This is enabled by default.
     pub(crate) const fn zulu(self, yes: bool) -> Parser {
         Parser { zulu: yes, ..self }
+    }
+
+    /// When enabled, the minute component of a time zone offset is required.
+    /// If no minutes are found, then an error is returned.
+    ///
+    /// This is disabled by default.
+    pub(crate) const fn require_minute(self, yes: bool) -> Parser {
+        Parser { require_minute: yes, ..self }
     }
 
     /// When enabled, offsets with precision greater than integral minutes
@@ -332,6 +348,13 @@ impl Parser {
     /// This is ignored if `subminute` is disabled.
     pub(crate) const fn subsecond(self, yes: bool) -> Parser {
         Parser { subsecond: yes, ..self }
+    }
+
+    /// Sets how to handle parsing of colons in a time zone offset.
+    ///
+    /// This is set to `Colon::Optional` by default.
+    pub(crate) const fn colon(self, colon: Colon) -> Parser {
+        Parser { colon, ..self }
     }
 
     /// Parse an offset from the beginning of `input`.
@@ -432,7 +455,29 @@ impl Parser {
                     "failed to parse hours in UTC numeric offset {original:?}"
                 )
             })?;
-        let extended = input.starts_with(b":");
+        let extended = match self.colon {
+            Colon::Optional => input.starts_with(b":"),
+            Colon::Required => {
+                if !input.is_empty() && !input.starts_with(b":") {
+                    return Err(err!(
+                        "parsed hour component of time zone offset from \
+                         {original:?}, but could not find required colon \
+                         component",
+                    ));
+                }
+                true
+            }
+            Colon::Absent => {
+                if !input.is_empty() && input.starts_with(b":") {
+                    return Err(err!(
+                        "parsed hour component of time zone offset from \
+                         {original:?}, but found colon after hours which \
+                         is not allowed",
+                    ));
+                }
+                false
+            }
+        };
 
         // Start building up our numeric offset value.
         let mut numeric = Numeric {
@@ -452,6 +497,13 @@ impl Parser {
                 )
             })?;
         if !has_minutes {
+            if self.require_minute {
+                return Err(err!(
+                    "parsed hour component of time zone offset from \
+                     {original:?}, but could not find required minute \
+                     component",
+                ));
+            }
             return Ok(Parsed { value: numeric, input });
         }
 
@@ -472,7 +524,7 @@ impl Parser {
             // almost certainly indicates that someone has tried to provide
             // more precision than is supported. So we return an error here.
             // If this winds up being problematic, we can make this error
-            // configuration or remove it altogether (unfortunate).
+            // configurable or remove it altogether (unfortunate).
             if input.get(0).map_or(false, |&b| b == b':') {
                 return Err(err!(
                     "subminute precision for UTC numeric offset {original:?} \
@@ -646,6 +698,18 @@ impl Parser {
         }
         Ok(Parsed { value: is_separator, input })
     }
+}
+
+/// How to handle parsing of colons in a time zone offset.
+#[derive(Debug)]
+pub(crate) enum Colon {
+    /// Colons may be present or not. When present, colons must be used
+    /// consistently. For example, `+05:3015` and `-0530:15` are not allowed.
+    Optional,
+    /// Colons must be present.
+    Required,
+    /// Colons must be absent.
+    Absent,
 }
 
 #[cfg(test)]
