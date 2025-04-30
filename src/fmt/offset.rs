@@ -11,12 +11,10 @@ from [Temporal's hybrid grammar].
 
 // Here's the specific part of Temporal's grammar that is implemented below:
 //
-// # Parser::new().zulu(true).subminute(true).parse(b"...")
 // DateTimeUTCOffset :::
 //   UTCDesignator
 //   UTCOffsetSubMinutePrecision
 //
-// # Parser::new().zulu(false).subminute(false).parse(b"...")
 // TimeZoneUTCOffsetName :::
 //   UTCOffsetMinutePrecision
 //
