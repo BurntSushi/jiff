@@ -14,11 +14,6 @@ use crate::{
     Error,
 };
 
-// BREADCRUMBS: For lenient parsing, I guess should we move the top-level
-// `match` expression to a separate function, and if it fails, just write
-// the format string literally? We will need to be a little careful here
-// because of parsed extensions... And that could fail...
-
 pub(super) struct Formatter<'c, 'f, 't, 'w, W, L> {
     pub(super) config: &'c Config<L>,
     pub(super) fmt: &'f [u8],
