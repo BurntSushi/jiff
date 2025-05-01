@@ -1884,12 +1884,29 @@ impl core::fmt::Debug for Time {
 
 /// Converts a `Time` into an ISO 8601 compliant string.
 ///
-/// Options currently supported:
+/// # Forrmatting options supported
 ///
 /// * [`std::fmt::Formatter::precision`] can be set to control the precision
-/// of the fractional second component.
+/// of the fractional second component. When not set, the minimum precision
+/// required to losslessly render the value is used.
 ///
 /// # Example
+///
+/// ```
+/// use jiff::civil::time;
+///
+/// // No fractional seconds:
+/// let t = time(7, 0, 0, 0);
+/// assert_eq!(format!("{t}"), "07:00:00");
+///
+/// // With fractional seconds:
+/// let t = time(7, 0, 0, 123_000_000);
+/// assert_eq!(format!("{t}"), "07:00:00.123");
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// # Example: setting the precision
 ///
 /// ```
 /// use jiff::civil::time;

@@ -2527,12 +2527,31 @@ impl core::fmt::Debug for DateTime {
 
 /// Converts a `DateTime` into an ISO 8601 compliant string.
 ///
-/// Options currently supported:
+/// # Forrmatting options supported
 ///
 /// * [`std::fmt::Formatter::precision`] can be set to control the precision
-/// of the fractional second component.
+/// of the fractional second component. When not set, the minimum precision
+/// required to losslessly render the value is used.
 ///
 /// # Example
+///
+/// This shows the default rendering:
+///
+/// ```
+/// use jiff::civil::date;
+///
+/// // No fractional seconds:
+/// let dt = date(2024, 6, 15).at(7, 0, 0, 0);
+/// assert_eq!(format!("{dt}"), "2024-06-15T07:00:00");
+///
+/// // With fractional seconds:
+/// let dt = date(2024, 6, 15).at(7, 0, 0, 123_000_000);
+/// assert_eq!(format!("{dt}"), "2024-06-15T07:00:00.123");
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// # Example: setting the precision
 ///
 /// ```
 /// use jiff::civil::date;
