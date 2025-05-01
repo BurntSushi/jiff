@@ -1,8 +1,10 @@
 # CHANGELOG
 
-0.2.11 (TBD)
-============
-This release includes new APIs for customizing Jiff's `strtime` behavior.
+0.2.11 (2025-05-01)
+===================
+This release includes new APIs for customizing Jiff's `strtime` behavior along
+with a few minor bug fixes. Jiff's `strtime` formatting API has also been
+optimized. It's about twice as fast as it was.
 
 This release also coincides with the publication of `jiff-icu 0.2.0-beta.2`,
 which has support for `icu 2.0.0-beta.2`.
