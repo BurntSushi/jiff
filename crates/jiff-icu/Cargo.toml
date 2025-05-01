@@ -27,9 +27,12 @@ bench = false
 path = "src/lib.rs"
 
 [features]
-default = ["alloc", "time"]
+default = ["std", "zoned"]
+std = ["jiff/std", "alloc"]
 alloc = ["jiff/alloc", "icu_calendar/alloc", "icu_time?/alloc"]
 time = ["dep:icu_time"]
+# Compiled data is needed for parsing IANA time zone identifiers used by Jiff.
+zoned = ["time", "icu_time?/compiled_data"]
 
 [dependencies]
 jiff = { version = "0.2.11", path = "../..", default-features = false }

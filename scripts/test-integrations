@@ -14,7 +14,7 @@ cd "$(dirname "$0")/.."
 integrations=(
   "jiff-diesel mysql"
   "jiff-diesel postgres"
-  "jiff-icu alloc,time"
+  "jiff-icu std,zoned"
   "jiff-sqlx postgres"
   "jiff-sqlx sqlite"
 )
@@ -32,6 +32,11 @@ done
 # doctests to pass for certain feature combinations.
 integrations=(
   "jiff-icu alloc"
+  "jiff-icu std"
+  "jiff-icu time"
+  "jiff-icu zoned"
+  "jiff-icu alloc,zoned"
+  "jiff-icu std,zoned"
 )
 for v in "${integrations[@]}"; do
   crate="$(echo $v | awk '{print $1}')"

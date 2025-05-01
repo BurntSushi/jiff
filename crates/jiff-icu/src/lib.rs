@@ -153,7 +153,7 @@ assert_eq!(zdt.to_string(), "2025-02-02T17:30:00-05:00[America/New_York]");
 #![no_std]
 #![deny(missing_docs)]
 
-#[cfg(test)]
+#[cfg(any(test, feature = "std"))]
 extern crate std;
 
 #[cfg(any(test, feature = "alloc"))]
@@ -163,20 +163,24 @@ use icu_calendar::{
     types::Weekday as IcuWeekday, AsCalendar as IcuAsCalendar,
     Date as IcuDate, Iso,
 };
-#[cfg(feature = "time")]
+#[cfg(feature = "zoned")]
 use icu_time::{
-    provider::TimeZoneVariant,
-    zone::{models::Full, UtcOffset as IcuUtcOffset},
-    DateTime as IcuDateTime, Time as IcuTime, TimeZone as IcuTimeZone,
+    provider::TimeZoneVariant, zone::models::Full, TimeZone as IcuTimeZone,
     TimeZoneInfo as IcuTimeZoneInfo, ZonedDateTime as IcuZonedDateTime,
 };
+#[cfg(feature = "time")]
+use icu_time::{
+    zone::UtcOffset as IcuUtcOffset, DateTime as IcuDateTime, Time as IcuTime,
+};
+
 use jiff::civil::{Date as JiffDate, Weekday as JiffWeekday};
 #[cfg(feature = "time")]
 use jiff::{
     civil::{DateTime as JiffDateTime, Time as JiffTime},
-    tz::{Offset as JiffOffset, TimeZone as JiffTimeZone},
-    Zoned as JiffZoned,
+    tz::Offset as JiffOffset,
 };
+#[cfg(feature = "zoned")]
+use jiff::{tz::TimeZone as JiffTimeZone, Zoned as JiffZoned};
 
 use self::error::err;
 pub use self::{
@@ -637,7 +641,7 @@ impl ConvertTryFrom<JiffOffset> for IcuUtcOffset {
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-#[cfg(feature = "time")]
+#[cfg(feature = "zoned")]
 impl ConvertFrom<JiffTimeZone> for IcuTimeZone {
     fn convert_from(v: JiffTimeZone) -> IcuTimeZone {
         IcuTimeZone::convert_from(&v)
@@ -646,7 +650,7 @@ impl ConvertFrom<JiffTimeZone> for IcuTimeZone {
 
 /// Converts from a [`&jiff::tz::TimeZone`](jiff::tz::TimeZone) to a
 /// [`icu_time::TimeZone`].
-#[cfg(feature = "time")]
+#[cfg(feature = "zoned")]
 impl<'a> ConvertFrom<&'a JiffTimeZone> for IcuTimeZone {
     fn convert_from(v: &'a JiffTimeZone) -> IcuTimeZone {
         let Some(iana_name) = v.iana_name() else {
@@ -683,7 +687,7 @@ impl<'a> ConvertFrom<&'a JiffTimeZone> for IcuTimeZone {
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-#[cfg(feature = "time")]
+#[cfg(feature = "zoned")]
 impl<'a> ConvertFrom<&'a JiffZoned>
     for IcuZonedDateTime<Iso, IcuTimeZoneInfo<Full>>
 {

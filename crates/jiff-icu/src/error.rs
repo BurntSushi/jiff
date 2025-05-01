@@ -43,6 +43,11 @@ impl core::fmt::Display for Error {
     }
 }
 
+// Why do we use `core::error::Error` here despite the fact that
+// we have a `std` feature? Well, because Jiff's `Error` type only
+// implements `std::error::Error` and can't (non-annoyingly) implement
+// `core::error::Error` because of its MSRV.
+#[cfg(feature = "std")]
 impl core::error::Error for Error {
     fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self.kind {
