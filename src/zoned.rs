@@ -3209,7 +3209,7 @@ impl core::fmt::Debug for Zoned {
 
 /// Converts a `Zoned` datetime into a RFC 9557 compliant string.
 ///
-/// # Forrmatting options supported
+/// # Formatting options supported
 ///
 /// * [`std::fmt::Formatter::precision`] can be set to control the precision
 /// of the fractional second component. When not set, the minimum precision
