@@ -1,6 +1,6 @@
 [package]
 name = "jiff-icu"
-version = "0.1.0"  #:version
+version = "0.2.0-beta.2"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 license = "Unlicense OR MIT"
 homepage = "https://github.com/BurntSushi/jiff/tree/master/crates/jiff-icu"
@@ -32,10 +32,10 @@ alloc = ["jiff/alloc", "icu_calendar/alloc", "icu_time?/alloc"]
 time = ["dep:icu_time"]
 
 [dependencies]
-jiff = { version = "0.2.0", path = "../..", default-features = false }
+jiff = { version = "0.2.11", path = "../..", default-features = false }
 icu_calendar = { version = "2.0.0-beta.2", default-features = false }
 icu_time = { version = "2.0.0-beta.2", optional = true, default-features = false }
 
 [dev-dependencies]
-jiff = { version = "0.2.0", path = "../..", default-features = true }
+jiff = { version = "0.2.11", path = "../..", default-features = true }
 icu = { version = "2.0.0-beta.2" }
