@@ -17,6 +17,8 @@ Add support for `%q` in `jiff::fmt::strtime` (prints quarter of year).
 Add support for `%::z` and `%:::z` in `jiff::fmt::strtime`.
 * [#344](https://github.com/BurntSushi/jiff/issues/344):
 Add support for `%N` in `jiff::fmt::strtime` (alias for `%9f`).
+* [#350](https://github.com/BurntSushi/jiff/issues/350):
+Add a "lenient" mode for `strtime` formatting APIs that ignores most errors.
 
 Bug fixes:
 

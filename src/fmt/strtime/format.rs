@@ -14,6 +14,11 @@ use crate::{
     Error,
 };
 
+// BREADCRUMBS: For lenient parsing, I guess should we move the top-level
+// `match` expression to a separate function, and if it fails, just write
+// the format string literally? We will need to be a little careful here
+// because of parsed extensions... And that could fail...
+
 pub(super) struct Formatter<'c, 'f, 't, 'w, W, L> {
     pub(super) config: &'c Config<L>,
     pub(super) fmt: &'f [u8],
@@ -35,109 +40,129 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 continue;
             }
             if !self.bump_fmt() {
+                if self.config.lenient {
+                    self.wtr.write_str("%")?;
+                    break;
+                }
                 return Err(err!(
                     "invalid format string, expected byte after '%', \
                      but found end of format string",
                 ));
             }
-            // Parse extensions like padding/case options and padding width.
-            let ext = self.parse_extension()?;
-            match self.f() {
-                b'%' => self.wtr.write_str("%").context("%% failed")?,
-                b'A' => self.fmt_weekday_full(&ext).context("%A failed")?,
-                b'a' => self.fmt_weekday_abbrev(&ext).context("%a failed")?,
-                b'B' => self.fmt_month_full(&ext).context("%B failed")?,
-                b'b' => self.fmt_month_abbrev(&ext).context("%b failed")?,
-                b'C' => self.fmt_century(&ext).context("%C failed")?,
-                b'c' => self.fmt_datetime(&ext).context("%c failed")?,
-                b'D' => self.fmt_american_date(&ext).context("%D failed")?,
-                b'd' => self.fmt_day_zero(&ext).context("%d failed")?,
-                b'e' => self.fmt_day_space(&ext).context("%e failed")?,
-                b'F' => self.fmt_iso_date(&ext).context("%F failed")?,
-                b'f' => self.fmt_fractional(&ext).context("%f failed")?,
-                b'G' => self.fmt_iso_week_year(&ext).context("%G failed")?,
-                b'g' => self.fmt_iso_week_year2(&ext).context("%g failed")?,
-                b'H' => self.fmt_hour24_zero(&ext).context("%H failed")?,
-                b'h' => self.fmt_month_abbrev(&ext).context("%b failed")?,
-                b'I' => self.fmt_hour12_zero(&ext).context("%H failed")?,
-                b'j' => self.fmt_day_of_year(&ext).context("%j failed")?,
-                b'k' => self.fmt_hour24_space(&ext).context("%k failed")?,
-                b'l' => self.fmt_hour12_space(&ext).context("%l failed")?,
-                b'M' => self.fmt_minute(&ext).context("%M failed")?,
-                b'm' => self.fmt_month(&ext).context("%m failed")?,
-                b'N' => self.fmt_nanoseconds(&ext).context("%N failed")?,
-                b'n' => self.fmt_literal("\n").context("%n failed")?,
-                b'P' => self.fmt_ampm_lower(&ext).context("%P failed")?,
-                b'p' => self.fmt_ampm_upper(&ext).context("%p failed")?,
-                b'Q' => match ext.colons {
-                    0 => self.fmt_iana_nocolon().context("%Q failed")?,
-                    1 => self.fmt_iana_colon().context("%:Q failed")?,
-                    _ => {
-                        return Err(err!(
-                            "invalid number of `:` in `%Q` directive"
-                        ))
-                    }
-                },
-                b'q' => self.fmt_quarter(&ext).context("%q failed")?,
-                b'R' => self.fmt_clock_nosecs(&ext).context("%R failed")?,
-                b'r' => self.fmt_12hour_time(&ext).context("%r failed")?,
-                b'S' => self.fmt_second(&ext).context("%S failed")?,
-                b's' => self.fmt_timestamp(&ext).context("%s failed")?,
-                b'T' => self.fmt_clock_secs(&ext).context("%T failed")?,
-                b't' => self.fmt_literal("\t").context("%t failed")?,
-                b'U' => self.fmt_week_sun(&ext).context("%U failed")?,
-                b'u' => self.fmt_weekday_mon(&ext).context("%u failed")?,
-                b'V' => self.fmt_week_iso(&ext).context("%V failed")?,
-                b'W' => self.fmt_week_mon(&ext).context("%W failed")?,
-                b'w' => self.fmt_weekday_sun(&ext).context("%w failed")?,
-                b'X' => self.fmt_time(&ext).context("%X failed")?,
-                b'x' => self.fmt_date(&ext).context("%x failed")?,
-                b'Y' => self.fmt_year(&ext).context("%Y failed")?,
-                b'y' => self.fmt_year2(&ext).context("%y failed")?,
-                b'Z' => self.fmt_tzabbrev(&ext).context("%Z failed")?,
-                b'z' => match ext.colons {
-                    0 => self.fmt_offset_nocolon().context("%z failed")?,
-                    1 => self.fmt_offset_colon().context("%:z failed")?,
-                    2 => self.fmt_offset_colon2().context("%::z failed")?,
-                    3 => self.fmt_offset_colon3().context("%:::z failed")?,
-                    _ => {
-                        return Err(err!(
-                            "invalid number of `:` in `%z` directive"
-                        ))
-                    }
-                },
-                b'.' => {
-                    if !self.bump_fmt() {
-                        return Err(err!(
-                            "invalid format string, expected directive \
-                             after '%.'",
-                        ));
-                    }
-                    // Parse precision settings after the `.`, effectively
-                    // overriding any digits that came before it.
-                    let ext = Extension { width: self.parse_width()?, ..ext };
-                    match self.f() {
-                        b'f' => self
-                            .fmt_dot_fractional(&ext)
-                            .context("%.f failed")?,
-                        unk => {
-                            return Err(err!(
-                                "found unrecognized directive %{unk} \
-                                 following %.",
-                                unk = escape::Byte(unk),
-                            ));
-                        }
-                    }
+            let orig = self.fmt;
+            if let Err(err) = self.format_one() {
+                if !self.config.lenient {
+                    return Err(err);
                 }
-                unk => {
+                // `orig` is whatever failed to parse immediately after a `%`.
+                // Since it failed, we write out the `%` and then proceed to
+                // handle what failed to parse literally.
+                self.wtr.write_str("%")?;
+                // Reset back to right after parsing the `%`.
+                self.fmt = orig;
+            }
+        }
+        Ok(())
+    }
+
+    fn format_one(&mut self) -> Result<(), Error> {
+        // Parse extensions like padding/case options and padding width.
+        let ext = self.parse_extension()?;
+        match self.f() {
+            b'%' => self.wtr.write_str("%").context("%% failed")?,
+            b'A' => self.fmt_weekday_full(&ext).context("%A failed")?,
+            b'a' => self.fmt_weekday_abbrev(&ext).context("%a failed")?,
+            b'B' => self.fmt_month_full(&ext).context("%B failed")?,
+            b'b' => self.fmt_month_abbrev(&ext).context("%b failed")?,
+            b'C' => self.fmt_century(&ext).context("%C failed")?,
+            b'c' => self.fmt_datetime(&ext).context("%c failed")?,
+            b'D' => self.fmt_american_date(&ext).context("%D failed")?,
+            b'd' => self.fmt_day_zero(&ext).context("%d failed")?,
+            b'e' => self.fmt_day_space(&ext).context("%e failed")?,
+            b'F' => self.fmt_iso_date(&ext).context("%F failed")?,
+            b'f' => self.fmt_fractional(&ext).context("%f failed")?,
+            b'G' => self.fmt_iso_week_year(&ext).context("%G failed")?,
+            b'g' => self.fmt_iso_week_year2(&ext).context("%g failed")?,
+            b'H' => self.fmt_hour24_zero(&ext).context("%H failed")?,
+            b'h' => self.fmt_month_abbrev(&ext).context("%b failed")?,
+            b'I' => self.fmt_hour12_zero(&ext).context("%H failed")?,
+            b'j' => self.fmt_day_of_year(&ext).context("%j failed")?,
+            b'k' => self.fmt_hour24_space(&ext).context("%k failed")?,
+            b'l' => self.fmt_hour12_space(&ext).context("%l failed")?,
+            b'M' => self.fmt_minute(&ext).context("%M failed")?,
+            b'm' => self.fmt_month(&ext).context("%m failed")?,
+            b'N' => self.fmt_nanoseconds(&ext).context("%N failed")?,
+            b'n' => self.fmt_literal("\n").context("%n failed")?,
+            b'P' => self.fmt_ampm_lower(&ext).context("%P failed")?,
+            b'p' => self.fmt_ampm_upper(&ext).context("%p failed")?,
+            b'Q' => match ext.colons {
+                0 => self.fmt_iana_nocolon().context("%Q failed")?,
+                1 => self.fmt_iana_colon().context("%:Q failed")?,
+                _ => {
                     return Err(err!(
-                        "found unrecognized specifier directive %{unk}",
-                        unk = escape::Byte(unk),
+                        "invalid number of `:` in `%Q` directive"
+                    ))
+                }
+            },
+            b'q' => self.fmt_quarter(&ext).context("%q failed")?,
+            b'R' => self.fmt_clock_nosecs(&ext).context("%R failed")?,
+            b'r' => self.fmt_12hour_time(&ext).context("%r failed")?,
+            b'S' => self.fmt_second(&ext).context("%S failed")?,
+            b's' => self.fmt_timestamp(&ext).context("%s failed")?,
+            b'T' => self.fmt_clock_secs(&ext).context("%T failed")?,
+            b't' => self.fmt_literal("\t").context("%t failed")?,
+            b'U' => self.fmt_week_sun(&ext).context("%U failed")?,
+            b'u' => self.fmt_weekday_mon(&ext).context("%u failed")?,
+            b'V' => self.fmt_week_iso(&ext).context("%V failed")?,
+            b'W' => self.fmt_week_mon(&ext).context("%W failed")?,
+            b'w' => self.fmt_weekday_sun(&ext).context("%w failed")?,
+            b'X' => self.fmt_time(&ext).context("%X failed")?,
+            b'x' => self.fmt_date(&ext).context("%x failed")?,
+            b'Y' => self.fmt_year(&ext).context("%Y failed")?,
+            b'y' => self.fmt_year2(&ext).context("%y failed")?,
+            b'Z' => self.fmt_tzabbrev(&ext).context("%Z failed")?,
+            b'z' => match ext.colons {
+                0 => self.fmt_offset_nocolon().context("%z failed")?,
+                1 => self.fmt_offset_colon().context("%:z failed")?,
+                2 => self.fmt_offset_colon2().context("%::z failed")?,
+                3 => self.fmt_offset_colon3().context("%:::z failed")?,
+                _ => {
+                    return Err(err!(
+                        "invalid number of `:` in `%z` directive"
+                    ))
+                }
+            },
+            b'.' => {
+                if !self.bump_fmt() {
+                    return Err(err!(
+                        "invalid format string, expected directive \
+                             after '%.'",
                     ));
                 }
+                // Parse precision settings after the `.`, effectively
+                // overriding any digits that came before it.
+                let ext = Extension { width: self.parse_width()?, ..ext };
+                match self.f() {
+                    b'f' => {
+                        self.fmt_dot_fractional(&ext).context("%.f failed")?
+                    }
+                    unk => {
+                        return Err(err!(
+                            "found unrecognized directive %{unk} \
+                                 following %.",
+                            unk = escape::Byte(unk),
+                        ));
+                    }
+                }
             }
-            self.bump_fmt();
+            unk => {
+                return Err(err!(
+                    "found unrecognized specifier directive %{unk}",
+                    unk = escape::Byte(unk),
+                ));
+            }
         }
+        self.bump_fmt();
         Ok(())
     }
 
@@ -1488,5 +1513,23 @@ mod tests {
             f("%s", dt),
             @"strftime formatting failed: %s failed: requires instant (a date, time and offset) to format Unix timestamp",
         );
+    }
+
+    #[test]
+    fn lenient() {
+        fn f(
+            fmt: &str,
+            tm: impl Into<BrokenDownTime>,
+        ) -> alloc::string::String {
+            let config = Config::new().lenient(true);
+            tm.into().to_string_with_config(&config, fmt).unwrap()
+        }
+
+        insta::assert_snapshot!(f("%z", date(2024, 7, 9)), @"%z");
+        insta::assert_snapshot!(f("%:z", date(2024, 7, 9)), @"%:z");
+        insta::assert_snapshot!(f("%Q", date(2024, 7, 9)), @"%Q");
+        insta::assert_snapshot!(f("%+", date(2024, 7, 9)), @"%+");
+        insta::assert_snapshot!(f("%F", date(2024, 7, 9)), @"2024-07-09");
+        insta::assert_snapshot!(f("%T", date(2024, 7, 9)), @"%T");
     }
 }

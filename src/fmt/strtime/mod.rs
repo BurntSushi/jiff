@@ -439,20 +439,22 @@ pub fn format(
 
 /// Configuration for customizing the behavior of formatting or parsing.
 ///
-/// Currently, this type is limited to being a vehicle for setting the
+/// One important use case enabled by this type is the ability to set a
 /// [`Custom`] trait implementation to use when calling
 /// [`BrokenDownTime::format_with_config`]
 /// or [`BrokenDownTime::to_string_with_config`].
 ///
-/// More functionality may be added in the future.
-///
 /// It is generally expected that most callers should not need to use this.
-/// At present, the only reason to use this is if you specifically need to
-/// provide locale aware formatting within the context of `strtime`-style
-/// APIs. Unless you specifically need this, you should prefer using the
-/// [`icu`] crate via [`jiff-icu`] to do type conversions. More specifically,
-/// follow the examples in the `icu::datetime` module for a modern approach
-/// to datetime localization that leverages Unicode.
+/// At present, the only reasons to use this are:
+///
+/// * If you specifically need to provide locale aware formatting within
+/// the context of `strtime`-style APIs. Unless you specifically need this,
+/// you should prefer using the [`icu`] crate via [`jiff-icu`] to do type
+/// conversions. More specifically, follow the examples in the `icu::datetime`
+/// module for a modern approach to datetime localization that leverages
+/// Unicode.
+/// * If you specifically need to opt into "lenient" parsing such that most
+/// errors when formatting are silently ignored.
 ///
 /// # Example
 ///
@@ -477,20 +479,94 @@ pub fn format(
 #[derive(Clone, Debug)]
 pub struct Config<C> {
     custom: C,
+    lenient: bool,
 }
 
 impl Config<DefaultCustom> {
     /// Create a new default `Config` that uses [`DefaultCustom`].
+    #[inline]
     pub const fn new() -> Config<DefaultCustom> {
-        Config { custom: DefaultCustom::new() }
+        Config { custom: DefaultCustom::new(), lenient: false }
     }
 }
 
 impl<C> Config<C> {
     /// Set the implementation of [`Custom`] to use in `strtime`-style APIs
     /// that use this configuration.
+    #[inline]
     pub fn custom<U: Custom>(self, custom: U) -> Config<U> {
-        Config { custom }
+        Config { custom, lenient: self.lenient }
+    }
+
+    /// Enable lenient formatting.
+    ///
+    /// When this is enabled, most errors that occur during formatting are
+    /// silently ignored. For example, if you try to format `%z` with a
+    /// [`BrokenDownTime`] that lacks a time zone offset, this would normally
+    /// result in an error. In contrast, when lenient mode is enabled, this
+    /// would just result in `%z` being written literally.
+    ///
+    /// This currently has no effect on parsing, although this may change in
+    /// the future.
+    ///
+    /// Lenient formatting is disabled by default. It is strongly recommended
+    /// to keep it disabled in order to avoid mysterious failure modes for end
+    /// users. You should only enable this if you have strict requirements to
+    /// conform to legacy software behavior.
+    ///
+    /// # API stability
+    ///
+    /// An artifact of lenient parsing is that most error behaviors are
+    /// squashed in favor of writing the errant conversion specifier literally.
+    /// This means that if you use something like `%+`, which is currently
+    /// unrecognized, then that will result in a literal `%+` in the string
+    /// returned. But Jiff may one day add support for `%+` in a semver
+    /// compatible release.
+    ///
+    /// Stated differently, the set of unknown or error conditions is not
+    /// fixed and may decrease with time. This in turn means that the precise
+    /// conditions under which a conversion specifier gets written literally
+    /// to the resulting string may change over time in semver compatible
+    /// releases of Jiff.
+    ///
+    /// The alternative would be that Jiff could never add any new conversion
+    /// specifiers without making a semver incompatible release. The intent
+    /// of this policy is to avoid that scenario and permit reasonable
+    /// evolution of Jiff's `strtime` support.
+    ///
+    /// # Example
+    ///
+    /// This example shows how `%z` will be written literally if it would
+    /// otherwise fail:
+    ///
+    /// ```
+    /// use jiff::{civil, fmt::strtime::{BrokenDownTime, Config}};
+    ///
+    /// let tm = BrokenDownTime::from(civil::date(2025, 4, 30));
+    /// assert_eq!(
+    ///     tm.to_string("%F %z").unwrap_err().to_string(),
+    ///     "strftime formatting failed: %z failed: \
+    ///      requires offset to format time zone offset",
+    /// );
+    ///
+    /// // Now enable lenient mode:
+    /// let config = Config::new().lenient(true);
+    /// assert_eq!(
+    ///     tm.to_string_with_config(&config, "%F %z").unwrap(),
+    ///     "2025-04-30 %z",
+    /// );
+    ///
+    /// // Lenient mode also applies when using an unsupported
+    /// // or unrecognized conversion specifier. This would
+    /// // normally return an error for example:
+    /// assert_eq!(
+    ///     tm.to_string_with_config(&config, "%+ %0").unwrap(),
+    ///     "%+ %0",
+    /// );
+    /// ```
+    #[inline]
+    pub fn lenient(self, yes: bool) -> Config<C> {
+        Config { lenient: yes, ..self }
     }
 }
 
