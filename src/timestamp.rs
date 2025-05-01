@@ -2521,9 +2521,28 @@ impl core::fmt::Debug for Timestamp {
 /// # Forrmatting options supported
 ///
 /// * [`std::fmt::Formatter::precision`] can be set to control the precision
-/// of the fractional second component.
+/// of the fractional second component. When not set, the minimum precision
+/// required to losslessly render the value is used.
 ///
 /// # Example
+///
+/// This shows the default rendering:
+///
+/// ```
+/// use jiff::Timestamp;
+///
+/// // No fractional seconds.
+/// let ts = Timestamp::from_second(1_123_456_789)?;
+/// assert_eq!(format!("{ts}"), "2005-08-07T23:19:49Z");
+///
+/// // With fractional seconds.
+/// let ts = Timestamp::new(1_123_456_789, 123_000_000)?;
+/// assert_eq!(format!("{ts}"), "2005-08-07T23:19:49.123Z");
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// # Example: setting the precision
 ///
 /// ```
 /// use jiff::Timestamp;
