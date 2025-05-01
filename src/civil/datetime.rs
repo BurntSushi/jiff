@@ -2527,7 +2527,7 @@ impl core::fmt::Debug for DateTime {
 
 /// Converts a `DateTime` into an ISO 8601 compliant string.
 ///
-/// # Forrmatting options supported
+/// # Formatting options supported
 ///
 /// * [`std::fmt::Formatter::precision`] can be set to control the precision
 /// of the fractional second component. When not set, the minimum precision

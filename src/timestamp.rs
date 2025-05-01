@@ -2518,7 +2518,7 @@ impl core::fmt::Debug for Timestamp {
 /// If you need to emit an RFC 3339 compliant string with a specific offset,
 /// then use [`Timestamp::display_with_offset`].
 ///
-/// # Forrmatting options supported
+/// # Formatting options supported
 ///
 /// * [`std::fmt::Formatter::precision`] can be set to control the precision
 /// of the fractional second component. When not set, the minimum precision
@@ -2944,7 +2944,7 @@ impl quickcheck::Arbitrary for Timestamp {
 /// trait implementation, which always uses `Z` or "Zulu" time, this always
 /// uses an offfset.
 ///
-/// # Forrmatting options supported
+/// # Formatting options supported
 ///
 /// * [`std::fmt::Formatter::precision`] can be set to control the precision
 /// of the fractional second component.
