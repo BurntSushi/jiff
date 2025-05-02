@@ -181,6 +181,14 @@ impl ParsedOffset {
     pub(crate) fn is_zulu(&self) -> bool {
         matches!(self.kind, ParsedOffsetKind::Zulu)
     }
+
+    /// Whether the parsed offset had an explicit sub-minute component or not.
+    pub(crate) fn has_subminute(&self) -> bool {
+        let ParsedOffsetKind::Numeric(ref numeric) = self.kind else {
+            return false;
+        };
+        numeric.seconds.is_some()
+    }
 }
 
 /// The kind of a parsed offset.

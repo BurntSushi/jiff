@@ -1940,6 +1940,23 @@ impl OffsetConflict {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    ///
+    /// Rounding does not occur when the parsed offset itself contains
+    /// sub-minute precision. In that case, exact equality is used:
+    ///
+    /// ```
+    /// use jiff::{tz::Offset, Zoned};
+    ///
+    /// let result = "1970-06-01T00-00:45:00[Africa/Monrovia]".parse::<Zoned>();
+    /// assert_eq!(
+    ///     result.unwrap_err().to_string(),
+    ///     "parsing \"1970-06-01T00-00:45:00[Africa/Monrovia]\" failed: \
+    ///      datetime 1970-06-01T00:00:00 could not resolve to a timestamp \
+    ///      since 'reject' conflict resolution was chosen, and because \
+    ///      datetime has offset -00:45, but the time zone Africa/Monrovia \
+    ///      for the given datetime unambiguously has offset -00:44:30",
+    /// );
+    /// ```
     pub fn resolve_with<F>(
         self,
         dt: civil::DateTime,
