@@ -5760,4 +5760,41 @@ mod tests {
             @"increment 2 for rounding datetime to days must be 1) less than 2, 2) divide into it evenly and 3) greater than zero"
         );
     }
+
+    // This tests that if we get a time zone offset with an explicit second
+    // component, then it must *exactly* match the correct offset for that
+    // civil time.
+    //
+    // See: https://github.com/tc39/proposal-temporal/issues/3099
+    // See: https://github.com/tc39/proposal-temporal/pull/3107
+    #[test]
+    fn time_zone_offset_seconds_exact_match() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let zdt: Zoned =
+            "1970-06-01T00:00:00-00:45[Africa/Monrovia]".parse().unwrap();
+        assert_eq!(
+            zdt.to_string(),
+            "1970-06-01T00:00:00-00:45[Africa/Monrovia]"
+        );
+
+        let zdt: Zoned =
+            "1970-06-01T00:00:00-00:44:30[Africa/Monrovia]".parse().unwrap();
+        assert_eq!(
+            zdt.to_string(),
+            "1970-06-01T00:00:00-00:45[Africa/Monrovia]"
+        );
+
+        insta::assert_snapshot!(
+            "1970-06-01T00:00:00-00:44:40[Africa/Monrovia]".parse::<Zoned>().unwrap_err(),
+            @r#"parsing "1970-06-01T00:00:00-00:44:40[Africa/Monrovia]" failed: datetime 1970-06-01T00:00:00 could not resolve to a timestamp since 'reject' conflict resolution was chosen, and because datetime has offset -00:44:40, but the time zone Africa/Monrovia for the given datetime unambiguously has offset -00:44:30"#,
+        );
+
+        insta::assert_snapshot!(
+            "1970-06-01T00:00:00-00:45:00[Africa/Monrovia]".parse::<Zoned>().unwrap_err(),
+            @r#"parsing "1970-06-01T00:00:00-00:45:00[Africa/Monrovia]" failed: datetime 1970-06-01T00:00:00 could not resolve to a timestamp since 'reject' conflict resolution was chosen, and because datetime has offset -00:45, but the time zone Africa/Monrovia for the given datetime unambiguously has offset -00:44:30"#,
+        );
+    }
 }

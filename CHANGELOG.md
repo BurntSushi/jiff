@@ -1,5 +1,16 @@
 # CHANGELOG
 
+0.2.12 (TBD)
+============
+TODO
+
+Bug fixes:
+
+* [#357](https://github.com/BurntSushi/jiff/issues/357):
+Fix a bug where parsing `1970-06-01T00-00:45:00[Africa/Monrovia]` succeeded
+but it should fail.
+
+
 0.2.11 (2025-05-01)
 ===================
 This release includes new APIs for customizing Jiff's `strtime` behavior along

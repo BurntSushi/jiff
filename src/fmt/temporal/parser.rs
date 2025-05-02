@@ -119,7 +119,17 @@ impl<'i> ParsedDateTime<'i> {
             }
             // If the candidate offset we're considering is a whole minute,
             // then we never need rounding.
-            if candidate.part_seconds_ranged() == C(0) {
+            //
+            // Alternatively, if the parsed offset has an explicit sub-minute
+            // component (even if it's zero), we should use exact equality.
+            // (The error message for this case when "reject" offset
+            // conflict resolution is used is not the best. But this case
+            // is stupidly rare, so I'm not sure it's worth the effort to
+            // improve the error message. I'd be open to a simple patch
+            // though.)
+            if candidate.part_seconds_ranged() == C(0)
+                || parsed_offset.has_subminute()
+            {
                 return parsed == candidate;
             }
             let Ok(candidate) = candidate.round(Unit::Minute) else {
