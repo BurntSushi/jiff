@@ -554,15 +554,19 @@ impl DateTimeParser {
             }
         };
         let Parsed { input, .. } = self.skip_whitespace(&input[3..]);
-        if input[0] != b',' {
+        let Some(should_be_comma) = input.get(0).copied() else {
             return Err(err!(
-                "expected day at beginning of RFC 2822 datetime \
-                 since first non-whitespace byte, {first:?}, \
-                 is not a digit, but found {got:?} after parsed \
-                 weekday {wd:?} and expected a comma",
-                first = escape::Byte(b1),
-                got = escape::Byte(input[0]),
-                wd = escape::Bytes(&[b1, b2, b3]),
+                "expected comma after parsed weekday `{weekday}` in \
+                 RFC 2822 datetime, but found end of string instead",
+                weekday = escape::Bytes(&[b1, b2, b3]),
+            ));
+        };
+        if should_be_comma != b',' {
+            return Err(err!(
+                "expected comma after parsed weekday `{weekday}` in \
+                 RFC 2822 datetime, but found `{got:?}` instead",
+                weekday = escape::Bytes(&[b1, b2, b3]),
+                got = escape::Byte(should_be_comma),
             ));
         }
         let Parsed { input, .. } = self.skip_whitespace(&input[1..]);
@@ -1785,6 +1789,18 @@ mod tests {
         insta::assert_snapshot!(
             p("Wed"),
             @r###"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected day at beginning of RFC 2822 datetime since first non-whitespace byte, "W", is not a digit, but given string is too short (length is 3)"###,
+        );
+        insta::assert_snapshot!(
+            p("Wed "),
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected comma after parsed weekday `Wed` in RFC 2822 datetime, but found end of string instead",
+        );
+        insta::assert_snapshot!(
+            p("Wed   ,"),
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected day, but found end of input",
+        );
+        insta::assert_snapshot!(
+            p("Wed   ,   "),
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected day, but found end of input",
         );
         insta::assert_snapshot!(
             p("Wat, "),

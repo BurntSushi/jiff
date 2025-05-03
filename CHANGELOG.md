@@ -1,14 +1,18 @@
 # CHANGELOG
 
-0.2.12 (TBD)
-============
-TODO
+0.2.12 (2025-05-03)
+===================
+This release fixes a couple bugs in Jiff's parser. In particular, a regression
+was introduced in `jiff 0.2.11` where its RFC 2822 parser could panic on some
+inputs. Previous releases of Jiff are unaffected.
 
 Bug fixes:
 
 * [#357](https://github.com/BurntSushi/jiff/issues/357):
 Fix a bug where parsing `1970-06-01T00-00:45:00[Africa/Monrovia]` succeeded
 but it should fail.
+* [#359](https://github.com/BurntSushi/jiff/issues/359):
+Fix a bug where the RFC 2822 parser could panic on some inputs.
 
 
 0.2.11 (2025-05-01)
