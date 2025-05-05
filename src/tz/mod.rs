@@ -168,7 +168,7 @@ mod zic;
 /// # Return type
 ///
 /// This macro returns a value with type `TimeZone`. To get a `&'static
-/// TimeZone`, simply use `&include("...")`.
+/// TimeZone`, simply use `&get!("...")`.
 ///
 /// # Usage
 ///
@@ -227,9 +227,9 @@ pub use jiff_static::get;
 ///
 /// Unlike [`jiff::tz::get`](get), this reads TZif data from a file.
 /// `jiff::tz::get`, in contrast, reads TZif data from the [`jiff-tzdb`] crate.
-/// `jiff::tz::get` is more convenient and doesn't require using managing TZif
-/// files, but it comes at the cost of a dependency on `jiff-tzdb` and being
-/// forced to use whatever data is in `jiff-tzdb`.
+/// `jiff::tz::get` is more convenient and doesn't require managing your own
+/// TZif files, but it comes at the cost of a compile-time dependency on
+/// `jiff-tzdb` and being forced to use whatever data is in `jiff-tzdb`.
 ///
 /// # Input
 ///
@@ -247,7 +247,7 @@ pub use jiff_static::get;
 /// # Return type
 ///
 /// This macro returns a value with type `TimeZone`. To get a `&'static
-/// TimeZone`, simply use `&include("...")`.
+/// TimeZone`, simply use `&include!("...")`.
 ///
 /// # Usage
 ///
