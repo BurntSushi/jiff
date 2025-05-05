@@ -5797,4 +5797,34 @@ mod tests {
             @r#"parsing "1970-06-01T00:00:00-00:45:00[Africa/Monrovia]" failed: datetime 1970-06-01T00:00:00 could not resolve to a timestamp since 'reject' conflict resolution was chosen, and because datetime has offset -00:45, but the time zone Africa/Monrovia for the given datetime unambiguously has offset -00:44:30"#,
         );
     }
+
+    // These are some interesting tests because the time zones have transitions
+    // that are very close to one another (within 14 days!). I picked these up
+    // from a bug report to Temporal. Their reference implementation uses
+    // different logic to examine time zone transitions than Jiff. In contrast,
+    // Jiff uses the IANA time zone database directly. So it was unaffected.
+    //
+    // [1]: https://github.com/tc39/proposal-temporal/issues/3110
+    #[test]
+    fn weird_time_zone_transitions() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let zdt: Zoned =
+            "2000-10-08T01:00:00-01:00[America/Noronha]".parse().unwrap();
+        let sod = zdt.start_of_day().unwrap();
+        assert_eq!(
+            sod.to_string(),
+            "2000-10-08T01:00:00-01:00[America/Noronha]"
+        );
+
+        let zdt: Zoned =
+            "2000-10-08T03:00:00-03:00[America/Boa_Vista]".parse().unwrap();
+        let sod = zdt.start_of_day().unwrap();
+        assert_eq!(
+            sod.to_string(),
+            "2000-10-08T01:00:00-03:00[America/Boa_Vista]",
+        );
+    }
 }
