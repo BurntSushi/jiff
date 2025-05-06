@@ -1889,11 +1889,11 @@ impl Span {
     ///
     /// Two spans compare equal when they correspond to the same duration
     /// of time, even if their individual fields are different. This is in
-    /// contrast to the `Eq` trait implementation of `Span`, which performs
-    /// exact field-wise comparisons. This split exists because the comparison
-    /// provided by this routine is "heavy" in that it may need to do
-    /// datetime arithmetic to return an answer. In contrast, the `Eq` trait
-    /// implementation is "cheap."
+    /// contrast to the `Eq` trait implementation of `SpanFieldwise` (created
+    /// by [`Span::fieldwise`]), which performs exact field-wise comparisons.
+    /// This split exists because the comparison provided by this routine is
+    /// "heavy" in that it may need to do datetime arithmetic to return an
+    /// answer. In contrast, the `Eq` trait implementation is "cheap."
     ///
     /// This routine accepts anything that implements `Into<SpanCompare>`.
     /// There are some trait implementations that make using this routine
