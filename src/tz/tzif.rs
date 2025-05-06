@@ -453,7 +453,7 @@ impl<
             // The first transition is a dummy that we insert, so if we land on
             // it here, treat it as if it doesn't exist.
             return None;
-        } else if index >= self.timestamps().len() - 1 {
+        } else if index >= self.timestamps().len() {
             if let Some(posix_tz) = self.posix_tz() {
                 // Since the POSIX TZ must be consistent with the last
                 // transition, it must be the case that next.timestamp <=
@@ -470,6 +470,16 @@ impl<
                 // But unlike the previous case, if we get `None` here, then
                 // that is the real answer because there are no other known
                 // future time zone transitions.
+                //
+                // 2025-05-05: OK, this could return `None` and this is fine.
+                // It happens for time zones that had DST but then stopped
+                // it at some point in the past. The POSIX time zone has no
+                // DST and thus returns `None`. That's fine. But there was a
+                // problem: we were using the POSIX time zone even when there
+                // was a historical time zone transition after the timestamp
+                // given. That was fixed by changing the condition when we get
+                // here: it can only happen when the timestamp given comes at
+                // or after all historical time zone transitions.
                 return posix_tz.next_transition(ts);
             }
             self.timestamps().len() - 1

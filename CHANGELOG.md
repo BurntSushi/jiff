@@ -1,5 +1,19 @@
 # CHANGELOG
 
+0.2.13 (2025-05-05)
+===================
+This release fixes a bug in a corner case where `TimeZone::following` could
+sometimes omit the last time zone transition. This could only happen in time
+zones that once had daylight saving time, but ended it. This did not have an
+impact on other Jiff APIs that handle daylight saving time.
+
+Bug fixes:
+
+* [#362](https://github.com/BurntSushi/jiff/issues/362):
+Fix a bug where `TimeZone::following` could omit the last historical time zone
+transition.
+
+
 0.2.12 (2025-05-03)
 ===================
 This release fixes a couple bugs in Jiff's parser. In particular, a regression

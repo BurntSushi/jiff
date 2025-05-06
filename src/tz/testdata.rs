@@ -71,6 +71,12 @@ pub(crate) static TZIF_TEST_FILES: &[TzifTestFile] = &[
         name: "America/Sao_Paulo",
         data: include_bytes!("testdata/america-sao-paulo.tzif"),
     },
+    // Another test file I added for a region that eliminated DST and thus
+    // has a "final" time zone transition.
+    TzifTestFile {
+        name: "America/Boa_Vista",
+        data: include_bytes!("testdata/america-boa-vista.tzif"),
+    },
     TzifTestFile { name: "UTC", data: include_bytes!("testdata/utc.tzif") },
 ];
 

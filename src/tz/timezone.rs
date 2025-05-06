@@ -3829,4 +3829,35 @@ mod tests {
             assert!(tz.to_fixed_offset().is_err());
         }
     }
+
+    /// This tests that `TimeZone::following` correctly returns a final time
+    /// zone transition.
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn time_zone_following_boa_vista() {
+        use alloc::{vec, vec::Vec};
+
+        let test_file = TzifTestFile::get("America/Boa_Vista");
+        let tz = TimeZone::tzif(test_file.name, test_file.data).unwrap();
+        let last4: Vec<Timestamp> = vec![
+            "1999-10-03T04Z".parse().unwrap(),
+            "2000-02-27T03Z".parse().unwrap(),
+            "2000-10-08T04Z".parse().unwrap(),
+            "2000-10-15T03Z".parse().unwrap(),
+        ];
+
+        let start: Timestamp = "2001-01-01T00Z".parse().unwrap();
+        let mut transitions: Vec<Timestamp> =
+            tz.preceding(start).take(4).map(|t| t.timestamp()).collect();
+        transitions.reverse();
+        assert_eq!(transitions, last4);
+
+        let start: Timestamp = "1990-01-01T00Z".parse().unwrap();
+        let transitions: Vec<Timestamp> =
+            tz.following(start).map(|t| t.timestamp()).collect();
+        // The regression here was that the 2000-10-15 transition wasn't
+        // being found here, despite the fact that it existed and was found
+        // by `preceding`.
+        assert_eq!(transitions, last4);
+    }
 }
