@@ -1,5 +1,16 @@
 # CHANGELOG
 
+0.2.14 (TBD)
+============
+TODO
+
+Bug fixes:
+
+* [#365](https://github.com/BurntSushi/jiff/issues/365):
+Fixes a compile error in Jiff when only the `tzdb-concatenated` feature was
+enabled.
+
+
 0.2.13 (2025-05-05)
 ===================
 This release fixes a bug in a corner case where `TimeZone::following` could
