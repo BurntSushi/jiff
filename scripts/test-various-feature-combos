@@ -17,6 +17,7 @@ features=(
     "std tzdb-bundle-always tzdb-zoneinfo"
     "std tzdb-bundle-always logging"
     "std tzdb-bundle-always serde"
+    "std tzdb-concatenated"
 )
 for f in "${features[@]}"; do
     echo "===== FEATURES: '$f' ====="

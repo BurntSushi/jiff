@@ -197,9 +197,7 @@ impl Error {
     ///
     /// This is a convenience routine for calling `Error::context` with a
     /// `FilePathError`.
-    ///
-    /// This is only available when the `std` feature is enabled.
-    #[cfg(feature = "tzdb-zoneinfo")]
+    #[cfg(any(feature = "tzdb-zoneinfo", feature = "tzdb-concatenated"))]
     pub(crate) fn path(self, path: impl Into<std::path::PathBuf>) -> Error {
         let err = Error::from(ErrorKind::FilePath(FilePathError {
             path: path.into(),
