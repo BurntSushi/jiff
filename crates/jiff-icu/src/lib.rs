@@ -1,6 +1,6 @@
 /*!
 This crate provides conversion routines between [`jiff`] and
-[`icu`](https://docs.rs/icu/2.0.0-beta.2/).
+[`icu`](https://docs.rs/icu/2/).
 
 The conversion routines are implemented via conversion traits defined in this
 crate. The traits mirror the [`From`], [`Into`], [`TryFrom`] and [`TryInto`]
