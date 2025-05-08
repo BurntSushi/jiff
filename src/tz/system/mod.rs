@@ -231,7 +231,7 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
                 trace!(
                     "using TZ={tz_name_or_path:?} as time zone name failed, \
                      could not find time zone in zoneinfo database {db:?} \
-                     (continuing to try and use {tz_name_or_path:?}",
+                     (continuing to try and use {tz_name_or_path:?})",
                 );
                 Ok(sys::read(db, &tz_name_or_path))
             }
