@@ -5,6 +5,7 @@ use alloc::{
 };
 
 use std::{
+    ffi::OsStr,
     fs::File,
     io::Read,
     path::{Path, PathBuf},
@@ -701,6 +702,11 @@ static ZONE_INFO_NAME_INVALID: usize = 2;
 ///
 /// See: https://github.com/BurntSushi/jiff/issues/366
 fn walk(start: &Path) -> Result<Vec<ZoneInfoName>, Error> {
+    struct StackEntry {
+        dir: PathBuf,
+        depth: usize,
+    }
+
     let mut first_err: Option<Error> = None;
     let mut seterr = |path: &Path, err: Error| {
         if first_err.is_none() {
@@ -709,12 +715,12 @@ fn walk(start: &Path) -> Result<Vec<ZoneInfoName>, Error> {
     };
 
     let mut names = vec![];
-    let mut stack = vec![start.to_path_buf()];
-    while let Some(dir) = stack.pop() {
+    let mut stack = vec![StackEntry { dir: start.to_path_buf(), depth: 0 }];
+    while let Some(StackEntry { dir, depth }) = stack.pop() {
         let readdir = match dir.read_dir() {
             Ok(readdir) => readdir,
             Err(err) => {
-                trace!(
+                info!(
                     "error when reading {} as a directory: {err}",
                     dir.display()
                 );
@@ -726,7 +732,7 @@ fn walk(start: &Path) -> Result<Vec<ZoneInfoName>, Error> {
             let dent = match result {
                 Ok(dent) => dent,
                 Err(err) => {
-                    trace!(
+                    info!(
                         "error when reading directory entry from {}: {err}",
                         dir.display()
                     );
@@ -738,7 +744,7 @@ fn walk(start: &Path) -> Result<Vec<ZoneInfoName>, Error> {
                 Ok(file_type) => file_type,
                 Err(err) => {
                     let path = dent.path();
-                    trace!(
+                    info!(
                         "error when reading file type from {}: {err}",
                         path.display()
                     );
@@ -748,9 +754,29 @@ fn walk(start: &Path) -> Result<Vec<ZoneInfoName>, Error> {
             };
             let path = dent.path();
             if file_type.is_dir() {
-                stack.push(path);
+                // We ignore the `posix` and `right` directories because Jiff
+                // doesn't care about them. They tend to bloat the output of
+                // `TimeZoneDatabase::available()` for no appreciable reason.
+                // If callers want to use them, they can do, e.g.,
+                // `TZDIR=/usr/share/zoneinfo/posix`. Moreover, they slow down
+                // initialization time in environments with very slow file
+                // systems.
+                if depth == 0
+                    && (dent.file_name() == OsStr::new("posix")
+                        || dent.file_name() == OsStr::new("right"))
+                {
+                    continue;
+                }
+                stack.push(StackEntry {
+                    dir: path,
+                    depth: depth.saturating_add(1),
+                });
                 continue;
             }
+            trace!(
+                "zoneinfo database initialization visiting {path}",
+                path = path.display(),
+            );
             // We assume symlinks are files, although this may not be
             // appropriate. If we need to also handle the case when they're
             // directories, then we'll need to add symlink loop detection.
