@@ -386,7 +386,7 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
-    - run: cargo test --test integration init::zoned_now -- --nocapture
+    - run: cargo test --features logging --test integration init::zoned_now -- --nocapture
 
 
   # Generic testing for most cross targets. Some get special treatment in

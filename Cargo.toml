@@ -231,6 +231,7 @@ chrono = { version = "0.4.38", features = ["serde"] }
 chrono-tz = "0.10.0"
 humantime = "2.1.0"
 insta = "1.39.0"
+log = "0.4.21"
 # We force `serde` to be enabled in dev mode so that the docs render and test
 # correctly. We also enable `static` so that we can test our proc macros.
 jiff = { path = "./", default-features = false, features = ["serde", "static"] }
