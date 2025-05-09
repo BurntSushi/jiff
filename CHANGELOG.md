@@ -9,6 +9,9 @@ Bug fixes:
 * [#365](https://github.com/BurntSushi/jiff/issues/365):
 Fixes a compile error in Jiff when only the `tzdb-concatenated` feature was
 enabled.
+* [#366](https://github.com/BurntSushi/jiff/issues/366):
+Fixes slow initial `Zoned::now()` in environments where `/usr/share/zoneinfo`
+is on a very slow file system (like CI environments).
 
 
 0.2.13 (2025-05-05)

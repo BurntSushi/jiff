@@ -367,6 +367,28 @@ jobs:
     - name: Build all examples
       run: ./scripts/test-integrations
 
+  # A test to ensure that `Zoned::now()` doesn't take "too long" on its
+  # first run.
+  time-zone-init:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - os: ubuntu-latest
+        - os: ubuntu-24.04-arm
+        - os: macos-latest
+        - os: windows-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+    - run: cargo test --test integration init::zoned_now -- --nocapture
+
+
   # Generic testing for most cross targets. Some get special treatment in
   # other jobs.
   cross:

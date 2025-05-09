@@ -771,4 +771,63 @@ mod tests {
         assert_eq!(db.get("Etc/Unknown").unwrap(), TimeZone::unknown());
         assert_eq!(db.get("etc/UNKNOWN").unwrap(), TimeZone::unknown());
     }
+
+    /// This checks that our zoneinfo database never returns a time zone
+    /// identifier that isn't presumed to correspond to a real and valid
+    /// TZif file in the tzdb.
+    ///
+    /// This test was added when I optimized the initialized of Jiff's zoneinfo
+    /// database. Originally, it did a directory traversal along with a 4-byte
+    /// read of every file in the directory to check if the file was TZif or
+    /// something else. This turned out to be quite slow on slow file systems.
+    /// I rejiggered it so that the reads of every file were removed. But this
+    /// meant we could have loaded a name from a file that wasn't TZif into
+    /// our in-memory cache.
+    ///
+    /// For doing a single time zone lookup, this isn't a problem, since we
+    /// have to read the TZif data anyway. If it's invalid, then we just
+    /// return `None` and log a warning. No big deal.
+    ///
+    /// But for the `TimeZoneDatabase::available()` API, we were previously
+    /// just returning a list of names under the presumption that every such
+    /// name corresponds to a valid TZif file. This test checks that we don't
+    /// emit junk. (Which was in practice accomplished to moving the 4-byte
+    /// read to when we call `TimeZoneDatabase::available()`.)
+    ///
+    /// Ref: https://github.com/BurntSushi/jiff/issues/366
+    #[cfg(all(feature = "std", not(miri)))]
+    #[test]
+    fn zoneinfo_available_returns_only_tzif() {
+        use alloc::{
+            collections::BTreeSet,
+            string::{String, ToString},
+        };
+
+        let Ok(db) = TimeZoneDatabase::from_dir("/usr/share/zoneinfo") else {
+            return;
+        };
+        if db.is_definitively_empty() {
+            return;
+        }
+        let names: BTreeSet<String> =
+            db.available().map(|n| n.as_str().to_string()).collect();
+        // Not all zoneinfo directories are created equal. Some have more or
+        // less junk than others. So just try a few things.
+        let should_be_absent = [
+            "leapseconds",
+            "tzdata.zi",
+            "leap-seconds.list",
+            "SECURITY",
+            "zone1970.tab",
+            "iso3166.tab",
+            "zonenow.tab",
+            "zone.tab",
+        ];
+        for name in should_be_absent {
+            assert!(
+                !names.contains(name),
+                "found `{name}` in time zone list, but it shouldn't be there",
+            );
+        }
+    }
 }
