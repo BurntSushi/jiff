@@ -131,6 +131,32 @@ impl Error {
     pub fn from_args<'a>(message: core::fmt::Arguments<'a>) -> Error {
         Error::from(ErrorKind::Adhoc(AdhocError::from_args(message)))
     }
+
+    #[inline(never)]
+    #[cold]
+    fn context_impl(self, consequent: Error) -> Error {
+        #[cfg(feature = "alloc")]
+        {
+            let mut err = consequent;
+            if err.inner.is_none() {
+                err = err!("unknown jiff error");
+            }
+            let inner = err.inner.as_mut().unwrap();
+            assert!(
+                inner.cause.is_none(),
+                "cause of consequence must be `None`"
+            );
+            // OK because we just created this error so the Arc
+            // has one reference.
+            Arc::get_mut(inner).unwrap().cause = Some(self);
+            err
+        }
+        #[cfg(not(feature = "alloc"))]
+        {
+            // We just completely drop `self`. :-(
+            consequent
+        }
+    }
 }
 
 impl Error {
@@ -138,6 +164,8 @@ impl Error {
     ///
     /// An ad hoc error value is just an opaque string.
     #[cfg(feature = "alloc")]
+    #[inline(never)]
+    #[cold]
     pub(crate) fn adhoc<'a>(message: impl core::fmt::Display + 'a) -> Error {
         Error::from(ErrorKind::Adhoc(AdhocError::from_display(message)))
     }
@@ -148,10 +176,22 @@ impl Error {
     /// `core::fmt::Arguments` down. This lets us extract a `&'static str`
     /// from some messages in core-only mode and provide somewhat decent error
     /// messages in some cases.
+    #[inline(never)]
+    #[cold]
     pub(crate) fn adhoc_from_args<'a>(
         message: core::fmt::Arguments<'a>,
     ) -> Error {
         Error::from(ErrorKind::Adhoc(AdhocError::from_args(message)))
+    }
+
+    /// Like `Error::adhoc`, but creates an error from a `String` directly.
+    ///
+    /// This exists to explicitly monomorphize a very common case.
+    #[cfg(feature = "alloc")]
+    #[inline(never)]
+    #[cold]
+    fn adhoc_from_string(message: alloc::string::String) -> Error {
+        Error::adhoc(message)
     }
 
     /// Like `Error::adhoc`, but creates an error from a `&'static str`
@@ -159,6 +199,8 @@ impl Error {
     ///
     /// This is useful in contexts where you know you have a `&'static str`,
     /// and avoids relying on `alloc`-only routines like `Error::adhoc`.
+    #[inline(never)]
+    #[cold]
     pub(crate) fn adhoc_from_static_str(message: &'static str) -> Error {
         Error::from(ErrorKind::Adhoc(AdhocError::from_static_str(message)))
     }
@@ -167,6 +209,8 @@ impl Error {
     /// specified `min..=max` range. The given `what` label is used in the
     /// error message as a human readable description of what exactly is out
     /// of range. (e.g., "seconds")
+    #[inline(never)]
+    #[cold]
     pub(crate) fn range(
         what: &'static str,
         given: impl Into<i128>,
@@ -189,6 +233,8 @@ impl Error {
     ///
     /// This is only available when the `std` feature is enabled.
     #[cfg(feature = "std")]
+    #[inline(never)]
+    #[cold]
     pub(crate) fn io(err: std::io::Error) -> Error {
         Error::from(ErrorKind::IO(IOError { err }))
     }
@@ -198,6 +244,8 @@ impl Error {
     /// This is a convenience routine for calling `Error::context` with a
     /// `FilePathError`.
     #[cfg(any(feature = "tzdb-zoneinfo", feature = "tzdb-concatenated"))]
+    #[inline(never)]
+    #[cold]
     pub(crate) fn path(self, path: impl Into<std::path::PathBuf>) -> Error {
         let err = Error::from(ErrorKind::FilePath(FilePathError {
             path: path.into(),
@@ -527,12 +575,14 @@ pub(crate) trait IntoError {
 }
 
 impl IntoError for Error {
+    #[inline(always)]
     fn into_error(self) -> Error {
         self
     }
 }
 
 impl IntoError for &'static str {
+    #[inline(always)]
     fn into_error(self) -> Error {
         Error::adhoc_from_static_str(self)
     }
@@ -540,8 +590,9 @@ impl IntoError for &'static str {
 
 #[cfg(feature = "alloc")]
 impl IntoError for alloc::string::String {
+    #[inline(always)]
     fn into_error(self) -> Error {
-        Error::adhoc(self)
+        Error::adhoc_from_string(self)
     }
 }
 
@@ -581,27 +632,7 @@ pub(crate) trait ErrorContext {
 impl ErrorContext for Error {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     fn context(self, consequent: impl IntoError) -> Error {
-        #[cfg(feature = "alloc")]
-        {
-            let mut err = consequent.into_error();
-            if err.inner.is_none() {
-                err = err!("unknown jiff error");
-            }
-            let inner = err.inner.as_mut().unwrap();
-            assert!(
-                inner.cause.is_none(),
-                "cause of consequence must be `None`"
-            );
-            // OK because we just created this error so the Arc
-            // has one reference.
-            Arc::get_mut(inner).unwrap().cause = Some(self);
-            err
-        }
-        #[cfg(not(feature = "alloc"))]
-        {
-            // We just completely drop `self`. :-(
-            consequent.into_error()
-        }
+        self.context_impl(consequent.into_error())
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
@@ -609,34 +640,25 @@ impl ErrorContext for Error {
         self,
         consequent: impl FnOnce() -> E,
     ) -> Error {
-        #[cfg(feature = "alloc")]
-        {
-            let mut err = consequent().into_error();
-            if err.inner.is_none() {
-                err = err!("unknown jiff error");
-            }
-            let inner = err.inner.as_mut().unwrap();
-            assert!(
-                inner.cause.is_none(),
-                "cause of consequence must be `None`"
-            );
-            // OK because we just created this error so the Arc
-            // has one reference.
-            Arc::get_mut(inner).unwrap().cause = Some(self);
-            err
-        }
-        #[cfg(not(feature = "alloc"))]
-        {
-            // We just completely drop `self`. :-(
-            consequent().into_error()
-        }
+        self.context_impl(consequent().into_error())
     }
 }
 
 impl<T> ErrorContext for Result<T, Error> {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     fn context(self, consequent: impl IntoError) -> Result<T, Error> {
-        self.map_err(|err| err.context(consequent))
+        #[inline(never)]
+        #[cold]
+        fn imp<U>(
+            this: Result<U, Error>,
+            consequent: Error,
+        ) -> Result<U, Error> {
+            match this {
+                Ok(value) => Ok(value),
+                Err(err) => Err(err.context_impl(consequent)),
+            }
+        }
+        imp(self, consequent.into_error())
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
@@ -644,7 +666,18 @@ impl<T> ErrorContext for Result<T, Error> {
         self,
         consequent: impl FnOnce() -> E,
     ) -> Result<T, Error> {
-        self.map_err(|err| err.with_context(consequent))
+        #[inline(never)]
+        #[cold]
+        fn imp<U>(
+            this: Result<U, Error>,
+            consequent: Error,
+        ) -> Result<U, Error> {
+            match this {
+                Ok(value) => Ok(value),
+                Err(err) => Err(err.context_impl(consequent)),
+            }
+        }
+        imp(self, consequent().into_error())
     }
 }
 
