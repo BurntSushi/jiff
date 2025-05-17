@@ -28,8 +28,17 @@ use crate::{
 
 const DEFAULT_TTL: Duration = Duration::new(5 * 60, 0);
 
+#[cfg(unix)]
 static ZONEINFO_DIRECTORIES: &[&str] =
     &["/usr/share/zoneinfo", "/usr/share/lib/zoneinfo", "/etc/zoneinfo"];
+
+// In non-Unix environments, there is (as of 2025-05-17) no standard location
+// for the zoneinfo database. And we specifically do not search the Unix-style
+// directories because this can have weird and undesirable effects on Windows.
+//
+// Ref https://github.com/BurntSushi/jiff/issues/376
+#[cfg(not(unix))]
+static ZONEINFO_DIRECTORIES: &[&str] = &[];
 
 pub(crate) struct Database {
     dir: Option<PathBuf>,

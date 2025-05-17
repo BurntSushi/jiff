@@ -12,6 +12,8 @@ enabled.
 * [#366](https://github.com/BurntSushi/jiff/issues/366):
 Fixes slow initial `Zoned::now()` in environments where `/usr/share/zoneinfo`
 is on a very slow file system (like CI environments).
+* [#376](https://github.com/BurntSushi/jiff/issues/376):
+Avoids searching for a tzdb at `/usr/share/zoneinfo` on Windows.
 
 
 0.2.13 (2025-05-05)
