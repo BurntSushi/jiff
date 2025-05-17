@@ -9,6 +9,8 @@ Bug fixes:
 * [#365](https://github.com/BurntSushi/jiff/issues/365):
 Fixes a compile error in Jiff when only the `tzdb-concatenated` feature was
 enabled.
+* [#364](https://github.com/BurntSushi/jiff/issues/364):
+Jiff now falls back to `Etc/Unknown` for invalid `TZ` values.
 * [#366](https://github.com/BurntSushi/jiff/issues/366):
 Fixes slow initial `Zoned::now()` in environments where `/usr/share/zoneinfo`
 is on a very slow file system (like CI environments).

@@ -279,8 +279,8 @@ impl TimeZone {
     /// An unknown time zone _behaves_ like [`TimeZone::UTC`], but will
     /// print as `Etc/Unknown` when converting a `Zoned` to a string.
     ///
-    /// If you would instead like to fall back to UTC instead
-    /// of the special "unknown" time zone, then you can do
+    /// If you would like to fall back to UTC instead of
+    /// the special "unknown" time zone, then you can do
     /// `TimeZone::try_system().unwrap_or(TimeZone::UTC)`.
     ///
     /// # Platform behavior
@@ -299,6 +299,9 @@ impl TimeZone {
     /// by providing a file path to a TZif file directly.
     /// * `TZ=EST5EDT,M3.2.0,M11.1.0` for setting a time zone via a daylight
     /// saving time transition rule.
+    ///
+    /// When `TZ` is set to an invalid value, Jiff uses the fallback behavior
+    /// described above.
     ///
     /// Otherwise, when `TZ` isn't set, then:
     ///
@@ -364,6 +367,9 @@ impl TimeZone {
     /// by providing a file path to a TZif file directly.
     /// * `TZ=EST5EDT,M3.2.0,M11.1.0` for setting a time zone via a daylight
     /// saving time transition rule.
+    ///
+    /// When `TZ` is set to an invalid value, then this routine returns an
+    /// error.
     ///
     /// Otherwise, when `TZ` isn't set, then:
     ///

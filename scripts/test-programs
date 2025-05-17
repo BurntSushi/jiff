@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# This script tests that every test program builds.
+
+set -e
+
+# cd to the directory containing this crate's Cargo.toml so that we don't need
+# to pass --manifest-path to every `cargo` command.
+cd "$(dirname "$0")/.."
+
+for d in ./testprograms/*/; do
+  echo "===== RUNNING TEST PROGRAMS: $d ====="
+  RUST_LOG=trace cargo run --manifest-path "$d/Cargo.toml"
+done

@@ -1,0 +1,18 @@
+[package]
+publish = false
+name = "invalid-tz-environment-variable"
+version = "0.1.0"
+edition = "2021"
+
+# Test programs in Jiff are explicitly isolated from the workspace to avoid
+# dev-dependencies accumulating. (Not all test programs have big dependency
+# trees, but we still exclude them from the workspace as a general rule.)
+[workspace]
+
+[dependencies]
+env_logger = "0.11.0"
+jiff = { path = "../..", features = ["logging"] }
+
+[[bin]]
+name = "invalid-tz-environment-variable"
+path = "main.rs"

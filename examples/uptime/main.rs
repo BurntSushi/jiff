@@ -53,7 +53,7 @@ impl UptimeDuration {
     /// This assumes the output of `uptime` is on stdin.
     fn find() -> anyhow::Result<UptimeDuration> {
         let re = Regex::new(
-            r"(\d+):(\d+)(?::\d+)?\s+up\s+(\d+)\s+days,\s+(\d+):(\d+)",
+            r"(\d+):(\d+)(?::\d+)?\s+up\s+(?:(\d+)\s+days,\s+|())(\d+):(\d+)",
         )
         .unwrap();
         for result in std::io::stdin().lines() {
@@ -66,9 +66,13 @@ impl UptimeDuration {
             let minute: i8 = minute.parse().with_context(|| {
                 format!("failed to parse current minute integer '{minute}'")
             })?;
-            let days: i32 = days
-                .parse()
-                .with_context(|| format!("failed to parse days '{days}'"))?;
+            let days: i32 = if days.is_empty() {
+                0
+            } else {
+                days.parse().with_context(|| {
+                    format!("failed to parse days '{days}'")
+                })?
+            };
             let hours: i32 = hours
                 .parse()
                 .with_context(|| format!("failed to parse hours '{hours}'"))?;

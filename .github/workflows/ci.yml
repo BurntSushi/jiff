@@ -348,6 +348,8 @@ jobs:
         toolchain: stable
     - name: Build all examples
       run: ./scripts/test-examples
+    - name: Run all test programs
+      run: ./scripts/test-programs
 
   # This job builds and runs tests for Jiff's "integration" crates. That is,
   # the crates that provide wrappers or traits for integrating with other
