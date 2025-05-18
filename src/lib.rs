@@ -824,4 +824,39 @@ mod tests {
         dbg!((t::UnixSeconds::MIN, t::UnixSeconds::MAX));
         dbg!((t::UnixEpochDay::MIN, t::UnixEpochDay::MAX));
     }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn maximally_long_span() {
+        use crate::{fmt::friendly, util::t};
+
+        let span = Span::new()
+            .years(t::SpanYears::MAX_REPR)
+            .months(t::SpanMonths::MAX_REPR)
+            .weeks(t::SpanWeeks::MAX_REPR)
+            .days(t::SpanDays::MAX_REPR)
+            .hours(t::SpanHours::MAX_REPR)
+            .minutes(t::SpanMinutes::MAX_REPR)
+            .seconds(t::SpanSeconds::MAX_REPR)
+            .milliseconds(t::SpanMilliseconds::MAX_REPR)
+            .microseconds(t::SpanMicroseconds::MAX_REPR)
+            .nanoseconds(t::SpanNanoseconds::MAX_REPR)
+            .negate();
+        std::println!("{span}");
+        std::println!("{span:#}");
+
+        let long_printer = friendly::SpanPrinter::new()
+            .designator(friendly::Designator::Verbose)
+            .spacing(friendly::Spacing::BetweenUnitsAndDesignators)
+            .comma_after_designator(true);
+        std::println!("{}", long_printer.span_to_string(&span));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn maximally_long_duration() {
+        let sdur = SignedDuration::MIN;
+        std::println!("{sdur}");
+        std::println!("{sdur:#}");
+    }
 }
