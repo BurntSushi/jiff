@@ -1,16 +1,30 @@
 # CHANGELOG
 
-0.2.14 (TBD)
-============
-TODO
+0.2.14 (2025-05-20)
+===================
+This release includes a smattering of bug fixes, and hopefully a small
+improvement to the time it takes to compile Jiff. Also, in this release, when
+`TZ` is set to a non-empty but invalid value, Jiff will always fall back to
+`Etc/Unknown` when using `TimeZone::system()`. This differs from previous
+behavior where Jiff would, in this case, attempt to read the system's default
+time zone. This change brings Jiff into consistency with existing Unix tooling
+like `date`, and is also arguably a better failure mode. That is, when `TZ` is
+set but invalid, we shouldn't silently fall back to the default system time
+zone, but instead do something that indicates something has potentially gone
+wrong.
+
+Enhancements:
+
+* [#364](https://github.com/BurntSushi/jiff/issues/364):
+Jiff now falls back to `Etc/Unknown` for invalid `TZ` values.
+* [#379](https://github.com/BurntSushi/jiff/pull/379):
+Improve compilation times.
 
 Bug fixes:
 
 * [#365](https://github.com/BurntSushi/jiff/issues/365):
 Fixes a compile error in Jiff when only the `tzdb-concatenated` feature was
 enabled.
-* [#364](https://github.com/BurntSushi/jiff/issues/364):
-Jiff now falls back to `Etc/Unknown` for invalid `TZ` values.
 * [#366](https://github.com/BurntSushi/jiff/issues/366):
 Fixes slow initial `Zoned::now()` in environments where `/usr/share/zoneinfo`
 is on a very slow file system (like CI environments).
