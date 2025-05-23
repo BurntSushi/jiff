@@ -39,6 +39,14 @@ easy copy & paste.
 * [`tz`]
     * [`jiff::fmt::serde::tz::required`](self::tz::required)
     * [`jiff::fmt::serde::tz::optional`](self::tz::optional)
+* [`unsigned_duration`]
+    * [`friendly`](self::unsigned_duration::friendly)
+        * [`compact`](self::unsigned_duration::friendly::compact)
+            * [`jiff::fmt::serde::unsigned_duration::friendly::compact::required`](self::unsigned_duration::friendly::compact::required)
+            * [`jiff::fmt::serde::unsigned_duration::friendly::compact::optional`](self::unsigned_duration::friendly::compact::optional)
+    * [`deserialize`](self::unsigned_duration::deserialize)
+        * [`jiff::fmt::serde::unsigned_duration::deserialize::required`](self::unsigned_duration::deserialize::required)
+        * [`jiff::fmt::serde::unsigned_duration::deserialize::optional`](self::unsigned_duration::deserialize::optional)
 
 # Example: timestamps as an integer
 
@@ -216,7 +224,7 @@ assert_eq!(serde_json::to_string(&got).unwrap(), expected);
 /// for this. Namely, deserialization automatically supports parsing all
 /// configuration options for serialization unconditionally.
 pub mod duration {
-    /// Serialize a `Span` in the [`friendly`](crate::fmt::friendly) duration
+    /// Serialize a `SignedDuration` in the [`friendly`](crate::fmt::friendly) duration
     /// format.
     pub mod friendly {
         /// Serialize a `SignedDuration` in the
@@ -1331,11 +1339,158 @@ pub mod tz {
     }
 }
 
+/// Serialize and deserialize [`UnsignedDuration`](core::time::Duration) in
+/// the [`friendly`](crate::fmt::friendly) duration format.
+pub mod unsigned_duration {
+    /// Serialize and deserialize [`UnsignedDuration`](core::time::Duration)
+    /// in the [`friendly`](crate::fmt::friendly) duration format.
+    pub mod friendly {
+        /// Serialize and deserialize [`UnsignedDuration`](core::time::Duration)
+        /// in the [`friendly`](crate::fmt::friendly) duration format using
+        /// compact designators.
+        pub mod compact {
+            use crate::fmt::{friendly, StdFmtWrite};
+            use core::time::Duration as UnsignedDuration;
+
+            struct CompactUnsignedDuration<'a>(&'a UnsignedDuration);
+
+            impl<'a> core::fmt::Display for CompactUnsignedDuration<'a> {
+                fn fmt(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    static PRINTER: friendly::SpanPrinter =
+                        friendly::SpanPrinter::new()
+                            .designator(friendly::Designator::Compact);
+                    PRINTER
+                        .print_unsigned_duration(self.0, StdFmtWrite(f))
+                        .map_err(|_| core::fmt::Error)
+                }
+            }
+
+            /// Serialize a required `UnsignedDuration`[`core::time::Duration`]
+            /// in the [`friendly`](crate::fmt::friendly) duration format using
+            /// compact designators.
+            #[inline]
+            pub fn required<S: serde::Serializer>(
+                duration: &UnsignedDuration,
+                se: S,
+            ) -> Result<S::Ok, S::Error> {
+                se.collect_str(&CompactUnsignedDuration(duration))
+            }
+
+            /// Serialize an optional [`UnsignedDuration`](core::time::Duration)
+            /// in the [`friendly`](crate::fmt::friendly) duration format.
+            #[inline]
+            pub fn optional<S: serde::Serializer>(
+                duration: &Option<UnsignedDuration>,
+                se: S,
+            ) -> Result<S::Ok, S::Error> {
+                match *duration {
+                    None => se.serialize_none(),
+                    Some(ref duration) => required(duration, se),
+                }
+            }
+        }
+    }
+
+    /// Deserialize an [`UnsignedDuration`](core::time::Duration) in the
+    /// [`friendly`](crate::fmt::friendly) duration format.
+    pub mod deserialize {
+        use crate::fmt::friendly;
+        use core::time::Duration as UnsignedDuration;
+        use serde::de;
+
+        /// Visitor for deserializing a required `UnsignedDuration`.
+        struct UnsignedDurationVisitor;
+
+        impl<'de> de::Visitor<'de> for UnsignedDurationVisitor {
+            type Value = UnsignedDuration;
+
+            fn expecting(
+                &self,
+                f: &mut core::fmt::Formatter,
+            ) -> core::fmt::Result {
+                f.write_str(
+                    "a non-negative friendly duration string (e.g., '1h 30m')",
+                )
+            }
+
+            #[inline]
+            fn visit_str<E: de::Error>(
+                self,
+                value: &str,
+            ) -> Result<UnsignedDuration, E> {
+                let duration = friendly::DEFAULT_SPAN_PARSER
+                    .parse_duration(value)
+                    .map_err(de::Error::custom)?;
+
+                UnsignedDuration::try_from(duration)
+                    .map_err(de::Error::custom)
+            }
+        }
+
+        /// Optional visitor for deserializing an optional `UnsignedDuration`.
+        struct OptionalUnsignedDurationVisitor<V>(V);
+
+        impl<'de, V: de::Visitor<'de, Value = UnsignedDuration>>
+            de::Visitor<'de> for OptionalUnsignedDurationVisitor<V>
+        {
+            type Value = Option<UnsignedDuration>;
+
+            fn expecting(
+                &self,
+                f: &mut core::fmt::Formatter,
+            ) -> core::fmt::Result {
+                f.write_str(
+                    "a non-negative friendly duration string or None (e.g., '1h 30m')",
+                )
+            }
+
+            #[inline]
+            fn visit_some<D: de::Deserializer<'de>>(
+                self,
+                de: D,
+            ) -> Result<Option<UnsignedDuration>, D::Error> {
+                de.deserialize_str(self.0).map(Some)
+            }
+
+            #[inline]
+            fn visit_none<E: de::Error>(
+                self,
+            ) -> Result<Option<UnsignedDuration>, E> {
+                Ok(None)
+            }
+        }
+
+        /// Deserialize an [`UnsignedDuration`](core::time::Duration) in the
+        /// [`friendly`](crate::fmt::friendly) duration format.
+        #[inline]
+        pub fn required<'de, D: serde::Deserializer<'de>>(
+            de: D,
+        ) -> Result<UnsignedDuration, D::Error> {
+            de.deserialize_str(UnsignedDurationVisitor)
+        }
+
+        /// Deserialize an optional [`UnsignedDuration`](core::time::Duration)
+        /// in the [`friendly`](crate::fmt::friendly) duration format.
+        #[inline]
+        pub fn optional<'de, D: serde::Deserializer<'de>>(
+            de: D,
+        ) -> Result<Option<UnsignedDuration>, D::Error> {
+            de.deserialize_option(OptionalUnsignedDurationVisitor(
+                UnsignedDurationVisitor,
+            ))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
         span::span_eq, SignedDuration, Span, SpanFieldwise, Timestamp, ToSpan,
     };
+    use core::time::Duration as UnsignedDuration;
 
     #[test]
     fn duration_friendly_compact_required() {
@@ -1377,6 +1532,46 @@ mod tests {
 
         let expected = r#"{"duration":"36h 1s 100ms"}"#;
         assert_eq!(serde_json::to_string(&got).unwrap(), expected);
+    }
+
+    #[test]
+    fn unsigned_duration_required() {
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Data {
+            #[serde(
+                serialize_with = "crate::fmt::serde::unsigned_duration::friendly::compact::required",
+                deserialize_with = "crate::fmt::serde::unsigned_duration::deserialize::required"
+            )]
+            duration: UnsignedDuration,
+        }
+
+        let json = r#"{"duration":"36h 1s 100ms"}"#;
+        let got: Data = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            got.duration,
+            UnsignedDuration::new(36 * 60 * 60 + 1, 100_000_000)
+        );
+        assert_eq!(serde_json::to_string(&got).unwrap(), json);
+    }
+
+    #[test]
+    fn unsigned_duration_optional() {
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Data {
+            #[serde(
+                serialize_with = "crate::fmt::serde::unsigned_duration::friendly::compact::optional",
+                deserialize_with = "crate::fmt::serde::unsigned_duration::deserialize::optional"
+            )]
+            duration: Option<UnsignedDuration>,
+        }
+
+        let json = r#"{"duration":"36h 1s 100ms"}"#;
+        let got: Data = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            got.duration,
+            Some(UnsignedDuration::new(36 * 60 * 60 + 1, 100_000_000))
+        );
+        assert_eq!(serde_json::to_string(&got).unwrap(), json);
     }
 
     #[test]

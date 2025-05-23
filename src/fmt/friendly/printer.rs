@@ -6,6 +6,8 @@ use crate::{
     Error, SignedDuration, Span, Unit,
 };
 
+use core::time::Duration as UnsignedDuration;
+
 const SECS_PER_HOUR: i64 = MINS_PER_HOUR * SECS_PER_MIN;
 const SECS_PER_MIN: i64 = 60;
 const MINS_PER_HOUR: i64 = 60;
@@ -1067,6 +1069,17 @@ impl SpanPrinter {
             return self.print_span_hms(span, wtr);
         }
         self.print_span_designators(span, wtr)
+    }
+
+    /// Print an [`UnsignedDuration`](core::time::Duration) to the given
+    /// writer using the "friendly" format.
+    pub fn print_unsigned_duration<W: Write>(
+        &self,
+        duration: &UnsignedDuration,
+        wtr: W,
+    ) -> Result<(), Error> {
+        let signed_duration = SignedDuration::try_from(*duration)?;
+        self.print_duration(&signed_duration, wtr)
     }
 
     /// Print a `SignedDuration` to the given writer using the "friendly"
