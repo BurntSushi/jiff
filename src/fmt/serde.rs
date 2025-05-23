@@ -1339,13 +1339,87 @@ pub mod tz {
     }
 }
 
-/// Serialize and deserialize [`UnsignedDuration`](core::time::Duration) in
-/// the [`friendly`](crate::fmt::friendly) duration format.
+/// Helpers for serializing and deserializing [`std::time::Duration`]
+/// in the [`friendly`](crate::fmt::friendly) duration format.
+///
+/// This module provides functions to be used with Serde's `serialize_with`
+/// and `deserialize_with` attributes. It allows `std::time::Duration`
+/// values to be represented as human-readable strings like "1h 30m" or
+/// "2m 15s 100ms" in your serialized output (e.g., JSON, TOML).
+///
+/// The deserializer expects a non-negative duration string. If a negative
+/// duration string (e.g., "-5s" or "5s ago") is encountered, deserialization
+/// will fail, as `std::time::Duration` cannot represent negative values.
+///
+/// # Module Structure
+///
+/// - [`friendly::compact`](crate::fmt::serde::unsigned_duration::friendly::compact):
+///   For serializing `std::time::Duration` into a compact friendly format
+///   (e.g., "1h 30m"). Contains `required` and `optional` serializers.
+/// - [`deserialize`](crate::fmt::serde::unsigned_duration::deserialize): For
+///   deserializing friendly duration strings back into `std::time::Duration`.
+///   Contains `required` and `optional` deserializers.
+///
+/// # Example: Round-tripping `std::time::Duration`
+///
+/// This example demonstrates how to serialize and deserialize a
+/// `std::time::Duration` field using the helpers from this module.
+///
+/// ```
+/// use core::time::Duration;
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Debug, PartialEq, Serialize, Deserialize)]
+/// struct Task {
+///     name: String,
+///     #[serde(
+///         serialize_with = "jiff::fmt::serde::unsigned_duration::friendly::compact::required",
+///         deserialize_with = "jiff::fmt::serde::unsigned_duration::deserialize::required"
+///     )]
+///     timeout: Duration,
+///     #[serde(
+///         serialize_with = "jiff::fmt::serde::unsigned_duration::friendly::compact::optional",
+///         deserialize_with = "jiff::fmt::serde::unsigned_duration::deserialize::optional"
+///     )]
+///     retry_delay: Option<Duration>,
+/// }
+///
+/// let task = Task {
+///     name: "Task 1".to_string(),
+///     timeout: Duration::from_secs(60 * 60 + 30 * 60), // 1 hour 30 minutes
+///     retry_delay: Some(Duration::from_millis(2500)),    // 2 seconds 500 milliseconds
+/// };
+///
+/// let expected_json = r#"{"name":"Task 1","timeout":"1h 30m","retry_delay":"2s 500ms"}"#;
+/// let actual_json = serde_json::to_string(&task)?;
+/// assert_eq!(actual_json, expected_json);
+///
+/// let deserialized_task: Task = serde_json::from_str(&actual_json)?;
+/// assert_eq!(deserialized_task, task);
+///
+/// // Example with None for optional field
+/// let task_no_retry = Task {
+///     name: "Task 2".to_string(),
+///     timeout: Duration::from_secs(5),
+///     retry_delay: None,
+/// };
+/// let expected_json_no_retry = r#"{"name":"Task 2","timeout":"5s","retry_delay":null}"#;
+/// let actual_json_no_retry = serde_json::to_string(&task_no_retry)?;
+/// assert_eq!(actual_json_no_retry, expected_json_no_retry);
+///
+/// let deserialized_task_no_retry: Task = serde_json::from_str(&actual_json_no_retry)?;
+/// assert_eq!(deserialized_task_no_retry, task_no_retry);
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub mod unsigned_duration {
-    /// Serialize and deserialize [`UnsignedDuration`](core::time::Duration)
-    /// in the [`friendly`](crate::fmt::friendly) duration format.
+    /// Serialize [`UnsignedDuration`](core::time::Duration)
+    /// in the [`friendly`](crate::fmt::friendly) duration format using
+    /// compact designators (e.g., "1h 30m" instead of "1 hour 30 minutes").
+    ///
+    /// These routines are for use with Serde's `serialize_with` attribute.
     pub mod friendly {
-        /// Serialize and deserialize [`UnsignedDuration`](core::time::Duration)
+        /// Serialize [`UnsignedDuration`](core::time::Duration)
         /// in the [`friendly`](crate::fmt::friendly) duration format using
         /// compact designators.
         pub mod compact {
@@ -1368,9 +1442,10 @@ pub mod unsigned_duration {
                 }
             }
 
-            /// Serialize a required `UnsignedDuration`[`core::time::Duration`]
-            /// in the [`friendly`](crate::fmt::friendly) duration format using
-            /// compact designators.
+            /// Serializes a required [`std::time::Duration`] in the friendly,
+            /// compact duration format (e.g., "1h 30m").
+            ///
+            /// This function is intended for use with `#[serde(serialize_with = "...")]`.
             #[inline]
             pub fn required<S: serde::Serializer>(
                 duration: &UnsignedDuration,
@@ -1379,8 +1454,13 @@ pub mod unsigned_duration {
                 se.collect_str(&CompactUnsignedDuration(duration))
             }
 
-            /// Serialize an optional [`UnsignedDuration`](core::time::Duration)
-            /// in the [`friendly`](crate::fmt::friendly) duration format.
+            /// Serializes an optional [`std::time::Duration`] in the friendly,
+            /// compact duration format (e.g., "1h 30m").
+            ///
+            /// If the duration is `None`, it will be serialized as `null` (or its
+            /// equivalent in the chosen format).
+            ///
+            /// This function is intended for use with `#[serde(serialize_with = "...")]`.
             #[inline]
             pub fn optional<S: serde::Serializer>(
                 duration: &Option<UnsignedDuration>,
@@ -1396,6 +1476,14 @@ pub mod unsigned_duration {
 
     /// Deserialize an [`UnsignedDuration`](core::time::Duration) in the
     /// [`friendly`](crate::fmt::friendly) duration format.
+    ///
+    /// These routines are for use with Serde's `deserialize_with` attribute.
+    /// They expect a non-negative duration string (e.g., "1h 30m", "2s 500ms").
+    /// If a negative duration string (e.g., "-5s" or "5s ago") is encountered,
+    /// deserialization will fail because `std::time::Duration` cannot represent
+    /// negative values.
+    ///
+    /// For serialization, use the helpers in the sibling `friendly` module.
     pub mod deserialize {
         use crate::fmt::friendly;
         use core::time::Duration as UnsignedDuration;
@@ -1425,8 +1513,7 @@ pub mod unsigned_duration {
                     .parse_duration(value)
                     .map_err(de::Error::custom)?;
 
-                UnsignedDuration::try_from(duration)
-                    .map_err(de::Error::custom)
+                UnsignedDuration::try_from(duration).map_err(de::Error::custom)
             }
         }
 
@@ -1463,8 +1550,13 @@ pub mod unsigned_duration {
             }
         }
 
-        /// Deserialize an [`UnsignedDuration`](core::time::Duration) in the
-        /// [`friendly`](crate::fmt::friendly) duration format.
+        /// Deserializes a required [`std::time::Duration`] in the friendly
+        /// format (e.g., "1h 30m").
+        ///
+        /// Expects a non-negative duration. Deserialization will fail if the
+        /// string represents a negative duration.
+        ///
+        /// This function is intended for use with `#[serde(deserialize_with = "...")]`.
         #[inline]
         pub fn required<'de, D: serde::Deserializer<'de>>(
             de: D,
@@ -1472,8 +1564,13 @@ pub mod unsigned_duration {
             de.deserialize_str(UnsignedDurationVisitor)
         }
 
-        /// Deserialize an optional [`UnsignedDuration`](core::time::Duration)
-        /// in the [`friendly`](crate::fmt::friendly) duration format.
+        /// Deserializes an optional [`std::time::Duration`] in the friendly
+        /// format (e.g., "1h 30m"), or `null`.
+        ///
+        /// Expects a non-negative duration if a string is provided. Deserialization
+        /// will fail if the string represents a negative duration.
+        ///
+        /// This function is intended for use with `#[serde(deserialize_with = "...")]`.
         #[inline]
         pub fn optional<'de, D: serde::Deserializer<'de>>(
             de: D,
