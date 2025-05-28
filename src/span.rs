@@ -3311,8 +3311,6 @@ impl core::ops::Mul<Span> for i64 {
 
 /// Converts a `Span` to a [`std::time::Duration`].
 ///
-/// Note that this assumes that days are always 24 hours long.
-///
 /// # Errors
 ///
 /// This can fail for only two reasons:
@@ -3472,8 +3470,6 @@ impl TryFrom<UnsignedDuration> for Span {
 }
 
 /// Converts a `Span` to a [`SignedDuration`].
-///
-/// Note that this assumes that days are always 24 hours long.
 ///
 /// # Errors
 ///
