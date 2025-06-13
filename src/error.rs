@@ -647,18 +647,7 @@ impl ErrorContext for Error {
 impl<T> ErrorContext for Result<T, Error> {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     fn context(self, consequent: impl IntoError) -> Result<T, Error> {
-        #[inline(never)]
-        #[cold]
-        fn imp<U>(
-            this: Result<U, Error>,
-            consequent: Error,
-        ) -> Result<U, Error> {
-            match this {
-                Ok(value) => Ok(value),
-                Err(err) => Err(err.context_impl(consequent)),
-            }
-        }
-        imp(self, consequent.into_error())
+        self.map_err(|err| err.context_impl(consequent.into_error()))
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
@@ -666,18 +655,7 @@ impl<T> ErrorContext for Result<T, Error> {
         self,
         consequent: impl FnOnce() -> E,
     ) -> Result<T, Error> {
-        #[inline(never)]
-        #[cold]
-        fn imp<U>(
-            this: Result<U, Error>,
-            consequent: Error,
-        ) -> Result<U, Error> {
-            match this {
-                Ok(value) => Ok(value),
-                Err(err) => Err(err.context_impl(consequent)),
-            }
-        }
-        imp(self, consequent().into_error())
+        self.map_err(|err| err.context_impl(consequent().into_error()))
     }
 }
 
