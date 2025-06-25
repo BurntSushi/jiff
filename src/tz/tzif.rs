@@ -384,10 +384,10 @@ impl<
 
     /// Returns the timestamp of the most recent time zone transition prior
     /// to the timestamp given. If one doesn't exist, `None` is returned.
-    pub(crate) fn previous_transition(
-        &self,
+    pub(crate) fn previous_transition<'t>(
+        &'t self,
         ts: Timestamp,
-    ) -> Option<TimeZoneTransition> {
+    ) -> Option<TimeZoneTransition<'t>> {
         assert!(!self.timestamps().is_empty(), "transitions is non-empty");
         let mut timestamp = ts.as_second();
         if ts.subsec_nanosecond() != 0 {
@@ -438,10 +438,10 @@ impl<
 
     /// Returns the timestamp of the soonest time zone transition after the
     /// timestamp given. If one doesn't exist, `None` is returned.
-    pub(crate) fn next_transition(
-        &self,
+    pub(crate) fn next_transition<'t>(
+        &'t self,
         ts: Timestamp,
-    ) -> Option<TimeZoneTransition> {
+    ) -> Option<TimeZoneTransition<'t>> {
         assert!(!self.timestamps().is_empty(), "transitions is non-empty");
         let timestamp = ts.as_second();
         let search = self.timestamps().binary_search(&timestamp);

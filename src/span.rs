@@ -5879,7 +5879,7 @@ impl<'a> Relative<'a> {
     /// This returns an error in the same cases as the underlying checked
     /// arithmetic APIs. In general, this occurs when adding the given `span`
     /// would result in overflow.
-    fn checked_add(&self, span: Span) -> Result<Relative, Error> {
+    fn checked_add(&'a self, span: Span) -> Result<Relative<'a>, Error> {
         match *self {
             Relative::Civil(dt) => Ok(Relative::Civil(dt.checked_add(span)?)),
             Relative::Zoned(ref zdt) => {
@@ -5889,9 +5889,9 @@ impl<'a> Relative<'a> {
     }
 
     fn checked_add_duration(
-        &self,
+        &'a self,
         duration: SignedDuration,
-    ) -> Result<Relative, Error> {
+    ) -> Result<Relative<'a>, Error> {
         match *self {
             Relative::Civil(dt) => {
                 Ok(Relative::Civil(dt.checked_add_duration(duration)?))
@@ -6316,7 +6316,7 @@ impl<'a> RelativeZoned<'a> {
 
     /// Returns the borrowed version of self; useful when you need to convert
     /// `&RelativeZoned` into `RelativeZoned` without cloning anything.
-    fn borrowed(&self) -> RelativeZoned {
+    fn borrowed(&'a self) -> RelativeZoned<'a> {
         RelativeZoned { zoned: self.zoned.borrowed() }
     }
 }

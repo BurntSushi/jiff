@@ -1356,10 +1356,10 @@ impl TimeZone {
 
     /// Used by the "preceding transitions" iterator.
     #[inline]
-    fn previous_transition(
-        &self,
+    fn previous_transition<'t>(
+        &'t self,
         timestamp: Timestamp,
-    ) -> Option<TimeZoneTransition> {
+    ) -> Option<TimeZoneTransition<'t>> {
         repr::each! {
             &self.repr,
             UTC => None,
@@ -1373,10 +1373,10 @@ impl TimeZone {
 
     /// Used by the "following transitions" iterator.
     #[inline]
-    fn next_transition(
-        &self,
+    fn next_transition<'t>(
+        &'t self,
         timestamp: Timestamp,
-    ) -> Option<TimeZoneTransition> {
+    ) -> Option<TimeZoneTransition<'t>> {
         repr::each! {
             &self.repr,
             UTC => None,
