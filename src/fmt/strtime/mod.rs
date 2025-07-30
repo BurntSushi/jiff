@@ -2369,9 +2369,9 @@ impl BrokenDownTime {
 
     /// Returns the parsed meridiem, if available.
     ///
-    /// Note that unlike other fields, there is no
-    /// `BrokenDownTime::set_meridiem`. Instead, when formatting, the meridiem
-    /// label (if it's used in the formatting string) is determined purely as a
+    /// Note that unlike other fields, the meridiem is not used when
+    /// formatting. Instead, when formatting, the meridiem label (if
+    /// it's used in the formatting string) is determined purely as a
     /// function of the hour in a 24 hour clock.
     ///
     /// # Example
@@ -2955,6 +2955,31 @@ impl BrokenDownTime {
     #[inline]
     pub fn set_weekday(&mut self, weekday: Option<Weekday>) {
         self.weekday = weekday;
+    }
+
+    /// Set the meridiem (AM/PM). This is most useful when doing custom
+    /// parsing that involves 12-hour time.
+    ///
+    /// Note that this value is not used when formatting. Formatting
+    /// only uses the 24-hour time from set_time() and calculate the
+    /// 12-hour time and meridiem from that.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::{fmt::strtime::{BrokenDownTime, Meridiem}};
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// tm.set_hour(Some(3));
+    /// tm.set_meridiem(Some(Meridiem::PM));
+    /// let time = tm.to_time()?;
+    /// assert_eq!(time.hour(), 15); // 3:00 PM = 15:00 in 24-hour time
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    ///
+    #[inline]
+    pub fn set_meridiem(&mut self, meridiem: Option<Meridiem>) {
+        self.meridiem = meridiem;
     }
 }
 
