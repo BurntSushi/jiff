@@ -263,7 +263,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     fn fmt_ampm_lower(&mut self, ext: &Extension) -> Result<(), Error> {
         let hour = self
             .tm
-            .hour
+            .hour_ranged()
             .ok_or_else(|| err!("requires time to format AM/PM"))?
             .get();
         ext.write_str(
@@ -277,7 +277,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     fn fmt_ampm_upper(&mut self, ext: &Extension) -> Result<(), Error> {
         let hour = self
             .tm
-            .hour
+            .hour_ranged()
             .ok_or_else(|| err!("requires time to format AM/PM"))?
             .get();
         // Manually specialize this case to avoid hitting `write_str_cold`.
@@ -351,7 +351,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     fn fmt_hour12_zero(&mut self, ext: &Extension) -> Result<(), Error> {
         let mut hour = self
             .tm
-            .hour
+            .hour_ranged()
             .ok_or_else(|| err!("requires time to format hour"))?
             .get();
         if hour == 0 {
@@ -366,7 +366,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     fn fmt_hour24_zero(&mut self, ext: &Extension) -> Result<(), Error> {
         let hour = self
             .tm
-            .hour
+            .hour_ranged()
             .ok_or_else(|| err!("requires time to format hour"))?
             .get();
         ext.write_int(b'0', Some(2), hour, self.wtr)
@@ -376,7 +376,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     fn fmt_hour12_space(&mut self, ext: &Extension) -> Result<(), Error> {
         let mut hour = self
             .tm
-            .hour
+            .hour_ranged()
             .ok_or_else(|| err!("requires time to format hour"))?
             .get();
         if hour == 0 {
@@ -391,7 +391,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     fn fmt_hour24_space(&mut self, ext: &Extension) -> Result<(), Error> {
         let hour = self
             .tm
-            .hour
+            .hour_ranged()
             .ok_or_else(|| err!("requires time to format hour"))?
             .get();
         ext.write_int(b' ', Some(2), hour, self.wtr)

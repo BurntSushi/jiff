@@ -1767,12 +1767,11 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::fmt::strtime;
     ///
-    /// // 31 is a legal day value, but not for June.
-    /// // However, this is not validated unless you
-    /// // ask for a `Date` from the parsed `BrokenDownTime`.
-    /// // Everything except for `BrokenDownTime::time`
-    /// // creates a date, so asking for only a `time`
-    /// // will circumvent date validation!
+    /// // 31 is a legal day value, but not for June. However, this is
+    /// // not validated unless you ask for a `Date` from the parsed
+    /// // `BrokenDownTime`. Most other higher level accessors on this
+    /// // type need to create a date, but this routine does not. So
+    /// // asking for only a `time` will circumvent date validation!
     /// let tm = strtime::parse("%Y-%m-%d %H:%M:%S", "2024-06-31 21:14:59")?;
     /// let time = tm.to_time()?;
     /// assert_eq!(time.to_string(), "21:14:59");
@@ -2369,10 +2368,8 @@ impl BrokenDownTime {
 
     /// Returns the parsed meridiem, if available.
     ///
-    /// Note that unlike other fields, there is no
-    /// `BrokenDownTime::set_meridiem`. Instead, when formatting, the meridiem
-    /// label (if it's used in the formatting string) is determined purely as a
-    /// function of the hour in a 24 hour clock.
+    /// When there is a conflict between the meridiem and the hour value, the
+    /// meridiem takes precedence.
     ///
     /// # Example
     ///
@@ -2385,6 +2382,11 @@ impl BrokenDownTime {
     /// assert_eq!(tm.meridiem(), Some(Meridiem::AM));
     /// let tm = BrokenDownTime::parse("%P", "pm")?;
     /// assert_eq!(tm.meridiem(), Some(Meridiem::PM));
+    ///
+    /// // A meridiem takes precedence.
+    /// let tm = BrokenDownTime::parse("%H%P", "13am")?;
+    /// assert_eq!(tm.hour(), Some(1));
+    /// assert_eq!(tm.meridiem(), Some(Meridiem::AM));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2955,6 +2957,64 @@ impl BrokenDownTime {
     #[inline]
     pub fn set_weekday(&mut self, weekday: Option<Weekday>) {
         self.weekday = weekday;
+    }
+
+    /// Set the meridiem (AM/PM). This is most useful when doing custom
+    /// parsing that involves 12-hour time.
+    ///
+    /// Note that this value is not used when formatting. Formatting
+    /// only uses the 24-hour time from set_time() and calculate the
+    /// 12-hour time and meridiem from that.
+    ///
+    /// # Example
+    ///
+    /// This shows how to set a meridiem and its impact on the hour value:
+    ///
+    /// ```
+    /// use jiff::{fmt::strtime::{BrokenDownTime, Meridiem}};
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// tm.set_hour(Some(3))?;
+    /// tm.set_meridiem(Some(Meridiem::PM));
+    /// let time = tm.to_time()?;
+    /// assert_eq!(time.hour(), 15); // 3:00 PM = 15:00 in 24-hour time
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// This shows how setting a meridiem influences formatting:
+    ///
+    /// ```
+    /// use jiff::{fmt::strtime::{BrokenDownTime, Meridiem}};
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// tm.set_hour(Some(3))?;
+    /// tm.set_minute(Some(4))?;
+    /// tm.set_second(Some(5))?;
+    /// tm.set_meridiem(Some(Meridiem::PM));
+    /// assert_eq!(tm.to_string("%T")?, "15:04:05");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// And this shows how a conflict between the hour and meridiem is
+    /// handled. Notably, the set meridiem still applies.
+    ///
+    /// ```
+    /// use jiff::{fmt::strtime::{BrokenDownTime, Meridiem}};
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// tm.set_hour(Some(13))?;
+    /// tm.set_minute(Some(4))?;
+    /// tm.set_second(Some(5))?;
+    /// tm.set_meridiem(Some(Meridiem::AM));
+    /// assert_eq!(tm.to_string("%T")?, "01:04:05");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_meridiem(&mut self, meridiem: Option<Meridiem>) {
+        self.meridiem = meridiem;
     }
 }
 
