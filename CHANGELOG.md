@@ -4,6 +4,12 @@
 ============
 TODO
 
+Enhancements:
+
+* [#397](https://github.com/BurntSushi/jiff/pull/397):
+Add `BrokenDownTime::set_meridiem` and ensure it overrides the hour when
+formatting.
+
 Bug fixes:
 
 * [#414](https://github.com/BurntSushi/jiff/pull/414):
