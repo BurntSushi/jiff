@@ -110,10 +110,10 @@ use self::repr::Repr;
 ///
 /// # A `TimeZone` is cheap to clone
 ///
-/// A `TimeZone` can be cheaply cloned. It uses automic reference counting
+/// A `TimeZone` can be cheaply cloned. It uses automatic reference counting
 /// internally. When `alloc` is disabled, cloning a `TimeZone` is still cheap
 /// because POSIX time zones and TZif time zones are unsupported. Therefore,
-/// cloning a time zone does a deep copy (since automic reference counting is
+/// cloning a time zone does a deep copy (since automatic reference counting is
 /// not available), but the data being copied is small.
 ///
 /// # Time zone equality
@@ -2259,7 +2259,7 @@ mod repr {
         }
     }
 
-    // SAFETY: We use automic reference counting.
+    // SAFETY: We use automatic reference counting.
     unsafe impl Send for Repr {}
     // SAFETY: We don't use an interior mutability and otherwise don't permit
     // any kind of mutation (other than for an `Arc` managing its ref counts)
