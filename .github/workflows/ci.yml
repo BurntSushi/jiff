@@ -432,7 +432,7 @@ jobs:
     # Note that I also have a very manual testing setup for Android:
     # https://github.com/BurntSushi/tauri-jiff
     - if: "!contains(matrix.target, 'android')"
-      run: cross test --verbose --target ${{ matrix.target }} --all
+      run: cross test --verbose --target ${{ matrix.target }} --all --all-targets
     - if: "!contains(matrix.target, 'android')"
       run: cross test --verbose --target ${{ matrix.target }} -p jiff-cli
 
