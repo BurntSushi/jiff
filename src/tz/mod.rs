@@ -39,7 +39,7 @@ conversion from a [`Timestamp`](crate::Timestamp) to a [`Zoned`](crate::Zoned)
 is infallible:
 
 ```
-use jiff::{tz::TimeZone, Timestamp, Zoned};
+use jiff::{tz::TimeZone, Timestamp};
 
 let tz = TimeZone::get("America/New_York")?;
 let ts = Timestamp::UNIX_EPOCH;

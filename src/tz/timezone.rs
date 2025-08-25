@@ -753,7 +753,7 @@ impl TimeZone {
     /// As mentioned above, consider using `Zoned` instead:
     ///
     /// ```
-    /// use jiff::{tz::TimeZone, Timestamp};
+    /// use jiff::Timestamp;
     ///
     /// let zdt = Timestamp::UNIX_EPOCH.in_tz("Europe/Rome")?;
     /// assert_eq!(zdt.datetime().to_string(), "1970-01-01T01:00:00");
@@ -782,7 +782,7 @@ impl TimeZone {
     /// # Example
     ///
     /// ```
-    /// use jiff::{tz::{self, Dst, TimeZone}, Timestamp};
+    /// use jiff::{tz::{self, TimeZone}, Timestamp};
     ///
     /// let tz = TimeZone::get("America/New_York")?;
     ///
@@ -2420,11 +2420,6 @@ mod repr {
     /// The strict provenance APIs in `core` were stabilized in Rust 1.84,
     /// but it will likely be a while before Jiff can use them. (At time of
     /// writing, 2025-02-24, Jiff's MSRV is Rust 1.70.)
-    ///
-    /// The `const` requirement is also why these are non-generic free
-    /// functions and not defined via an extension trait. It's also why we
-    /// don't have the useful `map_addr` routine (which is directly relevant to
-    /// our pointer tagging use case).
     mod polyfill {
         pub(super) const fn without_provenance(addr: usize) -> *const u8 {
             // SAFETY: Every valid `usize` is also a valid pointer (but not
@@ -2433,7 +2428,10 @@ mod repr {
             // MSRV(1.84): We *really* ought to be using
             // `core::ptr::without_provenance` here, but Jiff's MSRV prevents
             // us.
-            unsafe { core::mem::transmute(addr) }
+            #[allow(integer_to_ptr_transmutes)]
+            unsafe {
+                core::mem::transmute(addr)
+            }
         }
 
         // On Rust 1.84+, `StrictProvenancePolyfill` isn't actually used.

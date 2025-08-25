@@ -100,7 +100,7 @@ your system's copy of the Time Zone Database.
 
 ```rust
 use anyhow::Context;
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime, TimeZone};
+use chrono::TimeZone;
 use tzfile::Tz;
 
 #[cfg(unix)]
@@ -884,7 +884,7 @@ DST safe arithmetic. Instead, the code above should be written like this
 (unless you have a very specific reason to do otherwise):
 
 ```rust
-use jiff::{civil::date, Unit, Zoned};
+use jiff::{civil::date, Unit};
 
 fn main() -> anyhow::Result<()> {
     // Can also use `.to_zoned(TimeZone::system())` to use your system's
@@ -931,7 +931,7 @@ The `time` crate has no rounding APIs.
 With Jiff, you can add durations with calendar units:
 
 ```rust
-use jiff::{civil::date, ToSpan, Unit};
+use jiff::{civil::date, ToSpan};
 
 fn main() -> anyhow::Result<()> {
     let zdt1 = date(2024, 7, 11).at(21, 0, 0, 0).in_tz("America/New_York")?;

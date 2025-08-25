@@ -962,7 +962,7 @@ impl DateTimeParser {
     /// # Example
     ///
     /// ```
-    /// use jiff::{fmt::temporal::DateTimeParser, tz::{self, TimeZone}};
+    /// use jiff::{fmt::temporal::DateTimeParser, tz::TimeZone};
     ///
     /// static PARSER: DateTimeParser = DateTimeParser::new();
     ///
@@ -1535,7 +1535,7 @@ impl DateTimePrinter {
     /// # Example
     ///
     /// ```
-    /// use jiff::{fmt::temporal::DateTimePrinter, tz::{self, TimeZone}};
+    /// use jiff::{fmt::temporal::DateTimePrinter, tz::TimeZone};
     ///
     /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
     ///
