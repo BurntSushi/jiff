@@ -70,7 +70,7 @@ use crate::util::libm::Float;
 /// then convert them to a `SignedDuration` by providing a relative date:
 ///
 /// ```
-/// use jiff::{civil::date, SignedDuration, Span};
+/// use jiff::{civil::date, Span};
 ///
 /// let span: Span = "P1d".parse()?;
 /// let relative = date(2024, 11, 3).in_tz("US/Eastern")?;

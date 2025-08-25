@@ -177,7 +177,7 @@ much detail." You can remove this by rounding the `Span` to the nearest half
 hour before printing:
 
 ```
-use jiff::{civil, RoundMode, ToSpan, Unit, ZonedDifference};
+use jiff::{civil, RoundMode, Unit, ZonedDifference};
 
 let commented_at = civil::date(2024, 8, 1).at(19, 29, 13, 123_456_789).in_tz("US/Eastern")?;
 let now = civil::date(2024, 12, 26).at(12, 49, 0, 0).in_tz("US/Eastern")?;

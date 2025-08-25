@@ -381,7 +381,7 @@ pub fn parse(
 /// 2822 datetime:
 ///
 /// ```
-/// use jiff::{civil::date, fmt::strtime, tz};
+/// use jiff::{civil::date, fmt::strtime};
 ///
 /// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 /// let string = strtime::format("%a, %-d %b %Y %T %z", &zdt)?;
@@ -401,7 +401,7 @@ pub fn parse(
 /// this is what it looks like on my system:
 ///
 /// ```
-/// use jiff::{civil::date, fmt::strtime, tz};
+/// use jiff::{civil::date, fmt::strtime};
 ///
 /// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 /// let string = strtime::format("%a %b %e %I:%M:%S %p %Z %Y", &zdt)?;
@@ -413,7 +413,7 @@ pub fn parse(
 /// # Example: RFC 3339 compatible output with fractional seconds
 ///
 /// ```
-/// use jiff::{civil::date, fmt::strtime, tz};
+/// use jiff::{civil::date, fmt::strtime};
 ///
 /// let zdt = date(2024, 7, 15)
 ///     .at(16, 24, 59, 123_456_789)
@@ -2861,7 +2861,7 @@ impl BrokenDownTime {
     /// time zone, but where one wants to set a time zone based on the context.
     ///
     /// ```
-    /// use jiff::{fmt::strtime::BrokenDownTime, tz::Offset};
+    /// use jiff::{fmt::strtime::BrokenDownTime};
     ///
     /// let mut tm = BrokenDownTime::parse(
     ///     "%Y-%m-%d at %H:%M:%S",
@@ -2887,7 +2887,7 @@ impl BrokenDownTime {
     /// result printed is non-sensical:
     ///
     /// ```
-    /// use jiff::{civil::date, fmt::strtime::BrokenDownTime, tz};
+    /// use jiff::{civil::date, fmt::strtime::BrokenDownTime};
     ///
     /// let zdt = date(2024, 8, 28).at(14, 56, 0, 0).in_tz("US/Eastern")?;
     /// let mut tm = BrokenDownTime::from(&zdt);
@@ -3079,7 +3079,7 @@ impl From<Time> for BrokenDownTime {
 /// [`Zoned::strftime`]:
 ///
 /// ```
-/// use jiff::{civil::date, fmt::strtime, tz};
+/// use jiff::civil::date;
 ///
 /// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 /// let string = zdt.strftime("%a, %-d %b %Y %T %z").to_string();
@@ -3091,7 +3091,7 @@ impl From<Time> for BrokenDownTime {
 /// Or use it directly when writing to something:
 ///
 /// ```
-/// use jiff::{civil::date, fmt::strtime, tz};
+/// use jiff::{civil::date, fmt::strtime};
 ///
 /// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 ///
