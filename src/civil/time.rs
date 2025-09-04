@@ -2123,7 +2123,19 @@ impl serde::Serialize for Time {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            return serializer.collect_str(self);
+        }
+        use serde::ser::SerializeTuple;
+
+        let mut tuple = serializer.serialize_tuple(4)?;
+
+        tuple.serialize_element(&self.hour.get())?;
+        tuple.serialize_element(&self.minute.get())?;
+        tuple.serialize_element(&self.second.get())?;
+        tuple.serialize_element(&self.subsec_nanosecond.get())?;
+
+        tuple.end()
     }
 }
 
@@ -2133,37 +2145,76 @@ impl<'de> serde::Deserialize<'de> for Time {
     fn deserialize<D: serde::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Time, D::Error> {
-        use serde::de;
+        use serde::de::{self, Error as _};
 
-        struct TimeVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for TimeVisitor {
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = Time;
+
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a time string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<Time, E> {
+                    DEFAULT_DATETIME_PARSER
+                        .parse_time(value)
+                        .map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<Time, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
+            }
+
+            return deserializer.deserialize_str(HumanReadableVisitor);
+        }
+
+        struct CompactVisitor;
+
+        impl<'de> de::Visitor<'de> for CompactVisitor {
             type Value = Time;
 
+            #[inline]
             fn expecting(
                 &self,
                 f: &mut core::fmt::Formatter,
             ) -> core::fmt::Result {
-                f.write_str("a time string")
+                f.write_str("the number of nanoseconds")
             }
 
             #[inline]
-            fn visit_bytes<E: de::Error>(
-                self,
-                value: &[u8],
-            ) -> Result<Time, E> {
-                DEFAULT_DATETIME_PARSER
-                    .parse_time(value)
-                    .map_err(de::Error::custom)
-            }
-
-            #[inline]
-            fn visit_str<E: de::Error>(self, value: &str) -> Result<Time, E> {
-                self.visit_bytes(value.as_bytes())
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                Time::new(
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("hour"))?,
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("minute"))?,
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("second"))?,
+                    seq.next_element()?
+                        .ok_or(A::Error::missing_field("subsec_nanosecond"))?,
+                )
+                .map_err(|_| A::Error::custom("Invalid time."))
             }
         }
 
-        deserializer.deserialize_str(TimeVisitor)
+        deserializer.deserialize_tuple(4, CompactVisitor)
     }
 }
 
