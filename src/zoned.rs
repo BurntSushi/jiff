@@ -3522,9 +3522,9 @@ impl core::ops::SubAssign<UnsignedDuration> for Zoned {
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for Zoned {
+impl serde_core::Serialize for Zoned {
     #[inline]
-    fn serialize<S: serde::Serializer>(
+    fn serialize<S: serde_core::Serializer>(
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
@@ -3533,12 +3533,12 @@ impl serde::Serialize for Zoned {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for Zoned {
+impl<'de> serde_core::Deserialize<'de> for Zoned {
     #[inline]
-    fn deserialize<D: serde::Deserializer<'de>>(
+    fn deserialize<D: serde_core::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Zoned, D::Error> {
-        use serde::de;
+        use serde_core::de;
 
         struct ZonedVisitor;
 
