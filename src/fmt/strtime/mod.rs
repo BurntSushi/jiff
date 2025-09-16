@@ -3235,12 +3235,19 @@ impl Extension {
     /// This supports parsing up to 3 colons. The colons are used in some cases
     /// for alternate specifiers. e.g., `%:Q` or `%:::z`.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn parse_colons<'i>(fmt: &'i [u8]) -> (u8, &'i [u8]) {
+    fn parse_colons<'i>(fmt: &'i [u8]) -> Result<(u8, &'i [u8]), Error> {
         let mut colons = 0;
         while colons < 3 && colons < fmt.len() && fmt[colons] == b':' {
             colons += 1;
         }
-        (u8::try_from(colons).unwrap(), &fmt[usize::from(colons)..])
+        let fmt = &fmt[usize::from(colons)..];
+        if colons > 0 && fmt.is_empty() {
+            return Err(err!(
+                "expected to find specifier directive after {colons} colons, \
+                 but found end of format string",
+            ));
+        }
+        Ok((u8::try_from(colons).unwrap(), fmt))
     }
 }
 

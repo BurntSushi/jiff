@@ -200,7 +200,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     fn parse_extension(&mut self) -> Result<Extension, Error> {
         let (flag, fmt) = Extension::parse_flag(self.fmt)?;
         let (width, fmt) = Extension::parse_width(fmt)?;
-        let (colons, fmt) = Extension::parse_colons(fmt);
+        let (colons, fmt) = Extension::parse_colons(fmt)?;
         self.fmt = fmt;
         Ok(Extension { flag, width, colons })
     }
@@ -1920,6 +1920,21 @@ mod tests {
         insta::assert_snapshot!(
             p("%_23", " "),
             @"strptime parsing failed: expected to find specifier directive after width 23, but found end of format string",
+        );
+
+        insta::assert_snapshot!(
+            p("%:", " "),
+            @"strptime parsing failed: expected to find specifier directive after 1 colons, but found end of format string",
+        );
+
+        insta::assert_snapshot!(
+            p("%::", " "),
+            @"strptime parsing failed: expected to find specifier directive after 2 colons, but found end of format string",
+        );
+
+        insta::assert_snapshot!(
+            p("%:::", " "),
+            @"strptime parsing failed: expected to find specifier directive after 3 colons, but found end of format string",
         );
 
         insta::assert_snapshot!(

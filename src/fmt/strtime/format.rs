@@ -216,7 +216,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     fn parse_extension(&mut self) -> Result<Extension, Error> {
         let flag = self.parse_flag()?;
         let width = self.parse_width()?;
-        let colons = self.parse_colons();
+        let colons = self.parse_colons()?;
         Ok(Extension { flag, width, colons })
     }
 
@@ -248,10 +248,10 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     /// Parses an optional number of colons (up to 3) immediately before a
     /// conversion specifier.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn parse_colons(&mut self) -> u8 {
-        let (colons, fmt) = Extension::parse_colons(self.fmt);
+    fn parse_colons(&mut self) -> Result<u8, Error> {
+        let (colons, fmt) = Extension::parse_colons(self.fmt)?;
         self.fmt = fmt;
-        colons
+        Ok(colons)
     }
 
     // These are the formatting functions. They are pretty much responsible
