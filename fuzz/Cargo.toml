@@ -1,0 +1,35 @@
+[package]
+name = "jiff-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.jiff]
+path = ".."
+
+[[bin]]
+name = "time_zone_posix"
+path = "fuzz_targets/time_zone_posix.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "time_zone_get"
+path = "fuzz_targets/time_zone_get.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "time_zone_tzif"
+path = "fuzz_targets/time_zone_tzif.rs"
+test = false
+doc = false
+bench = false
