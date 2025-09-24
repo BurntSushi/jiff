@@ -382,11 +382,11 @@ struct ZonedInner {
 impl Zoned {
     /// Returns the current system time in this system's time zone.
     ///
-    /// If the system's time zone could not be found, then [`TimeZone::UTC`]
-    /// is used instead. When this happens, a `WARN` level log message will
-    /// be emitted. (To see it, one will need to install a logger that is
-    /// compatible with the `log` crate and enable Jiff's `logging` Cargo
-    /// feature.)
+    /// If the system's time zone could not be found, then
+    /// [`TimeZone::unknown`] is used instead. When this happens, a `WARN`
+    /// level log message will be emitted. (To see it, one will need to install
+    /// a logger that is compatible with the `log` crate and enable Jiff's
+    /// `logging` Cargo feature.)
     ///
     /// To create a `Zoned` value for the current time in a particular
     /// time zone other than the system default time zone, use

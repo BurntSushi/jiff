@@ -1,5 +1,17 @@
 # CHANGELOG
 
+0.2.16 (TBD)
+============
+TODO
+
+Bug fixes:
+
+* [#414](https://github.com/BurntSushi/jiff/pull/414):
+Update some parts of the documentation to indicate that `TimeZone::unknown()`
+is a fallback for `TimeZone::system()` (instead of the `jiff 0.1` behavior of
+using `TimeZone::UTC`).
+
+
 0.2.15 (2025-06-13)
 ===================
 This release fixes a bug where error values were being constructed during
