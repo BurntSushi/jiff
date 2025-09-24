@@ -83,14 +83,15 @@ use self::repr::Repr;
 ///
 /// The system time zone can be retrieved via [`TimeZone::system`]. If it
 /// couldn't be detected or if the `tz-system` crate feature is not enabled,
-/// then [`TimeZone::UTC`] is returned. `TimeZone::system` is what's used
+/// then [`TimeZone::unknown`] is returned. `TimeZone::system` is what's used
 /// internally for retrieving the current zoned datetime via [`Zoned::now`].
 ///
 /// While there is no platform independent way to detect your system's
 /// "default" time zone, Jiff employs best-effort heuristics to determine it.
-/// (For example, by examining `/etc/localtime` on Unix systems.) When the
-/// heuristics fail, Jiff will emit a `WARN` level log. It can be viewed by
-/// installing a `log` compatible logger, such as [`env_logger`].
+/// (For example, by examining `/etc/localtime` on Unix systems or the `TZ`
+/// environment variable.) When the heuristics fail, Jiff will emit a `WARN`
+/// level log. It can be viewed by installing a `log` compatible logger, such
+/// as [`env_logger`].
 ///
 /// # Custom time zones
 ///
