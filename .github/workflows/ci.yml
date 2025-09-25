@@ -577,6 +577,7 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
+        components: rustfmt
     - name: Install jiff-cli
       run: cargo install -f --path crates/jiff-cli
     - name: Generate code shared between jiff and jiff-static

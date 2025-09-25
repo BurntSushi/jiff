@@ -206,7 +206,7 @@ jiff-static = { version = "=0.2.15", path = "crates/jiff-static" }
 jiff-tzdb-platform = { version = "0.1.3", path = "crates/jiff-tzdb-platform", optional = true }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
-version = ">=0.52.0, <=0.59.*"
+version = ">=0.52.0, <=0.61.*"
 default-features = false
 features = ["Win32_Foundation", "Win32_System_Time"]
 optional = true
