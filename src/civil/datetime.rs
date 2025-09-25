@@ -2786,9 +2786,9 @@ impl core::ops::SubAssign<UnsignedDuration> for DateTime {
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for DateTime {
+impl serde_core::Serialize for DateTime {
     #[inline]
-    fn serialize<S: serde::Serializer>(
+    fn serialize<S: serde_core::Serializer>(
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
@@ -2797,12 +2797,12 @@ impl serde::Serialize for DateTime {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for DateTime {
+impl<'de> serde_core::Deserialize<'de> for DateTime {
     #[inline]
-    fn deserialize<D: serde::Deserializer<'de>>(
+    fn deserialize<D: serde_core::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<DateTime, D::Error> {
-        use serde::de;
+        use serde_core::de;
 
         struct DateTimeVisitor;
 

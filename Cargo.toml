@@ -48,9 +48,9 @@ default = [
   "tzdb-concatenated",
   "perf-inline",
 ]
-std = ["alloc", "log?/std", "serde?/std"]
-alloc = ["serde?/alloc", "portable-atomic-util/alloc"]
-serde = ["dep:serde"]
+std = ["alloc", "log?/std", "serde_core?/std"]
+alloc = ["serde_core?/alloc", "portable-atomic-util/alloc"]
+serde = ["dep:serde_core"]
 logging = ["dep:log"]
 
 # When enabled, Jiff will include code that attempts to determine the "system"
@@ -181,7 +181,7 @@ perf-inline = []
 jiff-static = { version = "0.2", path = "crates/jiff-static", optional = true }
 jiff-tzdb = { version = "0.1.4", path = "crates/jiff-tzdb", optional = true }
 log = { version = "0.4.21", optional = true, default-features = false }
-serde = { version = "1.0.203", optional = true, default-features = false }
+serde_core = { version = "1.0.221", optional = true, default-features = false }
 
 # This ensures that `jiff-static` is always used with a compatible version
 # of `jiff`. Namely, since `jiff-static` emits code that relies on internal
