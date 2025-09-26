@@ -637,6 +637,11 @@ impl<'s> Parser<'s> {
     fn parse_posix_time_zone(
         &self,
     ) -> Result<PosixTimeZone<Abbreviation>, Error> {
+        if self.is_done() {
+            return Err(err!(
+                "an empty string is not a valid POSIX time zone"
+            ));
+        }
         let std_abbrev = self
             .parse_abbreviation()
             .map_err(|e| err!("failed to parse standard abbreviation: {e}"))?;
@@ -756,9 +761,9 @@ impl<'s> Parser<'s> {
             if i >= Abbreviation::capacity() {
                 return Err(err!(
                     "expected abbreviation with at most {} bytes, \
-                         but found a longer abbreviation beginning with `{}`",
+                     but found a longer abbreviation beginning with `{}`",
                     Abbreviation::capacity(),
-                    Bytes(&self.tz[start..i]),
+                    Bytes(&self.tz[start..][..i]),
                 ));
             }
             if !self.bump() {
@@ -782,7 +787,7 @@ impl<'s> Parser<'s> {
         if abbrev.len() < 3 {
             return Err(err!(
                 "expected abbreviation with 3 or more bytes, but found \
-                     abbreviation {:?} with {} bytes",
+                 abbreviation {:?} with {} bytes",
                 abbrev,
                 abbrev.len(),
             ));
@@ -817,7 +822,7 @@ impl<'s> Parser<'s> {
                     "expected abbreviation with at most {} bytes, \
                      but found a longer abbreviation beginning with `{}`",
                     Abbreviation::capacity(),
-                    Bytes(&self.tz[start..i]),
+                    Bytes(&self.tz[start..][..i]),
                 ));
             }
             if !self.bump() {
@@ -1395,7 +1400,7 @@ impl<'s> Parser<'s> {
                 .ok_or_else(|| {
                     err!(
                         "number `{}` too big to parse into 64-bit integer",
-                        Bytes(&self.tz[start..i]),
+                        Bytes(&self.tz[start..][..i]),
                     )
                 })?;
             self.bump();
@@ -1427,7 +1432,7 @@ impl<'s> Parser<'s> {
                 .ok_or_else(|| {
                     err!(
                         "number `{}` too big to parse into 64-bit integer",
-                        Bytes(&self.tz[start..i]),
+                        Bytes(&self.tz[start..][..i]),
                     )
                 })?;
             self.bump();
@@ -2787,5 +2792,29 @@ mod tests {
 
         assert!(PosixTimeZone::parse(b"America/New_York").is_err());
         assert!(PosixTimeZone::parse(b":America/New_York").is_err());
+    }
+
+    // See: https://github.com/BurntSushi/jiff/issues/407
+    #[test]
+    fn parse_empty_is_err() {
+        assert!(PosixTimeZone::parse(b"").is_err());
+    }
+
+    // See: https://github.com/BurntSushi/jiff/issues/407
+    #[test]
+    fn parse_weird_is_err() {
+        let s =
+            b"AAAAAAAAAAAAAAACAAAAAAAAAAAAQA8AACAAAAAAAAAAAAAAAAACAAAAAAAAAAA";
+        assert!(PosixTimeZone::parse(s).is_err());
+
+        let s =
+            b"<AAAAAAAAAAAAAAACAAAAAAAAAAAAQA>8<AACAAAAAAAAAAAAAAAAACAAAAAAAAAAA>";
+        assert!(PosixTimeZone::parse(s).is_err());
+
+        let s = b"PPPPPPPPPPPPPPPPPPPPnoofPPPAAA6DaPPPPPPPPPPPPPPPPPPPPPnoofPPPPP,n";
+        assert!(PosixTimeZone::parse(s).is_err());
+
+        let s = b"oooooooooovooooooooooooooooool9<ooooo2o-o-oooooookoorooooooooroo8";
+        assert!(PosixTimeZone::parse(s).is_err());
     }
 }
