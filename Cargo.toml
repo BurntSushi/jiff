@@ -34,6 +34,7 @@ members = [
   "crates/jiff-static",
   "crates/jiff-tzdb",
   "crates/jiff-tzdb-platform",
+  "fuzz",
 ]
 
 # Features are documented in the "Crate features" section of the crate docs:
