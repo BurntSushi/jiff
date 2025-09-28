@@ -2962,9 +2962,8 @@ impl BrokenDownTime {
     /// Set the meridiem (AM/PM). This is most useful when doing custom
     /// parsing that involves 12-hour time.
     ///
-    /// Note that this value is not used when formatting. Formatting
-    /// only uses the 24-hour time from set_time() and calculate the
-    /// 12-hour time and meridiem from that.
+    /// When there is a conflict between the meridiem and the hour value, the
+    /// meridiem takes precedence.
     ///
     /// # Example
     ///
