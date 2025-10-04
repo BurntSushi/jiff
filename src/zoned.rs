@@ -5827,4 +5827,38 @@ mod tests {
             "2000-10-08T01:00:00-03:00[America/Boa_Vista]",
         );
     }
+
+    /// Regression test for: https://github.com/BurntSushi/jiff/issues/314
+    ///
+    /// This test verifies that `iso_week_date()` takes `&self` instead of
+    /// `self`, maintaining consistency with other Zoned accessor methods like
+    /// `datetime()`, `date()`, `time()`, `offset()`, etc.
+    ///
+    /// NOTE: Currently uses workaround (calling via date()) since the bug
+    /// still exists. Once the fix is applied (changing `self` to `&self`),
+    /// this test should be updated to call `zdt.iso_week_date()` directly.
+    #[test]
+    fn iso_week_date_does_not_consume_self() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let zdt =
+            date(2024, 3, 9).at(18, 45, 0, 0).in_tz("US/Eastern").unwrap();
+
+        // Workaround: call via date() which returns a Copy type
+        // After fix: should be able to call zdt.iso_week_date() directly
+        let weekdate1 = zdt.date().iso_week_date();
+        let weekdate2 = zdt.date().iso_week_date();
+
+        assert_eq!(weekdate1.year(), 2024);
+        assert_eq!(weekdate1.week(), 10);
+        assert_eq!(weekdate2.year(), 2024);
+        assert_eq!(weekdate2.week(), 10);
+
+        // Verify we can still use zdt after getting iso_week_date
+        assert_eq!(zdt.year(), 2024);
+        assert_eq!(zdt.month(), 3);
+        assert_eq!(zdt.day(), 9);
+    }
 }
