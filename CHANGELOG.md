@@ -16,6 +16,8 @@ Bug fixes:
 Update some parts of the documentation to indicate that `TimeZone::unknown()`
 is a fallback for `TimeZone::system()` (instead of the `jiff 0.1` behavior of
 using `TimeZone::UTC`).
+* [#423](https://github.com/BurntSushi/jiff/issues/423):
+Fix a panicking bug when reading malformed TZif data.
 
 
 0.2.15 (2025-06-13)

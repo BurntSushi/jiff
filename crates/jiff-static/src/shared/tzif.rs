@@ -734,9 +734,23 @@ impl TzifOwned {
             }
             start = end + 1;
         }
+
+        // Now we need to add a new abbreviation. This
+        // should generally only happen for malformed TZif
+        // data. i.e., TZif data with a POSIX time zone that
+        // contains an TZ abbreviation that isn't found in
+        // the TZif's designation list.
+        //
+        // And since we're guarding against malformed data,
+        // the designation list might not end with NUL. If
+        // not, add one.
+        if !self.fixed.designations.ends_with('\0') {
+            self.fixed.designations.push('\0');
+        }
+        let start = self.fixed.designations.len();
         self.fixed.designations.push_str(needle);
         self.fixed.designations.push('\0');
-        let end = start + needle.len();
+        let end = self.fixed.designations.len();
         Some((start.try_into().ok()?, end.try_into().ok()?))
     }
 
