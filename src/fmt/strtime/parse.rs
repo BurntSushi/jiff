@@ -861,6 +861,12 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             .context("failed to parse century")?;
         self.inp = inp;
 
+        if !(0 <= century && century <= 99) {
+            return Err(err!(
+                "century `{century}` is too big, must be in range 0-99",
+            ));
+        }
+
         // OK because sign=={1,-1} and century can't be bigger than 2 digits
         // so overflow isn't possible.
         let century = sign.checked_mul(century).unwrap();
@@ -2185,6 +2191,23 @@ mod tests {
         insta::assert_snapshot!(
             p("%:::z", "+05:3015"),
             @r#"strptime expects to consume the entire input, but "15" remains unparsed"#,
+        );
+    }
+
+    /// Regression test for checked arithmetic panicking.
+    ///
+    /// Ref https://github.com/BurntSushi/jiff/issues/426
+    #[test]
+    fn err_parse_large_century() {
+        let p = |fmt: &str, input: &str| {
+            BrokenDownTime::parse_mono(fmt.as_bytes(), input.as_bytes())
+                .unwrap_err()
+                .to_string()
+        };
+
+        insta::assert_snapshot!(
+            p("%^50C%", "2000000000000000000#0077)()"),
+            @"strptime parsing failed: %C failed: century `2000000000000000000` is too big, must be in range 0-99",
         );
     }
 }
