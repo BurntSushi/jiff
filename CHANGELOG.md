@@ -18,6 +18,8 @@ is a fallback for `TimeZone::system()` (instead of the `jiff 0.1` behavior of
 using `TimeZone::UTC`).
 * [#423](https://github.com/BurntSushi/jiff/issues/423):
 Fix a panicking bug when reading malformed TZif data.
+* [#426](https://github.com/BurntSushi/jiff/issues/426):
+Fix a panicking bug when parsing century (`%C`) via `strptime`.
 
 
 0.2.15 (2025-06-13)
