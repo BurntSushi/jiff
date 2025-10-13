@@ -549,6 +549,24 @@ jobs:
         cd crates/jiff-wasm
         wasm-pack test --node
 
+  # This job checks the docsrs configuration.
+  #
+  # This is important because we enable `doc_cfg`, which is an unstable
+  # feature that can (and has) broken.
+  docsrs:
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: "-D rustdoc::broken_intra_doc_links --cfg docsrs_jiff"
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: nightly
+    - name: Build docs
+      run: cargo doc --verbose --workspace --all-features
+
   # Check that all files are formatted properly.
   rustfmt:
     runs-on: ubuntu-latest
