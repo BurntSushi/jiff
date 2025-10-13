@@ -52,7 +52,7 @@ jobs:
           rust: stable
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -83,7 +83,7 @@ jobs:
           rust: nightly
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -114,7 +114,7 @@ jobs:
           rust: nightly
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -145,7 +145,7 @@ jobs:
           rust: nightly
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -170,7 +170,7 @@ jobs:
           rust: nightly
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -186,7 +186,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -207,7 +207,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -220,7 +220,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -239,7 +239,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -257,7 +257,7 @@ jobs:
     runs-on: windows-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -284,7 +284,7 @@ jobs:
     runs-on: windows-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -303,7 +303,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -341,7 +341,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -361,7 +361,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -383,7 +383,7 @@ jobs:
         - os: windows-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -413,7 +413,7 @@ jobs:
         - aarch64-linux-android
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install and configure Cross
       run: |
         # In the past, new releases of 'cross' have broken CI. So for now, we
@@ -452,7 +452,7 @@ jobs:
       with:
         toolchain: stable
         targets: riscv32imc-unknown-none-elf
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Test the build only
       run: |
         cargo build --target riscv32imc-unknown-none-elf --features alloc --no-default-features --features portable-atomic/critical-section
@@ -467,7 +467,7 @@ jobs:
       WASMTIME_BACKTRACE_DETAILS: 1
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -505,7 +505,7 @@ jobs:
       CROSS_VERSION: v0.2.5
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       # Rust 1.84 fails for reasons unknown to me, and I'm not familiar enough
       # with emscripten to figure out how to debug it.
@@ -540,7 +540,7 @@ jobs:
       TZ: America/New_York
     steps:
     - uses: dtolnay/rust-toolchain@1.81.0
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Install wasm-pack
       run: |
         curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
@@ -559,7 +559,7 @@ jobs:
       RUSTDOCFLAGS: "-D rustdoc::broken_intra_doc_links --cfg docsrs_jiff"
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -572,7 +572,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -590,7 +590,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
