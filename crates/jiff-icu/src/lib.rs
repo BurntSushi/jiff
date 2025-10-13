@@ -152,6 +152,9 @@ assert_eq!(zdt.to_string(), "2025-02-02T17:30:00-05:00[America/New_York]");
 
 #![no_std]
 #![deny(missing_docs)]
+// This adds Cargo feature annotations to items in the rustdoc output. Which is
+// sadly hugely beneficial for this crate due to the number of features.
+#![cfg_attr(docsrs_jiff, feature(doc_cfg))]
 
 #[cfg(any(test, feature = "std"))]
 extern crate std;
