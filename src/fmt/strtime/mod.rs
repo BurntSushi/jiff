@@ -1437,6 +1437,36 @@ impl BrokenDownTime {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    ///
+    /// # Example: conflicting data
+    ///
+    /// In theory, it is possible to parse both a timestamp and a civil
+    /// datetime in the same string. When that happens, the most recently
+    /// parsed data takes precedence:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime;
+    ///
+    /// // The `%s` parse wins:
+    /// let ts = strtime::parse(
+    ///     "%F %H:%M %:z and also %s",
+    ///     "2024-07-14 21:14 -04:00 and also 1760377242",
+    /// )?.to_timestamp()?;
+    /// assert_eq!(ts.to_string(), "2025-10-13T17:40:42Z");
+    ///
+    /// // The civil datetime (with offset) wins, but
+    /// // only partially! Only the parsed fields are
+    /// // overridden. Since the seconds from the clock
+    /// // time aren't parsed, those get taken from the
+    /// // timestamp.
+    /// let ts = strtime::parse(
+    ///     "%s and also %F %H:%M %:z",
+    ///     "1760377242 and also 2024-07-14 21:14 -04:00",
+    /// )?.to_timestamp()?;
+    /// assert_eq!(ts.to_string(), "2024-07-15T01:14:42Z");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn to_timestamp(&self) -> Result<Timestamp, Error> {
         let dt = self
