@@ -3000,8 +3000,10 @@ impl core::fmt::Display for TimestampDisplayWithOffset {
 
 /// An iterator over periodic timestamps, created by [`Timestamp::series`].
 ///
-/// It is exhausted when the next value would exceed a [`Span`] or
-/// [`Timestamp`] value.
+/// It is exhausted when the next value would exceed the limits of a [`Span`]
+/// or [`Timestamp`] value.
+///
+/// This iterator is created by [`Timestamp::series`].
 #[derive(Clone, Debug)]
 pub struct TimestampSeries {
     ts: Timestamp,
@@ -3027,6 +3029,8 @@ impl Iterator for TimestampSeries {
         Some(this)
     }
 }
+
+impl core::iter::FusedIterator for TimestampSeries {}
 
 /// Options for [`Timestamp::checked_add`] and [`Timestamp::checked_sub`].
 ///

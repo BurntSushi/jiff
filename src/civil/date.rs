@@ -2548,8 +2548,10 @@ impl quickcheck::Arbitrary for Date {
 
 /// An iterator over periodic dates, created by [`Date::series`].
 ///
-/// It is exhausted when the next value would exceed a [`Span`] or [`Date`]
-/// value.
+/// It is exhausted when the next value would exceed the limits of a [`Span`]
+/// or [`Date`] value.
+///
+/// This iterator is created by [`Date::series`].
 #[derive(Clone, Debug)]
 pub struct DateSeries {
     start: Date,
@@ -2568,6 +2570,8 @@ impl Iterator for DateSeries {
         Some(date)
     }
 }
+
+impl core::iter::FusedIterator for DateSeries {}
 
 /// Options for [`Date::checked_add`] and [`Date::checked_sub`].
 ///

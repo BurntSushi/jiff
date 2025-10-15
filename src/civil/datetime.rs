@@ -2858,8 +2858,10 @@ impl quickcheck::Arbitrary for DateTime {
 
 /// An iterator over periodic datetimes, created by [`DateTime::series`].
 ///
-/// It is exhausted when the next value would exceed a [`Span`] or [`DateTime`]
-/// value.
+/// It is exhausted when the next value would exceed the limits of a [`Span`]
+/// or [`DateTime`] value.
+///
+/// This iterator is created by [`DateTime::series`].
 #[derive(Clone, Debug)]
 pub struct DateTimeSeries {
     start: DateTime,
@@ -2878,6 +2880,8 @@ impl Iterator for DateTimeSeries {
         Some(date)
     }
 }
+
+impl core::iter::FusedIterator for DateTimeSeries {}
 
 /// Options for [`DateTime::checked_add`] and [`DateTime::checked_sub`].
 ///

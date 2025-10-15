@@ -2202,8 +2202,10 @@ impl quickcheck::Arbitrary for Time {
 
 /// An iterator over periodic times, created by [`Time::series`].
 ///
-/// It is exhausted when the next value would exceed a [`Span`] or [`Time`]
-/// value.
+/// It is exhausted when the next value would exceed the limits of a [`Span`]
+/// or [`Time`] value.
+///
+/// This iterator is created by [`Time::series`].
 #[derive(Clone, Debug)]
 pub struct TimeSeries {
     start: Time,
@@ -2222,6 +2224,8 @@ impl Iterator for TimeSeries {
         Some(time)
     }
 }
+
+impl core::iter::FusedIterator for TimeSeries {}
 
 /// Options for [`Time::checked_add`] and [`Time::checked_sub`].
 ///
