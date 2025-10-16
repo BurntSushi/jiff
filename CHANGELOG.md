@@ -9,6 +9,9 @@ Enhancements:
 * [#397](https://github.com/BurntSushi/jiff/pull/397):
 Add `BrokenDownTime::set_meridiem` and ensure it overrides the hour when
 formatting.
+* [#432](https://github.com/BurntSushi/jiff/pull/432):
+When `lenient` mode is enabled for `strftime`, Jiff will no longer error when
+the formatting string contains invalid UTF-8.
 
 Bug fixes:
 
