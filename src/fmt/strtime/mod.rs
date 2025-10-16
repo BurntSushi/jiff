@@ -504,7 +504,16 @@ impl<C> Config<C> {
     /// silently ignored. For example, if you try to format `%z` with a
     /// [`BrokenDownTime`] that lacks a time zone offset, this would normally
     /// result in an error. In contrast, when lenient mode is enabled, this
-    /// would just result in `%z` being written literally.
+    /// would just result in `%z` being written literally. Similarly, using
+    /// invalid UTF-8 in the format string would normally result in an error.
+    /// In lenient mode, invalid UTF-8 is automatically turned into the Unicode
+    /// replacement codepoint `U+FFFD` (which looks like this: `�`).
+    ///
+    /// Generally speaking, when this is enabled, the only error that can
+    /// occur when formatting is if a write to the underlying writer fails.
+    /// When using a writer that never errors (like `String`, unless allocation
+    /// fails), it follows that enabling lenient parsing will result in a
+    /// formatting operation that never fails (unless allocation fails).
     ///
     /// This currently has no effect on parsing, although this may change in
     /// the future.

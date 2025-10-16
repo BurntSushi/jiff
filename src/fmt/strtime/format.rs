@@ -130,8 +130,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
             b'.' => {
                 if !self.bump_fmt() {
                     return Err(err!(
-                        "invalid format string, expected directive \
-                             after '%.'",
+                        "invalid format string, expected directive after '%.'",
                     ));
                 }
                 // Parse precision settings after the `.`, effectively
@@ -143,8 +142,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                     }
                     unk => {
                         return Err(err!(
-                            "found unrecognized directive %{unk} \
-                                 following %.",
+                            "found unrecognized directive %{unk} following %.",
                             unk = escape::Byte(unk),
                         ));
                     }
@@ -189,6 +187,13 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     /// actual UTF-8 decoding, but since the `Write` trait only represents
     /// Unicode-accepting buffers, we need to actually do decoding here.
     ///
+    /// # Errors
+    ///
+    /// Unless lenient parsing is enabled, this returns an error if UTF-8
+    /// decoding failed. When lenient parsing is enabled, decoding errors
+    /// are turned into the Unicode replacement codepoint via the
+    /// "substitution of maximal subparts" strategy.
+    ///
     /// # Panics
     ///
     /// When `self.fmt` is empty. i.e., Only call this when you know there is
@@ -201,10 +206,14 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 self.fmt = &self.fmt[ch.len_utf8()..];
                 return Ok(ch);
             }
-            Err(invalid) => Err(err!(
-                "found invalid UTF-8 byte {byte:?} in format \
+            Err(errant_bytes) if self.config.lenient => {
+                self.fmt = &self.fmt[errant_bytes.len()..];
+                return Ok(char::REPLACEMENT_CHARACTER);
+            }
+            Err(errant_bytes) => Err(err!(
+                "found invalid UTF-8 byte {errant_bytes:?} in format \
                  string (format strings must be valid UTF-8)",
-                byte = escape::Byte(invalid),
+                errant_bytes = escape::Bytes(errant_bytes),
             )),
         }
     }
@@ -1511,9 +1520,22 @@ mod tests {
     }
 
     #[test]
+    fn err_invalid_utf8() {
+        let d = date(2025, 1, 20);
+        insta::assert_snapshot!(
+            format("abc %F xyz", d).unwrap(),
+            @"abc 2025-01-20 xyz",
+        );
+        insta::assert_snapshot!(
+            format(b"abc %F \xFFxyz", d).unwrap_err(),
+            @r#"strftime formatting failed: found invalid UTF-8 byte "\xff" in format string (format strings must be valid UTF-8)"#,
+        );
+    }
+
+    #[test]
     fn lenient() {
         fn f(
-            fmt: &str,
+            fmt: impl AsRef<[u8]>,
             tm: impl Into<BrokenDownTime>,
         ) -> alloc::string::String {
             let config = Config::new().lenient(true);
@@ -1526,5 +1548,26 @@ mod tests {
         insta::assert_snapshot!(f("%+", date(2024, 7, 9)), @"%+");
         insta::assert_snapshot!(f("%F", date(2024, 7, 9)), @"2024-07-09");
         insta::assert_snapshot!(f("%T", date(2024, 7, 9)), @"%T");
+        insta::assert_snapshot!(f("%F%", date(2024, 7, 9)), @"2024-07-09%");
+        insta::assert_snapshot!(
+            f(b"abc %F \xFFxyz", date(2024, 7, 9)),
+            @"abc 2024-07-09 �xyz",
+        );
+        // Demonstrates substitution of maximal subparts.
+        // Namely, `\xF0\x9F\x92` is a prefix of a valid
+        // UTF-8 encoding of a codepoint, such as `💩`.
+        // So the entire prefix should get substituted with
+        // a single replacement character...
+        insta::assert_snapshot!(
+            f(b"%F\xF0\x9F\x92%Y", date(2024, 7, 9)),
+            @"2024-07-09�2024",
+        );
+        // ... but \xFF is never part of a valid encoding.
+        // So each instance gets its own replacement
+        // character.
+        insta::assert_snapshot!(
+            f(b"%F\xFF\xFF\xFF%Y", date(2024, 7, 9)),
+            @"2024-07-09���2024",
+        );
     }
 }
