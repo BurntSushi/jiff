@@ -740,12 +740,6 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
             .or_else(|| self.tm.to_date().ok().map(|d| d.year_ranged()))
             .ok_or_else(|| err!("requires date to format year (2-digit)"))?
             .get();
-        if !(1969 <= year && year <= 2068) {
-            return Err(err!(
-                "formatting a 2-digit year requires that it be in \
-                 the inclusive range 1969 to 2068, but got {year}",
-            ));
-        }
         let year = year % 100;
         ext.write_int(b'0', Some(2), year, self.wtr)
     }
@@ -792,13 +786,6 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 )
             })?
             .get();
-        if !(1969 <= year && year <= 2068) {
-            return Err(err!(
-                "formatting a 2-digit ISO 8601 week-based year \
-                 requires that it be in \
-                 the inclusive range 1969 to 2068, but got {year}",
-            ));
-        }
         let year = year % 100;
         ext.write_int(b'0', Some(2), year, self.wtr)
     }
@@ -1445,6 +1432,9 @@ mod tests {
         insta::assert_snapshot!(f("%05y", date(2001, 7, 14)), @"00001");
         insta::assert_snapshot!(f("%_y", date(2001, 7, 14)), @" 1");
         insta::assert_snapshot!(f("%_5y", date(2001, 7, 14)), @"    1");
+
+        insta::assert_snapshot!(f("%y", date(1824, 7, 14)), @"24");
+        insta::assert_snapshot!(f("%g", date(1824, 7, 14)), @"24");
     }
 
     #[test]

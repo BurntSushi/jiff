@@ -3165,11 +3165,10 @@ impl From<Time> for BrokenDownTime {
 ///
 /// Therefore, only use this type if you know your formatting string is valid
 /// and that the datetime type being formatted has all of the information
-/// required by the format string. For most conversion specifiers, this falls
-/// in the category of things where "if it works, it works for all inputs."
-/// Unfortunately, there are some exceptions to this. For example, the `%y`
-/// modifier will only format a year if it falls in the range `1969-2068` and
-/// will otherwise return an error.
+/// required by the format string. Moreover, the `strftime` implementation in
+/// this crate is specifically designed to never error based on the specific
+/// values. For example, even though `%y` can only _parse_ years in the
+/// `1969-2068` range, it can format any valid year supported by Jiff.
 ///
 /// # Example
 ///

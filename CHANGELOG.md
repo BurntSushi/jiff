@@ -12,6 +12,8 @@ formatting.
 * [#432](https://github.com/BurntSushi/jiff/pull/432):
 When `lenient` mode is enabled for `strftime`, Jiff will no longer error when
 the formatting string contains invalid UTF-8.
+* [#432](https://github.com/BurntSushi/jiff/pull/432):
+Formatting of `%y` and `%g` no longer fails based on the specific year value.
 
 Bug fixes:
 
