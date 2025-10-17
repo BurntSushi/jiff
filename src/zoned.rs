@@ -3281,12 +3281,17 @@ impl Zoned {
     ///
     /// # Warning
     ///
-    /// If you need to be able to roundtrip `Zoned` values correctly, it is
-    /// strongly recommended that use the default `std::fmt::Display` and
-    /// `std::str::FromStr` trait implementations. Failing that, a `Zoned`
-    /// value can still be correctly round-tripped through this API with
-    /// [`Zoned::strptime`] if you include the IANA time zone identifier in
-    /// the formatting with the `%Q` conversion specifier.
+    /// The `strtime` module APIs do not require an IANA time zone identifier
+    /// to parse a `Zoned`. If one is not used, then if you format a zoned
+    /// datetime in a time zone like `America/New_York` and then parse it back
+    /// again, the zoned datetime you get back will be a "fixed offset" zoned
+    /// datetime. This in turn means it will not perform daylight saving time
+    /// safe arithmetic.
+    ///
+    /// However, the `%Q` directive may be used to both format and parse an
+    /// IANA time zone identifier. It is strongly recommended to use this
+    /// directive whenever one is formatting or parsing `Zoned` values since
+    /// it permits correctly round-tripping `Zoned` values.
     ///
     /// # Errors and panics
     ///

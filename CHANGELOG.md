@@ -14,6 +14,10 @@ When `lenient` mode is enabled for `strftime`, Jiff will no longer error when
 the formatting string contains invalid UTF-8.
 * [#432](https://github.com/BurntSushi/jiff/pull/432):
 Formatting of `%y` and `%g` no longer fails based on the specific year value.
+* [#432](https://github.com/BurntSushi/jiff/pull/432):
+Parsing of `%s` is now a bit more consistent with other fields. Moreover,
+`BrokenDownTime::{to_timestamp,to_zoned}` will now prefer timestamps parsed
+with `%s` over any other fields that have been parsed.
 
 Bug fixes:
 

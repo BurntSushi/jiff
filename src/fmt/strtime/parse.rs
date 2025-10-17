@@ -8,7 +8,6 @@ use crate::{
         strtime::{BrokenDownTime, Extension, Flag, Meridiem},
         Parsed,
     },
-    tz::Offset,
     util::{
         escape, parse,
         rangeint::{ri8, RFrom},
@@ -564,21 +563,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                 )
             })?;
         self.inp = inp;
-
-        // This is basically just repeating the
-        // `From<Timestamp> for BrokenDownTime`
-        // trait implementation.
-        let dt = Offset::UTC.to_datetime(timestamp);
-        let (d, t) = (dt.date(), dt.time());
-        self.tm.offset = Some(Offset::UTC);
-        self.tm.year = Some(d.year_ranged());
-        self.tm.month = Some(d.month_ranged());
-        self.tm.day = Some(d.day_ranged());
-        self.tm.hour = Some(t.hour_ranged());
-        self.tm.minute = Some(t.minute_ranged());
-        self.tm.second = Some(t.second_ranged());
-        self.tm.subsec = Some(t.subsec_nanosecond_ranged());
-        self.tm.meridiem = Some(Meridiem::from(t));
+        self.tm.timestamp = Some(timestamp);
 
         self.bump_fmt();
         Ok(())
