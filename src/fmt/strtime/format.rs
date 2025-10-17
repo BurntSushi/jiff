@@ -599,8 +599,8 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
             })?;
         let ts = self
             .tm
-            .timestamp
-            .ok_or_else(|| err!("requires timestamp in broken down time"))?;
+            .to_timestamp()
+            .context("requires timestamp in broken down time")?;
         let oinfo = tz.to_offset_info(ts);
         ext.write_str(Case::Upper, oinfo.abbreviation(), self.wtr)
     }
