@@ -369,7 +369,7 @@ use jiff::civil::date;
 
 let zdt1 = date(2020, 8, 26).at(6, 27, 0, 0).in_tz("America/New_York")?;
 let zdt2 = date(2023, 12, 31).at(18, 30, 0, 0).in_tz("America/New_York")?;
-let span = &zdt2 - &zdt1;
+let span = zdt2 - zdt1;
 assert_eq!(format!("{span:#}"), "29341h 3m");
 
 # Ok::<(), Box<dyn std::error::Error>>(())

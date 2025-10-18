@@ -208,8 +208,9 @@ use crate::{
 /// use jiff::{civil::date, ToSpan};
 ///
 /// let start = date(2024, 2, 25).at(15, 45, 0, 0).in_tz("America/New_York")?;
-/// // `Zoned` doesn't implement `Copy`, so we use `&start` instead of `start`.
-/// let one_week_later = &start + 1.weeks();
+/// // `Zoned` doesn't implement `Copy`, so you'll want to use `&start` instead
+/// // of `start` if you want to keep using it after arithmetic.
+/// let one_week_later = start + 1.weeks();
 /// assert_eq!(one_week_later.datetime(), date(2024, 3, 3).at(15, 45, 0, 0));
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -224,7 +225,7 @@ use crate::{
 ///
 /// let zdt1 = date(2024, 5, 3).at(23, 30, 0, 0).in_tz("America/New_York")?;
 /// let zdt2 = date(2024, 2, 25).at(7, 0, 0, 0).in_tz("America/New_York")?;
-/// assert_eq!(&zdt1 - &zdt2, 1647.hours().minutes(30).fieldwise());
+/// assert_eq!(zdt1 - zdt2, 1647.hours().minutes(30).fieldwise());
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -3514,7 +3515,33 @@ impl From<Zoned> for std::time::SystemTime {
     }
 }
 
+#[cfg(feature = "std")]
+impl<'a> From<&'a Zoned> for std::time::SystemTime {
+    #[inline]
+    fn from(time: &'a Zoned) -> std::time::SystemTime {
+        time.timestamp().into()
+    }
+}
+
 /// Adds a span of time to a zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_add`].
+///
+/// Using this implementation will result in consuming the `Zoned` value. Since
+/// it is not `Copy`, this will prevent further use. If this is undesirable,
+/// consider using the trait implementation for `&Zoned`, `Zoned::checked_add`
+/// or cloning the `Zoned` value.
+impl<'a> core::ops::Add<Span> for Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn add(self, rhs: Span) -> Zoned {
+        (&self).add(rhs)
+    }
+}
+
+/// Adds a span of time to a borrowed zoned datetime.
 ///
 /// This uses checked arithmetic and panics on overflow. To handle overflow
 /// without panics, use [`Zoned::checked_add`].
@@ -3540,6 +3567,24 @@ impl core::ops::AddAssign<Span> for Zoned {
 }
 
 /// Subtracts a span of time from a zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_sub`].
+///
+/// Using this implementation will result in consuming the `Zoned` value. Since
+/// it is not `Copy`, this will prevent further use. If this is undesirable,
+/// consider using the trait implementation for `&Zoned`, `Zoned::checked_sub`
+/// or cloning the `Zoned` value.
+impl<'a> core::ops::Sub<Span> for Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn sub(self, rhs: Span) -> Zoned {
+        (&self).sub(rhs)
+    }
+}
+
+/// Subtracts a span of time from a borrowed zoned datetime.
 ///
 /// This uses checked arithmetic and panics on overflow. To handle overflow
 /// without panics, use [`Zoned::checked_sub`].
@@ -3575,6 +3620,31 @@ impl core::ops::SubAssign<Span> for Zoned {
 /// unit in the `Span` returned will be hours.
 ///
 /// To configure the largest unit or enable rounding, use [`Zoned::since`].
+///
+/// Using this implementation will result in consuming the `Zoned` value. Since
+/// it is not `Copy`, this will prevent further use. If this is undesirable,
+/// consider using the trait implementation for `&Zoned`, `Zoned::since`,
+/// `Zoned::until` or cloning the `Zoned` value.
+impl core::ops::Sub for Zoned {
+    type Output = Span;
+
+    #[inline]
+    fn sub(self, rhs: Zoned) -> Span {
+        (&self).sub(&rhs)
+    }
+}
+
+/// Computes the span of time between two borrowed zoned datetimes.
+///
+/// This will return a negative span when the zoned datetime being subtracted
+/// is greater.
+///
+/// Since this uses the default configuration for calculating a span between
+/// two zoned datetimes (no rounding and largest units is hours), this will
+/// never panic or fail in any way. It is guaranteed that the largest non-zero
+/// unit in the `Span` returned will be hours.
+///
+/// To configure the largest unit or enable rounding, use [`Zoned::since`].
 impl<'a> core::ops::Sub for &'a Zoned {
     type Output = Span;
 
@@ -3585,6 +3655,24 @@ impl<'a> core::ops::Sub for &'a Zoned {
 }
 
 /// Adds a signed duration of time to a zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_add`].
+///
+/// Using this implementation will result in consuming the `Zoned` value. Since
+/// it is not `Copy`, this will prevent further use. If this is undesirable,
+/// consider using the trait implementation for `&Zoned`, `Zoned::checked_add`
+/// or cloning the `Zoned` value.
+impl core::ops::Add<SignedDuration> for Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn add(self, rhs: SignedDuration) -> Zoned {
+        (&self).add(rhs)
+    }
+}
+
+/// Adds a signed duration of time to a borrowed zoned datetime.
 ///
 /// This uses checked arithmetic and panics on overflow. To handle overflow
 /// without panics, use [`Zoned::checked_add`].
@@ -3610,6 +3698,24 @@ impl core::ops::AddAssign<SignedDuration> for Zoned {
 }
 
 /// Subtracts a signed duration of time from a zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_sub`].
+///
+/// Using this implementation will result in consuming the `Zoned` value. Since
+/// it is not `Copy`, this will prevent further use. If this is undesirable,
+/// consider using the trait implementation for `&Zoned`, `Zoned::checked_sub`
+/// or cloning the `Zoned` value.
+impl core::ops::Sub<SignedDuration> for Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn sub(self, rhs: SignedDuration) -> Zoned {
+        (&self).sub(rhs)
+    }
+}
+
+/// Subtracts a signed duration of time from a borrowed zoned datetime.
 ///
 /// This uses checked arithmetic and panics on overflow. To handle overflow
 /// without panics, use [`Zoned::checked_sub`].
@@ -3639,6 +3745,24 @@ impl core::ops::SubAssign<SignedDuration> for Zoned {
 ///
 /// This uses checked arithmetic and panics on overflow. To handle overflow
 /// without panics, use [`Zoned::checked_add`].
+///
+/// Using this implementation will result in consuming the `Zoned` value. Since
+/// it is not `Copy`, this will prevent further use. If this is undesirable,
+/// consider using the trait implementation for `&Zoned`, `Zoned::checked_add`
+/// or cloning the `Zoned` value.
+impl core::ops::Add<UnsignedDuration> for Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn add(self, rhs: UnsignedDuration) -> Zoned {
+        (&self).add(rhs)
+    }
+}
+
+/// Adds an unsigned duration of time to a borrowed zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_add`].
 impl<'a> core::ops::Add<UnsignedDuration> for &'a Zoned {
     type Output = Zoned;
 
@@ -3661,6 +3785,24 @@ impl core::ops::AddAssign<UnsignedDuration> for Zoned {
 }
 
 /// Subtracts an unsigned duration of time from a zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_sub`].
+///
+/// Using this implementation will result in consuming the `Zoned` value. Since
+/// it is not `Copy`, this will prevent further use. If this is undesirable,
+/// consider using the trait implementation for `&Zoned`, `Zoned::checked_sub`
+/// or cloning the `Zoned` value.
+impl core::ops::Sub<UnsignedDuration> for Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn sub(self, rhs: UnsignedDuration) -> Zoned {
+        (&self).sub(rhs)
+    }
+}
+
+/// Subtracts an unsigned duration of time from a borrowed zoned datetime.
 ///
 /// This uses checked arithmetic and panics on overflow. To handle overflow
 /// without panics, use [`Zoned::checked_sub`].
