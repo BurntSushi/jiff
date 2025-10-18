@@ -1322,6 +1322,8 @@ impl BrokenDownTime {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
+    /// # Example: time zone inconsistent with offset
+    ///
     /// This shows that an error is returned when the offset is inconsistent
     /// with the time zone. For example, `US/Eastern` is in daylight saving
     /// time in July 2024:
@@ -1340,6 +1342,21 @@ impl BrokenDownTime {
     ///      and because datetime has offset -05, but the time zone \
     ///      US/Eastern for the given datetime unambiguously has offset -04",
     /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: timestamp without offset
+    ///
+    /// If a timestamp has been parsed but there is no offset or IANA time
+    /// zone identifier, then the zoned datetime will be in UTC via the
+    /// `Etc/Unknown` time zone:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime;
+    ///
+    /// let zdt = strtime::parse("%s", "1760813400")?.to_zoned()?;
+    /// assert_eq!(zdt.to_string(), "2025-10-18T18:50:00Z[Etc/Unknown]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1414,10 +1431,15 @@ impl BrokenDownTime {
         db: &TimeZoneDatabase,
     ) -> Result<Zoned, Error> {
         match (self.offset, self.iana_time_zone()) {
-            (None, None) => Err(err!(
-                "either offset (from %z) or IANA time zone identifier \
-                 (from %Q) is required for parsing zoned datetime",
-            )),
+            (None, None) => {
+                if let Some(ts) = self.timestamp {
+                    return Ok(ts.to_zoned(TimeZone::unknown()));
+                }
+                Err(err!(
+                    "either offset (from %z) or IANA time zone identifier \
+                     (from %Q) is required for parsing zoned datetime",
+                ))
+            }
             (Some(offset), None) => {
                 let ts = match self.timestamp {
                     Some(ts) => ts,
