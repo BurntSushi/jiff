@@ -6,6 +6,9 @@ TODO
 
 Enhancements:
 
+* [#396](https://github.com/BurntSushi/jiff/issues/396):
+Add `Sub` and `Add` trait implementations for `Zoned` (in addition to the
+already existing trait implementations for `&Zoned`).
 * [#397](https://github.com/BurntSushi/jiff/pull/397):
 Add `BrokenDownTime::set_meridiem` and ensure it overrides the hour when
 formatting.
