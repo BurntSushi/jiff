@@ -12,6 +12,12 @@ already existing trait implementations for `&Zoned`).
 * [#397](https://github.com/BurntSushi/jiff/pull/397):
 Add `BrokenDownTime::set_meridiem` and ensure it overrides the hour when
 formatting.
+* [#409](https://github.com/BurntSushi/jiff/pull/409):
+Switch dependency on `serde` to `serde_core`. This should help speed up
+compilation times in some cases.
+* [#430](https://github.com/BurntSushi/jiff/pull/430):
+Add new `Zoned::series` API, making it consistent with the same API on other
+datetime types.
 * [#432](https://github.com/BurntSushi/jiff/pull/432):
 When `lenient` mode is enabled for `strftime`, Jiff will no longer error when
 the formatting string contains invalid UTF-8.
@@ -21,9 +27,15 @@ Formatting of `%y` and `%g` no longer fails based on the specific year value.
 Parsing of `%s` is now a bit more consistent with other fields. Moreover,
 `BrokenDownTime::{to_timestamp,to_zoned}` will now prefer timestamps parsed
 with `%s` over any other fields that have been parsed.
+* [#433](https://github.com/BurntSushi/jiff/pull/433):
+Allow parsing just a `%s` into a `Zoned` via the `Etc/Unknown` time zone.
 
 Bug fixes:
 
+* [#407](https://github.com/BurntSushi/jiff/issues/407):
+Fix a panic that occurred when parsing an empty string as a POSIX time zone.
+* [#410](https://github.com/BurntSushi/jiff/issues/410):
+Fix a panic that could occur when parsing `%:` via `strptime` APIs.
 * [#414](https://github.com/BurntSushi/jiff/pull/414):
 Update some parts of the documentation to indicate that `TimeZone::unknown()`
 is a fallback for `TimeZone::system()` (instead of the `jiff 0.1` behavior of
