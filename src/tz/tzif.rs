@@ -8,7 +8,7 @@ These binary files are the ones commonly found in Unix distributions in the
 [Time Zone Database]: https://www.iana.org/time-zones
 */
 
-use core::ops::Range;
+use core::{fmt::Debug, ops::Range};
 
 #[cfg(feature = "alloc")]
 use alloc::{string::String, vec::Vec};
@@ -177,7 +177,7 @@ impl TzifOwned {
 
 impl<
         STR: AsRef<str>,
-        ABBREV: AsRef<str>,
+        ABBREV: AsRef<str> + Debug,
         TYPES: AsRef<[shared::TzifLocalTimeType]>,
         TIMESTAMPS: AsRef<[i64]>,
         STARTS: AsRef<[shared::TzifDateTime]>,

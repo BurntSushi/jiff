@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use super::{
     util::{
         array_str::Abbreviation,
@@ -39,7 +41,7 @@ impl PosixTimeZone<Abbreviation> {
     // only-jiff-end
 }
 
-impl<ABBREV: AsRef<str>> PosixTimeZone<ABBREV> {
+impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
     /// Returns the appropriate time zone offset to use for the given
     /// timestamp.
     ///
