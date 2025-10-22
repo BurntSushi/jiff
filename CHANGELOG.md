@@ -32,6 +32,10 @@ Allow parsing just a `%s` into a `Zoned` via the `Etc/Unknown` time zone.
 
 Bug fixes:
 
+* [#386](https://github.com/BurntSushi/jiff/issues/386):
+Fix a bug where `2087-12-31T23:00:00Z` in the `Africa/Casablanca` time zone
+could not be round-tripped (because its offset was calculated incorrectly as
+a result of not handling "permanent DST" POSIX time zones).
 * [#407](https://github.com/BurntSushi/jiff/issues/407):
 Fix a panic that occurred when parsing an empty string as a POSIX time zone.
 * [#410](https://github.com/BurntSushi/jiff/issues/410):
