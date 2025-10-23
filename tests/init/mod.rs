@@ -39,7 +39,8 @@ fn zoned_now() {
     let limit = Duration::from_millis(500);
     assert!(
         first < limit,
-        "first `Zoned::now()` call should complete in less than {limit:?}",
+        "first `Zoned::now()` call should complete in less than {limit:?}, \
+         but it took {first:?}",
     );
     // The second call should run soon enough that the cached
     // directory traversal results are still valid. So this should
@@ -48,6 +49,7 @@ fn zoned_now() {
     let limit = Duration::from_millis(500);
     assert!(
         second < limit,
-        "second `Zoned::now()` call should complete in less than {limit:?}",
+        "second `Zoned::now()` call should complete in less than {limit:?}, \
+         but it took {second:?}",
     );
 }
