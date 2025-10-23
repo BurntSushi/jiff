@@ -380,7 +380,6 @@ impl TzifDateTime {
         minute: i8,
         second: i8,
     ) -> TzifDateTime {
-        // TzifDateTime { year, month, day, hour, minute, second }
         let mut bits = (year as u64) << 48;
         bits |= (month as u64) << 40;
         bits |= (day as u64) << 32;
