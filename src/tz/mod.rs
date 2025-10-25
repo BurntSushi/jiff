@@ -39,7 +39,7 @@ conversion from a [`Timestamp`](crate::Timestamp) to a [`Zoned`](crate::Zoned)
 is infallible:
 
 ```
-use jiff::{tz::TimeZone, Timestamp, Zoned};
+use jiff::{tz::TimeZone, Timestamp};
 
 let tz = TimeZone::get("America/New_York")?;
 let ts = Timestamp::UNIX_EPOCH;
@@ -190,7 +190,7 @@ mod zic;
 ///
 /// Using a static `TimeZone` may also be faster in some cases. In particular,
 /// a `TimeZone` created at runtime from a `/usr/share/zoneinfo` uses
-/// automic reference counting internally. In contrast, a `TimeZone` created
+/// automatic reference counting internally. In contrast, a `TimeZone` created
 /// with this macro does not.
 ///
 /// # Example
@@ -269,7 +269,7 @@ pub use jiff_static::get;
 ///
 /// Using a static `TimeZone` may also be faster in some cases. In particular,
 /// a `TimeZone` created at runtime from a `/usr/share/zoneinfo` uses
-/// automic reference counting internally. In contrast, a `TimeZone` created
+/// automatic reference counting internally. In contrast, a `TimeZone` created
 /// with this macro does not.
 ///
 /// # Example

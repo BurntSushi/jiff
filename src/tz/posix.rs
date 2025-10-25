@@ -68,6 +68,8 @@ data contains POSIX time zone strings.)
 [musl-env]: https://wiki.musl-libc.org/environment-variables
 */
 
+use core::fmt::Debug;
+
 use crate::{
     civil::DateTime,
     error::{err, Error, ErrorContext},
@@ -257,7 +259,7 @@ impl PosixTimeZone<&'static str> {
     }
 }
 
-impl<ABBREV: AsRef<str>> PosixTimeZone<ABBREV> {
+impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
     /// Returns the appropriate time zone offset to use for the given
     /// timestamp.
     ///
@@ -306,10 +308,10 @@ impl<ABBREV: AsRef<str>> PosixTimeZone<ABBREV> {
 
     /// Returns the timestamp of the most recent time zone transition prior
     /// to the timestamp given. If one doesn't exist, `None` is returned.
-    pub(crate) fn previous_transition(
-        &self,
+    pub(crate) fn previous_transition<'t>(
+        &'t self,
         timestamp: Timestamp,
-    ) -> Option<TimeZoneTransition> {
+    ) -> Option<TimeZoneTransition<'t>> {
         let (its, ioff, abbrev, is_dst) =
             self.inner.previous_transition(timestamp.to_itimestamp_const())?;
         let timestamp = Timestamp::from_itimestamp_const(its);
@@ -320,10 +322,10 @@ impl<ABBREV: AsRef<str>> PosixTimeZone<ABBREV> {
 
     /// Returns the timestamp of the soonest time zone transition after the
     /// timestamp given. If one doesn't exist, `None` is returned.
-    pub(crate) fn next_transition(
-        &self,
+    pub(crate) fn next_transition<'t>(
+        &'t self,
         timestamp: Timestamp,
-    ) -> Option<TimeZoneTransition> {
+    ) -> Option<TimeZoneTransition<'t>> {
         let (its, ioff, abbrev, is_dst) =
             self.inner.next_transition(timestamp.to_itimestamp_const())?;
         let timestamp = Timestamp::from_itimestamp_const(its);

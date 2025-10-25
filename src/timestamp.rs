@@ -2852,9 +2852,9 @@ impl TryFrom<std::time::SystemTime> for Timestamp {
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for Timestamp {
+impl serde_core::Serialize for Timestamp {
     #[inline]
-    fn serialize<S: serde::Serializer>(
+    fn serialize<S: serde_core::Serializer>(
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
@@ -2863,12 +2863,12 @@ impl serde::Serialize for Timestamp {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for Timestamp {
+impl<'de> serde_core::Deserialize<'de> for Timestamp {
     #[inline]
-    fn deserialize<D: serde::Deserializer<'de>>(
+    fn deserialize<D: serde_core::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Timestamp, D::Error> {
-        use serde::de;
+        use serde_core::de;
 
         struct TimestampVisitor;
 
@@ -3000,8 +3000,10 @@ impl core::fmt::Display for TimestampDisplayWithOffset {
 
 /// An iterator over periodic timestamps, created by [`Timestamp::series`].
 ///
-/// It is exhausted when the next value would exceed a [`Span`] or
-/// [`Timestamp`] value.
+/// It is exhausted when the next value would exceed the limits of a [`Span`]
+/// or [`Timestamp`] value.
+///
+/// This iterator is created by [`Timestamp::series`].
 #[derive(Clone, Debug)]
 pub struct TimestampSeries {
     ts: Timestamp,
@@ -3027,6 +3029,8 @@ impl Iterator for TimestampSeries {
         Some(this)
     }
 }
+
+impl core::iter::FusedIterator for TimestampSeries {}
 
 /// Options for [`Timestamp::checked_add`] and [`Timestamp::checked_sub`].
 ///

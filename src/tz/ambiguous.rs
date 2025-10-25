@@ -397,7 +397,7 @@ impl AmbiguousTimestamp {
     /// # Example
     ///
     /// ```
-    /// use jiff::{civil::date, tz::{self, AmbiguousOffset}};
+    /// use jiff::{civil::date, tz};
     ///
     /// let tz = tz::db().get("America/New_York")?;
     ///
@@ -959,7 +959,7 @@ impl AmbiguousZoned {
     /// # Example
     ///
     /// ```
-    /// use jiff::{civil::date, tz::{self, AmbiguousOffset}};
+    /// use jiff::{civil::date, tz};
     ///
     /// let tz = tz::db().get("America/New_York")?;
     ///

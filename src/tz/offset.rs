@@ -1945,7 +1945,7 @@ impl OffsetConflict {
     /// sub-minute precision. In that case, exact equality is used:
     ///
     /// ```
-    /// use jiff::{tz::Offset, Zoned};
+    /// use jiff::Zoned;
     ///
     /// let result = "1970-06-01T00-00:45:00[Africa/Monrovia]".parse::<Zoned>();
     /// assert_eq!(

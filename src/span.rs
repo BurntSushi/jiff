@@ -3311,8 +3311,6 @@ impl core::ops::Mul<Span> for i64 {
 
 /// Converts a `Span` to a [`std::time::Duration`].
 ///
-/// Note that this assumes that days are always 24 hours long.
-///
 /// # Errors
 ///
 /// This can fail for only two reasons:
@@ -3473,8 +3471,6 @@ impl TryFrom<UnsignedDuration> for Span {
 
 /// Converts a `Span` to a [`SignedDuration`].
 ///
-/// Note that this assumes that days are always 24 hours long.
-///
 /// # Errors
 ///
 /// This can fail for only when the span has any non-zero units greater than
@@ -3600,9 +3596,9 @@ impl TryFrom<SignedDuration> for Span {
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for Span {
+impl serde_core::Serialize for Span {
     #[inline]
-    fn serialize<S: serde::Serializer>(
+    fn serialize<S: serde_core::Serializer>(
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
@@ -3611,12 +3607,12 @@ impl serde::Serialize for Span {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for Span {
+impl<'de> serde_core::Deserialize<'de> for Span {
     #[inline]
-    fn deserialize<D: serde::Deserializer<'de>>(
+    fn deserialize<D: serde_core::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Span, D::Error> {
-        use serde::de;
+        use serde_core::de;
 
         struct SpanVisitor;
 
@@ -5883,7 +5879,7 @@ impl<'a> Relative<'a> {
     /// This returns an error in the same cases as the underlying checked
     /// arithmetic APIs. In general, this occurs when adding the given `span`
     /// would result in overflow.
-    fn checked_add(&self, span: Span) -> Result<Relative, Error> {
+    fn checked_add(&'a self, span: Span) -> Result<Relative<'a>, Error> {
         match *self {
             Relative::Civil(dt) => Ok(Relative::Civil(dt.checked_add(span)?)),
             Relative::Zoned(ref zdt) => {
@@ -5893,9 +5889,9 @@ impl<'a> Relative<'a> {
     }
 
     fn checked_add_duration(
-        &self,
+        &'a self,
         duration: SignedDuration,
-    ) -> Result<Relative, Error> {
+    ) -> Result<Relative<'a>, Error> {
         match *self {
             Relative::Civil(dt) => {
                 Ok(Relative::Civil(dt.checked_add_duration(duration)?))
@@ -6320,7 +6316,7 @@ impl<'a> RelativeZoned<'a> {
 
     /// Returns the borrowed version of self; useful when you need to convert
     /// `&RelativeZoned` into `RelativeZoned` without cloning anything.
-    fn borrowed(&self) -> RelativeZoned {
+    fn borrowed(&'a self) -> RelativeZoned<'a> {
         RelativeZoned { zoned: self.zoned.borrowed() }
     }
 }

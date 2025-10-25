@@ -674,7 +674,7 @@ impl DateTime {
     /// manifests from a specific timestamp.
     ///
     /// ```
-    /// use jiff::{civil, Timestamp};
+    /// use jiff::Timestamp;
     ///
     /// // 1,234 nanoseconds after the Unix epoch.
     /// let zdt = Timestamp::new(0, 1_234)?.in_tz("UTC")?;
@@ -2786,9 +2786,9 @@ impl core::ops::SubAssign<UnsignedDuration> for DateTime {
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for DateTime {
+impl serde_core::Serialize for DateTime {
     #[inline]
-    fn serialize<S: serde::Serializer>(
+    fn serialize<S: serde_core::Serializer>(
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
@@ -2797,12 +2797,12 @@ impl serde::Serialize for DateTime {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for DateTime {
+impl<'de> serde_core::Deserialize<'de> for DateTime {
     #[inline]
-    fn deserialize<D: serde::Deserializer<'de>>(
+    fn deserialize<D: serde_core::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<DateTime, D::Error> {
-        use serde::de;
+        use serde_core::de;
 
         struct DateTimeVisitor;
 
@@ -2858,8 +2858,10 @@ impl quickcheck::Arbitrary for DateTime {
 
 /// An iterator over periodic datetimes, created by [`DateTime::series`].
 ///
-/// It is exhausted when the next value would exceed a [`Span`] or [`DateTime`]
-/// value.
+/// It is exhausted when the next value would exceed the limits of a [`Span`]
+/// or [`DateTime`] value.
+///
+/// This iterator is created by [`DateTime::series`].
 #[derive(Clone, Debug)]
 pub struct DateTimeSeries {
     start: DateTime,
@@ -2878,6 +2880,8 @@ impl Iterator for DateTimeSeries {
         Some(date)
     }
 }
+
+impl core::iter::FusedIterator for DateTimeSeries {}
 
 /// Options for [`DateTime::checked_add`] and [`DateTime::checked_sub`].
 ///

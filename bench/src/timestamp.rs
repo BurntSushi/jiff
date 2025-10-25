@@ -127,7 +127,7 @@ fn from_seconds(c: &mut Criterion) {
     const EXPECTED: Timestamp = Timestamp::constant(SECONDS, 0);
 
     {
-        benchmark(c, format!("{NAME}/span/jiff"), |b| {
+        benchmark(c, format!("{NAME}/integer/jiff"), |b| {
             b.iter(|| {
                 let got = Timestamp::from_second(bb(SECONDS)).unwrap();
                 assert_eq!(got, EXPECTED);
@@ -137,7 +137,7 @@ fn from_seconds(c: &mut Criterion) {
 
     {
         let expected = chrono::DateTime::convert_from(EXPECTED);
-        benchmark(c, format!("{NAME}/duration/chrono"), |b| {
+        benchmark(c, format!("{NAME}/integer/chrono"), |b| {
             b.iter(|| {
                 let got =
                     chrono::DateTime::from_timestamp(bb(SECONDS), 0).unwrap();
@@ -148,7 +148,7 @@ fn from_seconds(c: &mut Criterion) {
 
     {
         let expected = time::UtcDateTime::convert_from(EXPECTED);
-        benchmark(c, format!("{NAME}/duration/time"), |b| {
+        benchmark(c, format!("{NAME}/integer/time"), |b| {
             b.iter(|| {
                 let got = time::UtcDateTime::from_unix_timestamp(bb(SECONDS))
                     .unwrap();

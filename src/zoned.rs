@@ -208,8 +208,9 @@ use crate::{
 /// use jiff::{civil::date, ToSpan};
 ///
 /// let start = date(2024, 2, 25).at(15, 45, 0, 0).in_tz("America/New_York")?;
-/// // `Zoned` doesn't implement `Copy`, so we use `&start` instead of `start`.
-/// let one_week_later = &start + 1.weeks();
+/// // `Zoned` doesn't implement `Copy`, so you'll want to use `&start` instead
+/// // of `start` if you want to keep using it after arithmetic.
+/// let one_week_later = start + 1.weeks();
 /// assert_eq!(one_week_later.datetime(), date(2024, 3, 3).at(15, 45, 0, 0));
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -224,7 +225,7 @@ use crate::{
 ///
 /// let zdt1 = date(2024, 5, 3).at(23, 30, 0, 0).in_tz("America/New_York")?;
 /// let zdt2 = date(2024, 2, 25).at(7, 0, 0, 0).in_tz("America/New_York")?;
-/// assert_eq!(&zdt1 - &zdt2, 1647.hours().minutes(30).fieldwise());
+/// assert_eq!(zdt1 - zdt2, 1647.hours().minutes(30).fieldwise());
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -382,11 +383,11 @@ struct ZonedInner {
 impl Zoned {
     /// Returns the current system time in this system's time zone.
     ///
-    /// If the system's time zone could not be found, then [`TimeZone::UTC`]
-    /// is used instead. When this happens, a `WARN` level log message will
-    /// be emitted. (To see it, one will need to install a logger that is
-    /// compatible with the `log` crate and enable Jiff's `logging` Cargo
-    /// feature.)
+    /// If the system's time zone could not be found, then
+    /// [`TimeZone::unknown`] is used instead. When this happens, a `WARN`
+    /// level log message will be emitted. (To see it, one will need to install
+    /// a logger that is compatible with the `log` crate and enable Jiff's
+    /// `logging` Cargo feature.)
     ///
     /// To create a `Zoned` value for the current time in a particular
     /// time zone other than the system default time zone, use
@@ -2984,7 +2985,6 @@ impl Zoned {
         options.round(self)
     }
 
-    /*
     /// Return an iterator of periodic zoned datetimes determined by the given
     /// span.
     ///
@@ -2993,11 +2993,17 @@ impl Zoned {
     /// itself overflows, or it would otherwise exceed the minimum or maximum
     /// `Zoned` value.
     ///
+    /// When the given span is positive, the zoned datetimes yielded are
+    /// monotonically increasing. When the given span is negative, the zoned
+    /// datetimes yielded as monotonically decreasing. When the given span is
+    /// zero, then all values yielded are identical and the time series is
+    /// infinite.
+    ///
     /// # Example: when to check a glucose monitor
     ///
     /// When my cat had diabetes, my veterinarian installed a glucose monitor
     /// and instructed me to scan it about every 5 hours. This example lists
-    /// all of the times I need to scan it for the 2 days following its
+    /// all of the times I needed to scan it for the 2 days following its
     /// installation:
     ///
     /// ```
@@ -3025,28 +3031,188 @@ impl Zoned {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
-    /// # Example
+    /// # Example: behavior during daylight saving time transitions
     ///
-    /// BREADCRUMBS: Maybe just remove ZonedSeries for now..?
+    /// Even when there is a daylight saving time transition, the time series
+    /// returned handles it correctly by continuing to move forward.
+    ///
+    /// This first example shows what happens when there is a gap in time (it
+    /// is automatically skipped):
+    ///
+    /// ```
+    /// use jiff::{civil::date, ToSpan};
+    ///
+    /// let zdt = date(2025, 3, 9).at(1, 0, 0, 0).in_tz("America/New_York")?;
+    /// let mut it = zdt.series(30.minutes());
+    ///
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2025-03-09T01:00:00-05:00[America/New_York]".to_string()),
+    /// );
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2025-03-09T01:30:00-05:00[America/New_York]".to_string()),
+    /// );
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2025-03-09T03:00:00-04:00[America/New_York]".to_string()),
+    /// );
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2025-03-09T03:30:00-04:00[America/New_York]".to_string()),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// And similarly, when there is a fold in time, the fold is repeated:
+    ///
+    /// ```
+    /// use jiff::{civil::date, ToSpan};
+    ///
+    /// let zdt = date(2025, 11, 2).at(0, 30, 0, 0).in_tz("America/New_York")?;
+    /// let mut it = zdt.series(30.minutes());
+    ///
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2025-11-02T00:30:00-04:00[America/New_York]".to_string()),
+    /// );
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2025-11-02T01:00:00-04:00[America/New_York]".to_string()),
+    /// );
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2025-11-02T01:30:00-04:00[America/New_York]".to_string()),
+    /// );
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2025-11-02T01:00:00-05:00[America/New_York]".to_string()),
+    /// );
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2025-11-02T01:30:00-05:00[America/New_York]".to_string()),
+    /// );
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2025-11-02T02:00:00-05:00[America/New_York]".to_string()),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: ensures values are monotonically increasing (or decreasing)
+    ///
+    /// Because of odd time zone transitions, it's possible that adding
+    /// different calendar units to the same zoned datetime will yield the
+    /// same result. For example, `2011-12-30` did not exist on the clocks
+    /// in the `Pacific/Apia` time zone. (Because Samoa switched sides of the
+    /// International Date Line.) This means that adding `1 day` to
+    /// `2011-12-29` yields the same result as adding `2 days`:
+    ///
+    /// ```
+    /// use jiff::{civil, ToSpan};
+    ///
+    /// let zdt = civil::date(2011, 12, 29).in_tz("Pacific/Apia")?;
+    /// assert_eq!(
+    ///     zdt.checked_add(1.day())?.to_string(),
+    ///     "2011-12-31T00:00:00+14:00[Pacific/Apia]",
+    /// );
+    /// assert_eq!(
+    ///     zdt.checked_add(2.days())?.to_string(),
+    ///     "2011-12-31T00:00:00+14:00[Pacific/Apia]",
+    /// );
+    /// assert_eq!(
+    ///     zdt.checked_add(3.days())?.to_string(),
+    ///     "2012-01-01T00:00:00+14:00[Pacific/Apia]",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// This might lead one to believe that `Zoned::series` could emit the
+    /// same instant twice. But it takes this into account and ensures all
+    /// values occur after the previous value (or before if the `Span` given
+    /// is negative):
     ///
     /// ```
     /// use jiff::{civil::date, ToSpan};
     ///
     /// let zdt = date(2011, 12, 28).in_tz("Pacific/Apia")?;
     /// let mut it = zdt.series(1.day());
-    /// assert_eq!(it.next(), Some(date(2011, 12, 28).in_tz("Pacific/Apia")?));
-    /// assert_eq!(it.next(), Some(date(2011, 12, 29).in_tz("Pacific/Apia")?));
-    /// assert_eq!(it.next(), Some(date(2011, 12, 30).in_tz("Pacific/Apia")?));
-    /// assert_eq!(it.next(), Some(date(2011, 12, 31).in_tz("Pacific/Apia")?));
-    /// assert_eq!(it.next(), Some(date(2012, 01, 01).in_tz("Pacific/Apia")?));
+    ///
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2011-12-28T00:00:00-10:00[Pacific/Apia]".to_string()),
+    /// );
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2011-12-29T00:00:00-10:00[Pacific/Apia]".to_string()),
+    /// );
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2011-12-31T00:00:00+14:00[Pacific/Apia]".to_string()),
+    /// );
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2012-01-01T00:00:00+14:00[Pacific/Apia]".to_string()),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// And similarly for a negative `Span`:
+    ///
+    /// ```
+    /// use jiff::{civil::date, ToSpan};
+    ///
+    /// let zdt = date(2012, 1, 1).in_tz("Pacific/Apia")?;
+    /// let mut it = zdt.series(-1.day());
+    ///
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2012-01-01T00:00:00+14:00[Pacific/Apia]".to_string()),
+    /// );
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2011-12-31T00:00:00+14:00[Pacific/Apia]".to_string()),
+    /// );
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2011-12-29T00:00:00-10:00[Pacific/Apia]".to_string()),
+    /// );
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2011-12-28T00:00:00-10:00[Pacific/Apia]".to_string()),
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// An exception to this is if a zero `Span` is provided. Then all values
+    /// emitted are necessarily equivalent:
+    ///
+    /// ```
+    /// use jiff::{civil::date, ToSpan};
+    ///
+    /// let zdt = date(2011, 12, 28).in_tz("Pacific/Apia")?;
+    /// let mut it = zdt.series(0.days());
+    ///
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2011-12-28T00:00:00-10:00[Pacific/Apia]".to_string()),
+    /// );
+    /// assert_eq!(
+    ///     it.next().map(|zdt| zdt.to_string()),
+    ///     Some("2011-12-28T00:00:00-10:00[Pacific/Apia]".to_string()),
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn series(self, period: Span) -> ZonedSeries {
-        ZonedSeries { start: self, period, step: 0 }
+    pub fn series(&self, period: Span) -> ZonedSeries {
+        ZonedSeries { start: self.clone(), prev: None, period, step: 0 }
     }
-    */
 
     #[inline]
     fn into_parts(self) -> (Timestamp, DateTime, Offset, TimeZone) {
@@ -3116,17 +3282,17 @@ impl Zoned {
     ///
     /// # Warning
     ///
-    /// The `strtime` module APIs do not support parsing or formatting with
-    /// IANA time zone identifiers. This means that if you format a zoned
+    /// The `strtime` module APIs do not require an IANA time zone identifier
+    /// to parse a `Zoned`. If one is not used, then if you format a zoned
     /// datetime in a time zone like `America/New_York` and then parse it back
     /// again, the zoned datetime you get back will be a "fixed offset" zoned
     /// datetime. This in turn means it will not perform daylight saving time
     /// safe arithmetic.
     ///
-    /// The `strtime` modules APIs are useful for ad hoc formatting and
-    /// parsing, but they shouldn't be used as an interchange format. For
-    /// an interchange format, the default `std::fmt::Display` and
-    /// `std::str::FromStr` trait implementations on `Zoned` are appropriate.
+    /// However, the `%Q` directive may be used to both format and parse an
+    /// IANA time zone identifier. It is strongly recommended to use this
+    /// directive whenever one is formatting or parsing `Zoned` values since
+    /// it permits correctly round-tripping `Zoned` values.
     ///
     /// # Errors and panics
     ///
@@ -3349,7 +3515,33 @@ impl From<Zoned> for std::time::SystemTime {
     }
 }
 
+#[cfg(feature = "std")]
+impl<'a> From<&'a Zoned> for std::time::SystemTime {
+    #[inline]
+    fn from(time: &'a Zoned) -> std::time::SystemTime {
+        time.timestamp().into()
+    }
+}
+
 /// Adds a span of time to a zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_add`].
+///
+/// Using this implementation will result in consuming the `Zoned` value. Since
+/// it is not `Copy`, this will prevent further use. If this is undesirable,
+/// consider using the trait implementation for `&Zoned`, `Zoned::checked_add`
+/// or cloning the `Zoned` value.
+impl<'a> core::ops::Add<Span> for Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn add(self, rhs: Span) -> Zoned {
+        (&self).add(rhs)
+    }
+}
+
+/// Adds a span of time to a borrowed zoned datetime.
 ///
 /// This uses checked arithmetic and panics on overflow. To handle overflow
 /// without panics, use [`Zoned::checked_add`].
@@ -3375,6 +3567,24 @@ impl core::ops::AddAssign<Span> for Zoned {
 }
 
 /// Subtracts a span of time from a zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_sub`].
+///
+/// Using this implementation will result in consuming the `Zoned` value. Since
+/// it is not `Copy`, this will prevent further use. If this is undesirable,
+/// consider using the trait implementation for `&Zoned`, `Zoned::checked_sub`
+/// or cloning the `Zoned` value.
+impl<'a> core::ops::Sub<Span> for Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn sub(self, rhs: Span) -> Zoned {
+        (&self).sub(rhs)
+    }
+}
+
+/// Subtracts a span of time from a borrowed zoned datetime.
 ///
 /// This uses checked arithmetic and panics on overflow. To handle overflow
 /// without panics, use [`Zoned::checked_sub`].
@@ -3410,6 +3620,31 @@ impl core::ops::SubAssign<Span> for Zoned {
 /// unit in the `Span` returned will be hours.
 ///
 /// To configure the largest unit or enable rounding, use [`Zoned::since`].
+///
+/// Using this implementation will result in consuming the `Zoned` value. Since
+/// it is not `Copy`, this will prevent further use. If this is undesirable,
+/// consider using the trait implementation for `&Zoned`, `Zoned::since`,
+/// `Zoned::until` or cloning the `Zoned` value.
+impl core::ops::Sub for Zoned {
+    type Output = Span;
+
+    #[inline]
+    fn sub(self, rhs: Zoned) -> Span {
+        (&self).sub(&rhs)
+    }
+}
+
+/// Computes the span of time between two borrowed zoned datetimes.
+///
+/// This will return a negative span when the zoned datetime being subtracted
+/// is greater.
+///
+/// Since this uses the default configuration for calculating a span between
+/// two zoned datetimes (no rounding and largest units is hours), this will
+/// never panic or fail in any way. It is guaranteed that the largest non-zero
+/// unit in the `Span` returned will be hours.
+///
+/// To configure the largest unit or enable rounding, use [`Zoned::since`].
 impl<'a> core::ops::Sub for &'a Zoned {
     type Output = Span;
 
@@ -3420,6 +3655,24 @@ impl<'a> core::ops::Sub for &'a Zoned {
 }
 
 /// Adds a signed duration of time to a zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_add`].
+///
+/// Using this implementation will result in consuming the `Zoned` value. Since
+/// it is not `Copy`, this will prevent further use. If this is undesirable,
+/// consider using the trait implementation for `&Zoned`, `Zoned::checked_add`
+/// or cloning the `Zoned` value.
+impl core::ops::Add<SignedDuration> for Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn add(self, rhs: SignedDuration) -> Zoned {
+        (&self).add(rhs)
+    }
+}
+
+/// Adds a signed duration of time to a borrowed zoned datetime.
 ///
 /// This uses checked arithmetic and panics on overflow. To handle overflow
 /// without panics, use [`Zoned::checked_add`].
@@ -3445,6 +3698,24 @@ impl core::ops::AddAssign<SignedDuration> for Zoned {
 }
 
 /// Subtracts a signed duration of time from a zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_sub`].
+///
+/// Using this implementation will result in consuming the `Zoned` value. Since
+/// it is not `Copy`, this will prevent further use. If this is undesirable,
+/// consider using the trait implementation for `&Zoned`, `Zoned::checked_sub`
+/// or cloning the `Zoned` value.
+impl core::ops::Sub<SignedDuration> for Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn sub(self, rhs: SignedDuration) -> Zoned {
+        (&self).sub(rhs)
+    }
+}
+
+/// Subtracts a signed duration of time from a borrowed zoned datetime.
 ///
 /// This uses checked arithmetic and panics on overflow. To handle overflow
 /// without panics, use [`Zoned::checked_sub`].
@@ -3474,6 +3745,24 @@ impl core::ops::SubAssign<SignedDuration> for Zoned {
 ///
 /// This uses checked arithmetic and panics on overflow. To handle overflow
 /// without panics, use [`Zoned::checked_add`].
+///
+/// Using this implementation will result in consuming the `Zoned` value. Since
+/// it is not `Copy`, this will prevent further use. If this is undesirable,
+/// consider using the trait implementation for `&Zoned`, `Zoned::checked_add`
+/// or cloning the `Zoned` value.
+impl core::ops::Add<UnsignedDuration> for Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn add(self, rhs: UnsignedDuration) -> Zoned {
+        (&self).add(rhs)
+    }
+}
+
+/// Adds an unsigned duration of time to a borrowed zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_add`].
 impl<'a> core::ops::Add<UnsignedDuration> for &'a Zoned {
     type Output = Zoned;
 
@@ -3496,6 +3785,24 @@ impl core::ops::AddAssign<UnsignedDuration> for Zoned {
 }
 
 /// Subtracts an unsigned duration of time from a zoned datetime.
+///
+/// This uses checked arithmetic and panics on overflow. To handle overflow
+/// without panics, use [`Zoned::checked_sub`].
+///
+/// Using this implementation will result in consuming the `Zoned` value. Since
+/// it is not `Copy`, this will prevent further use. If this is undesirable,
+/// consider using the trait implementation for `&Zoned`, `Zoned::checked_sub`
+/// or cloning the `Zoned` value.
+impl core::ops::Sub<UnsignedDuration> for Zoned {
+    type Output = Zoned;
+
+    #[inline]
+    fn sub(self, rhs: UnsignedDuration) -> Zoned {
+        (&self).sub(rhs)
+    }
+}
+
+/// Subtracts an unsigned duration of time from a borrowed zoned datetime.
 ///
 /// This uses checked arithmetic and panics on overflow. To handle overflow
 /// without panics, use [`Zoned::checked_sub`].
@@ -3522,9 +3829,9 @@ impl core::ops::SubAssign<UnsignedDuration> for Zoned {
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for Zoned {
+impl serde_core::Serialize for Zoned {
     #[inline]
-    fn serialize<S: serde::Serializer>(
+    fn serialize<S: serde_core::Serializer>(
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
@@ -3533,12 +3840,12 @@ impl serde::Serialize for Zoned {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for Zoned {
+impl<'de> serde_core::Deserialize<'de> for Zoned {
     #[inline]
-    fn deserialize<D: serde::Deserializer<'de>>(
+    fn deserialize<D: serde_core::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Zoned, D::Error> {
-        use serde::de;
+        use serde_core::de;
 
         struct ZonedVisitor;
 
@@ -3590,14 +3897,16 @@ impl quickcheck::Arbitrary for Zoned {
     }
 }
 
-/*
 /// An iterator over periodic zoned datetimes, created by [`Zoned::series`].
 ///
-/// It is exhausted when the next value would exceed a [`Span`] or [`Zoned`]
-/// value.
+/// It is exhausted when the next value would exceed the limits of a [`Span`]
+/// or [`Zoned`] value.
+///
+/// This iterator is created by [`Zoned::series`].
 #[derive(Clone, Debug)]
 pub struct ZonedSeries {
     start: Zoned,
+    prev: Option<Timestamp>,
     period: Span,
     step: i64,
 }
@@ -3607,26 +3916,52 @@ impl Iterator for ZonedSeries {
 
     #[inline]
     fn next(&mut self) -> Option<Zoned> {
-        // let this = self.start.clone();
-        // self.start = self.start.checked_add(self.period).ok()?;
-        // Some(this)
-        // This is how civil::DateTime series works. But this has a problem
-        // for Zoned when there are time zone transitions that skip an entire
-        // day. For example, Pacific/Api doesn't have a December 30, 2011.
-        // For that case, the code above works better. But if you do it that
-        // way, then you get the `jan31 + 1 month = feb28` and
-        // `feb28 + 1 month = march28` problem. Where you would instead
-        // expect jan31, feb28, mar31... I think.
+        // This loop is necessary because adding, e.g., `N * 1 day` may not
+        // always result in a timestamp that is strictly greater than
+        // `(N-1) * 1 day`. For example, `Pacific/Apia` never had `2011-12-30`
+        // on their clocks. So adding `1 day` to `2011-12-29` yields the same
+        // value as adding `2 days` (that is, `2011-12-31`).
         //
-        // So I'm not quite sure how to resolve this particular conundrum.
-        // And this is why ZonedSeries is currently not available.
-        let span = self.period.checked_mul(self.step).ok()?;
-        self.step = self.step.checked_add(1)?;
-        let zdt = self.start.checked_add(span).ok()?;
-        Some(zdt)
+        // This may seem odd, but Temporal has the same behavior (as of
+        // 2025-10-15):
+        //
+        //   >>> zdt = Temporal.ZonedDateTime.from("2011-12-29[Pacific/Apia]")
+        //   Object { … }
+        //   >>> zdt.toString()
+        //   "2011-12-29T00:00:00-10:00[Pacific/Apia]"
+        //   >>> zdt.add({days: 1}).toString()
+        //   "2011-12-31T00:00:00+14:00[Pacific/Apia]"
+        //   >>> zdt.add({days: 2}).toString()
+        //   "2011-12-31T00:00:00+14:00[Pacific/Apia]"
+        //
+        // Since we are generating a time series specifically here, it seems
+        // weird to yield two results that are equivalent instants in time.
+        // So we use a loop here to guarantee that every instant yielded is
+        // always strictly *after* the previous instant yielded.
+        loop {
+            let span = self.period.checked_mul(self.step).ok()?;
+            self.step = self.step.checked_add(1)?;
+            let zdt = self.start.checked_add(span).ok()?;
+            if self.prev.map_or(true, |prev| {
+                if self.period.is_positive() {
+                    prev < zdt.timestamp()
+                } else if self.period.is_negative() {
+                    prev > zdt.timestamp()
+                } else {
+                    assert!(self.period.is_zero());
+                    // In the case of a zero span, the caller has clearly
+                    // opted into an infinite repeating sequence.
+                    true
+                }
+            }) {
+                self.prev = Some(zdt.timestamp());
+                return Some(zdt);
+            }
+        }
     }
 }
-*/
+
+impl core::iter::FusedIterator for ZonedSeries {}
 
 /// Options for [`Timestamp::checked_add`] and [`Timestamp::checked_sub`].
 ///

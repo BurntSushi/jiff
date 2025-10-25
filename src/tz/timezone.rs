@@ -83,14 +83,15 @@ use self::repr::Repr;
 ///
 /// The system time zone can be retrieved via [`TimeZone::system`]. If it
 /// couldn't be detected or if the `tz-system` crate feature is not enabled,
-/// then [`TimeZone::UTC`] is returned. `TimeZone::system` is what's used
+/// then [`TimeZone::unknown`] is returned. `TimeZone::system` is what's used
 /// internally for retrieving the current zoned datetime via [`Zoned::now`].
 ///
 /// While there is no platform independent way to detect your system's
 /// "default" time zone, Jiff employs best-effort heuristics to determine it.
-/// (For example, by examining `/etc/localtime` on Unix systems.) When the
-/// heuristics fail, Jiff will emit a `WARN` level log. It can be viewed by
-/// installing a `log` compatible logger, such as [`env_logger`].
+/// (For example, by examining `/etc/localtime` on Unix systems or the `TZ`
+/// environment variable.) When the heuristics fail, Jiff will emit a `WARN`
+/// level log. It can be viewed by installing a `log` compatible logger, such
+/// as [`env_logger`].
 ///
 /// # Custom time zones
 ///
@@ -110,10 +111,10 @@ use self::repr::Repr;
 ///
 /// # A `TimeZone` is cheap to clone
 ///
-/// A `TimeZone` can be cheaply cloned. It uses automic reference counting
+/// A `TimeZone` can be cheaply cloned. It uses automatic reference counting
 /// internally. When `alloc` is disabled, cloning a `TimeZone` is still cheap
 /// because POSIX time zones and TZif time zones are unsupported. Therefore,
-/// cloning a time zone does a deep copy (since automic reference counting is
+/// cloning a time zone does a deep copy (since automatic reference counting is
 /// not available), but the data being copied is small.
 ///
 /// # Time zone equality
@@ -753,7 +754,7 @@ impl TimeZone {
     /// As mentioned above, consider using `Zoned` instead:
     ///
     /// ```
-    /// use jiff::{tz::TimeZone, Timestamp};
+    /// use jiff::Timestamp;
     ///
     /// let zdt = Timestamp::UNIX_EPOCH.in_tz("Europe/Rome")?;
     /// assert_eq!(zdt.datetime().to_string(), "1970-01-01T01:00:00");
@@ -782,7 +783,7 @@ impl TimeZone {
     /// # Example
     ///
     /// ```
-    /// use jiff::{tz::{self, Dst, TimeZone}, Timestamp};
+    /// use jiff::{tz::{self, TimeZone}, Timestamp};
     ///
     /// let tz = TimeZone::get("America/New_York")?;
     ///
@@ -1356,10 +1357,10 @@ impl TimeZone {
 
     /// Used by the "preceding transitions" iterator.
     #[inline]
-    fn previous_transition(
-        &self,
+    fn previous_transition<'t>(
+        &'t self,
         timestamp: Timestamp,
-    ) -> Option<TimeZoneTransition> {
+    ) -> Option<TimeZoneTransition<'t>> {
         repr::each! {
             &self.repr,
             UTC => None,
@@ -1373,10 +1374,10 @@ impl TimeZone {
 
     /// Used by the "following transitions" iterator.
     #[inline]
-    fn next_transition(
-        &self,
+    fn next_transition<'t>(
+        &'t self,
         timestamp: Timestamp,
-    ) -> Option<TimeZoneTransition> {
+    ) -> Option<TimeZoneTransition<'t>> {
         repr::each! {
             &self.repr,
             UTC => None,
@@ -2259,7 +2260,7 @@ mod repr {
         }
     }
 
-    // SAFETY: We use automic reference counting.
+    // SAFETY: We use automatic reference counting.
     unsafe impl Send for Repr {}
     // SAFETY: We don't use an interior mutability and otherwise don't permit
     // any kind of mutation (other than for an `Arc` managing its ref counts)
@@ -2420,11 +2421,6 @@ mod repr {
     /// The strict provenance APIs in `core` were stabilized in Rust 1.84,
     /// but it will likely be a while before Jiff can use them. (At time of
     /// writing, 2025-02-24, Jiff's MSRV is Rust 1.70.)
-    ///
-    /// The `const` requirement is also why these are non-generic free
-    /// functions and not defined via an extension trait. It's also why we
-    /// don't have the useful `map_addr` routine (which is directly relevant to
-    /// our pointer tagging use case).
     mod polyfill {
         pub(super) const fn without_provenance(addr: usize) -> *const u8 {
             // SAFETY: Every valid `usize` is also a valid pointer (but not
@@ -2433,7 +2429,10 @@ mod repr {
             // MSRV(1.84): We *really* ought to be using
             // `core::ptr::without_provenance` here, but Jiff's MSRV prevents
             // us.
-            unsafe { core::mem::transmute(addr) }
+            #[allow(integer_to_ptr_transmutes)]
+            unsafe {
+                core::mem::transmute(addr)
+            }
         }
 
         // On Rust 1.84+, `StrictProvenancePolyfill` isn't actually used.
@@ -3865,5 +3864,29 @@ mod tests {
         // being found here, despite the fact that it existed and was found
         // by `preceding`.
         assert_eq!(transitions, last4);
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn regression_tzif_parse_panic() {
+        _ = TimeZone::tzif(
+            "",
+            &[
+                84, 90, 105, 102, 6, 0, 5, 35, 84, 10, 77, 0, 0, 0, 84, 82,
+                105, 102, 0, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 2, 0, 0, 0, 5, 0, 0, 82, 28, 77, 0, 0, 90, 105,
+                78, 0, 0, 0, 0, 0, 0, 0, 84, 90, 105, 102, 0, 0, 5, 0, 84, 90,
+                105, 84, 77, 10, 0, 0, 0, 15, 93, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 5, 0, 0, 0, 82, 0, 64, 1, 0,
+                0, 2, 0, 0, 0, 0, 0, 0, 126, 1, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 126, 0, 0, 0, 0, 0,
+                0, 160, 109, 1, 0, 90, 105, 102, 0, 0, 5, 0, 87, 90, 105, 84,
+                77, 10, 0, 0, 0, 0, 0, 122, 102, 105, 0, 0, 0, 0, 0, 0, 0, 0,
+                2, 0, 0, 0, 0, 0, 0, 5, 82, 0, 0, 0, 0, 0, 2, 0, 0, 90, 105,
+                102, 0, 0, 5, 0, 84, 90, 105, 84, 77, 10, 0, 0, 0, 102, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84, 90, 195, 190, 10, 84,
+                90, 77, 49, 84, 90, 105, 102, 49, 44, 74, 51, 44, 50, 10,
+            ],
+        );
     }
 }

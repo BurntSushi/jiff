@@ -252,7 +252,7 @@ pub mod duration {
             /// Serialize a required `SignedDuration` in the [`friendly`]
             /// duration format using compact designators.
             #[inline]
-            pub fn required<S: serde::Serializer>(
+            pub fn required<S: serde_core::Serializer>(
                 duration: &crate::SignedDuration,
                 se: S,
             ) -> Result<S::Ok, S::Error> {
@@ -262,7 +262,7 @@ pub mod duration {
             /// Serialize an optional `SignedDuration` in the [`friendly`]
             /// duration format using compact designators.
             #[inline]
-            pub fn optional<S: serde::Serializer>(
+            pub fn optional<S: serde_core::Serializer>(
                 duration: &Option<crate::SignedDuration>,
                 se: S,
             ) -> Result<S::Ok, S::Error> {
@@ -396,7 +396,7 @@ pub mod span {
             /// Serialize a required `Span` in the [`friendly`] duration format
             /// using compact designators.
             #[inline]
-            pub fn required<S: serde::Serializer>(
+            pub fn required<S: serde_core::Serializer>(
                 span: &crate::Span,
                 se: S,
             ) -> Result<S::Ok, S::Error> {
@@ -406,7 +406,7 @@ pub mod span {
             /// Serialize an optional `Span` in the [`friendly`] duration
             /// format using compact designators.
             #[inline]
-            pub fn optional<S: serde::Serializer>(
+            pub fn optional<S: serde_core::Serializer>(
                 span: &Option<crate::Span>,
                 se: S,
             ) -> Result<S::Ok, S::Error> {
@@ -436,7 +436,7 @@ pub mod span {
 /// include the time zone, then using [`Zoned`](crate::Zoned) directly will
 /// work as well by utilizing the RFC 9557 extension to RFC 3339.)
 pub mod timestamp {
-    use serde::de;
+    use serde_core::de;
 
     /// A generic visitor for `Option<Timestamp>`.
     struct OptionalVisitor<V>(V);
@@ -473,7 +473,7 @@ pub mod timestamp {
 
     /// (De)serialize an integer number of seconds from the Unix epoch.
     pub mod second {
-        use serde::de;
+        use serde_core::de;
 
         struct Visitor;
 
@@ -592,7 +592,7 @@ pub mod timestamp {
             /// Serialize a required integer number of seconds since the Unix
             /// epoch.
             #[inline]
-            pub fn serialize<S: serde::Serializer>(
+            pub fn serialize<S: serde_core::Serializer>(
                 timestamp: &crate::Timestamp,
                 se: S,
             ) -> Result<S::Ok, S::Error> {
@@ -602,7 +602,7 @@ pub mod timestamp {
             /// Deserialize a required integer number of seconds since the
             /// Unix epoch.
             #[inline]
-            pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+            pub fn deserialize<'de, D: serde_core::Deserializer<'de>>(
                 de: D,
             ) -> Result<crate::Timestamp, D::Error> {
                 de.deserialize_i64(super::Visitor)
@@ -615,7 +615,7 @@ pub mod timestamp {
             /// Serialize an optional integer number of seconds since the Unix
             /// epoch.
             #[inline]
-            pub fn serialize<S: serde::Serializer>(
+            pub fn serialize<S: serde_core::Serializer>(
                 timestamp: &Option<crate::Timestamp>,
                 se: S,
             ) -> Result<S::Ok, S::Error> {
@@ -628,7 +628,7 @@ pub mod timestamp {
             /// Deserialize an optional integer number of seconds since the
             /// Unix epoch.
             #[inline]
-            pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+            pub fn deserialize<'de, D: serde_core::Deserializer<'de>>(
                 de: D,
             ) -> Result<Option<crate::Timestamp>, D::Error> {
                 de.deserialize_option(super::super::OptionalVisitor(
@@ -640,7 +640,7 @@ pub mod timestamp {
 
     /// (De)serialize an integer number of milliseconds from the Unix epoch.
     pub mod millisecond {
-        use serde::de;
+        use serde_core::de;
 
         struct Visitor;
 
@@ -762,7 +762,7 @@ pub mod timestamp {
             /// Serialize a required integer number of milliseconds since the
             /// Unix epoch.
             #[inline]
-            pub fn serialize<S: serde::Serializer>(
+            pub fn serialize<S: serde_core::Serializer>(
                 timestamp: &crate::Timestamp,
                 se: S,
             ) -> Result<S::Ok, S::Error> {
@@ -772,7 +772,7 @@ pub mod timestamp {
             /// Deserialize a required integer number of milliseconds since the
             /// Unix epoch.
             #[inline]
-            pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+            pub fn deserialize<'de, D: serde_core::Deserializer<'de>>(
                 de: D,
             ) -> Result<crate::Timestamp, D::Error> {
                 de.deserialize_i64(super::Visitor)
@@ -785,7 +785,7 @@ pub mod timestamp {
             /// Serialize an optional integer number of milliseconds since the
             /// Unix epoch.
             #[inline]
-            pub fn serialize<S: serde::Serializer>(
+            pub fn serialize<S: serde_core::Serializer>(
                 timestamp: &Option<crate::Timestamp>,
                 se: S,
             ) -> Result<S::Ok, S::Error> {
@@ -798,7 +798,7 @@ pub mod timestamp {
             /// Deserialize an optional integer number of milliseconds since
             /// the Unix epoch.
             #[inline]
-            pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+            pub fn deserialize<'de, D: serde_core::Deserializer<'de>>(
                 de: D,
             ) -> Result<Option<crate::Timestamp>, D::Error> {
                 de.deserialize_option(super::super::OptionalVisitor(
@@ -810,7 +810,7 @@ pub mod timestamp {
 
     /// (De)serialize an integer number of microseconds from the Unix epoch.
     pub mod microsecond {
-        use serde::de;
+        use serde_core::de;
 
         struct Visitor;
 
@@ -932,7 +932,7 @@ pub mod timestamp {
             /// Serialize a required integer number of microseconds since the
             /// Unix epoch.
             #[inline]
-            pub fn serialize<S: serde::Serializer>(
+            pub fn serialize<S: serde_core::Serializer>(
                 timestamp: &crate::Timestamp,
                 se: S,
             ) -> Result<S::Ok, S::Error> {
@@ -942,7 +942,7 @@ pub mod timestamp {
             /// Deserialize a required integer number of microseconds since the
             /// Unix epoch.
             #[inline]
-            pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+            pub fn deserialize<'de, D: serde_core::Deserializer<'de>>(
                 de: D,
             ) -> Result<crate::Timestamp, D::Error> {
                 de.deserialize_i64(super::Visitor)
@@ -955,7 +955,7 @@ pub mod timestamp {
             /// Serialize an optional integer number of microseconds since the
             /// Unix epoch.
             #[inline]
-            pub fn serialize<S: serde::Serializer>(
+            pub fn serialize<S: serde_core::Serializer>(
                 timestamp: &Option<crate::Timestamp>,
                 se: S,
             ) -> Result<S::Ok, S::Error> {
@@ -968,7 +968,7 @@ pub mod timestamp {
             /// Deserialize an optional integer number of microseconds since
             /// the Unix epoch.
             #[inline]
-            pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+            pub fn deserialize<'de, D: serde_core::Deserializer<'de>>(
                 de: D,
             ) -> Result<Option<crate::Timestamp>, D::Error> {
                 de.deserialize_option(super::super::OptionalVisitor(
@@ -980,7 +980,7 @@ pub mod timestamp {
 
     /// (De)serialize an integer number of nanoseconds from the Unix epoch.
     pub mod nanosecond {
-        use serde::de;
+        use serde_core::de;
 
         struct Visitor;
 
@@ -1041,7 +1041,7 @@ pub mod timestamp {
             /// Serialize a required integer number of nanoseconds since the
             /// Unix epoch.
             #[inline]
-            pub fn serialize<S: serde::Serializer>(
+            pub fn serialize<S: serde_core::Serializer>(
                 timestamp: &crate::Timestamp,
                 se: S,
             ) -> Result<S::Ok, S::Error> {
@@ -1051,7 +1051,7 @@ pub mod timestamp {
             /// Deserialize a required integer number of nanoseconds since the
             /// Unix epoch.
             #[inline]
-            pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+            pub fn deserialize<'de, D: serde_core::Deserializer<'de>>(
                 de: D,
             ) -> Result<crate::Timestamp, D::Error> {
                 de.deserialize_i128(super::Visitor)
@@ -1064,7 +1064,7 @@ pub mod timestamp {
             /// Serialize an optional integer number of nanoseconds since the
             /// Unix epoch.
             #[inline]
-            pub fn serialize<S: serde::Serializer>(
+            pub fn serialize<S: serde_core::Serializer>(
                 timestamp: &Option<crate::Timestamp>,
                 se: S,
             ) -> Result<S::Ok, S::Error> {
@@ -1077,7 +1077,7 @@ pub mod timestamp {
             /// Deserialize an optional integer number of nanoseconds since the
             /// Unix epoch.
             #[inline]
-            pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+            pub fn deserialize<'de, D: serde_core::Deserializer<'de>>(
                 de: D,
             ) -> Result<Option<crate::Timestamp>, D::Error> {
                 de.deserialize_option(super::super::OptionalVisitor(
@@ -1177,7 +1177,7 @@ pub mod timestamp {
 /// `Etc/Unknown` identifier for this case, it still surfaces the fact that
 /// something has gone wrong.
 pub mod tz {
-    use serde::de;
+    use serde_core::de;
 
     use crate::fmt::{temporal, StdFmtWrite};
 
@@ -1276,12 +1276,12 @@ pub mod tz {
         /// derived from a system `/etc/localtime` for which no IANA time zone
         /// identifier could be found.
         #[inline]
-        pub fn serialize<S: serde::Serializer>(
+        pub fn serialize<S: serde_core::Serializer>(
             tz: &crate::tz::TimeZone,
             se: S,
         ) -> Result<S::Ok, S::Error> {
             if !tz.has_succinct_serialization() {
-                return Err(<S::Error as serde::ser::Error>::custom(
+                return Err(<S::Error as serde_core::ser::Error>::custom(
                     "time zones without IANA identifiers that aren't either \
                      fixed offsets or a POSIX time zone can't be serialized \
                      (this typically occurs when this is a system time zone \
@@ -1297,7 +1297,7 @@ pub mod tz {
         /// This will attempt to parse an IANA time zone identifier, a fixed
         /// offset or a POSIX time zone string.
         #[inline]
-        pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+        pub fn deserialize<'de, D: serde_core::Deserializer<'de>>(
             de: D,
         ) -> Result<crate::tz::TimeZone, D::Error> {
             de.deserialize_str(super::Visitor)
@@ -1316,7 +1316,7 @@ pub mod tz {
         /// derived from a system `/etc/localtime` for which no IANA time zone
         /// identifier could be found.
         #[inline]
-        pub fn serialize<S: serde::Serializer>(
+        pub fn serialize<S: serde_core::Serializer>(
             tz: &Option<crate::tz::TimeZone>,
             se: S,
         ) -> Result<S::Ok, S::Error> {
@@ -1331,7 +1331,7 @@ pub mod tz {
         /// This will attempt to parse an IANA time zone identifier, a fixed
         /// offset or a POSIX time zone string.
         #[inline]
-        pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+        pub fn deserialize<'de, D: serde_core::Deserializer<'de>>(
             de: D,
         ) -> Result<Option<crate::tz::TimeZone>, D::Error> {
             de.deserialize_option(super::OptionalVisitor(super::Visitor))

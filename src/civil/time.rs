@@ -534,7 +534,7 @@ impl Time {
     /// manifests from a specific timestamp.
     ///
     /// ```
-    /// use jiff::{civil, Timestamp};
+    /// use jiff::Timestamp;
     ///
     /// // 1,234 nanoseconds after the Unix epoch.
     /// let zdt = Timestamp::new(0, 1_234)?.in_tz("UTC")?;
@@ -2117,9 +2117,9 @@ impl<'a> From<&'a Zoned> for Time {
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for Time {
+impl serde_core::Serialize for Time {
     #[inline]
-    fn serialize<S: serde::Serializer>(
+    fn serialize<S: serde_core::Serializer>(
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
@@ -2128,12 +2128,12 @@ impl serde::Serialize for Time {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for Time {
+impl<'de> serde_core::Deserialize<'de> for Time {
     #[inline]
-    fn deserialize<D: serde::Deserializer<'de>>(
+    fn deserialize<D: serde_core::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Time, D::Error> {
-        use serde::de;
+        use serde_core::de;
 
         struct TimeVisitor;
 
@@ -2202,8 +2202,10 @@ impl quickcheck::Arbitrary for Time {
 
 /// An iterator over periodic times, created by [`Time::series`].
 ///
-/// It is exhausted when the next value would exceed a [`Span`] or [`Time`]
-/// value.
+/// It is exhausted when the next value would exceed the limits of a [`Span`]
+/// or [`Time`] value.
+///
+/// This iterator is created by [`Time::series`].
 #[derive(Clone, Debug)]
 pub struct TimeSeries {
     start: Time,
@@ -2222,6 +2224,8 @@ impl Iterator for TimeSeries {
         Some(time)
     }
 }
+
+impl core::iter::FusedIterator for TimeSeries {}
 
 /// Options for [`Time::checked_add`] and [`Time::checked_sub`].
 ///

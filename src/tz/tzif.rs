@@ -8,7 +8,7 @@ These binary files are the ones commonly found in Unix distributions in the
 [Time Zone Database]: https://www.iana.org/time-zones
 */
 
-use core::ops::Range;
+use core::{fmt::Debug, ops::Range};
 
 #[cfg(feature = "alloc")]
 use alloc::{string::String, vec::Vec};
@@ -177,7 +177,7 @@ impl TzifOwned {
 
 impl<
         STR: AsRef<str>,
-        ABBREV: AsRef<str>,
+        ABBREV: AsRef<str> + Debug,
         TYPES: AsRef<[shared::TzifLocalTimeType]>,
         TIMESTAMPS: AsRef<[i64]>,
         STARTS: AsRef<[shared::TzifDateTime]>,
@@ -384,10 +384,10 @@ impl<
 
     /// Returns the timestamp of the most recent time zone transition prior
     /// to the timestamp given. If one doesn't exist, `None` is returned.
-    pub(crate) fn previous_transition(
-        &self,
+    pub(crate) fn previous_transition<'t>(
+        &'t self,
         ts: Timestamp,
-    ) -> Option<TimeZoneTransition> {
+    ) -> Option<TimeZoneTransition<'t>> {
         assert!(!self.timestamps().is_empty(), "transitions is non-empty");
         let mut timestamp = ts.as_second();
         if ts.subsec_nanosecond() != 0 {
@@ -438,10 +438,10 @@ impl<
 
     /// Returns the timestamp of the soonest time zone transition after the
     /// timestamp given. If one doesn't exist, `None` is returned.
-    pub(crate) fn next_transition(
-        &self,
+    pub(crate) fn next_transition<'t>(
+        &'t self,
         ts: Timestamp,
-    ) -> Option<TimeZoneTransition> {
+    ) -> Option<TimeZoneTransition<'t>> {
         assert!(!self.timestamps().is_empty(), "transitions is non-empty");
         let timestamp = ts.as_second();
         let search = self.timestamps().binary_search(&timestamp);

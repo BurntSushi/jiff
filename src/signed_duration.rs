@@ -70,7 +70,7 @@ use crate::util::libm::Float;
 /// then convert them to a `SignedDuration` by providing a relative date:
 ///
 /// ```
-/// use jiff::{civil::date, SignedDuration, Span};
+/// use jiff::{civil::date, Span};
 ///
 /// let span: Span = "P1d".parse()?;
 /// let relative = date(2024, 11, 3).in_tz("US/Eastern")?;
@@ -2259,9 +2259,9 @@ impl core::ops::DivAssign<i32> for SignedDuration {
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for SignedDuration {
+impl serde_core::Serialize for SignedDuration {
     #[inline]
-    fn serialize<S: serde::Serializer>(
+    fn serialize<S: serde_core::Serializer>(
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
@@ -2270,12 +2270,12 @@ impl serde::Serialize for SignedDuration {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for SignedDuration {
+impl<'de> serde_core::Deserialize<'de> for SignedDuration {
     #[inline]
-    fn deserialize<D: serde::Deserializer<'de>>(
+    fn deserialize<D: serde_core::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<SignedDuration, D::Error> {
-        use serde::de;
+        use serde_core::de;
 
         struct SignedDurationVisitor;
 

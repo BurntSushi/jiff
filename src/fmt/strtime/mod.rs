@@ -381,7 +381,7 @@ pub fn parse(
 /// 2822 datetime:
 ///
 /// ```
-/// use jiff::{civil::date, fmt::strtime, tz};
+/// use jiff::{civil::date, fmt::strtime};
 ///
 /// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 /// let string = strtime::format("%a, %-d %b %Y %T %z", &zdt)?;
@@ -401,7 +401,7 @@ pub fn parse(
 /// this is what it looks like on my system:
 ///
 /// ```
-/// use jiff::{civil::date, fmt::strtime, tz};
+/// use jiff::{civil::date, fmt::strtime};
 ///
 /// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 /// let string = strtime::format("%a %b %e %I:%M:%S %p %Z %Y", &zdt)?;
@@ -413,7 +413,7 @@ pub fn parse(
 /// # Example: RFC 3339 compatible output with fractional seconds
 ///
 /// ```
-/// use jiff::{civil::date, fmt::strtime, tz};
+/// use jiff::{civil::date, fmt::strtime};
 ///
 /// let zdt = date(2024, 7, 15)
 ///     .at(16, 24, 59, 123_456_789)
@@ -504,7 +504,16 @@ impl<C> Config<C> {
     /// silently ignored. For example, if you try to format `%z` with a
     /// [`BrokenDownTime`] that lacks a time zone offset, this would normally
     /// result in an error. In contrast, when lenient mode is enabled, this
-    /// would just result in `%z` being written literally.
+    /// would just result in `%z` being written literally. Similarly, using
+    /// invalid UTF-8 in the format string would normally result in an error.
+    /// In lenient mode, invalid UTF-8 is automatically turned into the Unicode
+    /// replacement codepoint `U+FFFD` (which looks like this: `�`).
+    ///
+    /// Generally speaking, when this is enabled, the only error that can
+    /// occur when formatting is if a write to the underlying writer fails.
+    /// When using a writer that never errors (like `String`, unless allocation
+    /// fails), it follows that enabling lenient parsing will result in a
+    /// formatting operation that never fails (unless allocation fails).
     ///
     /// This currently has no effect on parsing, although this may change in
     /// the future.
@@ -888,9 +897,8 @@ pub struct BrokenDownTime {
     // be used with, say, %H. In that case, AM will
     // turn 13 o'clock to 1 o'clock.
     meridiem: Option<Meridiem>,
-    // A timestamp. Set only when converting from
-    // a `Zoned` or `Timestamp`. Currently used only
-    // to get time zone offset info.
+    // A timestamp. Set when converting from
+    // a `Zoned` or `Timestamp`, or when parsing `%s`.
     timestamp: Option<Timestamp>,
     // The time zone. Currently used only when
     // formatting a `Zoned`.
@@ -1265,6 +1273,13 @@ impl BrokenDownTime {
     /// zone identifier lookups (via the `%Q` directive), then use
     /// [`BrokenDownTime::to_zoned_with`].
     ///
+    /// This always prefers an explicitly set timestamp over other components
+    /// of this `BrokenDownTime`. An explicit timestamp is set via
+    /// [`BrokenDownTime::set_timestamp`]. This most commonly occurs by parsing
+    /// a `%s` conversion specifier. When an explicit timestamp is not present,
+    /// then the instant is derived from a civil datetime with a UTC offset
+    /// and/or a time zone.
+    ///
     /// # Warning
     ///
     /// The `strtime` module APIs do not require an IANA time zone identifier
@@ -1276,15 +1291,20 @@ impl BrokenDownTime {
     ///
     /// However, the `%Q` directive may be used to both format and parse an
     /// IANA time zone identifier. It is strongly recommended to use this
-    /// directive whenever one is formatting or parsing `Zoned` values.
+    /// directive whenever one is formatting or parsing `Zoned` values since
+    /// it permits correctly round-tripping `Zoned` values.
     ///
     /// # Errors
     ///
     /// This returns an error if there weren't enough components to construct
-    /// a civil datetime _and_ either a UTC offset or a IANA time zone
-    /// identifier. When both a UTC offset and an IANA time zone identifier
-    /// are found, then [`OffsetConflict::Reject`] is used to detect any
-    /// inconsistency between the offset and the time zone.
+    /// an instant with a time zone. This requires an IANA time zone identifier
+    /// or a UTC offset, as well as either an explicitly set timestamp (via
+    /// [`BrokenDownTime::set_timestamp`]) or enough data set to form a civil
+    /// datetime.
+    ///
+    /// When both a UTC offset and an IANA time zone identifier are found, then
+    /// an error is returned if they are inconsistent with one another for the
+    /// parsed timestamp.
     ///
     /// # Example
     ///
@@ -1301,6 +1321,8 @@ impl BrokenDownTime {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    ///
+    /// # Example: time zone inconsistent with offset
     ///
     /// This shows that an error is returned when the offset is inconsistent
     /// with the time zone. For example, `US/Eastern` is in daylight saving
@@ -1323,6 +1345,21 @@ impl BrokenDownTime {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    ///
+    /// # Example: timestamp without offset
+    ///
+    /// If a timestamp has been parsed but there is no offset or IANA time
+    /// zone identifier, then the zoned datetime will be in UTC via the
+    /// `Etc/Unknown` time zone:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime;
+    ///
+    /// let zdt = strtime::parse("%s", "1760813400")?.to_zoned()?;
+    /// assert_eq!(zdt.to_string(), "2025-10-18T18:50:00Z[Etc/Unknown]");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn to_zoned(&self) -> Result<Zoned, Error> {
         self.to_zoned_with(crate::tz::db())
@@ -1340,6 +1377,13 @@ impl BrokenDownTime {
     /// [`Disambiguation::Compatible`](crate::tz::Disambiguation::Compatible)
     /// strategy is used if the parsed datetime is ambiguous in the time zone.
     ///
+    /// This always prefers an explicitly set timestamp over other components
+    /// of this `BrokenDownTime`. An explicit timestamp is set via
+    /// [`BrokenDownTime::set_timestamp`]. This most commonly occurs by parsing
+    /// a `%s` conversion specifier. When an explicit timestamp is not present,
+    /// then the instant is derived from a civil datetime with a UTC offset
+    /// and/or a time zone.
+    ///
     /// # Warning
     ///
     /// The `strtime` module APIs do not require an IANA time zone identifier
@@ -1351,15 +1395,20 @@ impl BrokenDownTime {
     ///
     /// However, the `%Q` directive may be used to both format and parse an
     /// IANA time zone identifier. It is strongly recommended to use this
-    /// directive whenever one is formatting or parsing `Zoned` values.
+    /// directive whenever one is formatting or parsing `Zoned` values since
+    /// it permits correctly round-tripping `Zoned` values.
     ///
     /// # Errors
     ///
     /// This returns an error if there weren't enough components to construct
-    /// a civil datetime _and_ either a UTC offset or a IANA time zone
-    /// identifier. When both a UTC offset and an IANA time zone identifier
-    /// are found, then [`OffsetConflict::Reject`] is used to detect any
-    /// inconsistency between the offset and the time zone.
+    /// an instant with a time zone. This requires an IANA time zone identifier
+    /// or a UTC offset, as well as either an explicitly set timestamp (via
+    /// [`BrokenDownTime::set_timestamp`]) or enough data set to form a civil
+    /// datetime.
+    ///
+    /// When both a UTC offset and an IANA time zone identifier are found, then
+    /// an error is returned if they are inconsistent with one another for the
+    /// parsed timestamp.
     ///
     /// # Example
     ///
@@ -1381,46 +1430,94 @@ impl BrokenDownTime {
         &self,
         db: &TimeZoneDatabase,
     ) -> Result<Zoned, Error> {
-        let dt = self
-            .to_datetime()
-            .context("datetime required to parse zoned datetime")?;
         match (self.offset, self.iana_time_zone()) {
-            (None, None) => Err(err!(
-                "either offset (from %z) or IANA time zone identifier \
-                 (from %Q) is required for parsing zoned datetime",
-            )),
+            (None, None) => {
+                if let Some(ts) = self.timestamp {
+                    return Ok(ts.to_zoned(TimeZone::unknown()));
+                }
+                Err(err!(
+                    "either offset (from %z) or IANA time zone identifier \
+                     (from %Q) is required for parsing zoned datetime",
+                ))
+            }
             (Some(offset), None) => {
-                let ts = offset.to_timestamp(dt).with_context(|| {
-                    err!(
-                        "parsed datetime {dt} and offset {offset}, \
-                         but combining them into a zoned datetime is outside \
-                         Jiff's supported timestamp range",
-                    )
-                })?;
+                let ts = match self.timestamp {
+                    Some(ts) => ts,
+                    None => {
+                        let dt = self.to_datetime().context(
+                            "datetime required to parse zoned datetime",
+                        )?;
+                        let ts =
+                            offset.to_timestamp(dt).with_context(|| {
+                                err!(
+                                "parsed datetime {dt} and offset {offset}, \
+                                 but combining them into a zoned datetime \
+                                 is outside Jiff's supported timestamp range",
+                            )
+                            })?;
+                        ts
+                    }
+                };
                 Ok(ts.to_zoned(TimeZone::fixed(offset)))
             }
             (None, Some(iana)) => {
                 let tz = db.get(iana)?;
-                let zdt = tz.to_zoned(dt)?;
-                Ok(zdt)
+                match self.timestamp {
+                    Some(ts) => Ok(ts.to_zoned(tz)),
+                    None => {
+                        let dt = self.to_datetime().context(
+                            "datetime required to parse zoned datetime",
+                        )?;
+                        Ok(tz.to_zoned(dt)?)
+                    }
+                }
             }
             (Some(offset), Some(iana)) => {
                 let tz = db.get(iana)?;
-                let azdt = OffsetConflict::Reject.resolve(dt, offset, tz)?;
-                // Guaranteed that if OffsetConflict::Reject doesn't reject,
-                // then we get back an unambiguous zoned datetime.
-                let zdt = azdt.unambiguous().unwrap();
-                Ok(zdt)
+                match self.timestamp {
+                    Some(ts) => {
+                        let zdt = ts.to_zoned(tz);
+                        if zdt.offset() != offset {
+                            return Err(err!(
+                                "parsed time zone offset `{offset}`, but \
+                                 offset from timestamp `{ts}` for time zone \
+                                 `{iana}` is `{got}`",
+                                got = zdt.offset(),
+                            ));
+                        }
+                        Ok(zdt)
+                    }
+                    None => {
+                        let dt = self.to_datetime().context(
+                            "datetime required to parse zoned datetime",
+                        )?;
+                        let azdt =
+                            OffsetConflict::Reject.resolve(dt, offset, tz)?;
+                        // Guaranteed that if OffsetConflict::Reject doesn't
+                        // reject, then we get back an unambiguous zoned
+                        // datetime.
+                        let zdt = azdt.unambiguous().unwrap();
+                        Ok(zdt)
+                    }
+                }
             }
         }
     }
 
     /// Extracts a timestamp from this broken down time.
     ///
+    /// This always prefers an explicitly set timestamp over other components
+    /// of this `BrokenDownTime`. An explicit timestamp is set via
+    /// [`BrokenDownTime::set_timestamp`]. This most commonly occurs by parsing
+    /// a `%s` conversion specifier. When an explicit timestamp is not present,
+    /// then the instant is derived from a civil datetime with a UTC offset.
+    ///
     /// # Errors
     ///
     /// This returns an error if there weren't enough components to construct
-    /// a civil datetime _and_ a UTC offset.
+    /// an instant. This requires either an explicitly set timestamp (via
+    /// [`BrokenDownTime::set_timestamp`]) or enough data set to form a civil
+    /// datetime _and_ a UTC offset.
     ///
     /// # Example
     ///
@@ -1437,8 +1534,59 @@ impl BrokenDownTime {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    ///
+    /// # Example: conflicting data
+    ///
+    /// It is possible to parse both a timestamp and a civil datetime with an
+    /// offset in the same string. This means there could be two potentially
+    /// different ways to derive a timestamp from the parsed data. When that
+    /// happens, any explicitly parsed timestamp (via `%s`) takes precedence
+    /// for this method:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime;
+    ///
+    /// // The `%s` parse wins:
+    /// let ts = strtime::parse(
+    ///     "%F %H:%M %:z and also %s",
+    ///     "2024-07-14 21:14 -04:00 and also 1760377242",
+    /// )?.to_timestamp()?;
+    /// assert_eq!(ts.to_string(), "2025-10-13T17:40:42Z");
+    ///
+    /// // Even when it is parsed first:
+    /// let ts = strtime::parse(
+    ///     "%s and also %F %H:%M %:z",
+    ///     "1760377242 and also 2024-07-14 21:14 -04:00",
+    /// )?.to_timestamp()?;
+    /// assert_eq!(ts.to_string(), "2025-10-13T17:40:42Z");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// If you need access to the instant parsed by a civil datetime with an
+    /// offset, then that is still available:
+    ///
+    /// ```
+    /// use jiff::fmt::strtime;
+    ///
+    /// let tm = strtime::parse(
+    ///     "%F %H:%M %:z and also %s",
+    ///     "2024-07-14 21:14 -04:00 and also 1760377242",
+    /// )?;
+    /// assert_eq!(tm.to_timestamp()?.to_string(), "2025-10-13T17:40:42Z");
+    ///
+    /// let dt = tm.to_datetime()?;
+    /// let offset = tm.offset().ok_or_else(|| "missing offset")?;
+    /// let instant = offset.to_timestamp(dt)?;
+    /// assert_eq!(instant.to_string(), "2024-07-15T01:14:00Z");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn to_timestamp(&self) -> Result<Timestamp, Error> {
+        if let Some(timestamp) = self.timestamp() {
+            return Ok(timestamp);
+        }
         let dt = self
             .to_datetime()
             .context("datetime required to parse timestamp")?;
@@ -1499,18 +1647,24 @@ impl BrokenDownTime {
 
     /// Extracts a civil date from this broken down time.
     ///
-    /// This requires that the year is set along with a way to identify the day
-    /// in the year. This can be done by either setting the month and the day
-    /// of the month (`%m` and `%d`), or by setting the day of the year (`%j`).
+    /// This requires that the year (Gregorian or ISO 8601 week date year)
+    /// is set along with a way to identify the day
+    /// in the year. Typically identifying the day is done by setting the
+    /// month and day, but this can also be done via a number of other means:
+    ///
+    /// * Via an ISO week date.
+    /// * Via the day of the year.
+    /// * Via a week date with Sunday as the start of the week.
+    /// * Via a week date with Monday as the start of the week.
     ///
     /// # Errors
     ///
     /// This returns an error if there weren't enough components to construct
-    /// a civil date. This means there must be at least a year and either the
-    /// month and day or the day of the year.
+    /// a civil date. This means there must be at least a year and a way to
+    /// determine the day of the year.
     ///
     /// It's okay if there are more units than are needed to construct a civil
-    /// datetime. For example, if this broken down time contain a civil time,
+    /// datetime. For example, if this broken down time contains a civil time,
     /// then it won't prevent a conversion to a civil date.
     ///
     /// # Example
@@ -1767,12 +1921,11 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::fmt::strtime;
     ///
-    /// // 31 is a legal day value, but not for June.
-    /// // However, this is not validated unless you
-    /// // ask for a `Date` from the parsed `BrokenDownTime`.
-    /// // Everything except for `BrokenDownTime::time`
-    /// // creates a date, so asking for only a `time`
-    /// // will circumvent date validation!
+    /// // 31 is a legal day value, but not for June. However, this is
+    /// // not validated unless you ask for a `Date` from the parsed
+    /// // `BrokenDownTime`. Most other higher level accessors on this
+    /// // type need to create a date, but this routine does not. So
+    /// // asking for only a `time` will circumvent date validation!
     /// let tm = strtime::parse("%Y-%m-%d %H:%M:%S", "2024-06-31 21:14:59")?;
     /// let time = tm.to_time()?;
     /// assert_eq!(time.to_string(), "21:14:59");
@@ -2369,10 +2522,8 @@ impl BrokenDownTime {
 
     /// Returns the parsed meridiem, if available.
     ///
-    /// Note that unlike other fields, there is no
-    /// `BrokenDownTime::set_meridiem`. Instead, when formatting, the meridiem
-    /// label (if it's used in the formatting string) is determined purely as a
-    /// function of the hour in a 24 hour clock.
+    /// When there is a conflict between the meridiem and the hour value, the
+    /// meridiem takes precedence.
     ///
     /// # Example
     ///
@@ -2386,11 +2537,70 @@ impl BrokenDownTime {
     /// let tm = BrokenDownTime::parse("%P", "pm")?;
     /// assert_eq!(tm.meridiem(), Some(Meridiem::PM));
     ///
+    /// // A meridiem takes precedence.
+    /// let tm = BrokenDownTime::parse("%H%P", "13am")?;
+    /// assert_eq!(tm.hour(), Some(1));
+    /// assert_eq!(tm.meridiem(), Some(Meridiem::AM));
+    ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
     pub fn meridiem(&self) -> Option<Meridiem> {
         self.meridiem
+    }
+
+    /// Returns the parsed timestamp, if available.
+    ///
+    /// Unlike [`BrokenDownTime::to_timestamp`], this only returns a timestamp
+    /// that has been set explicitly via [`BrokenDownTime::set_timestamp`].
+    /// For example, this occurs when parsing a `%s` conversion specifier.
+    ///
+    /// # Example
+    ///
+    /// This shows a how to parse the timestamp:
+    ///
+    /// ```
+    /// use jiff::{fmt::strtime::BrokenDownTime, Timestamp};
+    ///
+    /// let tm = BrokenDownTime::parse("%s", "1760723100")?;
+    /// assert_eq!(tm.timestamp(), Some(Timestamp::constant(1760723100, 0)));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: difference between `timestamp` and `to_timestamp`
+    ///
+    /// This shows how [`BrokenDownTime::to_timestamp`] will try to return
+    /// a timestamp when one could be formed from other data, while
+    /// [`BrokenDownTime::timestamp`] only returns a timestamp that has been
+    /// explicitly set.
+    ///
+    /// ```
+    /// use jiff::{fmt::strtime::BrokenDownTime, tz, Timestamp};
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// tm.set_year(Some(2025))?;
+    /// tm.set_month(Some(10))?;
+    /// tm.set_day(Some(17))?;
+    /// tm.set_hour(Some(13))?;
+    /// tm.set_minute(Some(45))?;
+    /// tm.set_offset(Some(tz::offset(-4)));
+    /// assert_eq!(tm.to_timestamp()?, Timestamp::constant(1760723100, 0));
+    /// // No timestamp set!
+    /// assert_eq!(tm.timestamp(), None);
+    /// // A timestamp can be set, and it may not be consistent
+    /// // with other data in `BrokenDownTime`.
+    /// tm.set_timestamp(Some(Timestamp::UNIX_EPOCH));
+    /// assert_eq!(tm.timestamp(), Some(Timestamp::UNIX_EPOCH));
+    /// // And note that `BrokenDownTime::to_timestamp` will prefer
+    /// // an explicitly set timestamp whenever possible.
+    /// assert_eq!(tm.to_timestamp()?, Timestamp::UNIX_EPOCH);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn timestamp(&self) -> Option<Timestamp> {
+        self.timestamp
     }
 
     /// Set the year on this broken down time.
@@ -2861,7 +3071,7 @@ impl BrokenDownTime {
     /// time zone, but where one wants to set a time zone based on the context.
     ///
     /// ```
-    /// use jiff::{fmt::strtime::BrokenDownTime, tz::Offset};
+    /// use jiff::{fmt::strtime::BrokenDownTime};
     ///
     /// let mut tm = BrokenDownTime::parse(
     ///     "%Y-%m-%d at %H:%M:%S",
@@ -2887,7 +3097,7 @@ impl BrokenDownTime {
     /// result printed is non-sensical:
     ///
     /// ```
-    /// use jiff::{civil::date, fmt::strtime::BrokenDownTime, tz};
+    /// use jiff::{civil::date, fmt::strtime::BrokenDownTime};
     ///
     /// let zdt = date(2024, 8, 28).at(14, 56, 0, 0).in_tz("US/Eastern")?;
     /// let mut tm = BrokenDownTime::from(&zdt);
@@ -2955,6 +3165,104 @@ impl BrokenDownTime {
     #[inline]
     pub fn set_weekday(&mut self, weekday: Option<Weekday>) {
         self.weekday = weekday;
+    }
+
+    /// Set the meridiem (AM/PM). This is most useful when doing custom
+    /// parsing that involves 12-hour time.
+    ///
+    /// When there is a conflict between the meridiem and the hour value, the
+    /// meridiem takes precedence.
+    ///
+    /// # Example
+    ///
+    /// This shows how to set a meridiem and its impact on the hour value:
+    ///
+    /// ```
+    /// use jiff::{fmt::strtime::{BrokenDownTime, Meridiem}};
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// tm.set_hour(Some(3))?;
+    /// tm.set_meridiem(Some(Meridiem::PM));
+    /// let time = tm.to_time()?;
+    /// assert_eq!(time.hour(), 15); // 3:00 PM = 15:00 in 24-hour time
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// This shows how setting a meridiem influences formatting:
+    ///
+    /// ```
+    /// use jiff::{fmt::strtime::{BrokenDownTime, Meridiem}};
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// tm.set_hour(Some(3))?;
+    /// tm.set_minute(Some(4))?;
+    /// tm.set_second(Some(5))?;
+    /// tm.set_meridiem(Some(Meridiem::PM));
+    /// assert_eq!(tm.to_string("%T")?, "15:04:05");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// And this shows how a conflict between the hour and meridiem is
+    /// handled. Notably, the set meridiem still applies.
+    ///
+    /// ```
+    /// use jiff::{fmt::strtime::{BrokenDownTime, Meridiem}};
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// tm.set_hour(Some(13))?;
+    /// tm.set_minute(Some(4))?;
+    /// tm.set_second(Some(5))?;
+    /// tm.set_meridiem(Some(Meridiem::AM));
+    /// assert_eq!(tm.to_string("%T")?, "01:04:05");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_meridiem(&mut self, meridiem: Option<Meridiem>) {
+        self.meridiem = meridiem;
+    }
+
+    /// Set an explicit timestamp for this `BrokenDownTime`.
+    ///
+    /// An explicitly set timestamp takes precedence when using higher
+    /// level convenience accessors such as [`BrokenDownTime::to_timestamp`]
+    /// and [`BrokenDownTime::to_zoned`].
+    ///
+    /// # Example
+    ///
+    /// This shows how [`BrokenDownTime::to_timestamp`] will try to return
+    /// a timestamp when one could be formed from other data, while
+    /// [`BrokenDownTime::timestamp`] only returns a timestamp that has been
+    /// explicitly set.
+    ///
+    /// ```
+    /// use jiff::{fmt::strtime::BrokenDownTime, tz, Timestamp};
+    ///
+    /// let mut tm = BrokenDownTime::default();
+    /// tm.set_year(Some(2025))?;
+    /// tm.set_month(Some(10))?;
+    /// tm.set_day(Some(17))?;
+    /// tm.set_hour(Some(13))?;
+    /// tm.set_minute(Some(45))?;
+    /// tm.set_offset(Some(tz::offset(-4)));
+    /// assert_eq!(tm.to_timestamp()?, Timestamp::constant(1760723100, 0));
+    /// // No timestamp set!
+    /// assert_eq!(tm.timestamp(), None);
+    /// // A timestamp can be set, and it may not be consistent
+    /// // with other data in `BrokenDownTime`.
+    /// tm.set_timestamp(Some(Timestamp::UNIX_EPOCH));
+    /// assert_eq!(tm.timestamp(), Some(Timestamp::UNIX_EPOCH));
+    /// // And note that `BrokenDownTime::to_timestamp` will prefer
+    /// // an explicitly set timestamp whenever possible.
+    /// assert_eq!(tm.to_timestamp()?, Timestamp::UNIX_EPOCH);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn set_timestamp(&mut self, timestamp: Option<Timestamp>) {
+        self.timestamp = timestamp;
     }
 }
 
@@ -3067,11 +3375,10 @@ impl From<Time> for BrokenDownTime {
 ///
 /// Therefore, only use this type if you know your formatting string is valid
 /// and that the datetime type being formatted has all of the information
-/// required by the format string. For most conversion specifiers, this falls
-/// in the category of things where "if it works, it works for all inputs."
-/// Unfortunately, there are some exceptions to this. For example, the `%y`
-/// modifier will only format a year if it falls in the range `1969-2068` and
-/// will otherwise return an error.
+/// required by the format string. Moreover, the `strftime` implementation in
+/// this crate is specifically designed to never error based on the specific
+/// values. For example, even though `%y` can only _parse_ years in the
+/// `1969-2068` range, it can format any valid year supported by Jiff.
 ///
 /// # Example
 ///
@@ -3079,7 +3386,7 @@ impl From<Time> for BrokenDownTime {
 /// [`Zoned::strftime`]:
 ///
 /// ```
-/// use jiff::{civil::date, fmt::strtime, tz};
+/// use jiff::civil::date;
 ///
 /// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 /// let string = zdt.strftime("%a, %-d %b %Y %T %z").to_string();
@@ -3091,7 +3398,7 @@ impl From<Time> for BrokenDownTime {
 /// Or use it directly when writing to something:
 ///
 /// ```
-/// use jiff::{civil::date, fmt::strtime, tz};
+/// use jiff::{civil::date, fmt::strtime};
 ///
 /// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
 ///
@@ -3235,12 +3542,19 @@ impl Extension {
     /// This supports parsing up to 3 colons. The colons are used in some cases
     /// for alternate specifiers. e.g., `%:Q` or `%:::z`.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn parse_colons<'i>(fmt: &'i [u8]) -> (u8, &'i [u8]) {
+    fn parse_colons<'i>(fmt: &'i [u8]) -> Result<(u8, &'i [u8]), Error> {
         let mut colons = 0;
         while colons < 3 && colons < fmt.len() && fmt[colons] == b':' {
             colons += 1;
         }
-        (u8::try_from(colons).unwrap(), &fmt[usize::from(colons)..])
+        let fmt = &fmt[usize::from(colons)..];
+        if colons > 0 && fmt.is_empty() {
+            return Err(err!(
+                "expected to find specifier directive after {colons} colons, \
+                 but found end of format string",
+            ));
+        }
+        Ok((u8::try_from(colons).unwrap(), fmt))
     }
 }
 

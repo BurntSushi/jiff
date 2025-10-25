@@ -8,7 +8,6 @@ use crate::{
         strtime::{BrokenDownTime, Extension, Flag, Meridiem},
         Parsed,
     },
-    tz::Offset,
     util::{
         escape, parse,
         rangeint::{ri8, RFrom},
@@ -200,7 +199,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     fn parse_extension(&mut self) -> Result<Extension, Error> {
         let (flag, fmt) = Extension::parse_flag(self.fmt)?;
         let (width, fmt) = Extension::parse_width(fmt)?;
-        let (colons, fmt) = Extension::parse_colons(fmt);
+        let (colons, fmt) = Extension::parse_colons(fmt)?;
         self.fmt = fmt;
         Ok(Extension { flag, width, colons })
     }
@@ -564,21 +563,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                 )
             })?;
         self.inp = inp;
-
-        // This is basically just repeating the
-        // `From<Timestamp> for BrokenDownTime`
-        // trait implementation.
-        let dt = Offset::UTC.to_datetime(timestamp);
-        let (d, t) = (dt.date(), dt.time());
-        self.tm.offset = Some(Offset::UTC);
-        self.tm.year = Some(d.year_ranged());
-        self.tm.month = Some(d.month_ranged());
-        self.tm.day = Some(d.day_ranged());
-        self.tm.hour = Some(t.hour_ranged());
-        self.tm.minute = Some(t.minute_ranged());
-        self.tm.second = Some(t.second_ranged());
-        self.tm.subsec = Some(t.subsec_nanosecond_ranged());
-        self.tm.meridiem = Some(Meridiem::from(t));
+        self.tm.timestamp = Some(timestamp);
 
         self.bump_fmt();
         Ok(())
@@ -860,6 +845,12 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             .parse_number(2, Flag::NoPad, inp)
             .context("failed to parse century")?;
         self.inp = inp;
+
+        if !(0 <= century && century <= 99) {
+            return Err(err!(
+                "century `{century}` is too big, must be in range 0-99",
+            ));
+        }
 
         // OK because sign=={1,-1} and century can't be bigger than 2 digits
         // so overflow isn't possible.
@@ -1923,6 +1914,21 @@ mod tests {
         );
 
         insta::assert_snapshot!(
+            p("%:", " "),
+            @"strptime parsing failed: expected to find specifier directive after 1 colons, but found end of format string",
+        );
+
+        insta::assert_snapshot!(
+            p("%::", " "),
+            @"strptime parsing failed: expected to find specifier directive after 2 colons, but found end of format string",
+        );
+
+        insta::assert_snapshot!(
+            p("%:::", " "),
+            @"strptime parsing failed: expected to find specifier directive after 3 colons, but found end of format string",
+        );
+
+        insta::assert_snapshot!(
             p("%H:%M:%S%.f", "15:59:01."),
             @"strptime parsing failed: %.f failed: expected at least one fractional decimal digit, but did not find any",
         );
@@ -2170,6 +2176,23 @@ mod tests {
         insta::assert_snapshot!(
             p("%:::z", "+05:3015"),
             @r#"strptime expects to consume the entire input, but "15" remains unparsed"#,
+        );
+    }
+
+    /// Regression test for checked arithmetic panicking.
+    ///
+    /// Ref https://github.com/BurntSushi/jiff/issues/426
+    #[test]
+    fn err_parse_large_century() {
+        let p = |fmt: &str, input: &str| {
+            BrokenDownTime::parse_mono(fmt.as_bytes(), input.as_bytes())
+                .unwrap_err()
+                .to_string()
+        };
+
+        insta::assert_snapshot!(
+            p("%^50C%", "2000000000000000000#0077)()"),
+            @"strptime parsing failed: %C failed: century `2000000000000000000` is too big, must be in range 0-99",
         );
     }
 }

@@ -60,8 +60,9 @@ impl<'a> core::fmt::Display for Bytes<'a> {
         while let Some(result) = utf8::decode(bytes) {
             let ch = match result {
                 Ok(ch) => ch,
-                Err(byte) => {
-                    write!(f, r"\x{:02x}", byte)?;
+                Err(errant_bytes) => {
+                    // The decode API guarantees `errant_bytes` is non-empty.
+                    write!(f, r"\x{:02x}", errant_bytes[0])?;
                     bytes = &bytes[1..];
                     continue;
                 }

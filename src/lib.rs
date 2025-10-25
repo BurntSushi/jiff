@@ -369,7 +369,7 @@ use jiff::civil::date;
 
 let zdt1 = date(2020, 8, 26).at(6, 27, 0, 0).in_tz("America/New_York")?;
 let zdt2 = date(2023, 12, 31).at(18, 30, 0, 0).in_tz("America/New_York")?;
-let span = &zdt2 - &zdt1;
+let span = zdt2 - zdt1;
 assert_eq!(format!("{span:#}"), "29341h 3m");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -720,10 +720,9 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
     )),
     allow(dead_code, unused_imports)
 )]
-// No clue why this thing is still unstable because it's pretty amazing. This
-// adds Cargo feature annotations to items in the rustdoc output. Which is
+// This adds Cargo feature annotations to items in the rustdoc output. Which is
 // sadly hugely beneficial for this crate due to the number of features.
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs_jiff, feature(doc_cfg))]
 // We generally want all types to impl Debug.
 #![warn(missing_debug_implementations)]
 // Document ALL THE THINGS!
