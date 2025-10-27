@@ -759,7 +759,10 @@ pub use crate::{
         TimestampDisplayWithOffset, TimestampRound, TimestampSeries,
     },
     util::round::mode::RoundMode,
-    zoned::{Zoned, ZonedArithmetic, ZonedDifference, ZonedRound, ZonedWith},
+    zoned::{
+        Zoned, ZonedArithmetic, ZonedDifference, ZonedRound, ZonedSeries,
+        ZonedWith,
+    },
 };
 
 #[macro_use]
