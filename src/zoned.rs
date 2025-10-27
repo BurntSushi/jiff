@@ -179,7 +179,7 @@ use crate::{
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
-/// (Note that this is diifferent from
+/// (Note that this is different from
 /// [Temporal's `ZonedDateTime.equals`][temporal-equals] comparison, which will
 /// take time zone into account for equality. This is because `Eq` and `Ord`
 /// trait implementations must be consistent in Rust. If you need Temporal's
