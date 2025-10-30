@@ -8,6 +8,7 @@ use crate::{benchmark, convert::ConvertFrom};
 pub(super) fn define(c: &mut Criterion) {
     parse_civil_datetime(c);
     parse_friendly(c);
+    parse_iso8601_duration(c);
     parse_rfc2822(c);
     parse_strptime(c);
 }
@@ -211,6 +212,66 @@ fn parse_friendly(c: &mut Criterion) {
         benchmark(c, format!("{NAME}/{kind}/duration/humantime"), |b| {
             b.iter(|| {
                 let got = humantime::parse_duration(input).unwrap();
+                assert_eq!(got, expected);
+            })
+        });
+    }
+}
+
+/// Benchmarks parsing an ISO 8601 duration. I think Jiff is alone in being
+/// able to parse ISO 8601 durations (among itself, chrono and time).
+fn parse_iso8601_duration(c: &mut Criterion) {
+    use jiff::{SignedDuration, Span, ToSpan};
+
+    const NAME: &str = "parse/iso8601_duration";
+    const TINY: &str = "PT2S";
+    const SHORT: &str = "PT2H30M";
+    const MEDIUM: &str = "P2DT5H30M";
+    const LONG: &str = "P2Y1M15DT5H59M1S";
+    const LONG_TIME: &str = "PT5H59M1.123456789S";
+
+    let benches = [
+        ("tiny", TINY, 2.seconds()),
+        ("short", SHORT, 2.hours().minutes(30)),
+        ("medium", MEDIUM, 2.days().hours(5).minutes(30)),
+        (
+            "long",
+            LONG,
+            2.years().months(1).days(15).hours(5).minutes(59).seconds(1),
+        ),
+        (
+            "long-time",
+            LONG_TIME,
+            5.hours()
+                .minutes(59)
+                .seconds(1)
+                .milliseconds(123)
+                .microseconds(456)
+                .nanoseconds(789),
+        ),
+    ];
+    for (kind, input, expected) in benches {
+        benchmark(c, format!("{NAME}/{kind}/span/jiff"), |b| {
+            b.iter(|| {
+                let got: Span = input.parse().unwrap();
+                assert_eq!(got.fieldwise(), expected.fieldwise());
+            })
+        });
+    }
+
+    let benches = [
+        ("tiny", TINY, SignedDuration::new(2, 0)),
+        ("short", SHORT, SignedDuration::new(2 * 60 * 60 + 30 * 60, 0)),
+        (
+            "long-time",
+            LONG_TIME,
+            SignedDuration::new(5 * 3600 + 59 * 60 + 1, 123_456_789),
+        ),
+    ];
+    for (kind, input, expected) in benches {
+        benchmark(c, format!("{NAME}/{kind}/duration/jiff"), |b| {
+            b.iter(|| {
+                let got: SignedDuration = input.parse().unwrap();
                 assert_eq!(got, expected);
             })
         });
