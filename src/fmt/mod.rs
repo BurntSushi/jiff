@@ -430,7 +430,7 @@ trait WriteExt: Write {
     fn write_fraction(
         &mut self,
         formatter: &FractionalFormatter,
-        n: impl Into<i64>,
+        n: impl Into<u32>,
     ) -> Result<(), Error> {
         self.write_fractional(&Fractional::new(formatter, n.into()))
     }

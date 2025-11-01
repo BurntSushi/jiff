@@ -10,7 +10,7 @@ use crate::{
         Write, WriteExt,
     },
     tz::Offset,
-    util::{escape, t::C, utf8},
+    util::{escape, utf8},
     Error,
 };
 
@@ -545,6 +545,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let subsec = self.tm.subsec.ok_or_else(|| {
             err!("requires time to format subsecond nanoseconds")
         })?;
+        let subsec = i32::from(subsec).unsigned_abs();
         // For %f, we always want to emit at least one digit. The only way we
         // wouldn't is if our fractional component is zero. One exception to
         // this is when the width is `0` (which looks like `%00f`), in which
@@ -554,7 +555,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         if ext.width == Some(0) {
             return Err(err!("zero precision with %f is not allowed"));
         }
-        if subsec == C(0) && ext.width.is_none() {
+        if subsec == 0 && ext.width.is_none() {
             self.wtr.write_str("0")?;
             return Ok(());
         }
@@ -565,7 +566,8 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     /// %.f
     fn fmt_dot_fractional(&mut self, ext: &Extension) -> Result<(), Error> {
         let Some(subsec) = self.tm.subsec else { return Ok(()) };
-        if subsec == C(0) && ext.width.is_none() || ext.width == Some(0) {
+        let subsec = i32::from(subsec).unsigned_abs();
+        if subsec == 0 && ext.width.is_none() || ext.width == Some(0) {
             return Ok(());
         }
         ext.write_str(Case::AsIs, ".", self.wtr)?;
@@ -581,6 +583,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         if ext.width == Some(0) {
             return Err(err!("zero precision with %N is not allowed"));
         }
+        let subsec = i32::from(subsec).unsigned_abs();
         // Since `%N` is actually an alias for `%9f`, when the precision
         // is missing, we default to 9.
         if ext.width.is_none() {
@@ -977,7 +980,7 @@ impl Extension {
     /// The `width` setting on `Extension` is treated as a precision setting.
     fn write_fractional_seconds<W: Write>(
         &self,
-        number: impl Into<i64>,
+        number: impl Into<u32>,
         wtr: &mut W,
     ) -> Result<(), Error> {
         let number = number.into();
