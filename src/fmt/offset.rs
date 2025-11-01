@@ -268,7 +268,11 @@ impl core::fmt::Display for Numeric {
         }
         if let Some(nanos) = self.nanoseconds {
             static FMT: FractionalFormatter = FractionalFormatter::new();
-            write!(f, ".{}", FMT.format(i64::from(nanos)).as_str())?;
+            write!(
+                f,
+                ".{}",
+                FMT.format(i32::from(nanos).unsigned_abs()).as_str()
+            )?;
         }
         Ok(())
     }

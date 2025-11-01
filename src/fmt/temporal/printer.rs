@@ -145,7 +145,7 @@ impl DateTimePrinter {
             wtr.write_str(".")?;
             wtr.write_fraction(
                 &FMT_FRACTION.precision(self.precision),
-                fractional_nanosecond,
+                fractional_nanosecond.unsigned_abs(),
             )?;
         }
         Ok(())
@@ -501,7 +501,10 @@ impl SpanPrinter {
             wtr.write_int(&FMT_INT, fraction_second.get())?;
             if fraction_nano != C(0) {
                 wtr.write_str(".")?;
-                wtr.write_fraction(&FMT_FRACTION, fraction_nano.get())?;
+                wtr.write_fraction(
+                    &FMT_FRACTION,
+                    i32::from(fraction_nano).unsigned_abs(),
+                )?;
             }
             wtr.write_char(self.label('S'))?;
         }
@@ -551,7 +554,7 @@ impl SpanPrinter {
         } else if nanos != 0 {
             wtr.write_int(&FMT_INT, secs)?;
             wtr.write_str(".")?;
-            wtr.write_fraction(&FMT_FRACTION, nanos)?;
+            wtr.write_fraction(&FMT_FRACTION, nanos.unsigned_abs())?;
             wtr.write_char(self.label('S'))?;
         }
         Ok(())

@@ -271,7 +271,7 @@ impl FractionalFormatter {
 
     /// Format the given value using this configuration as a decimal ASCII
     /// fractional number.
-    pub(crate) const fn format(&self, value: i64) -> Fractional {
+    pub(crate) const fn format(&self, value: u32) -> Fractional {
         Fractional::new(self, value)
     }
 
@@ -298,7 +298,7 @@ impl FractionalFormatter {
     ///
     /// This is useful for callers that need to know whether to write
     /// a decimal separator, e.g., `.`, before the digits.
-    pub(crate) fn will_write_digits(self, value: i64) -> bool {
+    pub(crate) fn will_write_digits(self, value: u32) -> bool {
         self.precision.map_or_else(|| value != 0, |p| p > 0)
     }
 
@@ -342,9 +342,9 @@ impl Fractional {
     /// This panics if the value given isn't in the range `0..=999_999_999`.
     pub(crate) const fn new(
         formatter: &FractionalFormatter,
-        mut value: i64,
+        mut value: u32,
     ) -> Fractional {
-        assert!(0 <= value && value <= 999_999_999);
+        assert!(value <= 999_999_999);
         let mut fractional = Fractional {
             buf: [b'0'; Self::MAX_LEN as usize],
             end: Self::MAX_LEN,

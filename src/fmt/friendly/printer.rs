@@ -1621,7 +1621,7 @@ impl<'p, 'w, W: Write> DesignatorWriter<'p, 'w, W> {
 /// formatter for the fractional component.
 struct FractionalPrinter {
     integer: u64,
-    fraction: u64,
+    fraction: u32,
     fmtint: DecimalFormatter,
     fmtfraction: FractionalFormatter,
 }
@@ -1657,25 +1657,25 @@ impl FractionalPrinter {
         match unit {
             FractionalUnit::Hour => {
                 let integer = dur.as_secs() / SECS_PER_HOUR;
-                let fraction = dur.as_nanos() % NANOS_PER_HOUR;
-                // OK because NANOS_PER_HOUR fits in an u64.
-                let mut fraction = u64::try_from(fraction).unwrap();
+                let mut fraction = dur.as_nanos() % NANOS_PER_HOUR;
                 // Drop precision since we're only allowed 9 decimal places.
-                fraction /= SECS_PER_HOUR;
+                fraction /= u128::from(SECS_PER_HOUR);
+                // OK because NANOS_PER_HOUR / SECS_PER_HOUR fits in a u32.
+                let fraction = u32::try_from(fraction).unwrap();
                 FractionalPrinter { integer, fraction, fmtint, fmtfraction }
             }
             FractionalUnit::Minute => {
                 let integer = dur.as_secs() / SECS_PER_MIN;
-                let fraction = dur.as_nanos() % NANOS_PER_MIN;
-                // OK because NANOS_PER_MIN fits in an u64.
-                let mut fraction = u64::try_from(fraction).unwrap();
+                let mut fraction = dur.as_nanos() % NANOS_PER_MIN;
                 // Drop precision since we're only allowed 9 decimal places.
-                fraction /= SECS_PER_MIN;
+                fraction /= u128::from(SECS_PER_MIN);
+                // OK because NANOS_PER_MIN fits in an u32.
+                let fraction = u32::try_from(fraction).unwrap();
                 FractionalPrinter { integer, fraction, fmtint, fmtfraction }
             }
             FractionalUnit::Second => {
                 let integer = dur.as_secs();
-                let fraction = u64::from(dur.subsec_nanos());
+                let fraction = u32::from(dur.subsec_nanos());
                 FractionalPrinter { integer, fraction, fmtint, fmtfraction }
             }
             FractionalUnit::Millisecond => {
@@ -1689,7 +1689,7 @@ impl FractionalPrinter {
                 // too.
                 let integer = u64::try_from(dur.as_millis()).unwrap();
                 let fraction =
-                    u64::from((dur.subsec_nanos() % NANOS_PER_MILLI) * 1_000);
+                    u32::from((dur.subsec_nanos() % NANOS_PER_MILLI) * 1_000);
                 FractionalPrinter { integer, fraction, fmtint, fmtfraction }
             }
             FractionalUnit::Microsecond => {
@@ -1702,7 +1702,7 @@ impl FractionalPrinter {
                 // each will fit into an i64. So this is also okay in that case
                 // too.
                 let integer = u64::try_from(dur.as_micros()).unwrap();
-                let fraction = u64::from(
+                let fraction = u32::from(
                     (dur.subsec_nanos() % NANOS_PER_MICRO) * 1_000_000,
                 );
                 FractionalPrinter { integer, fraction, fmtint, fmtfraction }
@@ -1740,11 +1740,9 @@ impl FractionalPrinter {
     /// conditional logic.
     fn print<W: Write>(&self, mut wtr: W) -> Result<(), Error> {
         wtr.write_uint(&self.fmtint, self.integer)?;
-        // FIXME: Get rid of the `as` cast here.
-        if self.fmtfraction.will_write_digits(self.fraction as i64) {
+        if self.fmtfraction.will_write_digits(self.fraction) {
             wtr.write_str(".")?;
-            // FIXME: Get rid of the `as` cast here.
-            wtr.write_fraction(&self.fmtfraction, self.fraction as i64)?;
+            wtr.write_fraction(&self.fmtfraction, self.fraction)?;
         }
         Ok(())
     }
