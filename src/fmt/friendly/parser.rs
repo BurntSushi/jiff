@@ -776,7 +776,7 @@ mod tests {
             // the maximum number of microseconds is subtracted off, and we're
             // left over with a value that overflows an i64.
             pe("640330789636854776 micros"),
-            @r#"failed to parse "640330789636854776 micros" in the "friendly" format: failed to set nanosecond value 9223372036854776000 (it overflows `i64`) on span determined from 640330789636854776.0"#,
+            @r#"failed to parse "640330789636854776 micros" in the "friendly" format: failed to set value 640330789636854776 as microsecond unit on span: failed to set nanosecond value 9223372036854776000 (it overflows `i64`) on span determined from 640330789636854776.0"#,
         );
         // one fewer is okay
         insta::assert_snapshot!(
@@ -844,7 +844,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("9223372036854775808 nanoseconds ago"),
-            @r#"failed to parse "9223372036854775808 nanoseconds ago" in the "friendly" format: fractional nanosecond units are not allowed"#,
+            @r#"failed to parse "9223372036854775808 nanoseconds ago" in the "friendly" format: failed to set value -9223372036854775808 as nanosecond unit on span: parameter 'nanoseconds' with value -9223372036854775808 is not in the required range of -9223372036854775807..=9223372036854775807"#,
         );
     }
 

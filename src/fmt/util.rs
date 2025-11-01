@@ -363,11 +363,16 @@ pub(crate) struct DurationUnits {
     /// a value in the range `0..=999_999_999`.
     fraction: Option<u32>,
     /// The sign of the duration. This may be set at any time.
-    sign: Option<Sign>,
+    ///
+    /// Note that this defaults to zero! So callers will always want to set
+    /// this.
+    sign: Sign,
     /// The smallest unit value that was explicitly set.
     min: Option<Unit>,
     /// The largest unit value that was explicitly set.
     max: Option<Unit>,
+    /// Whether there are any non-zero units.
+    any_non_zero_units: bool,
 }
 
 impl DurationUnits {
@@ -386,7 +391,8 @@ impl DurationUnits {
     /// Since this is meant to be used in service of duration parsing and all
     /// duration parsing proceeds from largest to smallest units, this will
     /// return an error if the given unit is bigger than or equal to any
-    /// previously set unit.
+    /// previously set unit. This also implies that this can only be called
+    /// at most once for each unit value.
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn set_unit_value(
         &mut self,
@@ -416,6 +422,7 @@ impl DurationUnits {
             self.max = Some(unit);
         }
         self.values[unit.as_usize()] = value;
+        self.any_non_zero_units = self.any_non_zero_units || value != 0;
         Ok(())
     }
 
@@ -493,9 +500,11 @@ impl DurationUnits {
     /// The sign applies to the entire duration. There is no support for
     /// having some components signed and some unsigned.
     ///
-    /// If no sign is set, then it is assumed to be positive.
+    /// If no sign is set, then it is assumed to be zero. Note also that
+    /// even if a sign is explicitly set *and* all unit values are zero,
+    /// then the sign will be set to zero.
     pub(crate) fn set_sign(&mut self, sign: Sign) {
-        self.sign = Some(sign);
+        self.sign = sign;
     }
 
     /// Convert these duration components to a `Span`.
@@ -507,49 +516,178 @@ impl DurationUnits {
     /// returns an error.
     ///
     /// This also returns an error if no units were set.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn to_span(&self) -> Result<Span, Error> {
+        // When every unit value is less than this, *and* there is
+        // no fractional component, then we trigger a fast path that
+        // doesn't need to bother with error handling and careful
+        // handling of the sign.
+        //
+        // Why do we use the maximum year value? Because years are
+        // the "biggest" unit, it follows that there can't be any
+        // other unit whose limit is smaller than years as a
+        // dimenionless quantity. That is, if all parsed unit values
+        // are no bigger than the maximum year, then we know all
+        // parsed unit values are necessarily within their
+        // appropriate limits.
+        const LIMIT: u64 = t::SpanYears::MAX_SELF.get_unchecked() as u64;
+
+        // If we have a fraction or a particularly large unit,
+        // bail out to the general case.
+        if self.fraction.is_some()
+            || self.values.iter().any(|&value| value > LIMIT)
+            // If no unit was set, it's an error case.
+            || self.max.is_none()
+        {
+            return self.to_span_general();
+        }
+
+        let mut span = Span::new();
+
+        let years = self.values[Unit::Year.as_usize()] as i16;
+        let months = self.values[Unit::Month.as_usize()] as i32;
+        let weeks = self.values[Unit::Week.as_usize()] as i32;
+        let days = self.values[Unit::Day.as_usize()] as i32;
+        let hours = self.values[Unit::Hour.as_usize()] as i32;
+        let mins = self.values[Unit::Minute.as_usize()] as i64;
+        let secs = self.values[Unit::Second.as_usize()] as i64;
+        let millis = self.values[Unit::Millisecond.as_usize()] as i64;
+        let micros = self.values[Unit::Microsecond.as_usize()] as i64;
+        let nanos = self.values[Unit::Nanosecond.as_usize()] as i64;
+
+        span = span.years_unchecked(years);
+        span = span.months_unchecked(months);
+        span = span.weeks_unchecked(weeks);
+        span = span.days_unchecked(days);
+        span = span.hours_unchecked(hours);
+        span = span.minutes_unchecked(mins);
+        span = span.seconds_unchecked(secs);
+        span = span.milliseconds_unchecked(millis);
+        span = span.microseconds_unchecked(micros);
+        span = span.nanoseconds_unchecked(nanos);
+
+        // The unchecked setters above don't manipulate
+        // the sign, which defaults to zero. So we need to
+        // set it even when it's positive.
+        span = span.sign_unchecked(self.get_sign().as_ranged_integer());
+
+        Ok(span)
+    }
+
+    /// The "general" implementation of `DurationUnits::to_span`.
+    ///
+    /// This handles all possible cases, including fractional units, with good
+    /// error handling. Basically, we take this path when we think an error
+    /// _could_ occur. But this function is more bloaty and does more work, so
+    /// the more it can be avoided, the better.
+    #[cold]
+    #[inline(never)]
+    fn to_span_general(&self) -> Result<Span, Error> {
+        fn error_context(unit: Unit, value: i64) -> Error {
+            err!(
+                "failed to set value {value:?} as {unit} unit on span",
+                unit = unit.singular(),
+            )
+        }
+
+        #[cfg_attr(feature = "perf-inline", inline(always))]
+        fn set_time_unit(
+            unit: Unit,
+            value: i64,
+            span: Span,
+            set: impl FnOnce(Span) -> Result<Span, Error>,
+        ) -> Result<Span, Error> {
+            #[cold]
+            #[inline(never)]
+            fn fractional_fallback(
+                err: Error,
+                unit: Unit,
+                value: i64,
+                span: Span,
+            ) -> Result<Span, Error> {
+                // Fractional calendar units aren't supported. Neither are
+                // fractional nanoseconds. So there's nothing we can do in
+                // this case.
+                if unit > Unit::Hour || unit == Unit::Nanosecond {
+                    Err(err)
+                } else {
+                    // This is annoying, but because we can write out a larger
+                    // number of hours/minutes/seconds than what we actually
+                    // support, we need to be prepared to parse an unbalanced
+                    // span if our time units are too big here. In essence,
+                    // this lets a single time unit "overflow" into smaller
+                    // units if it exceeds the limits.
+                    fractional_time_to_span(unit, value, 0, span)
+                }
+            }
+
+            set(span)
+                .or_else(|err| fractional_fallback(err, unit, value, span))
+                .with_context(|| error_context(unit, value))
+        }
+
         let (min, _) = self.get_min_max_units()?;
         let mut span = Span::new();
 
         if self.values[Unit::Year.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Year)?;
-            span = set_span_value(Unit::Year, value, span)?;
+            span = span
+                .try_years(value)
+                .with_context(|| error_context(Unit::Year, value))?;
         }
         if self.values[Unit::Month.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Month)?;
-            span = set_span_value(Unit::Month, value, span)?;
+            span = span
+                .try_months(value)
+                .with_context(|| error_context(Unit::Month, value))?;
         }
         if self.values[Unit::Week.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Week)?;
-            span = set_span_value(Unit::Week, value, span)?;
+            span = span
+                .try_weeks(value)
+                .with_context(|| error_context(Unit::Week, value))?;
         }
         if self.values[Unit::Day.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Day)?;
-            span = set_span_value(Unit::Day, value, span)?;
+            span = span
+                .try_days(value)
+                .with_context(|| error_context(Unit::Day, value))?;
         }
         if self.values[Unit::Hour.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Hour)?;
-            span = set_span_value_fallback(Unit::Hour, value, span)?;
+            span = set_time_unit(Unit::Hour, value, span, |span| {
+                span.try_hours(value)
+            })?;
         }
         if self.values[Unit::Minute.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Minute)?;
-            span = set_span_value_fallback(Unit::Minute, value, span)?;
+            span = set_time_unit(Unit::Minute, value, span, |span| {
+                span.try_minutes(value)
+            })?;
         }
         if self.values[Unit::Second.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Second)?;
-            span = set_span_value_fallback(Unit::Second, value, span)?;
+            span = set_time_unit(Unit::Second, value, span, |span| {
+                span.try_seconds(value)
+            })?;
         }
         if self.values[Unit::Millisecond.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Millisecond)?;
-            span = set_span_value_fallback(Unit::Millisecond, value, span)?;
+            span = set_time_unit(Unit::Millisecond, value, span, |span| {
+                span.try_milliseconds(value)
+            })?;
         }
         if self.values[Unit::Microsecond.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Microsecond)?;
-            span = set_span_value_fallback(Unit::Microsecond, value, span)?;
+            span = set_time_unit(Unit::Microsecond, value, span, |span| {
+                span.try_microseconds(value)
+            })?;
         }
         if self.values[Unit::Nanosecond.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Nanosecond)?;
-            span = set_span_value_fallback(Unit::Nanosecond, value, span)?;
+            span = set_time_unit(Unit::Nanosecond, value, span, |span| {
+                span.try_nanoseconds(value)
+            })?;
         }
 
         if let Some(fraction) = self.get_fraction()? {
@@ -614,6 +752,12 @@ impl DurationUnits {
         Ok(sdur)
     }
 
+    /// The "general" implementation of `DurationUnits::to_duration`.
+    ///
+    /// This handles all possible cases, including fractional units, with good
+    /// error handling. Basically, we take this path when we think an error
+    /// _could_ occur. But this function is more bloaty and does more work, so
+    /// the more it can be avoided, the better.
     #[cold]
     #[inline(never)]
     fn to_duration_general(&self) -> Result<SignedDuration, Error> {
@@ -798,7 +942,11 @@ impl DurationUnits {
 
     /// Returns the sign that should be applied to each individual unit.
     fn get_sign(&self) -> Sign {
-        self.sign.unwrap_or(Sign::Positive)
+        if self.any_non_zero_units {
+            self.sign
+        } else {
+            Sign::Zero
+        }
     }
 }
 
@@ -1028,61 +1176,6 @@ fn fractional_time_to_span(
     }
 
     Ok(span)
-}
-
-/// Set the given unit to the given value on the given span.
-///
-/// When the given unit is hours or smaller, then if the value exceeds the
-/// limits for that unit on `Span`, then an unbalanced span may be created to
-/// handle the overage (if it can fit into smaller units).
-///
-/// # Errors
-///
-/// If the value is outside the legal boundaries for the given unit, then an
-/// error is returned.
-#[cfg_attr(feature = "perf-inline", inline(always))]
-fn set_span_value_fallback(
-    unit: Unit,
-    value: i64,
-    span: Span,
-) -> Result<Span, Error> {
-    #[cold]
-    #[inline(never)]
-    fn fractional_fallback(
-        err: Error,
-        unit: Unit,
-        value: i64,
-        span: Span,
-    ) -> Result<Span, Error> {
-        if unit > Unit::Hour {
-            Err(err)
-        } else {
-            // This is annoying, but because we can write out a larger
-            // number of hours/minutes/seconds than what we actually
-            // support, we need to be prepared to parse an unbalanced span
-            // if our time units are too big here. In essence, this lets a
-            // single time unit "overflow" into smaller units if it exceeds
-            // the limits.
-            fractional_time_to_span(unit, value, 0, span)
-        }
-    }
-
-    set_span_value(unit, value, span)
-        .or_else(|err| fractional_fallback(err, unit, value, span))
-}
-
-/// Set the given calendar unit to the given value on the given span.
-///
-/// If the value is outside the legal boundaries for the given unit, then an
-/// error is returned.
-#[cfg_attr(feature = "perf-inline", inline(always))]
-fn set_span_value(unit: Unit, value: i64, span: Span) -> Result<Span, Error> {
-    span.try_units(unit, value).with_context(|| {
-        err!(
-            "failed to set value {value:?} as {unit} unit on span",
-            unit = unit.singular(),
-        )
-    })
 }
 
 /// Like `fractional_time_to_span`, but just converts the fraction of the given
