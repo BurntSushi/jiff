@@ -2628,16 +2628,7 @@ impl Span {
     }
 
     #[inline]
-    pub(crate) fn try_units(
-        self,
-        unit: Unit,
-        value: i64,
-    ) -> Result<Span, Error> {
-        self.try_units_ranged(unit, NoUnits::new_unchecked(value))
-    }
-
-    #[inline]
-    pub(crate) fn try_units_ranged(
+    fn try_units_ranged(
         self,
         unit: Unit,
         value: NoUnits,
@@ -2731,6 +2722,103 @@ impl Span {
             Unit::Microsecond => self.get_microseconds_ranged().rinto(),
             Unit::Nanosecond => self.get_nanoseconds_ranged().rinto(),
         }
+    }
+}
+
+/// Crate internal APIs that permit setting units without checks.
+///
+/// Callers should be very careful when using these. These notably also do
+/// not handle updating the sign on the `Span` and require the precisely
+/// correct integer primitive.
+impl Span {
+    #[inline]
+    pub(crate) fn years_unchecked(self, years: i16) -> Span {
+        let mut span =
+            Span { years: t::SpanYears::new_unchecked(years), ..self };
+        span.units = span.units.set(Unit::Year, years == 0);
+        span
+    }
+
+    #[inline]
+    pub(crate) fn months_unchecked(self, months: i32) -> Span {
+        let mut span =
+            Span { months: t::SpanMonths::new_unchecked(months), ..self };
+        span.units = span.units.set(Unit::Month, months == 0);
+        span
+    }
+
+    #[inline]
+    pub(crate) fn weeks_unchecked(self, weeks: i32) -> Span {
+        let mut span =
+            Span { weeks: t::SpanWeeks::new_unchecked(weeks), ..self };
+        span.units = span.units.set(Unit::Week, weeks == 0);
+        span
+    }
+
+    #[inline]
+    pub(crate) fn days_unchecked(self, days: i32) -> Span {
+        let mut span = Span { days: t::SpanDays::new_unchecked(days), ..self };
+        span.units = span.units.set(Unit::Day, days == 0);
+        span
+    }
+
+    #[inline]
+    pub(crate) fn hours_unchecked(self, hours: i32) -> Span {
+        let mut span =
+            Span { hours: t::SpanHours::new_unchecked(hours), ..self };
+        span.units = span.units.set(Unit::Hour, hours == 0);
+        span
+    }
+
+    #[inline]
+    pub(crate) fn minutes_unchecked(self, minutes: i64) -> Span {
+        let mut span =
+            Span { minutes: t::SpanMinutes::new_unchecked(minutes), ..self };
+        span.units = span.units.set(Unit::Minute, minutes == 0);
+        span
+    }
+
+    #[inline]
+    pub(crate) fn seconds_unchecked(self, seconds: i64) -> Span {
+        let mut span =
+            Span { seconds: t::SpanSeconds::new_unchecked(seconds), ..self };
+        span.units = span.units.set(Unit::Second, seconds == 0);
+        span
+    }
+
+    #[inline]
+    pub(crate) fn milliseconds_unchecked(self, milliseconds: i64) -> Span {
+        let mut span = Span {
+            milliseconds: t::SpanMilliseconds::new_unchecked(milliseconds),
+            ..self
+        };
+        span.units = span.units.set(Unit::Millisecond, milliseconds == 0);
+        span
+    }
+
+    #[inline]
+    pub(crate) fn microseconds_unchecked(self, microseconds: i64) -> Span {
+        let mut span = Span {
+            microseconds: t::SpanMicroseconds::new_unchecked(microseconds),
+            ..self
+        };
+        span.units = span.units.set(Unit::Microsecond, microseconds == 0);
+        span
+    }
+
+    #[inline]
+    pub(crate) fn nanoseconds_unchecked(self, nanoseconds: i64) -> Span {
+        let mut span = Span {
+            nanoseconds: t::SpanNanoseconds::new_unchecked(nanoseconds),
+            ..self
+        };
+        span.units = span.units.set(Unit::Nanosecond, nanoseconds == 0);
+        span
+    }
+
+    #[inline]
+    pub(crate) fn sign_unchecked(self, sign: Sign) -> Span {
+        Span { sign, ..self }
     }
 }
 
