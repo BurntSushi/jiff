@@ -317,7 +317,6 @@ pub struct SignedDuration {
     nanos: i32,
 }
 
-
 impl SignedDuration {
     /// A duration of zero time.
     ///
@@ -526,6 +525,50 @@ impl SignedDuration {
         SignedDuration::new_unchecked(secs, nanos)
     }
 
+    /// Creates a new `SignedDuration` from a given number of whole
+    /// milliseconds in 128 bits.
+    ///
+    /// # Panics
+    ///
+    /// When the given number of milliseconds is greater than the number of
+    /// nanoseconds represented by [`SignedDuration::MAX`] or smaller than
+    /// [`SignedDuration::MIN`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::SignedDuration;
+    ///
+    /// let duration = SignedDuration::from_millis_i128(12_456);
+    /// assert_eq!(duration.as_secs(), 12);
+    /// assert_eq!(duration.subsec_millis(), 456);
+    ///
+    /// let duration = SignedDuration::from_millis_i128(-12_456);
+    /// assert_eq!(duration.as_secs(), -12);
+    /// assert_eq!(duration.subsec_millis(), -456);
+    ///
+    /// // This input is bigger than what 64-bits can fit,
+    /// // and so demonstrates its utility in a case when
+    /// // `SignedDuration::from_nanos` cannot be used.
+    /// let duration = SignedDuration::from_millis_i128(
+    ///     1_208_925_819_614_629_174,
+    /// );
+    /// assert_eq!(duration.as_secs(), 1_208_925_819_614_629);
+    /// assert_eq!(duration.subsec_millis(), 174);
+    /// ```
+    #[inline]
+    pub const fn from_millis_i128(millis: i128) -> SignedDuration {
+        match SignedDuration::try_from_millis_i128(millis) {
+            Some(sdur) => sdur,
+            None => {
+                panic!(
+                    "seconds overflows `i64` \
+                     in `SignedDuration::from_millis_i128`",
+                )
+            }
+        }
+    }
+
     /// Creates a new `SignedDuration` from the given number of whole
     /// microseconds.
     ///
@@ -552,10 +595,54 @@ impl SignedDuration {
         // OK because MICROS_PER_SEC!={-1,0}.
         let secs = micros / MICROS_PER_SEC;
         // OK because MICROS_PER_SEC!={-1,0} and because
-        // millis % MICROS_PER_SEC can be at most 999, and 999 * 1_000_000
+        // micros % MICROS_PER_SEC can be at most 999_999, and 999_999 * 1_000
         // never overflows i32.
         let nanos = (micros % MICROS_PER_SEC) as i32 * NANOS_PER_MICRO;
         SignedDuration::new_unchecked(secs, nanos)
+    }
+
+    /// Creates a new `SignedDuration` from a given number of whole
+    /// microseconds in 128 bits.
+    ///
+    /// # Panics
+    ///
+    /// When the given number of microseconds is greater than the number of
+    /// nanoseconds represented by [`SignedDuration::MAX`] or smaller than
+    /// [`SignedDuration::MIN`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::SignedDuration;
+    ///
+    /// let duration = SignedDuration::from_micros_i128(12_000_456);
+    /// assert_eq!(duration.as_secs(), 12);
+    /// assert_eq!(duration.subsec_micros(), 456);
+    ///
+    /// let duration = SignedDuration::from_micros_i128(-12_000_456);
+    /// assert_eq!(duration.as_secs(), -12);
+    /// assert_eq!(duration.subsec_micros(), -456);
+    ///
+    /// // This input is bigger than what 64-bits can fit,
+    /// // and so demonstrates its utility in a case when
+    /// // `SignedDuration::from_nanos` cannot be used.
+    /// let duration = SignedDuration::from_micros_i128(
+    ///     1_208_925_819_614_629_174_706,
+    /// );
+    /// assert_eq!(duration.as_secs(), 1_208_925_819_614_629);
+    /// assert_eq!(duration.subsec_micros(), 174_706);
+    /// ```
+    #[inline]
+    pub const fn from_micros_i128(micros: i128) -> SignedDuration {
+        match SignedDuration::try_from_micros_i128(micros) {
+            Some(sdur) => sdur,
+            None => {
+                panic!(
+                    "seconds overflows `i64` \
+                     in `SignedDuration::from_micros_i128`",
+                )
+            }
+        }
     }
 
     /// Creates a new `SignedDuration` from the given number of whole
@@ -564,7 +651,9 @@ impl SignedDuration {
     /// Note that since this accepts an `i64`, this method cannot be used
     /// to construct the full range of possible signed duration values. In
     /// particular, [`SignedDuration::as_nanos`] returns an `i128`, which may
-    /// be a value that would otherwise overflow an `i64`.
+    /// be a value that would otherwise overflow an `i64`. To correctly
+    /// round-trip through an integer number of nanoseconds, use
+    /// [`SignedDuration::from_nanos_i128`].
     ///
     /// # Example
     ///
@@ -581,11 +670,56 @@ impl SignedDuration {
     /// ```
     #[inline]
     pub const fn from_nanos(nanos: i64) -> SignedDuration {
+        const NANOS_PER_SEC: i64 = self::NANOS_PER_SEC as i64;
         // OK because NANOS_PER_SEC!={-1,0}.
-        let secs = nanos / (NANOS_PER_SEC as i64);
+        let secs = nanos / NANOS_PER_SEC;
         // OK because NANOS_PER_SEC!={-1,0}.
-        let nanos = (nanos % (NANOS_PER_SEC as i64)) as i32;
+        let nanos = (nanos % NANOS_PER_SEC) as i32;
         SignedDuration::new_unchecked(secs, nanos)
+    }
+
+    /// Creates a new `SignedDuration` from a given number of whole
+    /// nanoseconds in 128 bits.
+    ///
+    /// # Panics
+    ///
+    /// When the given number of nanoseconds is greater than the number of
+    /// nanoseconds represented by [`SignedDuration::MAX`] or smaller than
+    /// [`SignedDuration::MIN`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::SignedDuration;
+    ///
+    /// let duration = SignedDuration::from_nanos_i128(12_000_000_456);
+    /// assert_eq!(duration.as_secs(), 12);
+    /// assert_eq!(duration.subsec_nanos(), 456);
+    ///
+    /// let duration = SignedDuration::from_nanos_i128(-12_000_000_456);
+    /// assert_eq!(duration.as_secs(), -12);
+    /// assert_eq!(duration.subsec_nanos(), -456);
+    ///
+    /// // This input is bigger than what 64-bits can fit,
+    /// // and so demonstrates its utility in a case when
+    /// // `SignedDuration::from_nanos` cannot be used.
+    /// let duration = SignedDuration::from_nanos_i128(
+    ///     1_208_925_819_614_629_174_706_176,
+    /// );
+    /// assert_eq!(duration.as_secs(), 1_208_925_819_614_629);
+    /// assert_eq!(duration.subsec_nanos(), 174_706_176);
+    /// ```
+    #[inline]
+    pub const fn from_nanos_i128(nanos: i128) -> SignedDuration {
+        match SignedDuration::try_from_nanos_i128(nanos) {
+            Some(sdur) => sdur,
+            None => {
+                panic!(
+                    "seconds overflows `i64` \
+                     in `SignedDuration::from_nanos_i128`",
+                )
+            }
+        }
     }
 
     /// Creates a new `SignedDuration` from the given number of hours. Every
@@ -2069,6 +2203,146 @@ impl SignedDuration {
     }
 }
 
+/// Fallible constructors.
+///
+/// Ideally these would be public. And in `std`. But I'm hesitant to export
+/// them before they're in `std` to avoid having a potential API inconsistency.
+/// I think the main question here is whether these should return an `Option`
+/// or a `Result`. For now, these return an `Option` so that they are `const`
+/// and can aide code reuse. But I suspect these ought to be a `Result`.
+impl SignedDuration {
+    /// Fallibly creates a new `SignedDuration` from a 128-bit integer number
+    /// of milliseconds.
+    ///
+    /// If the number of milliseconds is less than [`SignedDuration::MIN`] or
+    /// more than [`SignedDuration::MAX`], then this returns `None`.
+    #[inline]
+    pub(crate) const fn try_from_millis_i128(
+        millis: i128,
+    ) -> Option<SignedDuration> {
+        const MILLIS_PER_SEC: i128 = self::MILLIS_PER_SEC as i128;
+        // OK because MILLIS_PER_SEC!={-1,0}.
+        let secs = millis / MILLIS_PER_SEC;
+        // RUST: Use `i64::try_from` when available in `const`.
+        if !(i64::MIN as i128 <= secs && secs <= i64::MAX as i128) {
+            return None;
+        }
+        let secs64 = secs as i64;
+        // OK because NANOS_PER_SEC!={-1,0} and because
+        // micros % MILLIS_PER_SEC can be at most 999, and 999 * 1_000_000
+        // never overflows i32.
+        let nanos = (millis % MILLIS_PER_SEC) as i32 * NANOS_PER_MILLI;
+        Some(SignedDuration::new_unchecked(secs64, nanos))
+    }
+
+    /// Fallibly creates a new `SignedDuration` from a 128-bit integer number
+    /// of microseconds.
+    ///
+    /// If the number of microseconds is less than [`SignedDuration::MIN`] or
+    /// more than [`SignedDuration::MAX`], then this returns `None`.
+    #[inline]
+    pub(crate) const fn try_from_micros_i128(
+        micros: i128,
+    ) -> Option<SignedDuration> {
+        const MICROS_PER_SEC: i128 = self::MICROS_PER_SEC as i128;
+        // OK because MICROS_PER_SEC!={-1,0}.
+        let secs = micros / MICROS_PER_SEC;
+        // RUST: Use `i64::try_from` when available in `const`.
+        if !(i64::MIN as i128 <= secs && secs <= i64::MAX as i128) {
+            return None;
+        }
+        let secs64 = secs as i64;
+        // OK because NANOS_PER_SEC!={-1,0} and because
+        // micros % MICROS_PER_SEC can be at most 999_999, and 999_999 * 1_000
+        // never overflows i32.
+        let nanos = (micros % MICROS_PER_SEC) as i32 * NANOS_PER_MICRO;
+        Some(SignedDuration::new_unchecked(secs64, nanos))
+    }
+
+    /// Fallibly creates a new `SignedDuration` from a 128-bit integer number
+    /// of nanoseconds.
+    ///
+    /// If the number of nanoseconds is less than [`SignedDuration::MIN`] or
+    /// more than [`SignedDuration::MAX`], then this returns `None`.
+    #[inline]
+    pub(crate) const fn try_from_nanos_i128(
+        nanos: i128,
+    ) -> Option<SignedDuration> {
+        const NANOS_PER_SEC: i128 = self::NANOS_PER_SEC as i128;
+        // OK because NANOS_PER_SEC!={-1,0}.
+        let secs = nanos / NANOS_PER_SEC;
+        // RUST: Use `i64::try_from` when available in `const`.
+        if !(i64::MIN as i128 <= secs && secs <= i64::MAX as i128) {
+            return None;
+        }
+        let secs64 = secs as i64;
+        // OK because NANOS_PER_SEC!={-1,0}.
+        let nanos = (nanos % NANOS_PER_SEC) as i32;
+        Some(SignedDuration::new_unchecked(secs64, nanos))
+    }
+}
+
+/// Internal helpers used by Jiff.
+///
+/// NOTE: It is sad that some of these helpers can't really be implemented
+/// as efficiently outside of Jiff. If we exposed a `new_unchecked`
+/// constructor, then I believe that would be sufficient.
+impl SignedDuration {
+    /// Returns the number of whole hours in this duration (equivalent to
+    /// `SignedDuration::as_hours`) along with a duration equivalent to the
+    /// fractional remainder.
+    #[inline]
+    pub(crate) fn as_hours_with_remainder(&self) -> (i64, SignedDuration) {
+        let hours = self.as_hours();
+        let secs = self.as_secs() % (MINS_PER_HOUR * SECS_PER_MINUTE);
+        let rem = SignedDuration::new_unchecked(secs, self.subsec_nanos());
+        (hours, rem)
+    }
+
+    /// Returns the number of whole minutes in this duration (equivalent to
+    /// `SignedDuration::as_mins`) along with a duration equivalent to the
+    /// fractional remainder.
+    #[inline]
+    pub(crate) fn as_mins_with_remainder(&self) -> (i64, SignedDuration) {
+        let mins = self.as_mins();
+        let secs = self.as_secs() % SECS_PER_MINUTE;
+        let rem = SignedDuration::new_unchecked(secs, self.subsec_nanos());
+        (mins, rem)
+    }
+
+    /// Returns the number of whole seconds in this duration (equivalent to
+    /// `SignedDuration::as_secs`) along with a duration equivalent to the
+    /// fractional remainder.
+    #[inline]
+    pub(crate) fn as_secs_with_remainder(&self) -> (i64, SignedDuration) {
+        let secs = self.as_secs();
+        let rem = SignedDuration::new_unchecked(0, self.subsec_nanos());
+        (secs, rem)
+    }
+
+    /// Returns the number of whole milliseconds in this duration (equivalent
+    /// to `SignedDuration::as_millis`) along with a duration equivalent to the
+    /// fractional remainder.
+    #[inline]
+    pub(crate) fn as_millis_with_remainder(&self) -> (i128, SignedDuration) {
+        let millis = self.as_millis();
+        let nanos = self.subsec_nanos() % NANOS_PER_MILLI;
+        let rem = SignedDuration::new_unchecked(0, nanos);
+        (millis, rem)
+    }
+
+    /// Returns the number of whole microseconds in this duration (equivalent
+    /// to `SignedDuration::as_micros`) along with a duration equivalent to the
+    /// fractional remainder.
+    #[inline]
+    pub(crate) fn as_micros_with_remainder(&self) -> (i128, SignedDuration) {
+        let micros = self.as_micros();
+        let nanos = self.subsec_nanos() % NANOS_PER_MICRO;
+        let rem = SignedDuration::new_unchecked(0, nanos);
+        (micros, rem)
+    }
+}
+
 impl core::fmt::Display for SignedDuration {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -2909,5 +3183,70 @@ mod tests {
         let y: f32 = 0.999999999;
         assert_eq!(x, y);
         assert_eq!(y.fract(), 0.0f32);
+    }
+
+    #[test]
+    fn as_hours_with_remainder() {
+        let sdur = SignedDuration::new(4 * 60 * 60 + 30 * 60, 123_000_000);
+        let (hours, rem) = sdur.as_hours_with_remainder();
+        assert_eq!(hours, 4);
+        assert_eq!(rem, SignedDuration::new(30 * 60, 123_000_000));
+
+        let sdur = SignedDuration::new(-(4 * 60 * 60 + 30 * 60), -123_000_000);
+        let (hours, rem) = sdur.as_hours_with_remainder();
+        assert_eq!(hours, -4);
+        assert_eq!(rem, SignedDuration::new(-30 * 60, -123_000_000));
+    }
+
+    #[test]
+    fn as_mins_with_remainder() {
+        let sdur = SignedDuration::new(4 * 60 + 30, 123_000_000);
+        let (mins, rem) = sdur.as_mins_with_remainder();
+        assert_eq!(mins, 4);
+        assert_eq!(rem, SignedDuration::new(30, 123_000_000));
+
+        let sdur = SignedDuration::new(-(4 * 60 + 30), -123_000_000);
+        let (mins, rem) = sdur.as_mins_with_remainder();
+        assert_eq!(mins, -4);
+        assert_eq!(rem, SignedDuration::new(-30, -123_000_000));
+    }
+
+    #[test]
+    fn as_secs_with_remainder() {
+        let sdur = SignedDuration::new(4, 123_456_789);
+        let (secs, rem) = sdur.as_secs_with_remainder();
+        assert_eq!(secs, 4);
+        assert_eq!(rem, SignedDuration::new(0, 123_456_789));
+
+        let sdur = SignedDuration::new(-4, -123_456_789);
+        let (secs, rem) = sdur.as_secs_with_remainder();
+        assert_eq!(secs, -4);
+        assert_eq!(rem, SignedDuration::new(0, -123_456_789));
+    }
+
+    #[test]
+    fn as_millis_with_remainder() {
+        let sdur = SignedDuration::new(4, 123_456_789);
+        let (millis, rem) = sdur.as_millis_with_remainder();
+        assert_eq!(millis, 4_123);
+        assert_eq!(rem, SignedDuration::new(0, 000_456_789));
+
+        let sdur = SignedDuration::new(-4, -123_456_789);
+        let (millis, rem) = sdur.as_millis_with_remainder();
+        assert_eq!(millis, -4_123);
+        assert_eq!(rem, SignedDuration::new(0, -000_456_789));
+    }
+
+    #[test]
+    fn as_micros_with_remainder() {
+        let sdur = SignedDuration::new(4, 123_456_789);
+        let (micros, rem) = sdur.as_micros_with_remainder();
+        assert_eq!(micros, 4_123_456);
+        assert_eq!(rem, SignedDuration::new(0, 000_000_789));
+
+        let sdur = SignedDuration::new(-4, -123_456_789);
+        let (micros, rem) = sdur.as_micros_with_remainder();
+        assert_eq!(micros, -4_123_456);
+        assert_eq!(rem, SignedDuration::new(0, -000_000_789));
     }
 }
