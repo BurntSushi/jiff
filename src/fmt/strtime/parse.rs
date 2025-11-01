@@ -593,7 +593,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         // I believe this error can never happen, since we know we have no more
         // than 9 ASCII digits. Any sequence of 9 ASCII digits can be parsed
         // into an `i64`.
-        let nanoseconds = parse::fraction(digits, 9).map_err(|err| {
+        let nanoseconds = parse::fraction(digits).map_err(|err| {
             err!(
                 "failed to parse {digits:?} as fractional second component \
                  (up to 9 digits, nanosecond precision): {err}",

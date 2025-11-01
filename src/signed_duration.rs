@@ -66,7 +66,7 @@ const MINS_PER_HOUR: i64 = 60;
 /// assert_eq!(
 ///     "P1d".parse::<SignedDuration>().unwrap_err().to_string(),
 ///     "failed to parse ISO 8601 duration string into `SignedDuration`: \
-///      parsing ISO 8601 duration into SignedDuration requires that the \
+///      parsing ISO 8601 duration into a `SignedDuration` requires that the \
 ///      duration contain a time component and no components of days or \
 ///      greater",
 /// );
@@ -745,19 +745,15 @@ impl SignedDuration {
     /// ```
     #[inline]
     pub const fn from_hours(hours: i64) -> SignedDuration {
-        // OK because (SECS_PER_MINUTE*MINS_PER_HOUR)!={-1,0}.
-        const MIN_HOUR: i64 = i64::MIN / (SECS_PER_MINUTE * MINS_PER_HOUR);
-        // OK because (SECS_PER_MINUTE*MINS_PER_HOUR)!={-1,0}.
-        const MAX_HOUR: i64 = i64::MAX / (SECS_PER_MINUTE * MINS_PER_HOUR);
-        // OK because (SECS_PER_MINUTE*MINS_PER_HOUR)!={-1,0}.
-        if hours < MIN_HOUR {
-            panic!("hours overflowed minimum number of SignedDuration seconds")
+        match SignedDuration::try_from_hours(hours) {
+            Some(sdur) => sdur,
+            None => {
+                panic!(
+                    "hours overflowed an `i64` number of seconds \
+                     in `SignedDuration::from_hours`",
+                )
+            }
         }
-        // OK because (SECS_PER_MINUTE*MINS_PER_HOUR)!={-1,0}.
-        if hours > MAX_HOUR {
-            panic!("hours overflowed maximum number of SignedDuration seconds")
-        }
-        SignedDuration::from_secs(hours * MINS_PER_HOUR * SECS_PER_MINUTE)
     }
 
     /// Creates a new `SignedDuration` from the given number of minutes. Every
@@ -782,24 +778,16 @@ impl SignedDuration {
     /// assert_eq!(duration.subsec_nanos(), 0);
     /// ```
     #[inline]
-    pub const fn from_mins(minutes: i64) -> SignedDuration {
-        // OK because SECS_PER_MINUTE!={-1,0}.
-        const MIN_MINUTE: i64 = i64::MIN / SECS_PER_MINUTE;
-        // OK because SECS_PER_MINUTE!={-1,0}.
-        const MAX_MINUTE: i64 = i64::MAX / SECS_PER_MINUTE;
-        // OK because SECS_PER_MINUTE!={-1,0}.
-        if minutes < MIN_MINUTE {
-            panic!(
-                "minutes overflowed minimum number of SignedDuration seconds"
-            )
+    pub const fn from_mins(mins: i64) -> SignedDuration {
+        match SignedDuration::try_from_mins(mins) {
+            Some(sdur) => sdur,
+            None => {
+                panic!(
+                    "minutes overflowed an `i64` number of seconds \
+                     in `SignedDuration::from_mins`",
+                )
+            }
         }
-        // OK because SECS_PER_MINUTE!={-1,0}.
-        if minutes > MAX_MINUTE {
-            panic!(
-                "minutes overflowed maximum number of SignedDuration seconds"
-            )
-        }
-        SignedDuration::from_secs(minutes * SECS_PER_MINUTE)
     }
 
     /// Converts the given timestamp into a signed duration.
@@ -2211,6 +2199,44 @@ impl SignedDuration {
 /// or a `Result`. For now, these return an `Option` so that they are `const`
 /// and can aide code reuse. But I suspect these ought to be a `Result`.
 impl SignedDuration {
+    /// Fallibly creates a new `SignedDuration` from a 64-bit integer number
+    /// of hours.
+    ///
+    /// If the number of hours is less than [`SignedDuration::MIN`] or
+    /// more than [`SignedDuration::MAX`], then this returns `None`.
+    #[inline]
+    pub const fn try_from_hours(hours: i64) -> Option<SignedDuration> {
+        // OK because (SECS_PER_MINUTE*MINS_PER_HOUR)!={-1,0}.
+        const MIN_HOUR: i64 = i64::MIN / (SECS_PER_MINUTE * MINS_PER_HOUR);
+        // OK because (SECS_PER_MINUTE*MINS_PER_HOUR)!={-1,0}.
+        const MAX_HOUR: i64 = i64::MAX / (SECS_PER_MINUTE * MINS_PER_HOUR);
+        // OK because (SECS_PER_MINUTE*MINS_PER_HOUR)!={-1,0}.
+        if !(MIN_HOUR <= hours && hours <= MAX_HOUR) {
+            return None;
+        }
+        Some(SignedDuration::from_secs(
+            hours * MINS_PER_HOUR * SECS_PER_MINUTE,
+        ))
+    }
+
+    /// Fallibly creates a new `SignedDuration` from a 64-bit integer number
+    /// of minutes.
+    ///
+    /// If the number of minutes is less than [`SignedDuration::MIN`] or
+    /// more than [`SignedDuration::MAX`], then this returns `None`.
+    #[inline]
+    pub const fn try_from_mins(mins: i64) -> Option<SignedDuration> {
+        // OK because SECS_PER_MINUTE!={-1,0}.
+        const MIN_MINUTE: i64 = i64::MIN / SECS_PER_MINUTE;
+        // OK because SECS_PER_MINUTE!={-1,0}.
+        const MAX_MINUTE: i64 = i64::MAX / SECS_PER_MINUTE;
+        // OK because SECS_PER_MINUTE!={-1,0}.
+        if !(MIN_MINUTE <= mins && mins <= MAX_MINUTE) {
+            return None;
+        }
+        Some(SignedDuration::from_secs(mins * SECS_PER_MINUTE))
+    }
+
     /// Fallibly creates a new `SignedDuration` from a 128-bit integer number
     /// of milliseconds.
     ///

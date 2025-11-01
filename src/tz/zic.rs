@@ -1310,8 +1310,8 @@ fn parse_span(span: &str) -> Result<Span, Error> {
              but found {rest:?} instead"
         ));
     }
-    let nanoseconds = parse::fraction(nanosecond_digits.as_bytes(), 9)
-        .map_err(|e| {
+    let nanoseconds =
+        parse::fraction(nanosecond_digits.as_bytes()).map_err(|e| {
             e.context("failed to parse nanoseconds in time duration")
         })?;
     let nanoseconds_ranged = t::FractionalNanosecond::new(nanoseconds)
