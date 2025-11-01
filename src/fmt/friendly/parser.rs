@@ -2,17 +2,10 @@ use crate::{
     error::{err, ErrorContext},
     fmt::{
         friendly::parser_label,
-        util::{
-            fractional_time_to_duration, fractional_time_to_span,
-            parse_temporal_fraction, set_duration_unit_value,
-            set_span_unit_value,
-        },
+        util::{parse_temporal_fraction, DurationUnits},
         Parsed,
     },
-    util::{
-        escape,
-        t::{self, C},
-    },
+    util::{c::Sign, escape},
     Error, SignedDuration, Span, Unit,
 };
 
@@ -283,18 +276,20 @@ impl SpanParser {
                  optional sign, but no integer was found",
             ));
         };
-        let Parsed { value: span, input } =
-            self.parse_units_to_span(input, first_unit_value)?;
+        let Parsed { value: mut builder, input } =
+            self.parse_duration_units(input, first_unit_value)?;
 
         // As with the prefix sign parsing, guard it to avoid calling the
         // function.
         let (sign, input) = if !input.first().map_or(false, is_whitespace) {
-            (sign.unwrap_or(t::Sign::N::<1>()), input)
+            (sign.unwrap_or(Sign::Positive), input)
         } else {
             let parsed = self.parse_suffix_sign(sign, input)?;
             (parsed.value, parsed.input)
         };
-        Ok(Parsed { value: span * i64::from(sign.get()), input })
+        builder.set_sign(sign);
+        let span = builder.to_span()?;
+        Ok(Parsed { value: span, input })
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
@@ -324,191 +319,42 @@ impl SpanParser {
                  optional sign, but no integer was found",
             ));
         };
-        let Parsed { value: mut sdur, input } =
-            self.parse_units_to_duration(input, first_unit_value)?;
+        let Parsed { value: mut builder, input } =
+            self.parse_duration_units(input, first_unit_value)?;
 
         // As with the prefix sign parsing, guard it to avoid calling the
         // function.
         let (sign, input) = if !input.first().map_or(false, is_whitespace) {
-            (sign.unwrap_or(t::Sign::N::<1>()), input)
+            (sign.unwrap_or(Sign::Positive), input)
         } else {
             let parsed = self.parse_suffix_sign(sign, input)?;
             (parsed.value, parsed.input)
         };
-        if sign < C(0) {
-            sdur = -sdur;
-        }
+        builder.set_sign(sign);
+        let sdur = builder.to_duration()?;
 
         Ok(Parsed { value: sdur, input })
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn parse_units_to_span<'i>(
+    fn parse_duration_units<'i>(
         &self,
         mut input: &'i [u8],
-        first_unit_value: i64,
-    ) -> Result<Parsed<'i, Span>, Error> {
+        first_unit_value: u64,
+    ) -> Result<Parsed<'i, DurationUnits>, Error> {
         let mut parsed_any_after_comma = true;
-        let mut prev_unit: Option<Unit> = None;
         let mut value = first_unit_value;
-        let mut span = Span::new();
+        let mut builder = DurationUnits::default();
         loop {
             let parsed = self.parse_hms_maybe(input, value)?;
             input = parsed.input;
             if let Some(hms) = parsed.value {
-                if let Some(prev_unit) = prev_unit {
-                    if prev_unit <= Unit::Hour {
-                        return Err(err!(
-                            "found 'HH:MM:SS' after unit {prev_unit}, \
-                             but 'HH:MM:SS' can only appear after \
-                             years, months, weeks or days",
-                            prev_unit = prev_unit.singular(),
-                        ));
-                    }
-                }
-                span = set_span_unit_value(Unit::Hour, hms.hour, span)?;
-                span = set_span_unit_value(Unit::Minute, hms.minute, span)?;
-                span = if let Some(fraction) = hms.fraction {
-                    fractional_time_to_span(
-                        Unit::Second,
-                        hms.second,
-                        fraction,
-                        span,
-                    )?
-                } else {
-                    set_span_unit_value(Unit::Second, hms.second, span)?
-                };
-                break;
-            }
-
-            let fraction =
-                if input.first().map_or(false, |&b| b == b'.' || b == b',') {
-                    let parsed = parse_temporal_fraction(input)?;
-                    input = parsed.input;
-                    parsed.value
-                } else {
-                    None
-                };
-
-            // Eat any optional whitespace between the unit value and label.
-            input = self.parse_optional_whitespace(input).input;
-
-            // Parse the actual unit label/designator.
-            let parsed = self.parse_unit_designator(input)?;
-            input = parsed.input;
-            let unit = parsed.value;
-
-            // A comma is allowed to immediately follow the designator.
-            // Since this is a rarer case, we guard it with a check to see
-            // if the comma is there and only then call the function (which is
-            // marked unlineable to try and keep the hot path tighter).
-            if input.first().map_or(false, |&b| b == b',') {
-                input = self.parse_optional_comma(input)?.input;
-                parsed_any_after_comma = false;
-            }
-
-            if let Some(prev_unit) = prev_unit {
-                if prev_unit <= unit {
-                    return Err(err!(
-                        "found value {value:?} with unit {unit} \
-                         after unit {prev_unit}, but units must be \
-                         written from largest to smallest \
-                         (and they can't be repeated)",
-                        unit = unit.singular(),
-                        prev_unit = prev_unit.singular(),
-                    ));
-                }
-            }
-            prev_unit = Some(unit);
-
-            if let Some(fraction) = fraction {
-                span = fractional_time_to_span(unit, value, fraction, span)?;
-                // Once we see a fraction, we are done. We don't permit parsing
-                // any more units. That is, a fraction can only occur on the
-                // lowest unit of time.
-                break;
-            } else {
-                span = set_span_unit_value(unit, value, span)?;
-            }
-
-            // Eat any optional whitespace after the designator (or comma) and
-            // before the next unit value. But if we don't see a unit value,
-            // we don't eat the whitespace.
-            let after_whitespace = self.parse_optional_whitespace(input).input;
-            let parsed = self.parse_unit_value(after_whitespace)?;
-            value = match parsed.value {
-                None => break,
-                Some(value) => value,
-            };
-            input = parsed.input;
-            parsed_any_after_comma = true;
-        }
-        if !parsed_any_after_comma {
-            return Err(err!(
-                "found comma at the end of duration, \
-                 but a comma indicates at least one more \
-                 unit follows and none were found after \
-                 {prev_unit}",
-                // OK because parsed_any_after_comma can only
-                // be false when prev_unit is set.
-                prev_unit = prev_unit.unwrap().plural(),
-            ));
-        }
-        Ok(Parsed { value: span, input })
-    }
-
-    #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn parse_units_to_duration<'i>(
-        &self,
-        mut input: &'i [u8],
-        first_unit_value: i64,
-    ) -> Result<Parsed<'i, SignedDuration>, Error> {
-        let mut parsed_any_after_comma = true;
-        let mut prev_unit: Option<Unit> = None;
-        let mut value = first_unit_value;
-        let mut sdur = SignedDuration::ZERO;
-        loop {
-            let parsed = self.parse_hms_maybe(input, value)?;
-            input = parsed.input;
-            if let Some(hms) = parsed.value {
-                if let Some(prev_unit) = prev_unit {
-                    if prev_unit <= Unit::Hour {
-                        return Err(err!(
-                            "found 'HH:MM:SS' after unit {prev_unit}, \
-                             but 'HH:MM:SS' can only appear after \
-                             years, months, weeks or days",
-                            prev_unit = prev_unit.singular(),
-                        ));
-                    }
-                }
-                sdur = set_duration_unit_value(
-                    Unit::Hour,
+                builder.set_hms(
                     hms.hour,
-                    sdur,
-                    false,
-                )?;
-                sdur = set_duration_unit_value(
-                    Unit::Minute,
                     hms.minute,
-                    sdur,
-                    false,
+                    hms.second,
+                    hms.fraction,
                 )?;
-                sdur = if let Some(fraction) = hms.fraction {
-                    fractional_time_to_duration(
-                        Unit::Second,
-                        hms.second,
-                        fraction,
-                        sdur,
-                        false,
-                    )?
-                } else {
-                    set_duration_unit_value(
-                        Unit::Second,
-                        hms.second,
-                        sdur,
-                        false,
-                    )?
-                };
                 break;
             }
 
@@ -538,30 +384,13 @@ impl SpanParser {
                 parsed_any_after_comma = false;
             }
 
-            if let Some(prev_unit) = prev_unit {
-                if prev_unit <= unit {
-                    return Err(err!(
-                        "found value {value:?} with unit {unit} \
-                         after unit {prev_unit}, but units must be \
-                         written from largest to smallest \
-                         (and they can't be repeated)",
-                        unit = unit.singular(),
-                        prev_unit = prev_unit.singular(),
-                    ));
-                }
-            }
-            prev_unit = Some(unit);
-
+            builder.set_unit_value(unit, value)?;
             if let Some(fraction) = fraction {
-                sdur = fractional_time_to_duration(
-                    unit, value, fraction, sdur, false,
-                )?;
+                builder.set_fraction(fraction)?;
                 // Once we see a fraction, we are done. We don't permit parsing
                 // any more units. That is, a fraction can only occur on the
                 // lowest unit of time.
                 break;
-            } else {
-                sdur = set_duration_unit_value(unit, value, sdur, false)?;
             }
 
             // Eat any optional whitespace after the designator (or comma) and
@@ -580,14 +409,10 @@ impl SpanParser {
             return Err(err!(
                 "found comma at the end of duration, \
                  but a comma indicates at least one more \
-                 unit follows and none were found after \
-                 {prev_unit}",
-                // OK because parsed_any_after_comma can only
-                // be false when prev_unit is set.
-                prev_unit = prev_unit.unwrap().plural(),
+                 unit follows",
             ));
         }
-        Ok(Parsed { value: sdur, input })
+        Ok(Parsed { value: builder, input })
     }
 
     /// This possibly parses a `HH:MM:SS[.fraction]`.
@@ -599,7 +424,7 @@ impl SpanParser {
     fn parse_hms_maybe<'i>(
         &self,
         input: &'i [u8],
-        hour: i64,
+        hour: u64,
     ) -> Result<Parsed<'i, Option<HMS>>, Error> {
         if !input.first().map_or(false, |&b| b == b':') {
             return Ok(Parsed { input, value: None });
@@ -621,7 +446,7 @@ impl SpanParser {
     fn parse_hms<'i>(
         &self,
         input: &'i [u8],
-        hour: i64,
+        hour: u64,
     ) -> Result<Parsed<'i, HMS>, Error> {
         let Parsed { input, value } = self.parse_unit_value(input)?;
         let Some(minute) = value else {
@@ -663,55 +488,50 @@ impl SpanParser {
     ///
     /// Note that this is safe to call on untrusted input. It will not attempt
     /// to consume more input than could possibly fit into a parsed integer.
+    ///
+    /// Since this returns a `u64`, it is possible that an integer that cannot
+    /// fit into an `i64` is returned. Callers should handle this. (Indeed,
+    /// `DurationUnits` handles this case.)
     #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_unit_value<'i>(
         &self,
         mut input: &'i [u8],
-    ) -> Result<Parsed<'i, Option<i64>>, Error> {
+    ) -> Result<Parsed<'i, Option<u64>>, Error> {
         // Discovered via `i64::MAX.to_string().len()`.
         const MAX_I64_DIGITS: usize = 19;
 
-        let mut digit_count = 0;
-        let mut n: i64 = 0;
-        while digit_count <= MAX_I64_DIGITS
-            && input.get(digit_count).map_or(false, u8::is_ascii_digit)
-        {
-            let byte = input[digit_count];
-            digit_count += 1;
+        // This is mostly manually inlined from `util::parse::i64`.
+        // Namely, `parse::i64` requires knowing all of the
+        // digits up front. But we don't really know that here.
+        // So as we parse the digits, we also accumulate them
+        // into an integer. This avoids a second pass. (I guess
+        // `util::parse::i64` could be better designed? Meh.)
+        //
+        // Note though that we parse into a `u64` since that's
+        // what our duration components want.
 
-            // This part is manually inlined from `util::parse::i64`.
-            // Namely, `parse::i64` requires knowing all of the
-            // digits up front. But we don't really know that here.
-            // So as we parse the digits, we also accumulate them
-            // into an integer. This avoids a second pass. (I guess
-            // `util::parse::i64` could be better designed? Meh.)
-            let digit = match byte.checked_sub(b'0') {
-                None => {
-                    return Err(err!(
-                        "invalid digit, expected 0-9 but got {}",
-                        escape::Byte(byte),
-                    ));
-                }
-                Some(digit) if digit > 9 => {
-                    return Err(err!(
-                        "invalid digit, expected 0-9 but got {}",
-                        escape::Byte(byte),
-                    ))
-                }
-                Some(digit) => {
-                    debug_assert!((0..=9).contains(&digit));
-                    i64::from(digit)
-                }
-            };
+        let mut digit_count = 0;
+        let mut n: u64 = 0;
+        while digit_count <= MAX_I64_DIGITS {
+            let Some(&byte) = input.get(digit_count) else { break };
+            if !byte.is_ascii_digit() {
+                break;
+            }
+            digit_count += 1;
+            // OK because we confirmed `byte` is an ASCII digit.
+            let digit = u64::from(byte - b'0');
             n = n
                 .checked_mul(10)
                 .and_then(|n| n.checked_add(digit))
-                .ok_or_else(|| {
-                    err!(
-                        "number '{}' too big to parse into 64-bit integer",
-                        escape::Bytes(&input[..digit_count]),
-                    )
-                })?;
+                .ok_or_else(
+                    #[inline(never)]
+                    || {
+                        err!(
+                            "number `{}` too big to parse into 64-bit integer",
+                            escape::Bytes(&input[..digit_count]),
+                        )
+                    },
+                )?;
         }
         if digit_count == 0 {
             return Ok(Parsed { value: None, input });
@@ -759,14 +579,14 @@ impl SpanParser {
     fn parse_prefix_sign<'i>(
         &self,
         input: &'i [u8],
-    ) -> Parsed<'i, Option<t::Sign>> {
+    ) -> Parsed<'i, Option<Sign>> {
         let Some(sign) = input.first().copied() else {
             return Parsed { value: None, input };
         };
         let sign = if sign == b'+' {
-            t::Sign::N::<1>()
+            Sign::Positive
         } else if sign == b'-' {
-            t::Sign::N::<-1>()
+            Sign::Negative
         } else {
             return Parsed { value: None, input };
         };
@@ -789,17 +609,17 @@ impl SpanParser {
     #[inline(never)]
     fn parse_suffix_sign<'i>(
         &self,
-        prefix_sign: Option<t::Sign>,
+        prefix_sign: Option<Sign>,
         mut input: &'i [u8],
-    ) -> Result<Parsed<'i, t::Sign>, Error> {
+    ) -> Result<Parsed<'i, Sign>, Error> {
         if !input.first().map_or(false, is_whitespace) {
-            let sign = prefix_sign.unwrap_or(t::Sign::N::<1>());
+            let sign = prefix_sign.unwrap_or(Sign::Positive);
             return Ok(Parsed { value: sign, input });
         }
         // Eat any additional whitespace we find before looking for 'ago'.
         input = self.parse_optional_whitespace(&input[1..]).input;
         let (suffix_sign, input) = if input.starts_with(b"ago") {
-            (Some(t::Sign::N::<-1>()), &input[3..])
+            (Some(Sign::Negative), &input[3..])
         } else {
             (None, input)
         };
@@ -812,7 +632,7 @@ impl SpanParser {
             }
             (Some(sign), None) => sign,
             (None, Some(sign)) => sign,
-            (None, None) => t::Sign::N::<1>(),
+            (None, None) => Sign::Positive,
         };
         Ok(Parsed { value: sign, input })
     }
@@ -865,10 +685,10 @@ impl SpanParser {
 /// A type that represents the parsed components of `HH:MM:SS[.fraction]`.
 #[derive(Debug)]
 struct HMS {
-    hour: i64,
-    minute: i64,
-    second: i64,
-    fraction: Option<i32>,
+    hour: u64,
+    minute: u64,
+    second: u64,
+    fraction: Option<u32>,
 }
 
 /// Returns true if the byte is ASCII whitespace.
@@ -992,7 +812,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("2 months, "),
-            @r###"failed to parse "2 months, " in the "friendly" format: found comma at the end of duration, but a comma indicates at least one more unit follows and none were found after months"###,
+            @r#"failed to parse "2 months, " in the "friendly" format: found comma at the end of duration, but a comma indicates at least one more unit follows"#,
         );
         insta::assert_snapshot!(
             p("2 months ,"),
@@ -1064,7 +884,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("19999 years ago"),
-            @r###"failed to parse "19999 years ago" in the "friendly" format: failed to set value 19999 as year unit on span: parameter 'years' with value 19999 is not in the required range of -19998..=19998"###,
+            @r#"failed to parse "19999 years ago" in the "friendly" format: failed to set value -19999 as year unit on span: parameter 'years' with value -19999 is not in the required range of -19998..=19998"#,
         );
 
         insta::assert_snapshot!(
@@ -1073,7 +893,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("239977 months ago"),
-            @r###"failed to parse "239977 months ago" in the "friendly" format: failed to set value 239977 as month unit on span: parameter 'months' with value 239977 is not in the required range of -239976..=239976"###,
+            @r#"failed to parse "239977 months ago" in the "friendly" format: failed to set value -239977 as month unit on span: parameter 'months' with value -239977 is not in the required range of -239976..=239976"#,
         );
 
         insta::assert_snapshot!(
@@ -1082,7 +902,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("1043498 weeks ago"),
-            @r###"failed to parse "1043498 weeks ago" in the "friendly" format: failed to set value 1043498 as week unit on span: parameter 'weeks' with value 1043498 is not in the required range of -1043497..=1043497"###,
+            @r#"failed to parse "1043498 weeks ago" in the "friendly" format: failed to set value -1043498 as week unit on span: parameter 'weeks' with value -1043498 is not in the required range of -1043497..=1043497"#,
         );
 
         insta::assert_snapshot!(
@@ -1091,16 +911,16 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("7304485 days ago"),
-            @r###"failed to parse "7304485 days ago" in the "friendly" format: failed to set value 7304485 as day unit on span: parameter 'days' with value 7304485 is not in the required range of -7304484..=7304484"###,
+            @r#"failed to parse "7304485 days ago" in the "friendly" format: failed to set value -7304485 as day unit on span: parameter 'days' with value -7304485 is not in the required range of -7304484..=7304484"#,
         );
 
         insta::assert_snapshot!(
             p("9223372036854775808 nanoseconds"),
-            @r###"failed to parse "9223372036854775808 nanoseconds" in the "friendly" format: number '9223372036854775808' too big to parse into 64-bit integer"###,
+            @r#"failed to parse "9223372036854775808 nanoseconds" in the "friendly" format: `9223372036854775808` nanoseconds is too big (or small) to fit into a signed 64-bit integer"#,
         );
         insta::assert_snapshot!(
             p("9223372036854775808 nanoseconds ago"),
-            @r###"failed to parse "9223372036854775808 nanoseconds ago" in the "friendly" format: number '9223372036854775808' too big to parse into 64-bit integer"###,
+            @r#"failed to parse "9223372036854775808 nanoseconds ago" in the "friendly" format: fractional nanosecond units are not allowed"#,
         );
     }
 
@@ -1110,11 +930,11 @@ mod tests {
 
         insta::assert_snapshot!(
             p("1.5 years"),
-            @r###"failed to parse "1.5 years" in the "friendly" format: fractional year units are not allowed"###,
+            @r#"failed to parse "1.5 years" in the "friendly" format: fractional years are not supported"#,
         );
         insta::assert_snapshot!(
             p("1.5 nanos"),
-            @r###"failed to parse "1.5 nanos" in the "friendly" format: fractional nanosecond units are not allowed"###,
+            @r#"failed to parse "1.5 nanos" in the "friendly" format: fractional nanoseconds are not supported"#,
         );
     }
 
@@ -1136,7 +956,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("2 hours, 05:06:07"),
-            @r###"failed to parse "2 hours, 05:06:07" in the "friendly" format: found 'HH:MM:SS' after unit hour, but 'HH:MM:SS' can only appear after years, months, weeks or days"###,
+            @r#"failed to parse "2 hours, 05:06:07" in the "friendly" format: found `HH:MM:SS` after unit hour, but `HH:MM:SS` can only appear after years, months, weeks or days"#,
         );
     }
 
@@ -1160,19 +980,11 @@ mod tests {
         );
         insta::assert_snapshot!(
             perr("9223372036854775808s"),
-            @r###"failed to parse "9223372036854775808s" in the "friendly" format: number '9223372036854775808' too big to parse into 64-bit integer"###,
+            @r#"failed to parse "9223372036854775808s" in the "friendly" format: `9223372036854775808` seconds is too big (or small) to fit into a signed 64-bit integer"#,
         );
-        // This is kinda bush league, since -9223372036854775808 is the
-        // minimum i64 value. But we fail to parse it because its absolute
-        // value does not fit into an i64. Normally this would be bad juju
-        // because it could imply that `SignedDuration::MIN` could serialize
-        // successfully but then fail to deserialize. But the friendly printer
-        // will try to use larger units before going to smaller units. So
-        // `-9223372036854775808s` will never actually be emitted by the
-        // friendly printer.
         insta::assert_snapshot!(
-            perr("-9223372036854775808s"),
-            @r###"failed to parse "-9223372036854775808s" in the "friendly" format: number '9223372036854775808' too big to parse into 64-bit integer"###,
+            p("-9223372036854775808s"),
+            @"-PT2562047788015215H30M8S",
         );
     }
 
@@ -1232,25 +1044,25 @@ mod tests {
         insta::assert_snapshot!(p("-2562047788015215hours"), @"-PT2562047788015215H");
         insta::assert_snapshot!(
             pe("2562047788015216hrs"),
-            @r###"failed to parse "2562047788015216hrs" in the "friendly" format: converting 2562047788015216 hours to seconds overflows i64"###,
+            @r#"failed to parse "2562047788015216hrs" in the "friendly" format: accumulated `SignedDuration` of `0s` overflowed when adding 2562047788015216 of unit hour"#,
         );
 
         insta::assert_snapshot!(p("153722867280912930minutes"), @"PT2562047788015215H30M");
         insta::assert_snapshot!(p("153722867280912930minutes ago"), @"-PT2562047788015215H30M");
         insta::assert_snapshot!(
             pe("153722867280912931mins"),
-            @r#"failed to parse "153722867280912931mins" in the "friendly" format: converting 153722867280912931 minutes to seconds overflows i64"#,
+            @r#"failed to parse "153722867280912931mins" in the "friendly" format: accumulated `SignedDuration` of `0s` overflowed when adding 153722867280912931 of unit minute"#,
         );
 
         insta::assert_snapshot!(p("9223372036854775807seconds"), @"PT2562047788015215H30M7S");
         insta::assert_snapshot!(p("-9223372036854775807seconds"), @"-PT2562047788015215H30M7S");
         insta::assert_snapshot!(
             pe("9223372036854775808s"),
-            @r###"failed to parse "9223372036854775808s" in the "friendly" format: number '9223372036854775808' too big to parse into 64-bit integer"###,
+            @r#"failed to parse "9223372036854775808s" in the "friendly" format: `9223372036854775808` seconds is too big (or small) to fit into a signed 64-bit integer"#,
         );
         insta::assert_snapshot!(
-            pe("-9223372036854775808s"),
-            @r###"failed to parse "-9223372036854775808s" in the "friendly" format: number '9223372036854775808' too big to parse into 64-bit integer"###,
+            p("-9223372036854775808s"),
+            @"-PT2562047788015215H30M8S",
         );
     }
 
@@ -1288,7 +1100,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("2 minutes, "),
-            @r###"failed to parse "2 minutes, " in the "friendly" format: found comma at the end of duration, but a comma indicates at least one more unit follows and none were found after minutes"###,
+            @r#"failed to parse "2 minutes, " in the "friendly" format: found comma at the end of duration, but a comma indicates at least one more unit follows"#,
         );
         insta::assert_snapshot!(
             p("2 minutes ,"),
@@ -1327,7 +1139,7 @@ mod tests {
             // Unlike `Span`, this just overflows because it can't be parsed
             // as a 64-bit integer.
             pe("9223372036854775808 micros"),
-            @r###"failed to parse "9223372036854775808 micros" in the "friendly" format: number '9223372036854775808' too big to parse into 64-bit integer"###,
+            @r#"failed to parse "9223372036854775808 micros" in the "friendly" format: `9223372036854775808` microseconds is too big (or small) to fit into a signed 64-bit integer"#,
         );
         // one fewer is okay
         insta::assert_snapshot!(
@@ -1342,7 +1154,7 @@ mod tests {
 
         insta::assert_snapshot!(
             p("1.5 nanos"),
-            @r###"failed to parse "1.5 nanos" in the "friendly" format: fractional nanosecond units are not allowed"###,
+            @r#"failed to parse "1.5 nanos" in the "friendly" format: fractional nanoseconds are not supported"#,
         );
     }
 
@@ -1364,7 +1176,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("2 hours, 05:06:07"),
-            @r###"failed to parse "2 hours, 05:06:07" in the "friendly" format: found 'HH:MM:SS' after unit hour, but 'HH:MM:SS' can only appear after years, months, weeks or days"###,
+            @r#"failed to parse "2 hours, 05:06:07" in the "friendly" format: found `HH:MM:SS` after unit hour, but `HH:MM:SS` can only appear after years, months, weeks or days"#,
         );
     }
 }

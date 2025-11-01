@@ -4172,6 +4172,24 @@ impl Unit {
         }
     }
 
+    /*
+    /// Returns the next smallest unit, if one exists.
+    pub(crate) fn prev(&self) -> Option<Unit> {
+        match *self {
+            Unit::Year => Some(Unit::Month),
+            Unit::Month => Some(Unit::Week),
+            Unit::Week => Some(Unit::Day),
+            Unit::Day => Some(Unit::Hour),
+            Unit::Hour => Some(Unit::Minute),
+            Unit::Minute => Some(Unit::Second),
+            Unit::Second => Some(Unit::Millisecond),
+            Unit::Millisecond => Some(Unit::Microsecond),
+            Unit::Microsecond => Some(Unit::Nanosecond),
+            Unit::Nanosecond => None,
+        }
+    }
+    */
+
     /// Returns the number of nanoseconds in this unit as a 128-bit integer.
     ///
     /// # Panics
@@ -4248,6 +4266,13 @@ impl Unit {
             Unit::Microsecond => "µs",
             Unit::Nanosecond => "ns",
         }
+    }
+
+    /// Return this unit as a `usize`.
+    ///
+    /// This is use `unit as usize`.
+    pub(crate) fn as_usize(&self) -> usize {
+        *self as usize
     }
 
     /// The inverse of `unit as usize`.

@@ -5,11 +5,7 @@ use crate::{
         offset::{self, ParsedOffset},
         rfc9557::{self, ParsedAnnotations},
         temporal::Pieces,
-        util::{
-            fractional_time_to_duration, fractional_time_to_span,
-            parse_temporal_fraction, set_duration_unit_value,
-            set_span_unit_value,
-        },
+        util::{parse_temporal_fraction, DurationUnits},
         Parsed,
     },
     span::Span,
@@ -18,6 +14,7 @@ use crate::{
         TimeZoneDatabase,
     },
     util::{
+        c::Sign,
         escape, parse,
         t::{self, C},
     },
@@ -807,6 +804,10 @@ impl DateTimeParser {
         &self,
         input: &'i [u8],
     ) -> Result<Parsed<'i, t::Year>, Error> {
+        // TODO: We could probably decrease the codegen for this function,
+        // or at least make it tighter, by putting the code for signed years
+        // behind an unlineable function.
+
         let Parsed { value: sign, input } = self.parse_year_sign(input);
         if let Some(sign) = sign {
             let (year, input) = parse::split(input, 6).ok_or_else(|| {
@@ -823,13 +824,13 @@ impl DateTimeParser {
             })?;
             let year =
                 t::Year::try_new("year", year).context("year is not valid")?;
-            if year == C(0) && sign < C(0) {
+            if year == C(0) && sign.is_negative() {
                 return Err(err!(
                     "year zero must be written without a sign or a \
                      positive sign, but not a negative sign",
                 ));
             }
-            Ok(Parsed { value: year * sign, input })
+            Ok(Parsed { value: year * sign.as_ranged_integer(), input })
         } else {
             let (year, input) = parse::split(input, 4).ok_or_else(|| {
                 err!(
@@ -1094,14 +1095,14 @@ impl DateTimeParser {
     fn parse_year_sign<'i>(
         &self,
         mut input: &'i [u8],
-    ) -> Parsed<'i, Option<t::Sign>> {
+    ) -> Parsed<'i, Option<Sign>> {
         let Some(sign) = input.get(0).copied() else {
             return Parsed { value: None, input };
         };
         let sign = if sign == b'+' {
-            t::Sign::N::<1>()
+            Sign::Positive
         } else if sign == b'-' {
-            t::Sign::N::<-1>()
+            Sign::Negative
         } else {
             return Parsed { value: None, input };
         };
@@ -1155,70 +1156,79 @@ impl SpanParser {
         let original = escape::Bytes(input);
         let Parsed { value: sign, input } = self.parse_sign(input);
         let Parsed { input, .. } = self.parse_duration_designator(input)?;
-        let Parsed { value: (mut span, parsed_any_date), input } =
-            self.parse_date_units(input, Span::new())?;
+
+        let mut builder = DurationUnits::default();
+        let Parsed { input, .. } =
+            self.parse_duration_date_units(input, &mut builder)?;
         let Parsed { value: has_time, mut input } =
             self.parse_time_designator(input);
         if has_time {
-            let parsed = self.parse_time_units(input, span)?;
+            let parsed =
+                self.parse_duration_time_units(input, &mut builder)?;
             input = parsed.input;
 
-            let (time_span, parsed_any_time) = parsed.value;
-            if !parsed_any_time {
+            if builder.get_min().map_or(true, |min| min > Unit::Hour) {
                 return Err(err!(
                     "found a time designator (T or t) in an ISO 8601 \
                      duration string in {original:?}, but did not find \
                      any time units",
                 ));
             }
-            span = time_span;
-        } else if !parsed_any_date {
-            return Err(err!(
-                "found the start of a ISO 8601 duration string \
-                 in {original:?}, but did not find any units",
-            ));
         }
-        if sign < C(0) {
-            span = span.negate();
-        }
+        builder.set_sign(sign);
+        let span = builder.to_span()?;
         Ok(Parsed { value: span, input })
     }
+
+    // BREADCRUMBS: Use `DurationUnits` in `parse_duration`.
+    //
+    // Then I think we can start cleaning up code (like parsing as `u64`)
+    // and making the `i64::MIN` test cases work.
+    //
+    // Then I think we can have a little fun optimizing.
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_duration<'i>(
         &self,
         input: &'i [u8],
     ) -> Result<Parsed<'i, SignedDuration>, Error> {
+        let original = escape::Bytes(input);
         let Parsed { value: sign, input } = self.parse_sign(input);
         let Parsed { input, .. } = self.parse_duration_designator(input)?;
+
         let Parsed { value: has_time, input } =
             self.parse_time_designator(input);
         if !has_time {
             return Err(err!(
-                "parsing ISO 8601 duration into SignedDuration requires \
+                "parsing ISO 8601 duration into a `SignedDuration` requires \
                  that the duration contain a time component and no \
                  components of days or greater",
             ));
         }
-        let Parsed { value: dur, input } =
-            self.parse_time_units_duration(input, sign == C(-1))?;
-        Ok(Parsed { value: dur, input })
+
+        let mut builder = DurationUnits::default();
+        let Parsed { value: (), input } =
+            self.parse_duration_time_units(input, &mut builder)?;
+        if builder.get_min().map_or(true, |min| min > Unit::Hour) {
+            return Err(err!(
+                "found a time designator (T or t) in an ISO 8601 \
+                 duration string in {original:?}, but did not find \
+                 any time units",
+            ));
+        }
+        builder.set_sign(sign);
+        let sdur = builder.to_duration()?;
+        Ok(Parsed { value: sdur, input })
     }
 
-    /// Parses consecutive date units from an ISO 8601 duration string into the
-    /// span given.
-    ///
-    /// If 1 or more units were found, then `true` is also returned. Otherwise,
-    /// `false` indicates that no units were parsed. (Which the caller may want
-    /// to treat as an error.)
+    /// Parses consecutive units from an ISO 8601 duration string into the
+    /// `DurationUnits` given.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn parse_date_units<'i>(
+    fn parse_duration_date_units<'i>(
         &self,
         mut input: &'i [u8],
-        mut span: Span,
-    ) -> Result<Parsed<'i, (Span, bool)>, Error> {
-        let mut parsed_any = false;
-        let mut prev_unit: Option<Unit> = None;
+        builder: &mut DurationUnits,
+    ) -> Result<Parsed<'i, ()>, Error> {
         loop {
             let parsed = self.parse_unit_value(input)?;
             input = parsed.input;
@@ -1228,39 +1238,19 @@ impl SpanParser {
             input = parsed.input;
             let unit = parsed.value;
 
-            if let Some(prev_unit) = prev_unit {
-                if prev_unit <= unit {
-                    return Err(err!(
-                        "found value {value:?} with unit {unit} \
-                         after unit {prev_unit}, but units must be \
-                         written from largest to smallest \
-                         (and they can't be repeated)",
-                        unit = unit.singular(),
-                        prev_unit = prev_unit.singular(),
-                    ));
-                }
-            }
-            prev_unit = Some(unit);
-            span = set_span_unit_value(unit, value, span)?;
-            parsed_any = true;
+            builder.set_unit_value(unit, value as u64)?;
         }
-        Ok(Parsed { value: (span, parsed_any), input })
+        Ok(Parsed { value: (), input })
     }
 
     /// Parses consecutive time units from an ISO 8601 duration string into the
-    /// span given.
-    ///
-    /// If 1 or more units were found, then `true` is also returned. Otherwise,
-    /// `false` indicates that no units were parsed. (Which the caller may want
-    /// to treat as an error.)
+    /// `DurationUnits` given.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn parse_time_units<'i>(
+    fn parse_duration_time_units<'i>(
         &self,
         mut input: &'i [u8],
-        mut span: Span,
-    ) -> Result<Parsed<'i, (Span, bool)>, Error> {
-        let mut parsed_any = false;
-        let mut prev_unit: Option<Unit> = None;
+        builder: &mut DurationUnits,
+    ) -> Result<Parsed<'i, ()>, Error> {
         loop {
             let parsed = self.parse_unit_value(input)?;
             input = parsed.input;
@@ -1274,96 +1264,16 @@ impl SpanParser {
             input = parsed.input;
             let unit = parsed.value;
 
-            if let Some(prev_unit) = prev_unit {
-                if prev_unit <= unit {
-                    return Err(err!(
-                        "found value {value:?} with unit {unit} \
-                         after unit {prev_unit}, but units must be \
-                         written from largest to smallest \
-                         (and they can't be repeated)",
-                        unit = unit.singular(),
-                        prev_unit = prev_unit.singular(),
-                    ));
-                }
-            }
-            prev_unit = Some(unit);
-            parsed_any = true;
-
+            builder.set_unit_value(unit, value as u64)?;
             if let Some(fraction) = fraction {
-                span = fractional_time_to_span(unit, value, fraction, span)?;
+                builder.set_fraction(fraction)?;
                 // Once we see a fraction, we are done. We don't permit parsing
                 // any more units. That is, a fraction can only occur on the
                 // lowest unit of time.
                 break;
-            } else {
-                span = set_span_unit_value(unit, value, span)?;
             }
         }
-        Ok(Parsed { value: (span, parsed_any), input })
-    }
-
-    /// Parses consecutive time units from an ISO 8601 duration string into
-    /// a Jiff signed duration.
-    ///
-    /// If no time units are found, then this returns an error.
-    #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn parse_time_units_duration<'i>(
-        &self,
-        mut input: &'i [u8],
-        negative: bool,
-    ) -> Result<Parsed<'i, SignedDuration>, Error> {
-        let mut parsed_any = false;
-        let mut prev_unit: Option<Unit> = None;
-        let mut sdur = SignedDuration::ZERO;
-
-        loop {
-            let parsed = self.parse_unit_value(input)?;
-            input = parsed.input;
-            let Some(value) = parsed.value else { break };
-
-            let parsed = parse_temporal_fraction(input)?;
-            input = parsed.input;
-            let fraction = parsed.value;
-
-            let parsed = self.parse_unit_time_designator(input)?;
-            input = parsed.input;
-            let unit = parsed.value;
-
-            if let Some(prev_unit) = prev_unit {
-                if prev_unit <= unit {
-                    return Err(err!(
-                        "found value {value:?} with unit {unit} \
-                         after unit {prev_unit}, but units must be \
-                         written from largest to smallest \
-                         (and they can't be repeated)",
-                        unit = unit.singular(),
-                        prev_unit = prev_unit.singular(),
-                    ));
-                }
-            }
-            prev_unit = Some(unit);
-            parsed_any = true;
-
-            if let Some(fraction) = fraction {
-                sdur = fractional_time_to_duration(
-                    unit, value, fraction, sdur, negative,
-                )?;
-                // Once we see a fraction, we are done. We don't permit parsing
-                // any more units. That is, a fraction can only occur on the
-                // lowest unit of time.
-                break;
-            } else {
-                sdur = set_duration_unit_value(unit, value, sdur, negative)?;
-            }
-        }
-        if !parsed_any {
-            return Err(err!(
-                "expected at least one unit of time (hours, minutes or \
-                 seconds) in ISO 8601 duration when parsing into a \
-                 `SignedDuration`",
-            ));
-        }
-        Ok(Parsed { value: sdur, input })
+        Ok(Parsed { value: (), input })
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
@@ -1486,16 +1396,16 @@ impl SpanParser {
     // NOTE: Like with other things with signs, we don't support the Unicode
     // <MINUS> sign. Just ASCII.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn parse_sign<'i>(&self, input: &'i [u8]) -> Parsed<'i, t::Sign> {
+    fn parse_sign<'i>(&self, input: &'i [u8]) -> Parsed<'i, Sign> {
         let Some(sign) = input.get(0).copied() else {
-            return Parsed { value: t::Sign::N::<1>(), input };
+            return Parsed { value: Sign::Positive, input };
         };
         let sign = if sign == b'+' {
-            t::Sign::N::<1>()
+            Sign::Positive
         } else if sign == b'-' {
-            t::Sign::N::<-1>()
+            Sign::Negative
         } else {
-            return Parsed { value: t::Sign::N::<1>(), input };
+            return Parsed { value: Sign::Positive, input };
         };
         Parsed { value: sign, input: &input[1..] }
     }
@@ -1604,7 +1514,7 @@ mod tests {
 
         insta::assert_snapshot!(
             p(b"P0d"),
-            @"failed to parse ISO 8601 duration string into `SignedDuration`: parsing ISO 8601 duration into SignedDuration requires that the duration contain a time component and no components of days or greater",
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: parsing ISO 8601 duration into a `SignedDuration` requires that the duration contain a time component and no components of days or greater",
         );
         insta::assert_snapshot!(
             p(b"PT0d"),
@@ -1612,7 +1522,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p(b"P0dT1s"),
-            @"failed to parse ISO 8601 duration string into `SignedDuration`: parsing ISO 8601 duration into SignedDuration requires that the duration contain a time component and no components of days or greater",
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: parsing ISO 8601 duration into a `SignedDuration` requires that the duration contain a time component and no components of days or greater",
         );
 
         insta::assert_snapshot!(
@@ -1621,15 +1531,15 @@ mod tests {
         );
         insta::assert_snapshot!(
             p(b"P"),
-            @"failed to parse ISO 8601 duration string into `SignedDuration`: parsing ISO 8601 duration into SignedDuration requires that the duration contain a time component and no components of days or greater",
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: parsing ISO 8601 duration into a `SignedDuration` requires that the duration contain a time component and no components of days or greater",
         );
         insta::assert_snapshot!(
             p(b"PT"),
-            @"failed to parse ISO 8601 duration string into `SignedDuration`: expected at least one unit of time (hours, minutes or seconds) in ISO 8601 duration when parsing into a `SignedDuration`",
+            @r#"failed to parse ISO 8601 duration string into `SignedDuration`: found a time designator (T or t) in an ISO 8601 duration string in "PT", but did not find any time units"#,
         );
         insta::assert_snapshot!(
             p(b"PTs"),
-            @"failed to parse ISO 8601 duration string into `SignedDuration`: expected at least one unit of time (hours, minutes or seconds) in ISO 8601 duration when parsing into a `SignedDuration`",
+            @r#"failed to parse ISO 8601 duration string into `SignedDuration`: found a time designator (T or t) in an ISO 8601 duration string in "PTs", but did not find any time units"#,
         );
 
         insta::assert_snapshot!(
@@ -1665,7 +1575,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p(b"PT2562047788015215.6h"),
-            @"failed to parse ISO 8601 duration string into `SignedDuration`: accumulated `SignedDuration` of `2562047788015215h` overflowed when adding `36m` (from fractional hour units)",
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: accumulated `SignedDuration` of `2562047788015215h` overflowed when adding 0.600000000 of unit hour",
         );
     }
 

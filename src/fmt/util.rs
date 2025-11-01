@@ -1,7 +1,7 @@
 use crate::{
     error::{err, ErrorContext},
     fmt::Parsed,
-    util::{escape, parse, t},
+    util::{c::Sign, escape, parse, t},
     Error, SignedDuration, Span, Unit,
 };
 
@@ -328,6 +328,419 @@ impl Fractional {
     }
 }
 
+/// A container for holding a partially parsed duration.
+///
+/// This is used for parsing into `Span`, `SignedDuration` and (hopefully
+/// soon) `std::time::Duration`. It's _also_ used for both the ISO 8601
+/// duration and "friendly" format.
+///
+/// This replaced a significant chunk of code that was bespoke to each
+/// combination of duration type _and_ format.
+///
+/// The idea behind it is that we parse each duration component as an unsigned
+/// 64-bit integer and keep track of the sign separately. This is a critical
+/// aspect that was motivated by being able to roundtrip all legal values of
+/// a 96-bit signed integer number of nanoseconds (i.e., `SignedDuration`).
+/// In particular, if we used `i64` to represent each component, then it
+/// makes it much more difficult to parse, e.g., `9223372036854775808
+/// seconds ago`. Namely, `9223372036854775808` is not a valid `i64` but
+/// `-9223372036854775808` is. Notably, the sign is indicated by a suffix,
+/// so we don't know it's negative when parsing the integer itself. So we
+/// represent all components as their unsigned absolute value and apply the
+/// sign at the end.
+///
+/// This also centralizes a lot of thorny duration math and opens up the
+/// opportunity for tighter optimization.
+#[derive(Debug, Default)]
+pub(crate) struct DurationUnits {
+    /// The parsed unit values in descending order. That is, nanoseconds are
+    /// at index 0 while years are at index 9.
+    values: [u64; 10],
+    /// Any fractional component parsed. The fraction is necessarily a fraction
+    /// of the minimum unit if present.
+    ///
+    /// TODO: Make this use a `u32` since we want the caller to pass in
+    /// a value in the range `0..=999_999_999`.
+    fraction: Option<u32>,
+    /// The sign of the duration. This may be set at any time.
+    sign: Option<Sign>,
+    /// The smallest unit value that was explicitly set.
+    min: Option<Unit>,
+    /// The largest unit value that was explicitly set.
+    max: Option<Unit>,
+}
+
+impl DurationUnits {
+    /// Set the duration component value for the given unit.
+    ///
+    /// The value here is always unsigned. To deal with negative values, set
+    /// the sign independently. It will be accounted for when using one of this
+    /// type's methods for converting to a concrete duration type.
+    ///
+    /// # Panics
+    ///
+    /// When this is called after `set_fraction`.
+    ///
+    /// # Errors
+    ///
+    /// Since this is meant to be used in service of duration parsing and all
+    /// duration parsing proceeds from largest to smallest units, this will
+    /// return an error if the given unit is bigger than or equal to any
+    /// previously set unit.
+    pub(crate) fn set_unit_value(
+        &mut self,
+        unit: Unit,
+        value: u64,
+    ) -> Result<(), Error> {
+        assert!(self.fraction.is_none());
+
+        if let Some(min) = self.min {
+            if min <= unit {
+                return Err(err!(
+                    "found value {value:?} with unit {unit} \
+                     after unit {prev_unit}, but units must be \
+                     written from largest to smallest \
+                     (and they can't be repeated)",
+                    unit = unit.singular(),
+                    prev_unit = min.singular(),
+                ));
+            }
+        }
+        // Given the above check, the given unit must be smaller than any we
+        // have seen so far.
+        self.min = Some(unit);
+        // The maximum unit is always the first unit set, since we can never
+        // see a unit bigger than it without an error occurring.
+        if self.max.is_none() {
+            self.max = Some(unit);
+        }
+        self.values[unit.as_usize()] = value;
+        Ok(())
+    }
+
+    /// A convenience routine for setting values parsed from an `HH:MM:SS`
+    /// format (including the fraction).
+    ///
+    /// # Errors
+    ///
+    /// This forwards errors from `DurationUnits::set_unit_value`. It will also
+    /// return an error is the minimum parsed unit (so far) is smaller than
+    /// days. (Since `HH:MM:SS` can only appear after units of years, months,
+    /// weeks or days.)
+    pub(crate) fn set_hms(
+        &mut self,
+        hours: u64,
+        minutes: u64,
+        seconds: u64,
+        fraction: Option<u32>,
+    ) -> Result<(), Error> {
+        if let Some(min) = self.min {
+            if min <= Unit::Hour {
+                return Err(err!(
+                    "found `HH:MM:SS` after unit {min}, \
+                             but `HH:MM:SS` can only appear after \
+                             years, months, weeks or days",
+                    min = min.singular(),
+                ));
+            }
+        }
+        self.set_unit_value(Unit::Hour, hours)?;
+        self.set_unit_value(Unit::Minute, minutes)?;
+        self.set_unit_value(Unit::Second, seconds)?;
+        if let Some(fraction) = fraction {
+            self.set_fraction(fraction)?;
+        }
+        Ok(())
+    }
+
+    /// Set the fractional value.
+    ///
+    /// This is always interpreted as a fraction of the minimal unit.
+    ///
+    /// Callers must ensure this is called after the last call to
+    /// `DurationUnits::set_unit_value`.
+    ///
+    /// # Panics
+    ///
+    /// When `fraction` is not in the range `0..=999_999_999`. Callers are
+    /// expected to uphold this invariant.
+    ///
+    /// # Errors
+    ///
+    /// This will return an error if the minimum unit is `Unit::Nanosecond`.
+    /// (Because fractional nanoseconds are not supported.) This will also
+    /// return an error if the minimum unit is bigger than `Unit::Hour`.
+    pub(crate) fn set_fraction(&mut self, fraction: u32) -> Result<(), Error> {
+        assert!(fraction <= 999_999_999);
+        if self.min == Some(Unit::Nanosecond) {
+            return Err(err!("fractional nanoseconds are not supported"));
+        }
+        if let Some(min) = self.min {
+            if min > Unit::Hour {
+                return Err(err!(
+                    "fractional {plural} are not supported",
+                    plural = min.plural()
+                ));
+            }
+        }
+        self.fraction = Some(fraction);
+        Ok(())
+    }
+
+    /// Set the sign associated with the components.
+    ///
+    /// The sign applies to the entire duration. There is no support for
+    /// having some components signed and some unsigned.
+    ///
+    /// If no sign is set, then it is assumed to be positive.
+    pub(crate) fn set_sign(&mut self, sign: Sign) {
+        self.sign = Some(sign);
+    }
+
+    /// Convert these duration components to a `Span`.
+    ///
+    /// # Errors
+    ///
+    /// If any individual unit exceeds the limits of a `Span`, or if the units
+    /// combine to exceed what can be represented by a `Span`, then this
+    /// returns an error.
+    ///
+    /// This also returns an error if no units were set.
+    pub(crate) fn to_span(&self) -> Result<Span, Error> {
+        let (min, _) = self.get_min_max_units()?;
+        let mut span = Span::new();
+
+        if self.values[Unit::Year.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Year)?;
+            span = set_span_value(Unit::Year, value, span)?;
+        }
+        if self.values[Unit::Month.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Month)?;
+            span = set_span_value(Unit::Month, value, span)?;
+        }
+        if self.values[Unit::Week.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Week)?;
+            span = set_span_value(Unit::Week, value, span)?;
+        }
+        if self.values[Unit::Day.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Day)?;
+            span = set_span_value(Unit::Day, value, span)?;
+        }
+        if self.values[Unit::Hour.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Hour)?;
+            span = set_span_value_fallback(Unit::Hour, value, span)?;
+        }
+        if self.values[Unit::Minute.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Minute)?;
+            span = set_span_value_fallback(Unit::Minute, value, span)?;
+        }
+        if self.values[Unit::Second.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Second)?;
+            span = set_span_value_fallback(Unit::Second, value, span)?;
+        }
+        if self.values[Unit::Millisecond.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Millisecond)?;
+            span = set_span_value_fallback(Unit::Millisecond, value, span)?;
+        }
+        if self.values[Unit::Microsecond.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Microsecond)?;
+            span = set_span_value_fallback(Unit::Microsecond, value, span)?;
+        }
+        if self.values[Unit::Nanosecond.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Nanosecond)?;
+            span = set_span_value_fallback(Unit::Nanosecond, value, span)?;
+        }
+
+        if let Some(fraction) = self.get_fraction()? {
+            let value = self.get_unit_value(min)?;
+            span = fractional_time_to_span(min, value, fraction, span)?;
+        }
+
+        Ok(span)
+    }
+
+    /// Convert these duration components to a `SignedDuration`.
+    ///
+    /// # Errors
+    ///
+    /// If the total number of nanoseconds represented by all units combined
+    /// exceeds what can bit in a 96-bit signed integer, then an error is
+    /// returned.
+    ///
+    /// An error is also returned if any calendar units (days or greater) were
+    /// set or if no units were set.
+    pub(crate) fn to_duration(&self) -> Result<SignedDuration, Error> {
+        let (min, max) = self.get_min_max_units()?;
+        if max > Unit::Hour {
+            return Err(err!(
+                "parsing {unit} units into a `SignedDuration` is not supported \
+                 (perhaps try parsing into a `Span` instead)",
+                unit = max.singular(),
+            ));
+        }
+
+        let mut sdur = SignedDuration::ZERO;
+        if self.values[Unit::Hour.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Hour)?;
+            sdur = SignedDuration::try_from_hours(value)
+                .and_then(|nanos| sdur.checked_add(nanos))
+                .ok_or_else(|| {
+                    err!(
+                        "accumulated `SignedDuration` of `{sdur:?}` \
+                         overflowed when adding {value} of unit {unit}",
+                        unit = Unit::Hour.singular(),
+                    )
+                })?;
+        }
+        if self.values[Unit::Minute.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Minute)?;
+            sdur = SignedDuration::try_from_mins(value)
+                .and_then(|nanos| sdur.checked_add(nanos))
+                .ok_or_else(|| {
+                    err!(
+                        "accumulated `SignedDuration` of `{sdur:?}` \
+                         overflowed when adding {value} of unit {unit}",
+                        unit = Unit::Minute.singular(),
+                    )
+                })?;
+        }
+        if self.values[Unit::Second.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Second)?;
+            sdur = SignedDuration::from_secs(value)
+                .checked_add(sdur)
+                .ok_or_else(|| {
+                    err!(
+                        "accumulated `SignedDuration` of `{sdur:?}` \
+                         overflowed when adding {value} of unit {unit}",
+                        unit = Unit::Second.singular(),
+                    )
+                })?;
+        }
+        if self.values[Unit::Millisecond.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Millisecond)?;
+            sdur = SignedDuration::from_millis(value)
+                .checked_add(sdur)
+                .ok_or_else(|| {
+                    err!(
+                        "accumulated `SignedDuration` of `{sdur:?}` \
+                         overflowed when adding {value} of unit {unit}",
+                        unit = Unit::Millisecond.singular(),
+                    )
+                })?;
+        }
+        if self.values[Unit::Microsecond.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Microsecond)?;
+            sdur = SignedDuration::from_micros(value)
+                .checked_add(sdur)
+                .ok_or_else(|| {
+                    err!(
+                        "accumulated `SignedDuration` of `{sdur:?}` \
+                         overflowed when adding {value} of unit {unit}",
+                        unit = Unit::Microsecond.singular(),
+                    )
+                })?;
+        }
+        if self.values[Unit::Nanosecond.as_usize()] != 0 {
+            let value = self.get_unit_value(Unit::Nanosecond)?;
+            sdur = SignedDuration::from_nanos(value)
+                .checked_add(sdur)
+                .ok_or_else(|| {
+                    err!(
+                        "accumulated `SignedDuration` of `{sdur:?}` \
+                         overflowed when adding {value} of unit {unit}",
+                        unit = Unit::Nanosecond.singular(),
+                    )
+                })?;
+        }
+
+        if let Some(fraction) = self.get_fraction()? {
+            sdur = sdur
+                .checked_add(fractional_duration(min, fraction)?)
+                .ok_or_else(|| {
+                    err!(
+                        "accumulated `SignedDuration` of `{sdur:?}` \
+                         overflowed when adding 0.{fraction} of unit {unit}",
+                        unit = min.singular(),
+                    )
+                })?;
+        }
+
+        Ok(sdur)
+    }
+
+    /// Returns the minimum unit set.
+    ///
+    /// This only returns `None` when no units have been set.
+    pub(crate) fn get_min(&self) -> Option<Unit> {
+        self.min
+    }
+
+    /// Returns the minimum and maximum units set.
+    ///
+    /// This returns an error if no units were set. (Since this means there
+    /// were no parsed duration components.)
+    fn get_min_max_units(&self) -> Result<(Unit, Unit), Error> {
+        let (Some(min), Some(max)) = (self.min, self.max) else {
+            return Err(err!("no parsed duration components"));
+        };
+        Ok((min, max))
+    }
+
+    /// Returns the corresponding unit value using the set signed-ness.
+    fn get_unit_value(&self, unit: Unit) -> Result<i64, Error> {
+        const I64_MIN_ABS: u64 = i64::MIN.unsigned_abs();
+
+        let sign = self.get_sign();
+        let value = self.values[unit.as_usize()];
+        // As a weird special case, when we need to represent i64::MIN,
+        // we'll have a unit value of `|i64::MIN|` as a `u64`. We can't
+        // convert that to a positive `i64` first, since it will overflow.
+        if sign.is_negative() && value == I64_MIN_ABS {
+            return Ok(i64::MIN);
+        }
+        // Otherwise, if a conversion to `i64` fails, then that failure
+        // is correct.
+        let mut value = i64::try_from(value).map_err(|_| {
+            err!(
+                "`{sign}{value}` {unit} is too big (or small) \
+                 to fit into a signed 64-bit integer",
+                unit = unit.plural()
+            )
+        })?;
+        if sign.is_negative() {
+            value = value.checked_neg().ok_or_else(|| {
+                err!(
+                    "`{sign}{value}` {unit} is too big (or small) \
+                     to fit into a signed 64-bit integer",
+                    unit = unit.plural()
+                )
+            })?;
+        }
+        Ok(value)
+    }
+
+    /// Returns the fraction using the set signed-ness.
+    ///
+    /// This returns `None` when no fraction has been set.
+    fn get_fraction(&self) -> Result<Option<i32>, Error> {
+        let Some(fraction) = self.fraction else {
+            return Ok(None);
+        };
+        // OK because `set_fraction` guarantees `0..=999_999_999`.
+        let mut fraction = fraction as i32;
+        if self.get_sign().is_negative() {
+            // OK because `set_fraction` guarantees `0..=999_999_999`.
+            fraction = -fraction;
+        }
+        Ok(Some(fraction))
+    }
+
+    /// Returns the sign that should be applied to each individual unit.
+    fn get_sign(&self) -> Sign {
+        self.sign.unwrap_or(Sign::Positive)
+    }
+}
+
 /// Parses an optional fractional number from the start of `input`.
 ///
 /// If `input` does not begin with a `.` (or a `,`), then this returns `None`
@@ -346,7 +759,7 @@ impl Fractional {
 #[cfg_attr(feature = "perf-inline", inline(always))]
 pub(crate) fn parse_temporal_fraction<'i>(
     input: &'i [u8],
-) -> Result<Parsed<'i, Option<i32>>, Error> {
+) -> Result<Parsed<'i, Option<u32>>, Error> {
     // TimeFraction :::
     //   TemporalDecimalFraction
     //
@@ -377,7 +790,7 @@ pub(crate) fn parse_temporal_fraction<'i>(
     //   0 1 2 3 4 5 6 7 8 9
 
     #[inline(never)]
-    fn imp<'i>(mut input: &'i [u8]) -> Result<Parsed<'i, Option<i32>>, Error> {
+    fn imp<'i>(mut input: &'i [u8]) -> Result<Parsed<'i, Option<u32>>, Error> {
         let mkdigits = parse::slicer(input);
         while mkdigits(input).len() <= 8
             && input.first().map_or(false, u8::is_ascii_digit)
@@ -394,16 +807,17 @@ pub(crate) fn parse_temporal_fraction<'i>(
         // I believe this error can never happen, since we know we have no more
         // than 9 ASCII digits. Any sequence of 9 ASCII digits can be parsed
         // into an `i64`.
-        let nanoseconds = parse::fraction(digits, 9).map_err(|err| {
+        let nanoseconds = parse::fraction(digits).map_err(|err| {
             err!(
                 "failed to parse {digits:?} as fractional component \
                  (up to 9 digits, nanosecond precision): {err}",
                 digits = escape::Bytes(digits),
             )
         })?;
-        // OK because `999_999_999` is the maximum possible parsed value, which
-        // fits into an `i32`.
-        let nanoseconds = i32::try_from(nanoseconds).unwrap();
+        // OK because parsing is forcefully limited to 9 digits,
+        // which can never be greater than `999_999_99`,
+        // which is less than `u32::MAX`.
+        let nanoseconds = nanoseconds as u32;
         Ok(Parsed { value: Some(nanoseconds), input })
     }
 
@@ -413,8 +827,8 @@ pub(crate) fn parse_temporal_fraction<'i>(
     imp(&input[1..])
 }
 
-/// This routine returns a span based on the given with fractional time applied
-/// to it.
+/// This routine returns a span based on the given unit and value with
+/// fractional time applied to it.
 ///
 /// For example, given a span like `P1dT1.5h`, the `unit` would be
 /// `Unit::Hour`, the `value` would be `1` and the `fraction` would be
@@ -432,7 +846,7 @@ pub(crate) fn parse_temporal_fraction<'i>(
 /// a `span`. This also errors if `unit` is not `Hour`, `Minute`, `Second`,
 /// `Millisecond` or `Microsecond`.
 #[inline(never)]
-pub(crate) fn fractional_time_to_span(
+fn fractional_time_to_span(
     unit: Unit,
     value: i64,
     fraction: i32,
@@ -445,6 +859,13 @@ pub(crate) fn fractional_time_to_span(
         t::SpanMilliseconds::MAX_SELF.get_unchecked() as i128;
     const MAX_MICROS: i128 =
         t::SpanMicroseconds::MAX_SELF.get_unchecked() as i128;
+    const MIN_HOURS: i64 = t::SpanHours::MIN_SELF.get_unchecked() as i64;
+    const MIN_MINS: i64 = t::SpanMinutes::MIN_SELF.get_unchecked() as i64;
+    const MIN_SECS: i64 = t::SpanSeconds::MIN_SELF.get_unchecked() as i64;
+    const MIN_MILLIS: i128 =
+        t::SpanMilliseconds::MIN_SELF.get_unchecked() as i128;
+    const MIN_MICROS: i128 =
+        t::SpanMicroseconds::MIN_SELF.get_unchecked() as i128;
 
     // We switch everything over to nanoseconds and then divy that up as
     // appropriate. In general, we always create a balanced span, but there
@@ -462,13 +883,7 @@ pub(crate) fn fractional_time_to_span(
     // out anything over the limit and carry it over to the lesser units. If
     // our value is truly too big, then the final call to set nanoseconds will
     // fail.
-    let mut sdur = fractional_time_to_duration(
-        unit,
-        value,
-        fraction,
-        SignedDuration::ZERO,
-        false,
-    )?;
+    let mut sdur = fractional_time_to_duration(unit, value, fraction)?;
 
     if unit >= Unit::Hour && !sdur.is_zero() {
         let (mut hours, rem) = sdur.as_hours_with_remainder();
@@ -476,6 +891,9 @@ pub(crate) fn fractional_time_to_span(
         if hours > MAX_HOURS {
             sdur += SignedDuration::from_hours(hours - MAX_HOURS);
             hours = MAX_HOURS;
+        } else if hours < MIN_HOURS {
+            sdur += SignedDuration::from_hours(hours - MIN_HOURS);
+            hours = MIN_HOURS;
         }
         // OK because we just checked that our units are in range.
         span = span.hours(hours);
@@ -486,6 +904,9 @@ pub(crate) fn fractional_time_to_span(
         if mins > MAX_MINS {
             sdur += SignedDuration::from_mins(mins - MAX_MINS);
             mins = MAX_MINS;
+        } else if mins < MIN_MINS {
+            sdur += SignedDuration::from_mins(mins - MIN_MINS);
+            mins = MIN_MINS;
         }
         // OK because we just checked that our units are in range.
         span = span.minutes(mins);
@@ -496,6 +917,9 @@ pub(crate) fn fractional_time_to_span(
         if secs > MAX_SECS {
             sdur += SignedDuration::from_secs(secs - MAX_SECS);
             secs = MAX_SECS;
+        } else if secs < MIN_SECS {
+            sdur += SignedDuration::from_secs(secs - MIN_SECS);
+            secs = MIN_SECS;
         }
         // OK because we just checked that our units are in range.
         span = span.seconds(secs);
@@ -506,6 +930,9 @@ pub(crate) fn fractional_time_to_span(
         if millis > MAX_MILLIS {
             sdur += SignedDuration::from_millis_i128(millis - MAX_MILLIS);
             millis = MAX_MILLIS;
+        } else if millis < MIN_MILLIS {
+            sdur += SignedDuration::from_millis_i128(millis - MIN_MILLIS);
+            millis = MIN_MILLIS;
         }
         // OK because we just checked that our units are in range.
         span = span.milliseconds(i64::try_from(millis).unwrap());
@@ -516,6 +943,9 @@ pub(crate) fn fractional_time_to_span(
         if micros > MAX_MICROS {
             sdur += SignedDuration::from_micros_i128(micros - MAX_MICROS);
             micros = MAX_MICROS;
+        } else if micros < MIN_MICROS {
+            sdur += SignedDuration::from_micros_i128(micros - MIN_MICROS);
+            micros = MIN_MICROS;
         }
         // OK because we just checked that our units are in range.
         span = span.microseconds(i64::try_from(micros).unwrap());
@@ -541,22 +971,28 @@ pub(crate) fn fractional_time_to_span(
 
 /// Set the given unit to the given value on the given span.
 ///
+/// When the given unit is hours or smaller, then if the value exceeds the
+/// limits for that unit on `Span`, then an unbalanced span may be created to
+/// handle the overage (if it can fit into smaller units).
+///
+/// # Errors
+///
 /// If the value is outside the legal boundaries for the given unit, then an
 /// error is returned.
 #[cfg_attr(feature = "perf-inline", inline(always))]
-pub(crate) fn set_span_unit_value(
+fn set_span_value_fallback(
     unit: Unit,
     value: i64,
     span: Span,
 ) -> Result<Span, Error> {
-    let result = span.try_units(unit, value).with_context(|| {
-        err!(
-            "failed to set value {value:?} \
-             as {unit} unit on span",
-            unit = unit.singular(),
-        )
-    });
-    result.or_else(|err| {
+    #[cold]
+    #[inline(never)]
+    fn fractional_fallback(
+        err: Error,
+        unit: Unit,
+        value: i64,
+        span: Span,
+    ) -> Result<Span, Error> {
         if unit > Unit::Hour {
             Err(err)
         } else {
@@ -568,6 +1004,23 @@ pub(crate) fn set_span_unit_value(
             // the limits.
             fractional_time_to_span(unit, value, 0, span)
         }
+    }
+
+    set_span_value(unit, value, span)
+        .or_else(|err| fractional_fallback(err, unit, value, span))
+}
+
+/// Set the given calendar unit to the given value on the given span.
+///
+/// If the value is outside the legal boundaries for the given unit, then an
+/// error is returned.
+#[cfg_attr(feature = "perf-inline", inline(always))]
+fn set_span_value(unit: Unit, value: i64, span: Span) -> Result<Span, Error> {
+    span.try_units(unit, value).with_context(|| {
+        err!(
+            "failed to set value {value:?} as {unit} unit on span",
+            unit = unit.singular(),
+        )
     })
 }
 
@@ -588,35 +1041,14 @@ pub(crate) fn set_span_unit_value(
 /// This returns an error if `unit` is not `Hour`, `Minute`, `Second`,
 /// `Millisecond` or `Microsecond`.
 #[inline(never)]
-pub(crate) fn fractional_time_to_duration(
+fn fractional_time_to_duration(
     unit: Unit,
     value: i64,
     fraction: i32,
-    sdur: SignedDuration,
-    negative: bool,
 ) -> Result<SignedDuration, Error> {
-    let fraction = i64::from(fraction);
-    let nanos = match unit {
-        Unit::Hour => fraction.wrapping_mul(t::SECONDS_PER_HOUR.value()),
-        Unit::Minute => fraction.wrapping_mul(t::SECONDS_PER_MINUTE.value()),
-        Unit::Second => fraction,
-        Unit::Millisecond => fraction.wrapping_div(t::NANOS_PER_MICRO.value()),
-        Unit::Microsecond => fraction.wrapping_div(t::NANOS_PER_MILLI.value()),
-        unit => {
-            return Err(err!(
-                "fractional {unit} units are not allowed",
-                unit = unit.singular(),
-            ))
-        }
-    };
-    let sdur = set_duration_unit_value(unit, value, sdur, negative)?;
-    let fraction_dur = SignedDuration::from_nanos(nanos);
-    if negative {
-        sdur.checked_sub(fraction_dur)
-    } else {
-        sdur.checked_add(fraction_dur)
-    }
-    .ok_or_else(|| {
+    let sdur = duration_unit_value(unit, value)?;
+    let fraction_dur = fractional_duration(unit, fraction)?;
+    sdur.checked_add(fraction_dur).ok_or_else(|| {
         err!(
             "accumulated `SignedDuration` of `{sdur:?}` overflowed \
              when adding `{fraction_dur:?}` (from fractional {unit} units)",
@@ -625,31 +1057,40 @@ pub(crate) fn fractional_time_to_duration(
     })
 }
 
-/// Set the given unit to the given value on the given duration.
+/// Converts the fraction of the given unit to a signed duration.
 ///
-/// If the value is outside the legal boundaries for the given unit, then an
-/// error is returned. Moreover, if adding `value` (in terms of `unit`) to
-/// the given signed duration would overflow, then an error is returned.
-#[cfg_attr(feature = "perf-inline", inline(always))]
-pub(crate) fn set_duration_unit_value(
+/// Since a signed duration doesn't keep track of individual units, there is
+/// no loss of fidelity between it and ISO 8601 durations like there is for
+/// `Span`. Thus, we can do something far less complicated.
+///
+/// # Panics
+///
+/// When `fraction` isn't in the range `-999_999_999..=999_999_999`.
+///
+/// # Errors
+///
+/// This returns an error if `unit` is not `Hour`, `Minute`, `Second`,
+/// `Millisecond` or `Microsecond`.
+#[inline(never)]
+fn fractional_duration(
     unit: Unit,
-    value: i64,
-    sdur: SignedDuration,
-    negative: bool,
+    fraction: i32,
 ) -> Result<SignedDuration, Error> {
-    let value_dur = duration_unit_value(unit, value)?;
-    if negative {
-        sdur.checked_sub(value_dur)
-    } else {
-        sdur.checked_add(value_dur)
-    }
-    .ok_or_else(|| {
-        err!(
-            "accumulated `SignedDuration` of `{sdur:?}` overflowed when \
-             adding {value} of unit {unit}",
-            unit = unit.singular(),
-        )
-    })
+    let fraction = i64::from(fraction);
+    let nanos = match unit {
+        Unit::Hour => fraction * t::SECONDS_PER_HOUR.value(),
+        Unit::Minute => fraction * t::SECONDS_PER_MINUTE.value(),
+        Unit::Second => fraction,
+        Unit::Millisecond => fraction / t::NANOS_PER_MICRO.value(),
+        Unit::Microsecond => fraction / t::NANOS_PER_MILLI.value(),
+        unit => {
+            return Err(err!(
+                "fractional {unit} units are not allowed",
+                unit = unit.singular(),
+            ))
+        }
+    };
+    Ok(SignedDuration::from_nanos(nanos))
 }
 
 /// Returns the given parsed value, interpreted as the given unit, as a
