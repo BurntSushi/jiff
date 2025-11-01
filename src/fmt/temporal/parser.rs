@@ -7,7 +7,8 @@ use crate::{
         temporal::Pieces,
         util::{
             fractional_time_to_duration, fractional_time_to_span,
-            parse_temporal_fraction,
+            parse_temporal_fraction, set_duration_unit_value,
+            set_span_unit_value,
         },
         Parsed,
     },
@@ -1236,12 +1237,7 @@ impl SpanParser {
                 }
             }
             prev_unit = Some(unit);
-            span = span.try_units_ranged(unit, value).with_context(|| {
-                err!(
-                    "failed to set value {value:?} as {unit} unit on span",
-                    unit = Unit::from(unit).singular(),
-                )
-            })?;
+            span = set_span_unit_value(unit, value, span)?;
             parsed_any = true;
         }
         Ok(Parsed { value: (span, parsed_any), input })
@@ -1296,32 +1292,7 @@ impl SpanParser {
                 // lowest unit of time.
                 break;
             } else {
-                let result =
-                    span.try_units_ranged(unit, value).with_context(|| {
-                        err!(
-                            "failed to set value {value:?} \
-                             as {unit} unit on span",
-                            unit = Unit::from(unit).singular(),
-                        )
-                    });
-                // This is annoying, but because we can write out a larger
-                // number of hours/minutes/seconds than what we actually
-                // support, we need to be prepared to parse an unbalanced span
-                // if our time units are too big here. This entire dance is
-                // because ISO 8601 requires fractional seconds to represent
-                // milli-, micro- and nano-seconds. This means that spans
-                // cannot retain their full fidelity when roundtripping through
-                // ISO 8601. However, it is guaranteed that their total elapsed
-                // time represented will never change.
-                span = match result {
-                    Ok(span) => span,
-                    Err(_) => fractional_time_to_span(
-                        unit,
-                        value,
-                        t::SubsecNanosecond::N::<0>(),
-                        span,
-                    )?,
-                };
+                span = set_span_unit_value(unit, value, span)?;
             }
         }
         Ok(Parsed { value: (span, parsed_any), input })
@@ -1339,7 +1310,7 @@ impl SpanParser {
     ) -> Result<Parsed<'i, SignedDuration>, Error> {
         let mut parsed_any = false;
         let mut prev_unit: Option<Unit> = None;
-        let mut dur = SignedDuration::ZERO;
+        let mut sdur = SignedDuration::ZERO;
 
         loop {
             let parsed = self.parse_unit_value(input)?;
@@ -1369,67 +1340,16 @@ impl SpanParser {
             prev_unit = Some(unit);
             parsed_any = true;
 
-            // Convert our parsed unit into a number of seconds.
-            let unit_secs = match unit {
-                Unit::Second => value.get(),
-                Unit::Minute => {
-                    let mins = value.get();
-                    mins.checked_mul(60).ok_or_else(|| {
-                        err!(
-                            "minute units {mins} overflowed i64 when \
-                             converted to seconds"
-                        )
-                    })?
-                }
-                Unit::Hour => {
-                    let hours = value.get();
-                    hours.checked_mul(3_600).ok_or_else(|| {
-                        err!(
-                            "hour units {hours} overflowed i64 when \
-                             converted to seconds"
-                        )
-                    })?
-                }
-                // Guaranteed not to be here since `parse_unit_time_designator`
-                // always returns hours, minutes or seconds.
-                _ => unreachable!(),
-            };
-            // Never panics since nanos==0.
-            let unit_dur = SignedDuration::new(unit_secs, 0);
-            // And now try to add it to our existing duration.
-            let result = if negative {
-                dur.checked_sub(unit_dur)
-            } else {
-                dur.checked_add(unit_dur)
-            };
-            dur = result.ok_or_else(|| {
-                err!(
-                    "adding value {value} from unit {unit} overflowed \
-                     signed duration {dur:?}",
-                    unit = unit.singular(),
-                )
-            })?;
-
             if let Some(fraction) = fraction {
-                let fraction_dur =
-                    fractional_time_to_duration(unit, fraction)?;
-                let result = if negative {
-                    dur.checked_sub(fraction_dur)
-                } else {
-                    dur.checked_add(fraction_dur)
-                };
-                dur = result.ok_or_else(|| {
-                    err!(
-                        "adding fractional duration {fraction_dur:?} \
-                         from unit {unit} to {dur:?} overflowed \
-                         signed duration limits",
-                        unit = unit.singular(),
-                    )
-                })?;
+                sdur = fractional_time_to_duration(
+                    unit, value, fraction, sdur, negative,
+                )?;
                 // Once we see a fraction, we are done. We don't permit parsing
                 // any more units. That is, a fraction can only occur on the
                 // lowest unit of time.
                 break;
+            } else {
+                sdur = set_duration_unit_value(unit, value, sdur, negative)?;
             }
         }
         if !parsed_any {
@@ -1439,7 +1359,7 @@ impl SpanParser {
                  `SignedDuration`",
             ));
         }
-        Ok(Parsed { value: dur, input })
+        Ok(Parsed { value: sdur, input })
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
@@ -1668,6 +1588,10 @@ mod tests {
             input: "",
         }
         "#);
+
+        // TODO: This should probably be supported, but it currently is not.
+        // insta::assert_debug_snapshot!(p(b"-PT9223372036854775808S"), @r#"
+        // "#);
     }
 
     #[test]
@@ -1727,14 +1651,19 @@ mod tests {
             p(b"PT9223372036854775808s"),
             @r###"failed to parse ISO 8601 duration string into `SignedDuration`: failed to parse "9223372036854775808" as 64-bit signed integer: number '9223372036854775808' too big to parse into 64-bit integer"###,
         );
+        // TODO: This shouldn't be an error.
+        insta::assert_snapshot!(
+            p(b"-PT9223372036854775808s"),
+            @r###"failed to parse ISO 8601 duration string into `SignedDuration`: failed to parse "9223372036854775808" as 64-bit signed integer: number '9223372036854775808' too big to parse into 64-bit integer"###,
+        );
 
         insta::assert_snapshot!(
             p(b"PT1m9223372036854775807s"),
-            @"failed to parse ISO 8601 duration string into `SignedDuration`: adding value 9223372036854775807 from unit second overflowed signed duration 1m",
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: accumulated `SignedDuration` of `1m` overflowed when adding 9223372036854775807 of unit second",
         );
         insta::assert_snapshot!(
             p(b"PT2562047788015215.6h"),
-            @"failed to parse ISO 8601 duration string into `SignedDuration`: adding fractional duration 36m from unit hour to 2562047788015215h overflowed signed duration limits",
+            @"failed to parse ISO 8601 duration string into `SignedDuration`: accumulated `SignedDuration` of `2562047788015215h` overflowed when adding `36m` (from fractional hour units)",
         );
     }
 

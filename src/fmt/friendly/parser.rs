@@ -4,7 +4,8 @@ use crate::{
         friendly::parser_label,
         util::{
             fractional_time_to_duration, fractional_time_to_span,
-            parse_temporal_fraction,
+            parse_temporal_fraction, set_duration_unit_value,
+            set_span_unit_value,
         },
         Parsed,
     },
@@ -480,40 +481,33 @@ impl SpanParser {
                         ));
                     }
                 }
-                sdur = sdur
-                    .checked_add(duration_unit_value(Unit::Hour, hms.hour)?)
-                    .ok_or_else(|| {
-                        err!(
-                            "accumulated `SignedDuration` overflowed when \
-                             adding {value} of unit hour",
-                        )
-                    })?;
-                sdur = sdur
-                    .checked_add(duration_unit_value(
-                        Unit::Minute,
-                        hms.minute,
-                    )?)
-                    .ok_or_else(|| {
-                        err!(
-                            "accumulated `SignedDuration` overflowed when \
-                             adding {value} of unit minute",
-                        )
-                    })?;
-                sdur = sdur
-                    .checked_add(duration_unit_value(
+                sdur = set_duration_unit_value(
+                    Unit::Hour,
+                    hms.hour,
+                    sdur,
+                    false,
+                )?;
+                sdur = set_duration_unit_value(
+                    Unit::Minute,
+                    hms.minute,
+                    sdur,
+                    false,
+                )?;
+                sdur = if let Some(fraction) = hms.fraction {
+                    fractional_time_to_duration(
                         Unit::Second,
                         hms.second,
-                    )?)
-                    .ok_or_else(|| {
-                        err!(
-                            "accumulated `SignedDuration` overflowed when \
-                             adding {value} of unit second",
-                        )
-                    })?;
-                if let Some(f) = hms.fraction {
-                    // nanos += fractional_time_to_nanos(Unit::Second, fraction)?;
-                    let f = fractional_time_to_duration(Unit::Second, f)?;
-                    sdur = sdur.checked_add(f).ok_or_else(|| err!(""))?;
+                        fraction,
+                        sdur,
+                        false,
+                    )?
+                } else {
+                    set_duration_unit_value(
+                        Unit::Second,
+                        hms.second,
+                        sdur,
+                        false,
+                    )?
                 };
                 break;
             }
@@ -558,22 +552,16 @@ impl SpanParser {
             }
             prev_unit = Some(unit);
 
-            sdur = sdur
-                .checked_add(duration_unit_value(unit, value)?)
-                .ok_or_else(|| {
-                    err!(
-                        "accumulated `SignedDuration` overflowed when adding \
-                         {value} of unit {unit}",
-                        unit = unit.singular(),
-                    )
-                })?;
-            if let Some(f) = fraction {
-                let f = fractional_time_to_duration(unit, f)?;
-                sdur = sdur.checked_add(f).ok_or_else(|| err!(""))?;
+            if let Some(fraction) = fraction {
+                sdur = fractional_time_to_duration(
+                    unit, value, fraction, sdur, false,
+                )?;
                 // Once we see a fraction, we are done. We don't permit parsing
                 // any more units. That is, a fraction can only occur on the
                 // lowest unit of time.
                 break;
+            } else {
+                sdur = set_duration_unit_value(unit, value, sdur, false)?;
             }
 
             // Eat any optional whitespace after the designator (or comma) and
@@ -883,92 +871,6 @@ struct HMS {
     minute: t::NoUnits,
     second: t::NoUnits,
     fraction: Option<t::SubsecNanosecond>,
-}
-
-/// Set the given unit to the given value on the given span.
-///
-/// If the value outside the legal boundaries for the given unit, then an error
-/// is returned.
-#[cfg_attr(feature = "perf-inline", inline(always))]
-fn set_span_unit_value(
-    unit: Unit,
-    value: t::NoUnits,
-    span: Span,
-) -> Result<Span, Error> {
-    let result = span.try_units_ranged(unit, value).with_context(|| {
-        err!(
-            "failed to set value {value:?} \
-             as {unit} unit on span",
-            unit = Unit::from(unit).singular(),
-        )
-    });
-    result.or_else(|err| {
-        if unit > Unit::Hour {
-            Err(err)
-        } else {
-            // This is annoying, but because we can write out a larger
-            // number of hours/minutes/seconds than what we actually
-            // support, we need to be prepared to parse an unbalanced span
-            // if our time units are too big here. In essence, this lets a
-            // single time unit "overflow" into smaller units if it exceeds
-            // the limits.
-            fractional_time_to_span(
-                unit,
-                value,
-                t::SubsecNanosecond::N::<0>(),
-                span,
-            )
-        }
-    })
-}
-
-/// Returns the given parsed value, interpreted as the given unit, as a
-/// `SignedDuration`.
-///
-/// If the given unit is not supported for signed durations (i.e., calendar
-/// units), or if converting the given value to a `SignedDuration` for the
-/// given units overflows, then an error is returned.
-#[cfg_attr(feature = "perf-inline", inline(always))]
-fn duration_unit_value(
-    unit: Unit,
-    value: t::NoUnits,
-) -> Result<SignedDuration, Error> {
-    // let value = t::NoUnits128::rfrom(value);
-    // Convert our parsed unit into a number of nanoseconds.
-    //
-    // Note also that overflow isn't possible here, since all of our parsed
-    // values are guaranteed to fit into i64, but we accrue into an i128.
-    // Of course, the final i128 might overflow a SignedDuration, but this
-    // is checked once at the end of parsing when a SignedDuration is
-    // materialized.
-    let sdur = match unit {
-        Unit::Hour => {
-            let seconds =
-                value.checked_mul(t::SECONDS_PER_HOUR).ok_or_else(|| {
-                    err!("converting {value} hours to seconds overflows i64")
-                })?;
-            SignedDuration::from_secs(seconds.get())
-        }
-        Unit::Minute => {
-            let seconds = value.try_checked_mul(
-                "minutes-to-seconds",
-                t::SECONDS_PER_MINUTE,
-            )?;
-            SignedDuration::from_secs(seconds.get())
-        }
-        Unit::Second => SignedDuration::from_secs(value.get()),
-        Unit::Millisecond => SignedDuration::from_millis(value.get()),
-        Unit::Microsecond => SignedDuration::from_micros(value.get()),
-        Unit::Nanosecond => SignedDuration::from_nanos(value.get()),
-        unsupported => {
-            return Err(err!(
-                "parsing {unit} units into a `SignedDuration` is not supported \
-                 (perhaps try parsing into a `Span` instead)",
-                unit = unsupported.singular(),
-            ));
-        }
-    };
-    Ok(sdur)
 }
 
 /// Returns true if the byte is ASCII whitespace.
@@ -1339,7 +1241,7 @@ mod tests {
         insta::assert_snapshot!(p("153722867280912930minutes ago"), @"-PT2562047788015215H30M");
         insta::assert_snapshot!(
             pe("153722867280912931mins"),
-            @r###"failed to parse "153722867280912931mins" in the "friendly" format: parameter 'minutes-to-seconds' with value 60 is not in the required range of -9223372036854775808..=9223372036854775807"###,
+            @r#"failed to parse "153722867280912931mins" in the "friendly" format: converting 153722867280912931 minutes to seconds overflows i64"#,
         );
 
         insta::assert_snapshot!(p("9223372036854775807seconds"), @"PT2562047788015215H30M7S");

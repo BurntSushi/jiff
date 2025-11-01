@@ -566,6 +566,43 @@ pub(crate) fn fractional_time_to_span(
     Ok(span)
 }
 
+/// Set the given unit to the given value on the given span.
+///
+/// If the value is outside the legal boundaries for the given unit, then an
+/// error is returned.
+#[cfg_attr(feature = "perf-inline", inline(always))]
+pub(crate) fn set_span_unit_value(
+    unit: Unit,
+    value: t::NoUnits,
+    span: Span,
+) -> Result<Span, Error> {
+    let result = span.try_units_ranged(unit, value).with_context(|| {
+        err!(
+            "failed to set value {value:?} \
+             as {unit} unit on span",
+            unit = unit.singular(),
+        )
+    });
+    result.or_else(|err| {
+        if unit > Unit::Hour {
+            Err(err)
+        } else {
+            // This is annoying, but because we can write out a larger
+            // number of hours/minutes/seconds than what we actually
+            // support, we need to be prepared to parse an unbalanced span
+            // if our time units are too big here. In essence, this lets a
+            // single time unit "overflow" into smaller units if it exceeds
+            // the limits.
+            fractional_time_to_span(
+                unit,
+                value,
+                t::SubsecNanosecond::N::<0>(),
+                span,
+            )
+        }
+    })
+}
+
 /// Like `fractional_time_to_span`, but just converts the fraction of the given
 /// unit to a signed duration.
 ///
@@ -574,7 +611,7 @@ pub(crate) fn fractional_time_to_span(
 /// `Span`.
 ///
 /// Note that `fraction` can be a fractional hour, minute, second, millisecond
-/// or microsecond (even though its type suggests its only a fraction of a
+/// or microsecond (even though its type suggests it's only a fraction of a
 /// second). When milliseconds or microseconds, the given fraction has any
 /// sub-nanosecond precision truncated.
 ///
@@ -585,7 +622,10 @@ pub(crate) fn fractional_time_to_span(
 #[inline(never)]
 pub(crate) fn fractional_time_to_duration(
     unit: Unit,
+    value: t::NoUnits,
     fraction: t::SubsecNanosecond,
+    sdur: SignedDuration,
+    negative: bool,
 ) -> Result<SignedDuration, Error> {
     let fraction = t::NoUnits::rfrom(fraction);
     let nanos = match unit {
@@ -601,7 +641,92 @@ pub(crate) fn fractional_time_to_duration(
             ))
         }
     };
-    Ok(SignedDuration::from_nanos(nanos.get()))
+    let sdur = set_duration_unit_value(unit, value, sdur, negative)?;
+    let fraction_dur = SignedDuration::from_nanos(nanos.get());
+    if negative {
+        sdur.checked_sub(fraction_dur)
+    } else {
+        sdur.checked_add(fraction_dur)
+    }
+    .ok_or_else(|| {
+        err!(
+            "accumulated `SignedDuration` of `{sdur:?}` overflowed \
+             when adding `{fraction_dur:?}` (from fractional {unit} units)",
+            unit = unit.singular(),
+        )
+    })
+}
+
+/// Set the given unit to the given value on the given duration.
+///
+/// If the value is outside the legal boundaries for the given unit, then an
+/// error is returned. Moreover, if adding `value` (in terms of `unit`) to
+/// the given signed duration would overflow, then an error is returned.
+#[cfg_attr(feature = "perf-inline", inline(always))]
+pub(crate) fn set_duration_unit_value(
+    unit: Unit,
+    value: t::NoUnits,
+    sdur: SignedDuration,
+    negative: bool,
+) -> Result<SignedDuration, Error> {
+    let value_dur = duration_unit_value(unit, value)?;
+    if negative {
+        sdur.checked_sub(value_dur)
+    } else {
+        sdur.checked_add(value_dur)
+    }
+    .ok_or_else(|| {
+        err!(
+            "accumulated `SignedDuration` of `{sdur:?}` overflowed when \
+                 adding {value} of unit {unit}",
+            unit = unit.singular(),
+        )
+    })
+}
+
+/// Returns the given parsed value, interpreted as the given unit, as a
+/// `SignedDuration`.
+///
+/// If the given unit is not supported for signed durations (i.e., calendar
+/// units), or if converting the given value to a `SignedDuration` for the
+/// given units overflows, then an error is returned.
+#[cfg_attr(feature = "perf-inline", inline(always))]
+fn duration_unit_value(
+    unit: Unit,
+    value: t::NoUnits,
+) -> Result<SignedDuration, Error> {
+    // Convert our parsed unit into a number of nanoseconds.
+    //
+    // Note also that overflow isn't possible here for units less than minutes,
+    // since a `SignedDuration` supports all `i64` second values.
+    let sdur = match unit {
+        Unit::Hour => {
+            let seconds =
+                value.checked_mul(t::SECONDS_PER_HOUR).ok_or_else(|| {
+                    err!("converting {value} hours to seconds overflows i64")
+                })?;
+            SignedDuration::from_secs(seconds.get())
+        }
+        Unit::Minute => {
+            let seconds =
+                value.checked_mul(t::SECONDS_PER_MINUTE).ok_or_else(|| {
+                    err!("converting {value} minutes to seconds overflows i64")
+                })?;
+            SignedDuration::from_secs(seconds.get())
+        }
+        Unit::Second => SignedDuration::from_secs(value.get()),
+        Unit::Millisecond => SignedDuration::from_millis(value.get()),
+        Unit::Microsecond => SignedDuration::from_micros(value.get()),
+        Unit::Nanosecond => SignedDuration::from_nanos(value.get()),
+        unsupported => {
+            return Err(err!(
+                "parsing {unit} units into a `SignedDuration` is not supported \
+                 (perhaps try parsing into a `Span` instead)",
+                unit = unsupported.singular(),
+            ));
+        }
+    };
+    Ok(sdur)
 }
 
 #[cfg(test)]
