@@ -387,6 +387,7 @@ impl DurationUnits {
     /// duration parsing proceeds from largest to smallest units, this will
     /// return an error if the given unit is bigger than or equal to any
     /// previously set unit.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn set_unit_value(
         &mut self,
         unit: Unit,
@@ -569,7 +570,53 @@ impl DurationUnits {
     ///
     /// An error is also returned if any calendar units (days or greater) were
     /// set or if no units were set.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn to_duration(&self) -> Result<SignedDuration, Error> {
+        // When every unit value is less than this, *and* there is
+        // no fractional component, then we trigger a fast path that
+        // doesn't need to bother with error handling and careful
+        // handling of the sign.
+        //
+        // Why `999`? Well, I think it's nice to use one limit for all
+        // units to make the comparisons simpler (although we could
+        // use more targeted values to admit more cases, I didn't try
+        // that). But specifically, this means we can have `999ms 999us
+        // 999ns` as a maximal subsecond value without overflowing
+        // the nanosecond component of a `SignedDuration`. This lets
+        // us "just do math" without needing to check each result and
+        // handle errors.
+        const LIMIT: u64 = 999;
+
+        if self.fraction.is_some()
+            || self.values[..Unit::Day.as_usize()]
+                .iter()
+                .any(|&value| value > LIMIT)
+            || self.max.map_or(true, |max| max > Unit::Hour)
+        {
+            return self.to_duration_general();
+        }
+
+        let hours = self.values[Unit::Hour.as_usize()] as i64;
+        let mins = self.values[Unit::Minute.as_usize()] as i64;
+        let secs = self.values[Unit::Second.as_usize()] as i64;
+        let millis = self.values[Unit::Millisecond.as_usize()] as i32;
+        let micros = self.values[Unit::Microsecond.as_usize()] as i32;
+        let nanos = self.values[Unit::Nanosecond.as_usize()] as i32;
+
+        let total_secs = (hours * 3600) + (mins * 60) + secs;
+        let total_nanos = (millis * 1_000_000) + (micros * 1_000) + nanos;
+        let mut sdur =
+            SignedDuration::new_without_nano_overflow(total_secs, total_nanos);
+        if self.get_sign().is_negative() {
+            sdur = -sdur;
+        }
+
+        Ok(sdur)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn to_duration_general(&self) -> Result<SignedDuration, Error> {
         let (min, max) = self.get_min_max_units()?;
         if max > Unit::Hour {
             return Err(err!(
@@ -687,34 +734,48 @@ impl DurationUnits {
     }
 
     /// Returns the corresponding unit value using the set signed-ness.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn get_unit_value(&self, unit: Unit) -> Result<i64, Error> {
         const I64_MIN_ABS: u64 = i64::MIN.unsigned_abs();
 
-        let sign = self.get_sign();
-        let value = self.values[unit.as_usize()];
-        // As a weird special case, when we need to represent i64::MIN,
-        // we'll have a unit value of `|i64::MIN|` as a `u64`. We can't
-        // convert that to a positive `i64` first, since it will overflow.
-        if sign.is_negative() && value == I64_MIN_ABS {
-            return Ok(i64::MIN);
-        }
-        // Otherwise, if a conversion to `i64` fails, then that failure
-        // is correct.
-        let mut value = i64::try_from(value).map_err(|_| {
-            err!(
-                "`{sign}{value}` {unit} is too big (or small) \
-                 to fit into a signed 64-bit integer",
-                unit = unit.plural()
-            )
-        })?;
-        if sign.is_negative() {
-            value = value.checked_neg().ok_or_else(|| {
+        #[cold]
+        #[inline(never)]
+        fn general(unit: Unit, value: u64, sign: Sign) -> Result<i64, Error> {
+            // As a weird special case, when we need to represent i64::MIN,
+            // we'll have a unit value of `|i64::MIN|` as a `u64`. We can't
+            // convert that to a positive `i64` first, since it will overflow.
+            if sign.is_negative() && value == I64_MIN_ABS {
+                return Ok(i64::MIN);
+            }
+            // Otherwise, if a conversion to `i64` fails, then that failure
+            // is correct.
+            let mut value = i64::try_from(value).map_err(|_| {
                 err!(
                     "`{sign}{value}` {unit} is too big (or small) \
                      to fit into a signed 64-bit integer",
                     unit = unit.plural()
                 )
             })?;
+            if sign.is_negative() {
+                value = value.checked_neg().ok_or_else(|| {
+                    err!(
+                        "`{sign}{value}` {unit} is too big (or small) \
+                         to fit into a signed 64-bit integer",
+                        unit = unit.plural()
+                    )
+                })?;
+            }
+            Ok(value)
+        }
+
+        let sign = self.get_sign();
+        let value = self.values[unit.as_usize()];
+        if value >= I64_MIN_ABS {
+            return general(unit, value, sign);
+        }
+        let mut value = value as i64;
+        if sign.is_negative() {
+            value = -value;
         }
         Ok(value)
     }

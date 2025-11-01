@@ -1154,7 +1154,13 @@ impl SpanParser {
         input: &'i [u8],
     ) -> Result<Parsed<'i, Span>, Error> {
         let original = escape::Bytes(input);
-        let Parsed { value: sign, input } = self.parse_sign(input);
+        let (sign, input) =
+            if !input.first().map_or(false, |&b| matches!(b, b'+' | b'-')) {
+                (Sign::Positive, input)
+            } else {
+                let Parsed { value: sign, input } = self.parse_sign(input);
+                (sign, input)
+            };
         let Parsed { input, .. } = self.parse_duration_designator(input)?;
 
         let mut builder = DurationUnits::default();
@@ -1193,7 +1199,13 @@ impl SpanParser {
         input: &'i [u8],
     ) -> Result<Parsed<'i, SignedDuration>, Error> {
         let original = escape::Bytes(input);
-        let Parsed { value: sign, input } = self.parse_sign(input);
+        let (sign, input) =
+            if !input.first().map_or(false, |&b| matches!(b, b'+' | b'-')) {
+                (Sign::Positive, input)
+            } else {
+                let Parsed { value: sign, input } = self.parse_sign(input);
+                (sign, input)
+            };
         let Parsed { input, .. } = self.parse_duration_designator(input)?;
 
         let Parsed { value: has_time, input } =
@@ -1395,7 +1407,8 @@ impl SpanParser {
     //
     // NOTE: Like with other things with signs, we don't support the Unicode
     // <MINUS> sign. Just ASCII.
-    #[cfg_attr(feature = "perf-inline", inline(always))]
+    #[cold]
+    #[inline(never)]
     fn parse_sign<'i>(&self, input: &'i [u8]) -> Parsed<'i, Sign> {
         let Some(sign) = input.get(0).copied() else {
             return Parsed { value: Sign::Positive, input };
