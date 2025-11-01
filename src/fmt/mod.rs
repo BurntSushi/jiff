@@ -196,6 +196,17 @@ pub(crate) struct Parsed<'i, V> {
     input: &'i [u8],
 }
 
+impl<'i, V> Parsed<'i, V> {
+    #[inline]
+    fn and_then<U>(
+        self,
+        map: impl FnOnce(V) -> Result<U, Error>,
+    ) -> Result<Parsed<'i, U>, Error> {
+        let Parsed { value, input } = self;
+        Ok(Parsed { value: map(value)?, input })
+    }
+}
+
 impl<'i, V: core::fmt::Display> Parsed<'i, V> {
     /// Ensures that the parsed value represents the entire input. This occurs
     /// precisely when the `input` on this parsed value is empty.

@@ -65,9 +65,9 @@ const MINS_PER_HOUR: i64 = 60;
 ///
 /// assert_eq!(
 ///     "P1d".parse::<SignedDuration>().unwrap_err().to_string(),
-///     "failed to parse ISO 8601 duration string into `SignedDuration`: \
-///      parsing ISO 8601 duration into a `SignedDuration` requires that the \
-///      duration contain a time component and no components of days or \
+///     "failed to parse \"P1d\" as an ISO 8601 duration string: \
+///      parsing ISO 8601 duration into a `SignedDuration` requires that \
+///      the duration contain a time component and no components of days or \
 ///      greater",
 /// );
 ///

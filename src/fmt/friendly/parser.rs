@@ -177,21 +177,23 @@ impl SpanParser {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[inline]
     pub fn parse_span<I: AsRef<[u8]>>(&self, input: I) -> Result<Span, Error> {
+        #[inline(never)]
+        fn imp(span_parser: &SpanParser, input: &[u8]) -> Result<Span, Error> {
+            let mut builder = DurationUnits::default();
+            let parsed = span_parser.parse(input, &mut builder)?;
+            let parsed = parsed.and_then(|_| builder.to_span())?;
+            parsed.into_full()
+        }
+
         let input = input.as_ref();
-        let parsed = self.parse_to_span(input).with_context(|| {
+        imp(self, input).with_context(|| {
             err!(
                 "failed to parse {input:?} in the \"friendly\" format",
                 input = escape::Bytes(input)
             )
-        })?;
-        let span = parsed.into_full().with_context(|| {
-            err!(
-                "failed to parse {input:?} in the \"friendly\" format",
-                input = escape::Bytes(input)
-            )
-        })?;
-        Ok(span)
+        })
     }
 
     /// Run the parser on the given string (which may be plain bytes) and,
@@ -229,31 +231,37 @@ impl SpanParser {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[inline]
     pub fn parse_duration<I: AsRef<[u8]>>(
         &self,
         input: I,
     ) -> Result<SignedDuration, Error> {
+        #[inline(never)]
+        fn imp(
+            span_parser: &SpanParser,
+            input: &[u8],
+        ) -> Result<SignedDuration, Error> {
+            let mut builder = DurationUnits::default();
+            let parsed = span_parser.parse(input, &mut builder)?;
+            let parsed = parsed.and_then(|_| builder.to_duration())?;
+            parsed.into_full()
+        }
+
         let input = input.as_ref();
-        let parsed = self.parse_to_duration(input).with_context(|| {
+        imp(self, input).with_context(|| {
             err!(
                 "failed to parse {input:?} in the \"friendly\" format",
                 input = escape::Bytes(input)
             )
-        })?;
-        let sdur = parsed.into_full().with_context(|| {
-            err!(
-                "failed to parse {input:?} in the \"friendly\" format",
-                input = escape::Bytes(input)
-            )
-        })?;
-        Ok(sdur)
+        })
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn parse_to_span<'i>(
+    fn parse<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, Span>, Error> {
+        builder: &mut DurationUnits,
+    ) -> Result<Parsed<'i, ()>, Error> {
         if input.is_empty() {
             return Err(err!("an empty string is not a valid duration"));
         }
@@ -277,9 +285,8 @@ impl SpanParser {
             ));
         };
 
-        let mut builder = DurationUnits::default();
-        let Parsed { value: (), input } =
-            self.parse_duration_units(input, first_unit_value, &mut builder)?;
+        let Parsed { input, .. } =
+            self.parse_duration_units(input, first_unit_value, builder)?;
 
         // As with the prefix sign parsing, guard it to avoid calling the
         // function.
@@ -290,54 +297,7 @@ impl SpanParser {
             (parsed.value, parsed.input)
         };
         builder.set_sign(sign);
-        let span = builder.to_span()?;
-        Ok(Parsed { value: span, input })
-    }
-
-    #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn parse_to_duration<'i>(
-        &self,
-        input: &'i [u8],
-    ) -> Result<Parsed<'i, SignedDuration>, Error> {
-        if input.is_empty() {
-            return Err(err!("an empty string is not a valid duration"));
-        }
-        // Guard prefix sign parsing to avoid the function call, which is
-        // marked unlineable to keep the fast path tighter.
-        let (sign, input) =
-            if !input.first().map_or(false, |&b| matches!(b, b'+' | b'-')) {
-                (None, input)
-            } else {
-                let Parsed { value: sign, input } =
-                    self.parse_prefix_sign(input);
-                (sign, input)
-            };
-
-        let Parsed { value, input } = self.parse_unit_value(input)?;
-        let Some(first_unit_value) = value else {
-            return Err(err!(
-                "parsing a friendly duration requires it to start \
-                 with a unit value (a decimal integer) after an \
-                 optional sign, but no integer was found",
-            ));
-        };
-
-        let mut builder = DurationUnits::default();
-        let Parsed { value: (), input } =
-            self.parse_duration_units(input, first_unit_value, &mut builder)?;
-
-        // As with the prefix sign parsing, guard it to avoid calling the
-        // function.
-        let (sign, input) = if !input.first().map_or(false, is_whitespace) {
-            (sign.unwrap_or(Sign::Positive), input)
-        } else {
-            let parsed = self.parse_suffix_sign(sign, input)?;
-            (parsed.value, parsed.input)
-        };
-        builder.set_sign(sign);
-        let sdur = builder.to_duration()?;
-
-        Ok(Parsed { value: sdur, input })
+        Ok(Parsed { value: (), input })
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]

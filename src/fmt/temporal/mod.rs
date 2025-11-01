@@ -2039,11 +2039,9 @@ impl SpanParser {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[inline]
     pub fn parse_span<I: AsRef<[u8]>>(&self, input: I) -> Result<Span, Error> {
-        let input = input.as_ref();
-        let parsed = self.p.parse_temporal_duration(input)?;
-        let span = parsed.into_full()?;
-        Ok(span)
+        self.p.parse_span(input)
     }
 
     /// Parse an ISO 8601 duration string into a [`SignedDuration`] value.
@@ -2084,14 +2082,12 @@ impl SpanParser {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    #[inline]
     pub fn parse_duration<I: AsRef<[u8]>>(
         &self,
         input: I,
     ) -> Result<SignedDuration, Error> {
-        let input = input.as_ref();
-        let parsed = self.p.parse_signed_duration(input)?;
-        let dur = parsed.into_full()?;
-        Ok(dur)
+        self.p.parse_duration(input)
     }
 }
 
