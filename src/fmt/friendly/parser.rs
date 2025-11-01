@@ -893,39 +893,33 @@ struct HMS {
 fn set_span_unit_value(
     unit: Unit,
     value: t::NoUnits,
-    mut span: Span,
+    span: Span,
 ) -> Result<Span, Error> {
-    if unit <= Unit::Hour {
-        let result = span.try_units_ranged(unit, value).with_context(|| {
-            err!(
-                "failed to set value {value:?} \
-                 as {unit} unit on span",
-                unit = Unit::from(unit).singular(),
-            )
-        });
-        // This is annoying, but because we can write out a larger
-        // number of hours/minutes/seconds than what we actually
-        // support, we need to be prepared to parse an unbalanced span
-        // if our time units are too big here.
-        span = match result {
-            Ok(span) => span,
-            Err(_) => fractional_time_to_span(
+    let result = span.try_units_ranged(unit, value).with_context(|| {
+        err!(
+            "failed to set value {value:?} \
+             as {unit} unit on span",
+            unit = Unit::from(unit).singular(),
+        )
+    });
+    result.or_else(|err| {
+        if unit > Unit::Hour {
+            Err(err)
+        } else {
+            // This is annoying, but because we can write out a larger
+            // number of hours/minutes/seconds than what we actually
+            // support, we need to be prepared to parse an unbalanced span
+            // if our time units are too big here. In essence, this lets a
+            // single time unit "overflow" into smaller units if it exceeds
+            // the limits.
+            fractional_time_to_span(
                 unit,
                 value,
                 t::SubsecNanosecond::N::<0>(),
                 span,
-            )?,
-        };
-    } else {
-        span = span.try_units_ranged(unit, value).with_context(|| {
-            err!(
-                "failed to set value {value:?} \
-                 as {unit} unit on span",
-                unit = Unit::from(unit).singular(),
             )
-        })?;
-    }
-    Ok(span)
+        }
+    })
 }
 
 /// Returns the given parsed value, interpreted as the given unit, as a
