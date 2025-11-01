@@ -1140,34 +1140,43 @@ impl SpanPrinter {
     ) -> Result<(), Error> {
         let span = span.abs();
         if span.get_years() != 0 {
-            wtr.write_signed_int(Unit::Year, span.get_years())?;
+            wtr.write(Unit::Year, span.get_years().unsigned_abs())?;
         }
         if span.get_months() != 0 {
-            wtr.write_signed_int(Unit::Month, span.get_months())?;
+            wtr.write(Unit::Month, span.get_months().unsigned_abs())?;
         }
         if span.get_weeks() != 0 {
-            wtr.write_signed_int(Unit::Week, span.get_weeks())?;
+            wtr.write(Unit::Week, span.get_weeks().unsigned_abs())?;
         }
         if span.get_days() != 0 {
-            wtr.write_signed_int(Unit::Day, span.get_days())?;
+            wtr.write(Unit::Day, span.get_days().unsigned_abs())?;
         }
         if span.get_hours() != 0 {
-            wtr.write_signed_int(Unit::Hour, span.get_hours())?;
+            wtr.write(Unit::Hour, span.get_hours().unsigned_abs())?;
         }
         if span.get_minutes() != 0 {
-            wtr.write_signed_int(Unit::Minute, span.get_minutes())?;
+            wtr.write(Unit::Minute, span.get_minutes().unsigned_abs())?;
         }
         if span.get_seconds() != 0 {
-            wtr.write_signed_int(Unit::Second, span.get_seconds())?;
+            wtr.write(Unit::Second, span.get_seconds().unsigned_abs())?;
         }
         if span.get_milliseconds() != 0 {
-            wtr.write_signed_int(Unit::Millisecond, span.get_milliseconds())?;
+            wtr.write(
+                Unit::Millisecond,
+                span.get_milliseconds().unsigned_abs(),
+            )?;
         }
         if span.get_microseconds() != 0 {
-            wtr.write_signed_int(Unit::Microsecond, span.get_microseconds())?;
+            wtr.write(
+                Unit::Microsecond,
+                span.get_microseconds().unsigned_abs(),
+            )?;
         }
         if span.get_nanoseconds() != 0 {
-            wtr.write_signed_int(Unit::Nanosecond, span.get_nanoseconds())?;
+            wtr.write(
+                Unit::Nanosecond,
+                span.get_nanoseconds().unsigned_abs(),
+            )?;
         }
         Ok(())
     }
@@ -1375,11 +1384,9 @@ impl SpanPrinter {
         // OK because guaranteed to be bigger than i64::MIN.
         secs = secs % SECS_PER_MIN;
 
-        // FIXME: Get rid of this cast.
-        wtr.write_int(&fmtint, hours as i64)?;
+        wtr.write_uint(&fmtint, hours)?;
         wtr.write_str(":")?;
-        // FIXME: Get rid of this cast.
-        wtr.write_int(&fmtint, minutes as i64)?;
+        wtr.write_uint(&fmtint, minutes)?;
         wtr.write_str(":")?;
         let fp = FractionalPrinter::from_duration(
             // OK because -999_999_999 <= nanos <= 999_999_999 and secs < 60.
@@ -1549,20 +1556,11 @@ impl<'p, 'w, W: Write> DesignatorWriter<'p, 'w, W> {
             .fractional
             .map(Unit::from)
             .unwrap_or(self.printer.zero_unit);
-        self.wtr.write_int(&self.fmtint, 0)?;
+        self.wtr.write_uint(&self.fmtint, 0u32)?;
         self.wtr
             .write_str(self.printer.spacing.between_units_and_designators())?;
         self.wtr.write_str(self.desig.designator(unit, true))?;
         Ok(())
-    }
-
-    fn write_signed_int(
-        &mut self,
-        unit: Unit,
-        value: impl Into<i64>,
-    ) -> Result<(), Error> {
-        // FIXME: Get rid of this cast.
-        self.write(unit, value.into() as u64)
     }
 
     fn write(
@@ -1576,8 +1574,7 @@ impl<'p, 'w, W: Write> DesignatorWriter<'p, 'w, W> {
         }
         self.finish_preceding()?;
         self.written_non_zero_unit = true;
-        // FIXME: Get rid of this cast.
-        self.wtr.write_int(&self.fmtint, value as i64)?;
+        self.wtr.write_uint(&self.fmtint, value)?;
         self.wtr
             .write_str(self.printer.spacing.between_units_and_designators())?;
         self.wtr.write_str(self.desig.designator(unit, value != 1))?;
@@ -1670,7 +1667,7 @@ impl FractionalPrinter {
             FractionalUnit::Minute => {
                 let integer = dur.as_secs() / SECS_PER_MIN;
                 let fraction = dur.as_nanos() % NANOS_PER_MIN;
-                // OK because NANOS_PER_HOUR fits in an u64.
+                // OK because NANOS_PER_MIN fits in an u64.
                 let mut fraction = u64::try_from(fraction).unwrap();
                 // Drop precision since we're only allowed 9 decimal places.
                 fraction /= SECS_PER_MIN;
@@ -1742,8 +1739,7 @@ impl FractionalPrinter {
     /// the caller wants to omit printing zero, the caller should do their own
     /// conditional logic.
     fn print<W: Write>(&self, mut wtr: W) -> Result<(), Error> {
-        // FIXME: Get rid of the `as` cast here.
-        wtr.write_int(&self.fmtint, self.integer as i64)?;
+        wtr.write_uint(&self.fmtint, self.integer)?;
         // FIXME: Get rid of the `as` cast here.
         if self.fmtfraction.will_write_digits(self.fraction as i64) {
             wtr.write_str(".")?;
