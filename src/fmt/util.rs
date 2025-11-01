@@ -33,17 +33,27 @@ impl DecimalFormatter {
         }
     }
 
-    /// Format the given value using this configuration as a decimal ASCII
-    /// number.
+    /// Format the given value using this configuration as a signed decimal
+    /// ASCII number.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) const fn format(&self, value: i64) -> Decimal {
-        Decimal::new(self, value)
+    pub(crate) const fn format_signed(&self, value: i64) -> Decimal {
+        Decimal::signed(self, value)
+    }
+
+    /// Format the given value using this configuration as an unsigned decimal
+    /// ASCII number.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) const fn format_unsigned(&self, value: u64) -> Decimal {
+        Decimal::unsigned(self, value)
     }
 
     /// Forces the sign to be rendered, even if it's positive.
     ///
     /// When `zero_is_positive` is true, then a zero value is formatted with a
     /// positive sign. Otherwise, it is formatted with a negative sign.
+    ///
+    /// Regardless of this setting, a sign is never emitted when formatting an
+    /// unsigned integer.
     #[cfg(test)]
     pub(crate) const fn force_sign(
         self,
@@ -58,7 +68,7 @@ impl DecimalFormatter {
     /// the minimum is reached.
     ///
     /// The minimum number of digits is capped at the maximum number of digits
-    /// for an i64 value (which is 19).
+    /// for an i64 value (19) or a u64 value (20).
     pub(crate) const fn padding(self, mut digits: u8) -> DecimalFormatter {
         if digits > Decimal::MAX_I64_DIGITS {
             digits = Decimal::MAX_I64_DIGITS;
@@ -72,6 +82,24 @@ impl DecimalFormatter {
     pub(crate) const fn padding_byte(self, byte: u8) -> DecimalFormatter {
         DecimalFormatter { padding_byte: byte, ..self }
     }
+
+    /// Returns the minimum number of digits for a signed value.
+    const fn get_signed_minimum_digits(&self) -> u8 {
+        if self.minimum_digits <= Decimal::MAX_I64_DIGITS {
+            self.minimum_digits
+        } else {
+            Decimal::MAX_I64_DIGITS
+        }
+    }
+
+    /// Returns the minimum number of digits for an unsigned value.
+    const fn get_unsigned_minimum_digits(&self) -> u8 {
+        if self.minimum_digits <= Decimal::MAX_U64_DIGITS {
+            self.minimum_digits
+        } else {
+            Decimal::MAX_U64_DIGITS
+        }
+    }
 }
 
 impl Default for DecimalFormatter {
@@ -83,62 +111,31 @@ impl Default for DecimalFormatter {
 /// A formatted decimal number that can be converted to a sequence of bytes.
 #[derive(Debug)]
 pub(crate) struct Decimal {
-    buf: [u8; Self::MAX_I64_LEN as usize],
+    buf: [u8; Self::MAX_LEN as usize],
     start: u8,
     end: u8,
 }
 
 impl Decimal {
-    /// Discovered via `i64::MIN.to_string().len()`.
-    const MAX_I64_LEN: u8 = 20;
+    /// Discovered via
+    /// `i64::MIN.to_string().len().max(u64::MAX.to_string().len())`.
+    const MAX_LEN: u8 = 20;
     /// Discovered via `i64::MAX.to_string().len()`.
     const MAX_I64_DIGITS: u8 = 19;
+    /// Discovered via `u64::MAX.to_string().len()`.
+    const MAX_U64_DIGITS: u8 = 20;
 
-    /// Using the given formatter, turn the value given into a decimal
-    /// representation using ASCII bytes.
+    /// Using the given formatter, turn the value given into an unsigned
+    /// decimal representation using ASCII bytes.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    const fn new(formatter: &DecimalFormatter, mut value: i64) -> Decimal {
-        // Specialize the common case to generate tighter codegen.
-        if value >= 0 && formatter.force_sign.is_none() {
-            let mut decimal = Decimal {
-                buf: [0; Self::MAX_I64_LEN as usize],
-                start: Self::MAX_I64_LEN,
-                end: Self::MAX_I64_LEN,
-            };
-            loop {
-                decimal.start -= 1;
-
-                let digit = (value % 10) as u8;
-                value /= 10;
-                decimal.buf[decimal.start as usize] = b'0' + digit;
-                if value == 0 {
-                    break;
-                }
-            }
-            while decimal.len() < formatter.minimum_digits {
-                decimal.start -= 1;
-                decimal.buf[decimal.start as usize] = formatter.padding_byte;
-            }
-            return decimal;
-        }
-        Decimal::new_cold(formatter, value)
-    }
-
-    #[cold]
-    #[inline(never)]
-    const fn new_cold(formatter: &DecimalFormatter, value: i64) -> Decimal {
-        let sign = value.signum();
-        let Some(mut value) = value.checked_abs() else {
-            let buf = [
-                b'-', b'9', b'2', b'2', b'3', b'3', b'7', b'2', b'0', b'3',
-                b'6', b'8', b'5', b'4', b'7', b'7', b'5', b'8', b'0', b'8',
-            ];
-            return Decimal { buf, start: 0, end: Self::MAX_I64_LEN };
-        };
+    const fn unsigned(
+        formatter: &DecimalFormatter,
+        mut value: u64,
+    ) -> Decimal {
         let mut decimal = Decimal {
-            buf: [0; Self::MAX_I64_LEN as usize],
-            start: Self::MAX_I64_LEN,
-            end: Self::MAX_I64_LEN,
+            buf: [0; Self::MAX_LEN as usize],
+            start: Self::MAX_LEN,
+            end: Self::MAX_LEN,
         };
         loop {
             decimal.start -= 1;
@@ -150,7 +147,72 @@ impl Decimal {
                 break;
             }
         }
-        while decimal.len() < formatter.minimum_digits {
+
+        while decimal.len() < formatter.get_unsigned_minimum_digits() {
+            decimal.start -= 1;
+            decimal.buf[decimal.start as usize] = formatter.padding_byte;
+        }
+        decimal
+    }
+
+    /// Using the given formatter, turn the value given into a signed decimal
+    /// representation using ASCII bytes.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    const fn signed(formatter: &DecimalFormatter, mut value: i64) -> Decimal {
+        // Specialize the common case to generate tighter codegen.
+        if value >= 0 && formatter.force_sign.is_none() {
+            let mut decimal = Decimal {
+                buf: [0; Self::MAX_LEN as usize],
+                start: Self::MAX_LEN,
+                end: Self::MAX_LEN,
+            };
+            loop {
+                decimal.start -= 1;
+
+                let digit = (value % 10) as u8;
+                value /= 10;
+                decimal.buf[decimal.start as usize] = b'0' + digit;
+                if value == 0 {
+                    break;
+                }
+            }
+
+            while decimal.len() < formatter.get_signed_minimum_digits() {
+                decimal.start -= 1;
+                decimal.buf[decimal.start as usize] = formatter.padding_byte;
+            }
+            return decimal;
+        }
+        Decimal::signed_cold(formatter, value)
+    }
+
+    #[cold]
+    #[inline(never)]
+    const fn signed_cold(formatter: &DecimalFormatter, value: i64) -> Decimal {
+        let sign = value.signum();
+        let Some(mut value) = value.checked_abs() else {
+            let buf = [
+                b'-', b'9', b'2', b'2', b'3', b'3', b'7', b'2', b'0', b'3',
+                b'6', b'8', b'5', b'4', b'7', b'7', b'5', b'8', b'0', b'8',
+            ];
+            return Decimal { buf, start: 0, end: Self::MAX_LEN };
+        };
+        let mut decimal = Decimal {
+            buf: [0; Self::MAX_LEN as usize],
+            start: Self::MAX_LEN,
+            end: Self::MAX_LEN,
+        };
+        loop {
+            decimal.start -= 1;
+
+            let digit = (value % 10) as u8;
+            value /= 10;
+            decimal.buf[decimal.start as usize] = b'0' + digit;
+            if value == 0 {
+                break;
+            }
+        }
+        while decimal.len() < formatter.get_signed_minimum_digits() {
             decimal.start -= 1;
             decimal.buf[decimal.start as usize] = formatter.padding_byte;
         }
@@ -1302,38 +1364,41 @@ mod tests {
 
     #[test]
     fn decimal() {
-        let x = DecimalFormatter::new().format(i64::MIN);
+        let x = DecimalFormatter::new().format_signed(i64::MIN);
         assert_eq!(x.as_str(), "-9223372036854775808");
 
-        let x = DecimalFormatter::new().format(i64::MIN + 1);
+        let x = DecimalFormatter::new().format_signed(i64::MIN + 1);
         assert_eq!(x.as_str(), "-9223372036854775807");
 
-        let x = DecimalFormatter::new().format(i64::MAX);
+        let x = DecimalFormatter::new().format_signed(i64::MAX);
         assert_eq!(x.as_str(), "9223372036854775807");
 
-        let x = DecimalFormatter::new().force_sign(true).format(i64::MAX);
+        let x =
+            DecimalFormatter::new().force_sign(true).format_signed(i64::MAX);
         assert_eq!(x.as_str(), "+9223372036854775807");
 
-        let x = DecimalFormatter::new().format(0);
+        let x = DecimalFormatter::new().format_signed(0);
         assert_eq!(x.as_str(), "0");
 
-        let x = DecimalFormatter::new().force_sign(true).format(0);
+        let x = DecimalFormatter::new().force_sign(true).format_signed(0);
         assert_eq!(x.as_str(), "+0");
 
-        let x = DecimalFormatter::new().force_sign(false).format(0);
+        let x = DecimalFormatter::new().force_sign(false).format_signed(0);
         assert_eq!(x.as_str(), "-0");
 
-        let x = DecimalFormatter::new().padding(4).format(0);
+        let x = DecimalFormatter::new().padding(4).format_signed(0);
         assert_eq!(x.as_str(), "0000");
 
-        let x = DecimalFormatter::new().padding(4).format(789);
+        let x = DecimalFormatter::new().padding(4).format_signed(789);
         assert_eq!(x.as_str(), "0789");
 
-        let x = DecimalFormatter::new().padding(4).format(-789);
+        let x = DecimalFormatter::new().padding(4).format_signed(-789);
         assert_eq!(x.as_str(), "-0789");
 
-        let x =
-            DecimalFormatter::new().force_sign(true).padding(4).format(789);
+        let x = DecimalFormatter::new()
+            .force_sign(true)
+            .padding(4)
+            .format_signed(789);
         assert_eq!(x.as_str(), "+0789");
     }
 
