@@ -12,6 +12,14 @@ use crate::{
 #[cfg(not(feature = "std"))]
 use crate::util::libm::Float;
 
+const NANOS_PER_SEC: i32 = 1_000_000_000;
+const NANOS_PER_MILLI: i32 = 1_000_000;
+const NANOS_PER_MICRO: i32 = 1_000;
+const MILLIS_PER_SEC: i64 = 1_000;
+const MICROS_PER_SEC: i64 = 1_000_000;
+const SECS_PER_MINUTE: i64 = 60;
+const MINS_PER_HOUR: i64 = 60;
+
 /// A signed duration of time represented as a 96-bit integer of nanoseconds.
 ///
 /// Each duration is made up of a 64-bit integer of whole seconds and a
@@ -309,13 +317,6 @@ pub struct SignedDuration {
     nanos: i32,
 }
 
-const NANOS_PER_SEC: i32 = 1_000_000_000;
-const NANOS_PER_MILLI: i32 = 1_000_000;
-const NANOS_PER_MICRO: i32 = 1_000;
-const MILLIS_PER_SEC: i64 = 1_000;
-const MICROS_PER_SEC: i64 = 1_000_000;
-const SECS_PER_MINUTE: i64 = 60;
-const MINS_PER_HOUR: i64 = 60;
 
 impl SignedDuration {
     /// A duration of zero time.
