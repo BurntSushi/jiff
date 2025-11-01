@@ -341,10 +341,12 @@ impl Fractional {
 /// misnomer, but the range of possible values is still correct. (That is, the
 /// fractional component of an hour is still limited to 9 decimal places per
 /// the Temporal spec.)
+///
+/// The number returned is guaranteed to be in the range `0..=999_999_999`.
 #[cfg_attr(feature = "perf-inline", inline(always))]
 pub(crate) fn parse_temporal_fraction<'i>(
     input: &'i [u8],
-) -> Result<Parsed<'i, Option<t::SubsecNanosecond>>, Error> {
+) -> Result<Parsed<'i, Option<i32>>, Error> {
     // TimeFraction :::
     //   TemporalDecimalFraction
     //
@@ -375,9 +377,7 @@ pub(crate) fn parse_temporal_fraction<'i>(
     //   0 1 2 3 4 5 6 7 8 9
 
     #[inline(never)]
-    fn imp<'i>(
-        mut input: &'i [u8],
-    ) -> Result<Parsed<'i, Option<t::SubsecNanosecond>>, Error> {
+    fn imp<'i>(mut input: &'i [u8]) -> Result<Parsed<'i, Option<i32>>, Error> {
         let mkdigits = parse::slicer(input);
         while mkdigits(input).len() <= 8
             && input.first().map_or(false, u8::is_ascii_digit)
@@ -401,14 +401,9 @@ pub(crate) fn parse_temporal_fraction<'i>(
                 digits = escape::Bytes(digits),
             )
         })?;
-        // I believe this is also impossible to fail, since the maximal
-        // fractional nanosecond is 999_999_999, and which also corresponds
-        // to the maximal expressible number with 9 ASCII digits. So every
-        // possible expressible value here is in range.
-        let nanoseconds =
-            t::SubsecNanosecond::try_new("nanoseconds", nanoseconds).map_err(
-                |err| err!("fractional nanoseconds are not valid: {err}"),
-            )?;
+        // OK because `999_999_999` is the maximum possible parsed value, which
+        // fits into an `i32`.
+        let nanoseconds = i32::try_from(nanoseconds).unwrap();
         Ok(Parsed { value: Some(nanoseconds), input })
     }
 
@@ -440,7 +435,7 @@ pub(crate) fn parse_temporal_fraction<'i>(
 pub(crate) fn fractional_time_to_span(
     unit: Unit,
     value: i64,
-    fraction: t::SubsecNanosecond,
+    fraction: i32,
     mut span: Span,
 ) -> Result<Span, Error> {
     const MAX_HOURS: i64 = t::SpanHours::MAX_SELF.get_unchecked() as i64;
@@ -571,12 +566,7 @@ pub(crate) fn set_span_unit_value(
             // if our time units are too big here. In essence, this lets a
             // single time unit "overflow" into smaller units if it exceeds
             // the limits.
-            fractional_time_to_span(
-                unit,
-                value,
-                t::SubsecNanosecond::N::<0>(),
-                span,
-            )
+            fractional_time_to_span(unit, value, 0, span)
         }
     })
 }
@@ -601,11 +591,11 @@ pub(crate) fn set_span_unit_value(
 pub(crate) fn fractional_time_to_duration(
     unit: Unit,
     value: i64,
-    fraction: t::SubsecNanosecond,
+    fraction: i32,
     sdur: SignedDuration,
     negative: bool,
 ) -> Result<SignedDuration, Error> {
-    let fraction = i64::from(fraction.get());
+    let fraction = i64::from(fraction);
     let nanos = match unit {
         Unit::Hour => fraction.wrapping_mul(t::SECONDS_PER_HOUR.value()),
         Unit::Minute => fraction.wrapping_mul(t::SECONDS_PER_MINUTE.value()),
