@@ -517,8 +517,8 @@ impl Zoned {
         Zoned { inner }
     }
 
-    /// Create a builder for constructing a new `DateTime` from the fields of
-    /// this datetime.
+    /// Create a builder for constructing a new `Zoned` from the fields of
+    /// this zoned datetime.
     ///
     /// See the methods on [`ZonedWith`] for the different ways one can set
     /// the fields of a new `Zoned`.
