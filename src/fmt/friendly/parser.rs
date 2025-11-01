@@ -276,8 +276,10 @@ impl SpanParser {
                  optional sign, but no integer was found",
             ));
         };
-        let Parsed { value: mut builder, input } =
-            self.parse_duration_units(input, first_unit_value)?;
+
+        let mut builder = DurationUnits::default();
+        let Parsed { value: (), input } =
+            self.parse_duration_units(input, first_unit_value, &mut builder)?;
 
         // As with the prefix sign parsing, guard it to avoid calling the
         // function.
@@ -319,8 +321,10 @@ impl SpanParser {
                  optional sign, but no integer was found",
             ));
         };
-        let Parsed { value: mut builder, input } =
-            self.parse_duration_units(input, first_unit_value)?;
+
+        let mut builder = DurationUnits::default();
+        let Parsed { value: (), input } =
+            self.parse_duration_units(input, first_unit_value, &mut builder)?;
 
         // As with the prefix sign parsing, guard it to avoid calling the
         // function.
@@ -341,10 +345,10 @@ impl SpanParser {
         &self,
         mut input: &'i [u8],
         first_unit_value: u64,
-    ) -> Result<Parsed<'i, DurationUnits>, Error> {
+        builder: &mut DurationUnits,
+    ) -> Result<Parsed<'i, ()>, Error> {
         let mut parsed_any_after_comma = true;
         let mut value = first_unit_value;
-        let mut builder = DurationUnits::default();
         loop {
             let parsed = self.parse_hms_maybe(input, value)?;
             input = parsed.input;
@@ -412,7 +416,7 @@ impl SpanParser {
                  unit follows",
             ));
         }
-        Ok(Parsed { value: builder, input })
+        Ok(Parsed { value: (), input })
     }
 
     /// This possibly parses a `HH:MM:SS[.fraction]`.
