@@ -687,7 +687,11 @@ impl DateTimeParser {
             hour,
             minute,
             second,
-            nanosecond.unwrap_or(t::SubsecNanosecond::N::<0>()),
+            // OK because `parse_temporal_fraction` guarantees
+            // `0..=999_999_999`.
+            nanosecond
+                .map(|n| t::SubsecNanosecond::new(n).unwrap())
+                .unwrap_or(t::SubsecNanosecond::N::<0>()),
         );
         let value = ParsedTime {
             input: escape::Bytes(mkslice(input)),

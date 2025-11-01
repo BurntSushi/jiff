@@ -868,7 +868,7 @@ struct HMS {
     hour: i64,
     minute: i64,
     second: i64,
-    fraction: Option<t::SubsecNanosecond>,
+    fraction: Option<i32>,
 }
 
 /// Returns true if the byte is ASCII whitespace.

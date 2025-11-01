@@ -604,7 +604,9 @@ impl Parser {
                      UTC numeric offset {original:?}",
                 )
             })?;
-        numeric.nanoseconds = nanoseconds;
+        // OK because `parse_temporal_fraction` guarantees `0..=999_999_999`.
+        numeric.nanoseconds =
+            nanoseconds.map(|n| t::SubsecNanosecond::new(n).unwrap());
         Ok(Parsed { value: numeric, input })
     }
 
