@@ -1260,7 +1260,7 @@ impl SpanParser {
             input = parsed.input;
             let unit = parsed.value;
 
-            builder.set_unit_value(unit, value as u64)?;
+            builder.set_unit_value(unit, value)?;
         }
         Ok(Parsed { value: (), input })
     }
@@ -1286,7 +1286,7 @@ impl SpanParser {
             input = parsed.input;
             let unit = parsed.value;
 
-            builder.set_unit_value(unit, value as u64)?;
+            builder.set_unit_value(unit, value)?;
             if let Some(fraction) = fraction {
                 builder.set_fraction(fraction)?;
                 // Once we see a fraction, we are done. We don't permit parsing
@@ -1301,28 +1301,10 @@ impl SpanParser {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_unit_value<'i>(
         &self,
-        mut input: &'i [u8],
-    ) -> Result<Parsed<'i, Option<i64>>, Error> {
-        // Discovered via `i64::MAX.to_string().len()`.
-        const MAX_I64_DIGITS: usize = 19;
-
-        let mkdigits = parse::slicer(input);
-        while mkdigits(input).len() <= MAX_I64_DIGITS
-            && input.first().map_or(false, u8::is_ascii_digit)
-        {
-            input = &input[1..];
-        }
-        let digits = mkdigits(input);
-        if digits.is_empty() {
-            return Ok(Parsed { value: None, input });
-        }
-        let value = parse::i64(digits).with_context(|| {
-            err!(
-                "failed to parse {digits:?} as 64-bit signed integer",
-                digits = escape::Bytes(digits),
-            )
-        })?;
-        Ok(Parsed { value: Some(value), input })
+        input: &'i [u8],
+    ) -> Result<Parsed<'i, Option<u64>>, Error> {
+        let (value, input) = parse::u64_prefix(input)?;
+        Ok(Parsed { value, input })
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
@@ -1459,9 +1441,8 @@ mod tests {
         insta::assert_debug_snapshot!(p(b"-PT2562047788015215h30m8.999999999s"), @"-9223372036854775808s 999999999ns");
         insta::assert_debug_snapshot!(p(b"PT2562047788015215h30m7.999999999s"), @"9223372036854775807s 999999999ns");
 
-        // TODO: This should probably be supported, but it currently is not.
-        // insta::assert_debug_snapshot!(p(b"-PT9223372036854775808S"), @r#"
-        // "#);
+        insta::assert_debug_snapshot!(p(b"PT9223372036854775807S"), @"9223372036854775807s");
+        insta::assert_debug_snapshot!(p(b"-PT9223372036854775808S"), @"-9223372036854775808s");
     }
 
     #[test]
@@ -1515,16 +1496,11 @@ mod tests {
 
         insta::assert_snapshot!(
             p(b"-PT9223372036854775809s"),
-            @r#"failed to parse "-PT9223372036854775809s" as an ISO 8601 duration string: failed to parse "9223372036854775809" as 64-bit signed integer: number '9223372036854775809' too big to parse into 64-bit integer"#,
+            @r#"failed to parse "-PT9223372036854775809s" as an ISO 8601 duration string: `-9223372036854775809` seconds is too big (or small) to fit into a signed 64-bit integer"#,
         );
         insta::assert_snapshot!(
             p(b"PT9223372036854775808s"),
-            @r#"failed to parse "PT9223372036854775808s" as an ISO 8601 duration string: failed to parse "9223372036854775808" as 64-bit signed integer: number '9223372036854775808' too big to parse into 64-bit integer"#,
-        );
-        // TODO: This shouldn't be an error.
-        insta::assert_snapshot!(
-            p(b"-PT9223372036854775808s"),
-            @r#"failed to parse "-PT9223372036854775808s" as an ISO 8601 duration string: failed to parse "9223372036854775808" as 64-bit signed integer: number '9223372036854775808' too big to parse into 64-bit integer"#,
+            @r#"failed to parse "PT9223372036854775808s" as an ISO 8601 duration string: `9223372036854775808` seconds is too big (or small) to fit into a signed 64-bit integer"#,
         );
 
         insta::assert_snapshot!(

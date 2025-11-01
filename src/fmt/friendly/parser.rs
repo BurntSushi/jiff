@@ -5,7 +5,7 @@ use crate::{
         util::{parse_temporal_fraction, DurationUnits},
         Parsed,
     },
-    util::{c::Sign, escape},
+    util::{c::Sign, escape, parse},
     Error, SignedDuration, Span, Unit,
 };
 
@@ -459,50 +459,10 @@ impl SpanParser {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_unit_value<'i>(
         &self,
-        mut input: &'i [u8],
+        input: &'i [u8],
     ) -> Result<Parsed<'i, Option<u64>>, Error> {
-        // Discovered via `i64::MAX.to_string().len()`.
-        const MAX_I64_DIGITS: usize = 19;
-
-        // This is mostly manually inlined from `util::parse::i64`.
-        // Namely, `parse::i64` requires knowing all of the
-        // digits up front. But we don't really know that here.
-        // So as we parse the digits, we also accumulate them
-        // into an integer. This avoids a second pass. (I guess
-        // `util::parse::i64` could be better designed? Meh.)
-        //
-        // Note though that we parse into a `u64` since that's
-        // what our duration components want.
-
-        let mut digit_count = 0;
-        let mut n: u64 = 0;
-        while digit_count <= MAX_I64_DIGITS {
-            let Some(&byte) = input.get(digit_count) else { break };
-            if !byte.is_ascii_digit() {
-                break;
-            }
-            digit_count += 1;
-            // OK because we confirmed `byte` is an ASCII digit.
-            let digit = u64::from(byte - b'0');
-            n = n
-                .checked_mul(10)
-                .and_then(|n| n.checked_add(digit))
-                .ok_or_else(
-                    #[inline(never)]
-                    || {
-                        err!(
-                            "number `{}` too big to parse into 64-bit integer",
-                            escape::Bytes(&input[..digit_count]),
-                        )
-                    },
-                )?;
-        }
-        if digit_count == 0 {
-            return Ok(Parsed { value: None, input });
-        }
-
-        input = &input[digit_count..];
-        Ok(Parsed { value: Some(n), input })
+        let (value, input) = parse::u64_prefix(input)?;
+        Ok(Parsed { value, input })
     }
 
     /// Parse a unit designator, e.g., `years` or `nano`.
