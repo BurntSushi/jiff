@@ -1,11 +1,7 @@
 use crate::{
     error::{err, ErrorContext},
     fmt::Parsed,
-    util::{
-        escape, parse,
-        rangeint::RFrom,
-        t::{self, C},
-    },
+    util::{escape, parse, t},
     Error, SignedDuration, Span, Unit,
 };
 
@@ -446,25 +442,19 @@ pub(crate) fn parse_temporal_fraction<'i>(
 #[inline(never)]
 pub(crate) fn fractional_time_to_span(
     unit: Unit,
-    value: t::NoUnits,
+    value: i64,
     fraction: t::SubsecNanosecond,
     mut span: Span,
 ) -> Result<Span, Error> {
-    let allowed = matches!(
-        unit,
-        Unit::Hour
-            | Unit::Minute
-            | Unit::Second
-            | Unit::Millisecond
-            | Unit::Microsecond
-    );
-    if !allowed {
-        return Err(err!(
-            "fractional {unit} units are not allowed",
-            unit = unit.singular(),
-        ));
-    }
-    // We switch everything over to nanoseconds and then divvy that up as
+    const MAX_HOURS: i64 = t::SpanHours::MAX_SELF.get_unchecked() as i64;
+    const MAX_MINS: i64 = t::SpanMinutes::MAX_SELF.get_unchecked() as i64;
+    const MAX_SECS: i64 = t::SpanSeconds::MAX_SELF.get_unchecked() as i64;
+    const MAX_MILLIS: i128 =
+        t::SpanMilliseconds::MAX_SELF.get_unchecked() as i128;
+    const MAX_MICROS: i128 =
+        t::SpanMicroseconds::MAX_SELF.get_unchecked() as i128;
+
+    // We switch everything over to nanoseconds and then divy that up as
     // appropriate. In general, we always create a balanced span, but there
     // are some cases where we can't. For example, if one serializes a span
     // with both the maximum number of seconds and the maximum number of
@@ -480,84 +470,75 @@ pub(crate) fn fractional_time_to_span(
     // out anything over the limit and carry it over to the lesser units. If
     // our value is truly too big, then the final call to set nanoseconds will
     // fail.
-    let value = t::NoUnits128::rfrom(value);
-    let fraction = t::NoUnits128::rfrom(fraction);
-    let mut nanos = match unit {
-        Unit::Hour => {
-            (value * t::NANOS_PER_HOUR) + (fraction * t::SECONDS_PER_HOUR)
-        }
-        Unit::Minute => {
-            (value * t::NANOS_PER_MINUTE) + (fraction * t::SECONDS_PER_MINUTE)
-        }
-        Unit::Second => (value * t::NANOS_PER_SECOND) + fraction,
-        Unit::Millisecond => {
-            (value * t::NANOS_PER_MILLI) + (fraction / t::NANOS_PER_MICRO)
-        }
-        Unit::Microsecond => {
-            (value * t::NANOS_PER_MICRO) + (fraction / t::NANOS_PER_MILLI)
-        }
-        // We return an error above if we hit this case.
-        _ => unreachable!("unsupported unit: {unit:?}"),
-    };
+    let mut sdur = fractional_time_to_duration(
+        unit,
+        value,
+        fraction,
+        SignedDuration::ZERO,
+        false,
+    )?;
 
-    if unit >= Unit::Hour && nanos > C(0) {
-        let mut hours = nanos / t::NANOS_PER_HOUR;
-        nanos %= t::NANOS_PER_HOUR;
-        if hours > t::SpanHours::MAX_SELF {
-            nanos += (hours - t::SpanHours::MAX_SELF) * t::NANOS_PER_HOUR;
-            hours = t::NoUnits128::rfrom(t::SpanHours::MAX_SELF);
+    if unit >= Unit::Hour && !sdur.is_zero() {
+        let (mut hours, rem) = sdur.as_hours_with_remainder();
+        sdur = rem;
+        if hours > MAX_HOURS {
+            sdur += SignedDuration::from_hours(hours - MAX_HOURS);
+            hours = MAX_HOURS;
         }
         // OK because we just checked that our units are in range.
-        span = span.try_hours_ranged(hours).unwrap();
+        span = span.hours(hours);
     }
-    if unit >= Unit::Minute && nanos > C(0) {
-        let mut minutes = nanos / t::NANOS_PER_MINUTE;
-        nanos %= t::NANOS_PER_MINUTE;
-        if minutes > t::SpanMinutes::MAX_SELF {
-            nanos +=
-                (minutes - t::SpanMinutes::MAX_SELF) * t::NANOS_PER_MINUTE;
-            minutes = t::NoUnits128::rfrom(t::SpanMinutes::MAX_SELF);
+    if unit >= Unit::Minute && !sdur.is_zero() {
+        let (mut mins, rem) = sdur.as_mins_with_remainder();
+        sdur = rem;
+        if mins > MAX_MINS {
+            sdur += SignedDuration::from_mins(mins - MAX_MINS);
+            mins = MAX_MINS;
         }
         // OK because we just checked that our units are in range.
-        span = span.try_minutes_ranged(minutes).unwrap();
+        span = span.minutes(mins);
     }
-    if unit >= Unit::Second && nanos > C(0) {
-        let mut seconds = nanos / t::NANOS_PER_SECOND;
-        nanos %= t::NANOS_PER_SECOND;
-        if seconds > t::SpanSeconds::MAX_SELF {
-            nanos +=
-                (seconds - t::SpanSeconds::MAX_SELF) * t::NANOS_PER_SECOND;
-            seconds = t::NoUnits128::rfrom(t::SpanSeconds::MAX_SELF);
+    if unit >= Unit::Second && !sdur.is_zero() {
+        let (mut secs, rem) = sdur.as_secs_with_remainder();
+        sdur = rem;
+        if secs > MAX_SECS {
+            sdur += SignedDuration::from_secs(secs - MAX_SECS);
+            secs = MAX_SECS;
         }
         // OK because we just checked that our units are in range.
-        span = span.try_seconds_ranged(seconds).unwrap();
+        span = span.seconds(secs);
     }
-    if unit >= Unit::Millisecond && nanos > C(0) {
-        let mut millis = nanos / t::NANOS_PER_MILLI;
-        nanos %= t::NANOS_PER_MILLI;
-        if millis > t::SpanMilliseconds::MAX_SELF {
-            nanos +=
-                (millis - t::SpanMilliseconds::MAX_SELF) * t::NANOS_PER_MILLI;
-            millis = t::NoUnits128::rfrom(t::SpanMilliseconds::MAX_SELF);
+    if unit >= Unit::Millisecond && !sdur.is_zero() {
+        let (mut millis, rem) = sdur.as_millis_with_remainder();
+        sdur = rem;
+        if millis > MAX_MILLIS {
+            sdur += SignedDuration::from_millis_i128(millis - MAX_MILLIS);
+            millis = MAX_MILLIS;
         }
         // OK because we just checked that our units are in range.
-        span = span.try_milliseconds_ranged(millis).unwrap();
+        span = span.milliseconds(i64::try_from(millis).unwrap());
     }
-    if unit >= Unit::Microsecond && nanos > C(0) {
-        let mut micros = nanos / t::NANOS_PER_MICRO;
-        nanos %= t::NANOS_PER_MICRO;
-        if micros > t::SpanMicroseconds::MAX_SELF {
-            nanos +=
-                (micros - t::SpanMicroseconds::MAX_SELF) * t::NANOS_PER_MICRO;
-            micros = t::NoUnits128::rfrom(t::SpanMicroseconds::MAX_SELF);
+    if unit >= Unit::Microsecond && !sdur.is_zero() {
+        let (mut micros, rem) = sdur.as_micros_with_remainder();
+        sdur = rem;
+        if micros > MAX_MICROS {
+            sdur += SignedDuration::from_micros_i128(micros - MAX_MICROS);
+            micros = MAX_MICROS;
         }
         // OK because we just checked that our units are in range.
-        span = span.try_microseconds_ranged(micros).unwrap();
+        span = span.microseconds(i64::try_from(micros).unwrap());
     }
-    if nanos > C(0) {
-        span = span.try_nanoseconds_ranged(nanos).with_context(|| {
+    if !sdur.is_zero() {
+        let nanos = sdur.as_nanos();
+        let nanos64 = i64::try_from(nanos).map_err(|_| {
             err!(
-                "failed to set nanosecond value {nanos} on span \
+                "failed to set nanosecond value {nanos} (it overflows \
+                 `i64`) on span determined from {value}.{fraction}",
+            )
+        })?;
+        span = span.try_nanoseconds(nanos64).with_context(|| {
+            err!(
+                "failed to set nanosecond value {nanos64} on span \
                  determined from {value}.{fraction}",
             )
         })?;
@@ -573,10 +554,10 @@ pub(crate) fn fractional_time_to_span(
 #[cfg_attr(feature = "perf-inline", inline(always))]
 pub(crate) fn set_span_unit_value(
     unit: Unit,
-    value: t::NoUnits,
+    value: i64,
     span: Span,
 ) -> Result<Span, Error> {
-    let result = span.try_units_ranged(unit, value).with_context(|| {
+    let result = span.try_units(unit, value).with_context(|| {
         err!(
             "failed to set value {value:?} \
              as {unit} unit on span",
@@ -622,18 +603,18 @@ pub(crate) fn set_span_unit_value(
 #[inline(never)]
 pub(crate) fn fractional_time_to_duration(
     unit: Unit,
-    value: t::NoUnits,
+    value: i64,
     fraction: t::SubsecNanosecond,
     sdur: SignedDuration,
     negative: bool,
 ) -> Result<SignedDuration, Error> {
-    let fraction = t::NoUnits::rfrom(fraction);
+    let fraction = i64::from(fraction.get());
     let nanos = match unit {
-        Unit::Hour => fraction * t::SECONDS_PER_HOUR,
-        Unit::Minute => fraction * t::SECONDS_PER_MINUTE,
+        Unit::Hour => fraction.wrapping_mul(t::SECONDS_PER_HOUR.value()),
+        Unit::Minute => fraction.wrapping_mul(t::SECONDS_PER_MINUTE.value()),
         Unit::Second => fraction,
-        Unit::Millisecond => fraction / t::NANOS_PER_MICRO,
-        Unit::Microsecond => fraction / t::NANOS_PER_MILLI,
+        Unit::Millisecond => fraction.wrapping_div(t::NANOS_PER_MICRO.value()),
+        Unit::Microsecond => fraction.wrapping_div(t::NANOS_PER_MILLI.value()),
         unit => {
             return Err(err!(
                 "fractional {unit} units are not allowed",
@@ -642,7 +623,7 @@ pub(crate) fn fractional_time_to_duration(
         }
     };
     let sdur = set_duration_unit_value(unit, value, sdur, negative)?;
-    let fraction_dur = SignedDuration::from_nanos(nanos.get());
+    let fraction_dur = SignedDuration::from_nanos(nanos);
     if negative {
         sdur.checked_sub(fraction_dur)
     } else {
@@ -665,7 +646,7 @@ pub(crate) fn fractional_time_to_duration(
 #[cfg_attr(feature = "perf-inline", inline(always))]
 pub(crate) fn set_duration_unit_value(
     unit: Unit,
-    value: t::NoUnits,
+    value: i64,
     sdur: SignedDuration,
     negative: bool,
 ) -> Result<SignedDuration, Error> {
@@ -678,7 +659,7 @@ pub(crate) fn set_duration_unit_value(
     .ok_or_else(|| {
         err!(
             "accumulated `SignedDuration` of `{sdur:?}` overflowed when \
-                 adding {value} of unit {unit}",
+             adding {value} of unit {unit}",
             unit = unit.singular(),
         )
     })
@@ -693,7 +674,7 @@ pub(crate) fn set_duration_unit_value(
 #[cfg_attr(feature = "perf-inline", inline(always))]
 fn duration_unit_value(
     unit: Unit,
-    value: t::NoUnits,
+    value: i64,
 ) -> Result<SignedDuration, Error> {
     // Convert our parsed unit into a number of nanoseconds.
     //
@@ -701,23 +682,25 @@ fn duration_unit_value(
     // since a `SignedDuration` supports all `i64` second values.
     let sdur = match unit {
         Unit::Hour => {
-            let seconds =
-                value.checked_mul(t::SECONDS_PER_HOUR).ok_or_else(|| {
+            let seconds = value
+                .checked_mul(t::SECONDS_PER_HOUR.value())
+                .ok_or_else(|| {
                     err!("converting {value} hours to seconds overflows i64")
                 })?;
-            SignedDuration::from_secs(seconds.get())
+            SignedDuration::from_secs(seconds)
         }
         Unit::Minute => {
-            let seconds =
-                value.checked_mul(t::SECONDS_PER_MINUTE).ok_or_else(|| {
+            let seconds = value
+                .checked_mul(t::SECONDS_PER_MINUTE.value())
+                .ok_or_else(|| {
                     err!("converting {value} minutes to seconds overflows i64")
                 })?;
-            SignedDuration::from_secs(seconds.get())
+            SignedDuration::from_secs(seconds)
         }
-        Unit::Second => SignedDuration::from_secs(value.get()),
-        Unit::Millisecond => SignedDuration::from_millis(value.get()),
-        Unit::Microsecond => SignedDuration::from_micros(value.get()),
-        Unit::Nanosecond => SignedDuration::from_nanos(value.get()),
+        Unit::Second => SignedDuration::from_secs(value),
+        Unit::Millisecond => SignedDuration::from_millis(value),
+        Unit::Microsecond => SignedDuration::from_micros(value),
+        Unit::Nanosecond => SignedDuration::from_nanos(value),
         unsupported => {
             return Err(err!(
                 "parsing {unit} units into a `SignedDuration` is not supported \

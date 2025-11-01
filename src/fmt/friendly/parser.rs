@@ -346,7 +346,7 @@ impl SpanParser {
     fn parse_units_to_span<'i>(
         &self,
         mut input: &'i [u8],
-        first_unit_value: t::NoUnits,
+        first_unit_value: i64,
     ) -> Result<Parsed<'i, Span>, Error> {
         let mut parsed_any_after_comma = true;
         let mut prev_unit: Option<Unit> = None;
@@ -461,7 +461,7 @@ impl SpanParser {
     fn parse_units_to_duration<'i>(
         &self,
         mut input: &'i [u8],
-        first_unit_value: t::NoUnits,
+        first_unit_value: i64,
     ) -> Result<Parsed<'i, SignedDuration>, Error> {
         let mut parsed_any_after_comma = true;
         let mut prev_unit: Option<Unit> = None;
@@ -599,7 +599,7 @@ impl SpanParser {
     fn parse_hms_maybe<'i>(
         &self,
         input: &'i [u8],
-        hour: t::NoUnits,
+        hour: i64,
     ) -> Result<Parsed<'i, Option<HMS>>, Error> {
         if !input.first().map_or(false, |&b| b == b':') {
             return Ok(Parsed { input, value: None });
@@ -621,7 +621,7 @@ impl SpanParser {
     fn parse_hms<'i>(
         &self,
         input: &'i [u8],
-        hour: t::NoUnits,
+        hour: i64,
     ) -> Result<Parsed<'i, HMS>, Error> {
         let Parsed { input, value } = self.parse_unit_value(input)?;
         let Some(minute) = value else {
@@ -667,7 +667,7 @@ impl SpanParser {
     fn parse_unit_value<'i>(
         &self,
         mut input: &'i [u8],
-    ) -> Result<Parsed<'i, Option<t::NoUnits>>, Error> {
+    ) -> Result<Parsed<'i, Option<i64>>, Error> {
         // Discovered via `i64::MAX.to_string().len()`.
         const MAX_I64_DIGITS: usize = 19;
 
@@ -718,9 +718,7 @@ impl SpanParser {
         }
 
         input = &input[digit_count..];
-        // OK because t::NoUnits permits all possible i64 values.
-        let value = t::NoUnits::new(n).unwrap();
-        Ok(Parsed { value: Some(value), input })
+        Ok(Parsed { value: Some(n), input })
     }
 
     /// Parse a unit designator, e.g., `years` or `nano`.
@@ -867,9 +865,9 @@ impl SpanParser {
 /// A type that represents the parsed components of `HH:MM:SS[.fraction]`.
 #[derive(Debug)]
 struct HMS {
-    hour: t::NoUnits,
-    minute: t::NoUnits,
-    second: t::NoUnits,
+    hour: i64,
+    minute: i64,
+    second: i64,
     fraction: Option<t::SubsecNanosecond>,
 }
 
@@ -1034,7 +1032,7 @@ mod tests {
             // the maximum number of microseconds is subtracted off, and we're
             // left over with a value that overflows an i64.
             pe("640330789636854776 micros"),
-            @r###"failed to parse "640330789636854776 micros" in the "friendly" format: failed to set nanosecond value 9223372036854776000 on span determined from 640330789636854776.0: parameter 'nanoseconds' with value 9223372036854776000 is not in the required range of -9223372036854775807..=9223372036854775807"###,
+            @r#"failed to parse "640330789636854776 micros" in the "friendly" format: failed to set nanosecond value 9223372036854776000 (it overflows `i64`) on span determined from 640330789636854776.0"#,
         );
         // one fewer is okay
         insta::assert_snapshot!(
@@ -1047,7 +1045,7 @@ mod tests {
             // different error path by using an explicit fraction. Here, if
             // we had x.807 micros, it would parse successfully.
             pe("640330789636854775.808 micros"),
-            @r###"failed to parse "640330789636854775.808 micros" in the "friendly" format: failed to set nanosecond value 9223372036854775808 on span determined from 640330789636854775.808000000: parameter 'nanoseconds' with value 9223372036854775808 is not in the required range of -9223372036854775807..=9223372036854775807"###,
+            @r#"failed to parse "640330789636854775.808 micros" in the "friendly" format: failed to set nanosecond value 9223372036854775808 (it overflows `i64`) on span determined from 640330789636854775.808000000"#,
         );
         // one fewer is okay
         insta::assert_snapshot!(
