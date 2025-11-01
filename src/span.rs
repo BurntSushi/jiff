@@ -2628,6 +2628,15 @@ impl Span {
     }
 
     #[inline]
+    pub(crate) fn try_units(
+        self,
+        unit: Unit,
+        value: i64,
+    ) -> Result<Span, Error> {
+        self.try_units_ranged(unit, NoUnits::new_unchecked(value))
+    }
+
+    #[inline]
     pub(crate) fn try_units_ranged(
         self,
         unit: Unit,

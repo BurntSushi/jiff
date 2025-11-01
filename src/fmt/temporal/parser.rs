@@ -1366,7 +1366,7 @@ impl SpanParser {
     fn parse_unit_value<'i>(
         &self,
         mut input: &'i [u8],
-    ) -> Result<Parsed<'i, Option<t::NoUnits>>, Error> {
+    ) -> Result<Parsed<'i, Option<i64>>, Error> {
         // Discovered via `i64::MAX.to_string().len()`.
         const MAX_I64_DIGITS: usize = 19;
 
@@ -1386,8 +1386,6 @@ impl SpanParser {
                 digits = escape::Bytes(digits),
             )
         })?;
-        // OK because t::NoUnits permits all possible i64 values.
-        let value = t::NoUnits::new(value).unwrap();
         Ok(Parsed { value: Some(value), input })
     }
 
