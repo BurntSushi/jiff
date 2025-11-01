@@ -35,7 +35,7 @@ impl DecimalFormatter {
 
     /// Format the given value using this configuration as a decimal ASCII
     /// number.
-    #[cfg(test)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) const fn format(&self, value: i64) -> Decimal {
         Decimal::new(self, value)
     }
@@ -97,10 +97,7 @@ impl Decimal {
     /// Using the given formatter, turn the value given into a decimal
     /// representation using ASCII bytes.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) const fn new(
-        formatter: &DecimalFormatter,
-        mut value: i64,
-    ) -> Decimal {
+    const fn new(formatter: &DecimalFormatter, mut value: i64) -> Decimal {
         // Specialize the common case to generate tighter codegen.
         if value >= 0 && formatter.force_sign.is_none() {
             let mut decimal = Decimal {
@@ -180,7 +177,7 @@ impl Decimal {
     ///
     /// The slice returned is guaranteed to be valid ASCII.
     #[inline]
-    pub(crate) fn as_bytes(&self) -> &[u8] {
+    fn as_bytes(&self) -> &[u8] {
         &self.buf[usize::from(self.start)..usize::from(self.end)]
     }
 

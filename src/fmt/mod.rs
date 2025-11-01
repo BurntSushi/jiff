@@ -399,7 +399,7 @@ trait WriteExt: Write {
         formatter: &DecimalFormatter,
         n: impl Into<i64>,
     ) -> Result<(), Error> {
-        self.write_decimal(&Decimal::new(formatter, n.into()))
+        self.write_decimal(&formatter.format(n.into()))
     }
 
     /// Write the given fractional number using ASCII digits to this buffer.
