@@ -251,7 +251,7 @@ println!("{zdt}");
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-Or, if the time is known to be valid, you can use the infallibe
+Or, if the time is known to be valid, you can use the infallible
 [`civil::time`](civil::time()) convenience constructor:
 
 ```

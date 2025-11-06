@@ -5518,7 +5518,7 @@ impl<'a> SpanRelativeTo<'a> {
     /// `Span` APIs. Previously, some APIs (like [`Timestamp::checked_add`])
     /// would always return an error if the `Span` given had non-zero
     /// units of days or greater. On the other hand, other APIs (like
-    /// [`Span::checked_add`]) would autoamtically assume days were always
+    /// [`Span::checked_add`]) would automatically assume days were always
     /// 24 hours if no relative reference time was given and either span had
     /// non-zero units of days. With this marker, APIs _never_ assume days are
     /// always 24 hours automatically.

@@ -850,7 +850,7 @@ fn result_out_of_range() -> Result {
 
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/Duration/prototype/round/round-cross-unit-boundary.js
 #[test]
-fn round_cross_unit_bondary() -> Result {
+fn round_cross_unit_boundary() -> Result {
     let d = date(2022, 1, 1);
     let mode = RoundMode::Expand;
 
