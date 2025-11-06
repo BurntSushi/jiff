@@ -1149,7 +1149,7 @@ impl SpanParser {
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(super) fn parse_duration<I: AsRef<[u8]>>(
+    pub(super) fn parse_signed_duration<I: AsRef<[u8]>>(
         &self,
         input: I,
     ) -> Result<SignedDuration, Error> {
@@ -1157,8 +1157,35 @@ impl SpanParser {
         fn imp(p: &SpanParser, input: &[u8]) -> Result<SignedDuration, Error> {
             let mut builder = DurationUnits::default();
             let parsed = p.parse_time_only(input, &mut builder)?;
-            let parsed = parsed.and_then(|_| builder.to_duration())?;
+            let parsed = parsed.and_then(|_| builder.to_signed_duration())?;
             parsed.into_full()
+        }
+
+        let input = input.as_ref();
+        imp(self, input).with_context(|| {
+            err!(
+                "failed to parse {input:?} as an ISO 8601 duration string",
+                input = escape::Bytes(input)
+            )
+        })
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(super) fn parse_unsigned_duration<I: AsRef<[u8]>>(
+        &self,
+        input: I,
+    ) -> Result<core::time::Duration, Error> {
+        #[inline(never)]
+        fn imp(
+            p: &SpanParser,
+            input: &[u8],
+        ) -> Result<core::time::Duration, Error> {
+            let mut builder = DurationUnits::default();
+            let parsed = p.parse_time_only(input, &mut builder)?;
+            let parsed =
+                parsed.and_then(|_| builder.to_unsigned_duration())?;
+            let d = parsed.value;
+            parsed.into_full_with(format_args!("{d:?}"))
         }
 
         let input = input.as_ref();
@@ -1423,8 +1450,9 @@ mod tests {
 
     #[test]
     fn ok_signed_duration() {
-        let p =
-            |input: &[u8]| SpanParser::new().parse_duration(input).unwrap();
+        let p = |input: &[u8]| {
+            SpanParser::new().parse_signed_duration(input).unwrap()
+        };
 
         insta::assert_debug_snapshot!(p(b"PT0s"), @"0s");
         insta::assert_debug_snapshot!(p(b"PT0.000000001s"), @"1ns");
@@ -1448,7 +1476,7 @@ mod tests {
     #[test]
     fn err_signed_duration() {
         let p = |input: &[u8]| {
-            SpanParser::new().parse_duration(input).unwrap_err()
+            SpanParser::new().parse_signed_duration(input).unwrap_err()
         };
 
         insta::assert_snapshot!(
@@ -1510,6 +1538,116 @@ mod tests {
         insta::assert_snapshot!(
             p(b"PT2562047788015215.6h"),
             @r#"failed to parse "PT2562047788015215.6h" as an ISO 8601 duration string: accumulated `SignedDuration` of `2562047788015215h` overflowed when adding 0.600000000 of unit hour"#,
+        );
+    }
+
+    #[test]
+    fn ok_unsigned_duration() {
+        let p = |input: &[u8]| {
+            SpanParser::new().parse_unsigned_duration(input).unwrap()
+        };
+
+        insta::assert_debug_snapshot!(p(b"PT0s"), @"0ns");
+        insta::assert_debug_snapshot!(p(b"PT0.000000001s"), @"1ns");
+        insta::assert_debug_snapshot!(p(b"PT1s"), @"1s");
+        insta::assert_debug_snapshot!(p(b"+PT1s"), @"1s");
+        insta::assert_debug_snapshot!(p(b"PT59s"), @"59s");
+        insta::assert_debug_snapshot!(p(b"PT60s"), @"60s");
+        insta::assert_debug_snapshot!(p(b"PT1m"), @"60s");
+        insta::assert_debug_snapshot!(p(b"PT1m0.000000001s"), @"60.000000001s");
+        insta::assert_debug_snapshot!(p(b"PT1.25m"), @"75s");
+        insta::assert_debug_snapshot!(p(b"PT1h"), @"3600s");
+        insta::assert_debug_snapshot!(p(b"PT1h0.000000001s"), @"3600.000000001s");
+        insta::assert_debug_snapshot!(p(b"PT1.25h"), @"4500s");
+
+        insta::assert_debug_snapshot!(p(b"PT2562047788015215h30m7.999999999s"), @"9223372036854775807.999999999s");
+        insta::assert_debug_snapshot!(p(b"PT5124095576030431H15.999999999S"), @"18446744073709551615.999999999s");
+
+        insta::assert_debug_snapshot!(p(b"PT9223372036854775807S"), @"9223372036854775807s");
+        insta::assert_debug_snapshot!(p(b"PT9223372036854775808S"), @"9223372036854775808s");
+        insta::assert_debug_snapshot!(p(b"PT18446744073709551615S"), @"18446744073709551615s");
+        insta::assert_debug_snapshot!(p(b"PT1M18446744073709551555S"), @"18446744073709551615s");
+    }
+
+    #[test]
+    fn err_unsigned_duration() {
+        #[track_caller]
+        fn p(input: &[u8]) -> crate::Error {
+            SpanParser::new().parse_unsigned_duration(input).unwrap_err()
+        }
+
+        insta::assert_snapshot!(
+            p(b"-PT1S"),
+            @r#"failed to parse "-PT1S" as an ISO 8601 duration string: cannot parse negative duration into unsigned `std::time::Duration`"#,
+        );
+        insta::assert_snapshot!(
+            p(b"-PT0S"),
+            @r#"failed to parse "-PT0S" as an ISO 8601 duration string: cannot parse negative duration into unsigned `std::time::Duration`"#,
+        );
+
+        insta::assert_snapshot!(
+            p(b"P0d"),
+            @r#"failed to parse "P0d" as an ISO 8601 duration string: parsing ISO 8601 duration into a `SignedDuration` requires that the duration contain a time component and no components of days or greater"#,
+        );
+        insta::assert_snapshot!(
+            p(b"PT0d"),
+            @r#"failed to parse "PT0d" as an ISO 8601 duration string: expected to find time unit designator suffix (H, M or S), but found "d" instead"#,
+        );
+        insta::assert_snapshot!(
+            p(b"P0dT1s"),
+            @r#"failed to parse "P0dT1s" as an ISO 8601 duration string: parsing ISO 8601 duration into a `SignedDuration` requires that the duration contain a time component and no components of days or greater"#,
+        );
+
+        insta::assert_snapshot!(
+            p(b""),
+            @r#"failed to parse "" as an ISO 8601 duration string: expected to find duration beginning with 'P' or 'p', but found end of input"#,
+        );
+        insta::assert_snapshot!(
+            p(b"P"),
+            @r#"failed to parse "P" as an ISO 8601 duration string: parsing ISO 8601 duration into a `SignedDuration` requires that the duration contain a time component and no components of days or greater"#,
+        );
+        insta::assert_snapshot!(
+            p(b"PT"),
+            @r#"failed to parse "PT" as an ISO 8601 duration string: found a time designator (T or t) in an ISO 8601 duration string in "PT", but did not find any time units"#,
+        );
+        insta::assert_snapshot!(
+            p(b"PTs"),
+            @r#"failed to parse "PTs" as an ISO 8601 duration string: found a time designator (T or t) in an ISO 8601 duration string in "PTs", but did not find any time units"#,
+        );
+
+        insta::assert_snapshot!(
+            p(b"PT1s1m"),
+            @r#"failed to parse "PT1s1m" as an ISO 8601 duration string: found value 1 with unit minute after unit second, but units must be written from largest to smallest (and they can't be repeated)"#,
+        );
+        insta::assert_snapshot!(
+            p(b"PT1s1h"),
+            @r#"failed to parse "PT1s1h" as an ISO 8601 duration string: found value 1 with unit hour after unit second, but units must be written from largest to smallest (and they can't be repeated)"#,
+        );
+        insta::assert_snapshot!(
+            p(b"PT1m1h"),
+            @r#"failed to parse "PT1m1h" as an ISO 8601 duration string: found value 1 with unit hour after unit minute, but units must be written from largest to smallest (and they can't be repeated)"#,
+        );
+
+        insta::assert_snapshot!(
+            p(b"-PT9223372036854775809S"),
+            @r#"failed to parse "-PT9223372036854775809S" as an ISO 8601 duration string: cannot parse negative duration into unsigned `std::time::Duration`"#,
+        );
+        insta::assert_snapshot!(
+            p(b"PT18446744073709551616S"),
+            @r#"failed to parse "PT18446744073709551616S" as an ISO 8601 duration string: number `18446744073709551616` too big to parse into 64-bit integer"#,
+        );
+
+        insta::assert_snapshot!(
+            p(b"PT5124095576030431H16.999999999S"),
+            @r#"failed to parse "PT5124095576030431H16.999999999S" as an ISO 8601 duration string: accumulated `std::time::Duration` of `18446744073709551600s` overflowed when adding 16 of unit second"#,
+        );
+        insta::assert_snapshot!(
+            p(b"PT1M18446744073709551556S"),
+            @r#"failed to parse "PT1M18446744073709551556S" as an ISO 8601 duration string: accumulated `std::time::Duration` of `60s` overflowed when adding 18446744073709551556 of unit second"#,
+        );
+        insta::assert_snapshot!(
+            p(b"PT5124095576030431.5H"),
+            @r#"failed to parse "PT5124095576030431.5H" as an ISO 8601 duration string: accumulated `std::time::Duration` of `18446744073709551600s` overflowed when adding 0.500000000 of unit hour"#,
         );
     }
 

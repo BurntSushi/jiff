@@ -420,9 +420,6 @@ pub(crate) struct DurationUnits {
     values: [u64; 10],
     /// Any fractional component parsed. The fraction is necessarily a fraction
     /// of the minimum unit if present.
-    ///
-    /// TODO: Make this use a `u32` since we want the caller to pass in
-    /// a value in the range `0..=999_999_999`.
     fraction: Option<u32>,
     /// The sign of the duration. This may be set at any time.
     ///
@@ -771,7 +768,7 @@ impl DurationUnits {
     /// An error is also returned if any calendar units (days or greater) were
     /// set or if no units were set.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn to_duration(&self) -> Result<SignedDuration, Error> {
+    pub(crate) fn to_signed_duration(&self) -> Result<SignedDuration, Error> {
         // When every unit value is less than this, *and* there is
         // no fractional component, then we trigger a fast path that
         // doesn't need to bother with error handling and careful
@@ -793,7 +790,7 @@ impl DurationUnits {
                 .any(|&value| value > LIMIT)
             || self.max.map_or(true, |max| max > Unit::Hour)
         {
-            return self.to_duration_general();
+            return self.to_signed_duration_general();
         }
 
         let hours = self.values[Unit::Hour.as_usize()] as i64;
@@ -814,7 +811,7 @@ impl DurationUnits {
         Ok(sdur)
     }
 
-    /// The "general" implementation of `DurationUnits::to_duration`.
+    /// The "general" implementation of `DurationUnits::to_signed_duration`.
     ///
     /// This handles all possible cases, including fractional units, with good
     /// error handling. Basically, we take this path when we think an error
@@ -822,7 +819,7 @@ impl DurationUnits {
     /// the more it can be avoided, the better.
     #[cold]
     #[inline(never)]
-    fn to_duration_general(&self) -> Result<SignedDuration, Error> {
+    fn to_signed_duration_general(&self) -> Result<SignedDuration, Error> {
         let (min, max) = self.get_min_max_units()?;
         if max > Unit::Hour {
             return Err(err!(
@@ -912,6 +909,197 @@ impl DurationUnits {
                 .ok_or_else(|| {
                     err!(
                         "accumulated `SignedDuration` of `{sdur:?}` \
+                         overflowed when adding 0.{fraction} of unit {unit}",
+                        unit = min.singular(),
+                    )
+                })?;
+        }
+
+        Ok(sdur)
+    }
+
+    /// Convert these duration components to a `core::time::Duration`.
+    ///
+    /// # Errors
+    ///
+    /// If the total number of nanoseconds represented by all units combined
+    /// exceeds what can bit in a 96-bit signed integer, then an error is
+    /// returned.
+    ///
+    /// An error is also returned if any calendar units (days or greater) were
+    /// set or if no units were set.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn to_unsigned_duration(
+        &self,
+    ) -> Result<core::time::Duration, Error> {
+        // When every unit value is less than this, *and* there is
+        // no fractional component, then we trigger a fast path that
+        // doesn't need to bother with error handling and careful
+        // handling of the sign.
+        //
+        // Why `999`? Well, I think it's nice to use one limit for all
+        // units to make the comparisons simpler (although we could
+        // use more targeted values to admit more cases, I didn't try
+        // that). But specifically, this means we can have `999ms 999us
+        // 999ns` as a maximal subsecond value without overflowing
+        // the nanosecond component of a `core::time::Duration`. This lets
+        // us "just do math" without needing to check each result and
+        // handle errors.
+        const LIMIT: u64 = 999;
+
+        if self.fraction.is_some()
+            || self.values[..Unit::Day.as_usize()]
+                .iter()
+                .any(|&value| value > LIMIT)
+            || self.max.map_or(true, |max| max > Unit::Hour)
+            || self.sign.is_negative()
+        {
+            return self.to_unsigned_duration_general();
+        }
+
+        let hours = self.values[Unit::Hour.as_usize()];
+        let mins = self.values[Unit::Minute.as_usize()];
+        let secs = self.values[Unit::Second.as_usize()];
+        let millis = self.values[Unit::Millisecond.as_usize()] as u32;
+        let micros = self.values[Unit::Microsecond.as_usize()] as u32;
+        let nanos = self.values[Unit::Nanosecond.as_usize()] as u32;
+
+        let total_secs = (hours * 3600) + (mins * 60) + secs;
+        let total_nanos = (millis * 1_000_000) + (micros * 1_000) + nanos;
+        let sdur = core::time::Duration::new(total_secs, total_nanos);
+
+        Ok(sdur)
+    }
+
+    /// The "general" implementation of `DurationUnits::to_unsigned_duration`.
+    ///
+    /// This handles all possible cases, including fractional units, with good
+    /// error handling. Basically, we take this path when we think an error
+    /// _could_ occur. But this function is more bloaty and does more work, so
+    /// the more it can be avoided, the better.
+    #[cold]
+    #[inline(never)]
+    fn to_unsigned_duration_general(
+        &self,
+    ) -> Result<core::time::Duration, Error> {
+        #[inline]
+        const fn try_from_hours(hours: u64) -> Option<core::time::Duration> {
+            // OK because (SECS_PER_MINUTE*MINS_PER_HOUR)!={-1,0}.
+            const MAX_HOUR: u64 = u64::MAX / (60 * 60);
+            if hours > MAX_HOUR {
+                return None;
+            }
+            Some(core::time::Duration::from_secs(hours * 60 * 60))
+        }
+
+        #[inline]
+        const fn try_from_mins(mins: u64) -> Option<core::time::Duration> {
+            // OK because SECS_PER_MINUTE!={-1,0}.
+            const MAX_MINUTE: u64 = u64::MAX / 60;
+            if mins > MAX_MINUTE {
+                return None;
+            }
+            Some(core::time::Duration::from_secs(mins * 60))
+        }
+
+        if self.sign.is_negative() {
+            return Err(err!(
+                "cannot parse negative duration into unsigned \
+                 `std::time::Duration`",
+            ));
+        }
+
+        let (min, max) = self.get_min_max_units()?;
+        if max > Unit::Hour {
+            return Err(err!(
+                "parsing {unit} units into a `std::time::Duration` \
+                 is not supported (perhaps try parsing into a `Span` instead)",
+                unit = max.singular(),
+            ));
+        }
+
+        let mut sdur = core::time::Duration::ZERO;
+        if self.values[Unit::Hour.as_usize()] != 0 {
+            let value = self.values[Unit::Hour.as_usize()];
+            sdur = try_from_hours(value)
+                .and_then(|nanos| sdur.checked_add(nanos))
+                .ok_or_else(|| {
+                    err!(
+                        "accumulated `std::time::Duration` of `{sdur:?}` \
+                         overflowed when adding {value} of unit {unit}",
+                        unit = Unit::Hour.singular(),
+                    )
+                })?;
+        }
+        if self.values[Unit::Minute.as_usize()] != 0 {
+            let value = self.values[Unit::Minute.as_usize()];
+            sdur = try_from_mins(value)
+                .and_then(|nanos| sdur.checked_add(nanos))
+                .ok_or_else(|| {
+                    err!(
+                        "accumulated `std::time::Duration` of `{sdur:?}` \
+                         overflowed when adding {value} of unit {unit}",
+                        unit = Unit::Minute.singular(),
+                    )
+                })?;
+        }
+        if self.values[Unit::Second.as_usize()] != 0 {
+            let value = self.values[Unit::Second.as_usize()];
+            sdur = core::time::Duration::from_secs(value)
+                .checked_add(sdur)
+                .ok_or_else(|| {
+                    err!(
+                        "accumulated `std::time::Duration` of `{sdur:?}` \
+                         overflowed when adding {value} of unit {unit}",
+                        unit = Unit::Second.singular(),
+                    )
+                })?;
+        }
+        if self.values[Unit::Millisecond.as_usize()] != 0 {
+            let value = self.values[Unit::Millisecond.as_usize()];
+            sdur = core::time::Duration::from_millis(value)
+                .checked_add(sdur)
+                .ok_or_else(|| {
+                    err!(
+                        "accumulated `std::time::Duration` of `{sdur:?}` \
+                         overflowed when adding {value} of unit {unit}",
+                        unit = Unit::Millisecond.singular(),
+                    )
+                })?;
+        }
+        if self.values[Unit::Microsecond.as_usize()] != 0 {
+            let value = self.values[Unit::Microsecond.as_usize()];
+            sdur = core::time::Duration::from_micros(value)
+                .checked_add(sdur)
+                .ok_or_else(|| {
+                    err!(
+                        "accumulated `std::time::Duration` of `{sdur:?}` \
+                         overflowed when adding {value} of unit {unit}",
+                        unit = Unit::Microsecond.singular(),
+                    )
+                })?;
+        }
+        if self.values[Unit::Nanosecond.as_usize()] != 0 {
+            let value = self.values[Unit::Nanosecond.as_usize()];
+            sdur = core::time::Duration::from_nanos(value)
+                .checked_add(sdur)
+                .ok_or_else(|| {
+                err!(
+                    "accumulated `std::time::Duration` of `{sdur:?}` \
+                         overflowed when adding {value} of unit {unit}",
+                    unit = Unit::Nanosecond.singular(),
+                )
+            })?;
+        }
+
+        if let Some(fraction) = self.get_fraction()? {
+            sdur = sdur
+                .checked_add(
+                    fractional_duration(min, fraction)?.unsigned_abs(),
+                )
+                .ok_or_else(|| {
+                    err!(
+                        "accumulated `std::time::Duration` of `{sdur:?}` \
                          overflowed when adding 0.{fraction} of unit {unit}",
                         unit = min.singular(),
                     )
