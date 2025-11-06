@@ -243,8 +243,72 @@ impl SpanParser {
         ) -> Result<SignedDuration, Error> {
             let mut builder = DurationUnits::default();
             let parsed = span_parser.parse(input, &mut builder)?;
-            let parsed = parsed.and_then(|_| builder.to_duration())?;
+            let parsed = parsed.and_then(|_| builder.to_signed_duration())?;
             parsed.into_full()
+        }
+
+        let input = input.as_ref();
+        imp(self, input).with_context(|| {
+            err!(
+                "failed to parse {input:?} in the \"friendly\" format",
+                input = escape::Bytes(input)
+            )
+        })
+    }
+
+    /// Run the parser on the given string (which may be plain bytes) and,
+    /// if successful, return the parsed `std::time::Duration`.
+    ///
+    /// See the [module documentation](super) for more details on the specific
+    /// grammar supported by this parser.
+    ///
+    /// # Example
+    ///
+    /// This shows a number of different duration formats that can be parsed
+    /// into a `std::time::Duration`:
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use jiff::fmt::friendly::SpanParser;
+    ///
+    /// let durations = [
+    ///     ("2h30m", Duration::from_secs(2 * 60 * 60 + 30 * 60)),
+    ///     ("2 hrs 30 mins", Duration::from_secs(2 * 60 * 60 + 30 * 60)),
+    ///     ("2 hours 30 minutes", Duration::from_secs(2 * 60 * 60 + 30 * 60)),
+    ///     ("2 hrs 30 minutes", Duration::from_secs(2 * 60 * 60 + 30 * 60)),
+    ///     ("2.5h", Duration::from_secs(2 * 60 * 60 + 30 * 60)),
+    ///     ("1m", Duration::from_secs(1 * 60)),
+    ///     ("1.5m", Duration::from_secs(90)),
+    ///     ("0.0021s", Duration::new(0, 2_100_000)),
+    ///     ("0s", Duration::ZERO),
+    ///     ("0.000000001s", Duration::from_nanos(1)),
+    /// ];
+    ///
+    /// static PARSER: SpanParser = SpanParser::new();
+    /// for (string, duration) in durations {
+    ///     let parsed = PARSER.parse_unsigned_duration(string)?;
+    ///     assert_eq!(duration, parsed, "result of parsing {string:?}");
+    /// }
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn parse_unsigned_duration<I: AsRef<[u8]>>(
+        &self,
+        input: I,
+    ) -> Result<core::time::Duration, Error> {
+        #[inline(never)]
+        fn imp(
+            span_parser: &SpanParser,
+            input: &[u8],
+        ) -> Result<core::time::Duration, Error> {
+            let mut builder = DurationUnits::default();
+            let parsed = span_parser.parse(input, &mut builder)?;
+            let parsed =
+                parsed.and_then(|_| builder.to_unsigned_duration())?;
+            let d = parsed.value;
+            parsed.into_full_with(format_args!("{d:?}"))
         }
 
         let input = input.as_ref();
@@ -885,7 +949,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_duration_basic() {
+    fn parse_signed_duration_basic() {
         let p = |s: &str| SpanParser::new().parse_duration(s).unwrap();
 
         insta::assert_snapshot!(p("1 hour, 2 minutes, 3 seconds"), @"PT1H2M3S");
@@ -894,7 +958,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_duration_negate() {
+    fn parse_signed_duration_negate() {
         let p = |s: &str| SpanParser::new().parse_duration(s).unwrap();
         let perr = |s: &str| SpanParser::new().parse_duration(s).unwrap_err();
 
@@ -913,7 +977,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_duration_fractional() {
+    fn parse_signed_duration_fractional() {
         let p = |s: &str| SpanParser::new().parse_duration(s).unwrap();
 
         insta::assert_snapshot!(p("1.5hrs"), @"PT1H30M");
@@ -931,7 +995,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_duration_boundaries() {
+    fn parse_signed_duration_boundaries() {
         let p = |s: &str| SpanParser::new().parse_duration(s).unwrap();
         let pe = |s: &str| SpanParser::new().parse_duration(s).unwrap_err();
 
@@ -991,7 +1055,7 @@ mod tests {
     }
 
     #[test]
-    fn err_duration_basic() {
+    fn err_signed_duration_basic() {
         let p = |s: &str| SpanParser::new().parse_duration(s).unwrap_err();
 
         insta::assert_snapshot!(
@@ -1033,7 +1097,7 @@ mod tests {
     }
 
     #[test]
-    fn err_duration_sign() {
+    fn err_signed_duration_sign() {
         let p = |s: &str| SpanParser::new().parse_duration(s).unwrap_err();
 
         insta::assert_snapshot!(
@@ -1055,7 +1119,7 @@ mod tests {
     }
 
     #[test]
-    fn err_duration_overflow_fraction() {
+    fn err_signed_duration_overflow_fraction() {
         let p = |s: &str| SpanParser::new().parse_duration(s).unwrap();
         let pe = |s: &str| SpanParser::new().parse_duration(s).unwrap_err();
 
@@ -1073,7 +1137,7 @@ mod tests {
     }
 
     #[test]
-    fn err_duration_fraction() {
+    fn err_signed_duration_fraction() {
         let p = |s: &str| SpanParser::new().parse_duration(s).unwrap_err();
 
         insta::assert_snapshot!(
@@ -1083,8 +1147,247 @@ mod tests {
     }
 
     #[test]
-    fn err_duration_hms() {
+    fn err_signed_duration_hms() {
         let p = |s: &str| SpanParser::new().parse_duration(s).unwrap_err();
+
+        insta::assert_snapshot!(
+            p("05:"),
+            @r###"failed to parse "05:" in the "friendly" format: expected to parse minute in 'HH:MM:SS' format following parsed hour of 5"###,
+        );
+        insta::assert_snapshot!(
+            p("05:06"),
+            @r###"failed to parse "05:06" in the "friendly" format: when parsing 'HH:MM:SS' format, expected to see a ':' after the parsed minute of 6"###,
+        );
+        insta::assert_snapshot!(
+            p("05:06:"),
+            @r###"failed to parse "05:06:" in the "friendly" format: expected to parse second in 'HH:MM:SS' format following parsed minute of 6"###,
+        );
+        insta::assert_snapshot!(
+            p("2 hours, 05:06:07"),
+            @r#"failed to parse "2 hours, 05:06:07" in the "friendly" format: found `HH:MM:SS` after unit hour, but `HH:MM:SS` can only appear after years, months, weeks or days"#,
+        );
+    }
+
+    #[test]
+    fn parse_unsigned_duration_basic() {
+        let p = |s: &str| {
+            let dur = SpanParser::new().parse_unsigned_duration(s).unwrap();
+            crate::fmt::temporal::SpanPrinter::new()
+                .unsigned_duration_to_string(&dur)
+        };
+
+        insta::assert_snapshot!(
+            p("1 hour, 2 minutes, 3 seconds"),
+            @"PT1H2M3S",
+        );
+        insta::assert_snapshot!(p("01:02:03"), @"PT1H2M3S");
+        insta::assert_snapshot!(p("999:999:999"), @"PT1015H55M39S");
+        insta::assert_snapshot!(
+            p("+1hr"),
+            @"PT1H",
+        );
+    }
+
+    #[test]
+    fn parse_unsigned_duration_negate() {
+        let p = |s: &str| {
+            let dur = SpanParser::new().parse_unsigned_duration(s).unwrap();
+            crate::fmt::temporal::SpanPrinter::new()
+                .unsigned_duration_to_string(&dur)
+        };
+        let perr = |s: &str| {
+            SpanParser::new().parse_unsigned_duration(s).unwrap_err()
+        };
+
+        insta::assert_snapshot!(
+            p("18446744073709551615s"),
+            @"PT5124095576030431H15S",
+        );
+        insta::assert_snapshot!(
+            perr("18446744073709551616s"),
+            @r#"failed to parse "18446744073709551616s" in the "friendly" format: number `18446744073709551616` too big to parse into 64-bit integer"#,
+        );
+        insta::assert_snapshot!(
+            perr("-1s"),
+            @r#"failed to parse "-1s" in the "friendly" format: cannot parse negative duration into unsigned `std::time::Duration`"#,
+        );
+    }
+
+    #[test]
+    fn parse_unsigned_duration_fractional() {
+        let p = |s: &str| {
+            let dur = SpanParser::new().parse_unsigned_duration(s).unwrap();
+            crate::fmt::temporal::SpanPrinter::new()
+                .unsigned_duration_to_string(&dur)
+        };
+
+        insta::assert_snapshot!(p("1.5hrs"), @"PT1H30M");
+        insta::assert_snapshot!(p("1.5mins"), @"PT1M30S");
+        insta::assert_snapshot!(p("1.5secs"), @"PT1.5S");
+        insta::assert_snapshot!(p("1.5msecs"), @"PT0.0015S");
+        insta::assert_snapshot!(p("1.5µsecs"), @"PT0.0000015S");
+
+        insta::assert_snapshot!(p("1h 1.5mins"), @"PT1H1M30S");
+        insta::assert_snapshot!(p("1m 1.5secs"), @"PT1M1.5S");
+        insta::assert_snapshot!(p("1s 1.5msecs"), @"PT1.0015S");
+        insta::assert_snapshot!(p("1ms 1.5µsecs"), @"PT0.0010015S");
+
+        insta::assert_snapshot!(p("1s2000ms"), @"PT3S");
+    }
+
+    #[test]
+    fn parse_unsigned_duration_boundaries() {
+        let p = |s: &str| {
+            let dur = SpanParser::new().parse_unsigned_duration(s).unwrap();
+            crate::fmt::temporal::SpanPrinter::new()
+                .unsigned_duration_to_string(&dur)
+        };
+        let pe = |s: &str| SpanParser::new().parse_duration(s).unwrap_err();
+
+        insta::assert_snapshot!(p("175307616 hours"), @"PT175307616H");
+        insta::assert_snapshot!(p("10518456960 minutes"), @"PT175307616H");
+        insta::assert_snapshot!(p("631107417600 seconds"), @"PT175307616H");
+        insta::assert_snapshot!(p("631107417600000 milliseconds"), @"PT175307616H");
+        insta::assert_snapshot!(p("631107417600000000 microseconds"), @"PT175307616H");
+        insta::assert_snapshot!(p("9223372036854775807 nanoseconds"), @"PT2562047H47M16.854775807S");
+
+        insta::assert_snapshot!(p("175307617 hours"), @"PT175307617H");
+        insta::assert_snapshot!(p("10518456961 minutes"), @"PT175307616H1M");
+        insta::assert_snapshot!(p("631107417601 seconds"), @"PT175307616H1S");
+        insta::assert_snapshot!(p("631107417600001 milliseconds"), @"PT175307616H0.001S");
+        insta::assert_snapshot!(p("631107417600000001 microseconds"), @"PT175307616H0.000001S");
+
+        // The above were copied from the corresponding `Span` test, which has
+        // tighter limits on components. But a `std::time::Duration` supports
+        // the full range of `u64` seconds.
+        insta::assert_snapshot!(p("5124095576030431hours"), @"PT5124095576030431H");
+        insta::assert_snapshot!(
+            pe("5124095576030432hrs"),
+            @r#"failed to parse "5124095576030432hrs" in the "friendly" format: accumulated `SignedDuration` of `0s` overflowed when adding 5124095576030432 of unit hour"#,
+        );
+
+        insta::assert_snapshot!(p("307445734561825860minutes"), @"PT5124095576030431H");
+        insta::assert_snapshot!(
+            pe("307445734561825861mins"),
+            @r#"failed to parse "307445734561825861mins" in the "friendly" format: accumulated `SignedDuration` of `0s` overflowed when adding 307445734561825861 of unit minute"#,
+        );
+
+        insta::assert_snapshot!(p("18446744073709551615seconds"), @"PT5124095576030431H15S");
+        insta::assert_snapshot!(
+            pe("18446744073709551616s"),
+            @r#"failed to parse "18446744073709551616s" in the "friendly" format: number `18446744073709551616` too big to parse into 64-bit integer"#,
+        );
+    }
+
+    #[test]
+    fn err_unsigned_duration_basic() {
+        let p = |s: &str| {
+            SpanParser::new().parse_unsigned_duration(s).unwrap_err()
+        };
+
+        insta::assert_snapshot!(
+            p(""),
+            @r###"failed to parse "" in the "friendly" format: an empty string is not a valid duration"###,
+        );
+        insta::assert_snapshot!(
+            p(" "),
+            @r###"failed to parse " " in the "friendly" format: parsing a friendly duration requires it to start with a unit value (a decimal integer) after an optional sign, but no integer was found"###,
+        );
+        insta::assert_snapshot!(
+            p("5"),
+            @r###"failed to parse "5" in the "friendly" format: expected to find unit designator suffix (e.g., 'years' or 'secs'), but found end of input"###,
+        );
+        insta::assert_snapshot!(
+            p("a"),
+            @r###"failed to parse "a" in the "friendly" format: parsing a friendly duration requires it to start with a unit value (a decimal integer) after an optional sign, but no integer was found"###,
+        );
+        insta::assert_snapshot!(
+            p("2 minutes 1 hour"),
+            @r###"failed to parse "2 minutes 1 hour" in the "friendly" format: found value 1 with unit hour after unit minute, but units must be written from largest to smallest (and they can't be repeated)"###,
+        );
+        insta::assert_snapshot!(
+            p("1 hour 1 minut"),
+            @r#"failed to parse "1 hour 1 minut" in the "friendly" format: parsed value '3660s', but unparsed input "ut" remains (expected no unparsed input)"#,
+        );
+        insta::assert_snapshot!(
+            p("2 minutes,"),
+            @r###"failed to parse "2 minutes," in the "friendly" format: expected whitespace after comma, but found end of input"###,
+        );
+        insta::assert_snapshot!(
+            p("2 minutes, "),
+            @r#"failed to parse "2 minutes, " in the "friendly" format: found comma at the end of duration, but a comma indicates at least one more unit follows"#,
+        );
+        insta::assert_snapshot!(
+            p("2 minutes ,"),
+            @r#"failed to parse "2 minutes ," in the "friendly" format: parsed value '120s', but unparsed input "," remains (expected no unparsed input)"#,
+        );
+    }
+
+    #[test]
+    fn err_unsigned_duration_sign() {
+        let p = |s: &str| {
+            SpanParser::new().parse_unsigned_duration(s).unwrap_err()
+        };
+
+        insta::assert_snapshot!(
+            p("1hago"),
+            @r#"failed to parse "1hago" in the "friendly" format: parsed value '3600s', but unparsed input "ago" remains (expected no unparsed input)"#,
+        );
+        insta::assert_snapshot!(
+            p("1 hour 1 minuteago"),
+            @r#"failed to parse "1 hour 1 minuteago" in the "friendly" format: parsed value '3660s', but unparsed input "ago" remains (expected no unparsed input)"#,
+        );
+        insta::assert_snapshot!(
+            p("+1 hour 1 minute ago"),
+            @r###"failed to parse "+1 hour 1 minute ago" in the "friendly" format: expected to find either a prefix sign (+/-) or a suffix sign (ago), but found both"###,
+        );
+        insta::assert_snapshot!(
+            p("-1 hour 1 minute ago"),
+            @r###"failed to parse "-1 hour 1 minute ago" in the "friendly" format: expected to find either a prefix sign (+/-) or a suffix sign (ago), but found both"###,
+        );
+    }
+
+    #[test]
+    fn err_unsigned_duration_overflow_fraction() {
+        let p = |s: &str| {
+            let dur = SpanParser::new().parse_unsigned_duration(s).unwrap();
+            crate::fmt::temporal::SpanPrinter::new()
+                .unsigned_duration_to_string(&dur)
+        };
+        let pe = |s: &str| {
+            SpanParser::new().parse_unsigned_duration(s).unwrap_err()
+        };
+
+        insta::assert_snapshot!(
+            // Unlike `Span`, this just overflows because it can't be parsed
+            // as a 64-bit integer.
+            pe("18446744073709551616 micros"),
+            @r#"failed to parse "18446744073709551616 micros" in the "friendly" format: number `18446744073709551616` too big to parse into 64-bit integer"#,
+        );
+        // one fewer is okay
+        insta::assert_snapshot!(
+            p("18446744073709551615 micros"),
+            @"PT5124095576H1M49.551615S"
+        );
+    }
+
+    #[test]
+    fn err_unsigned_duration_fraction() {
+        let p = |s: &str| {
+            SpanParser::new().parse_unsigned_duration(s).unwrap_err()
+        };
+
+        insta::assert_snapshot!(
+            p("1.5 nanos"),
+            @r#"failed to parse "1.5 nanos" in the "friendly" format: fractional nanoseconds are not supported"#,
+        );
+    }
+
+    #[test]
+    fn err_unsigned_duration_hms() {
+        let p = |s: &str| {
+            SpanParser::new().parse_unsigned_duration(s).unwrap_err()
+        };
 
         insta::assert_snapshot!(
             p("05:"),

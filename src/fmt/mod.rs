@@ -227,6 +227,32 @@ impl<'i, V: core::fmt::Display> Parsed<'i, V> {
     }
 }
 
+impl<'i, V> Parsed<'i, V> {
+    /// Ensures that the parsed value represents the entire input. This occurs
+    /// precisely when the `input` on this parsed value is empty.
+    ///
+    /// This is useful when one expects a parsed value to consume the entire
+    /// input, and to consider it an error if it doesn't.
+    ///
+    /// This is like `Parsed::into_full`, but lets the caller provide a custom
+    /// `Display` implementation.
+    #[inline]
+    fn into_full_with(
+        self,
+        display: impl core::fmt::Display,
+    ) -> Result<V, Error> {
+        if self.input.is_empty() {
+            return Ok(self.value);
+        }
+        Err(err!(
+            "parsed value '{value}', but unparsed input {unparsed:?} \
+             remains (expected no unparsed input)",
+            value = display,
+            unparsed = escape::Bytes(self.input),
+        ))
+    }
+}
+
 impl<'i, V: core::fmt::Debug> core::fmt::Debug for Parsed<'i, V> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         f.debug_struct("Parsed")

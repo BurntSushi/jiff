@@ -2087,7 +2087,40 @@ impl SpanParser {
         &self,
         input: I,
     ) -> Result<SignedDuration, Error> {
-        self.p.parse_duration(input)
+        self.p.parse_signed_duration(input)
+    }
+
+    /// Parse an ISO 8601 duration string into a [`std::time::Duration`] value.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the span string given is invalid or if it is
+    /// valid but can't be converted to a `std::time::Duration`. This can occur
+    /// when the parsed time exceeds the maximum `std::time::Duration` value,
+    /// or if there are any non-zero units greater than hours.
+    ///
+    /// # Example
+    ///
+    /// This shows a basic example of using this routine.
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use jiff::fmt::temporal::SpanParser;
+    ///
+    /// static PARSER: SpanParser = SpanParser::new();
+    ///
+    /// let duration = PARSER.parse_unsigned_duration(b"PT48m")?;
+    /// assert_eq!(duration, Duration::from_secs(48 * 60));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn parse_unsigned_duration<I: AsRef<[u8]>>(
+        &self,
+        input: I,
+    ) -> Result<core::time::Duration, Error> {
+        self.p.parse_unsigned_duration(input)
     }
 }
 
