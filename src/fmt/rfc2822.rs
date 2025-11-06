@@ -22,7 +22,7 @@ there are real world use cases that need it, then that would be sufficient
 justification for adding it.
 
 RFC 2822 support should otherwise be complete, including support for parsing
-obselete offsets.
+obsolete offsets.
 
 [issue39]: https://github.com/BurntSushi/jiff/issues/39
 

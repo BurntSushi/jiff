@@ -585,7 +585,7 @@ impl<C> Config<C> {
 /// to the behavior of [`DefaultCustom`]. More methods on this trait may be
 /// added in the future.
 ///
-/// Implementors of this trait can be attached to a [`Config`] which can then
+/// Implementers of this trait can be attached to a [`Config`] which can then
 /// be passed to [`BrokenDownTime::format_with_config`] or
 /// [`BrokenDownTime::to_string_with_config`].
 ///
