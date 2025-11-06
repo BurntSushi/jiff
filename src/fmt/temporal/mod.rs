@@ -2240,6 +2240,42 @@ impl SpanPrinter {
         buf
     }
 
+    /// Format a `std::time::Duration` into a string.
+    ///
+    /// This balances the units of the duration up to at most hours
+    /// automatically.
+    ///
+    /// This is a convenience routine for
+    /// [`SpanPrinter::print_unsigned_duration`] with a `String`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use jiff::fmt::temporal::SpanPrinter;
+    ///
+    /// const PRINTER: SpanPrinter = SpanPrinter::new();
+    ///
+    /// let dur = Duration::new(86_525, 123_000_789);
+    /// assert_eq!(
+    ///     PRINTER.unsigned_duration_to_string(&dur),
+    ///     "PT24H2M5.123000789S",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[cfg(feature = "alloc")]
+    pub fn unsigned_duration_to_string(
+        &self,
+        duration: &core::time::Duration,
+    ) -> alloc::string::String {
+        let mut buf = alloc::string::String::with_capacity(4);
+        // OK because writing to `String` never fails.
+        self.print_unsigned_duration(duration, &mut buf).unwrap();
+        buf
+    }
+
     /// Print a `Span` to the given writer.
     ///
     /// # Errors
@@ -2311,7 +2347,44 @@ impl SpanPrinter {
         duration: &SignedDuration,
         wtr: W,
     ) -> Result<(), Error> {
-        self.p.print_duration(duration, wtr)
+        self.p.print_signed_duration(duration, wtr)
+    }
+
+    /// Print a `std::time::Duration` to the given writer.
+    ///
+    /// This balances the units of the duration up to at most hours
+    /// automatically.
+    ///
+    /// # Errors
+    ///
+    /// This only returns an error when writing to the given [`Write`]
+    /// implementation would fail. Some such implementations, like for `String`
+    /// and `Vec<u8>`, never fail (unless memory allocation fails). In such
+    /// cases, it would be appropriate to call `unwrap()` on the result.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use jiff::fmt::temporal::SpanPrinter;
+    ///
+    /// const PRINTER: SpanPrinter = SpanPrinter::new();
+    ///
+    /// let dur = Duration::new(86_525, 123_000_789);
+    ///
+    /// let mut buf = String::new();
+    /// // Printing to a `String` can never fail.
+    /// PRINTER.print_unsigned_duration(&dur, &mut buf).unwrap();
+    /// assert_eq!(buf, "PT24H2M5.123000789S");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn print_unsigned_duration<W: Write>(
+        &self,
+        duration: &core::time::Duration,
+        wtr: W,
+    ) -> Result<(), Error> {
+        self.p.print_unsigned_duration(duration, wtr)
     }
 }
 

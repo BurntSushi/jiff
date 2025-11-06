@@ -514,7 +514,7 @@ impl SpanPrinter {
     /// Print the given signed duration to the writer given.
     ///
     /// This only returns an error when the given writer returns an error.
-    pub(super) fn print_duration<W: Write>(
+    pub(super) fn print_signed_duration<W: Write>(
         &self,
         dur: &SignedDuration,
         mut wtr: W,
@@ -555,6 +555,48 @@ impl SpanPrinter {
             wtr.write_int(&FMT_INT, secs)?;
             wtr.write_str(".")?;
             wtr.write_fraction(&FMT_FRACTION, nanos.unsigned_abs())?;
+            wtr.write_char(self.label('S'))?;
+        }
+        Ok(())
+    }
+
+    /// Print the given unsigned duration to the writer given.
+    ///
+    /// This only returns an error when the given writer returns an error.
+    pub(super) fn print_unsigned_duration<W: Write>(
+        &self,
+        dur: &core::time::Duration,
+        mut wtr: W,
+    ) -> Result<(), Error> {
+        static FMT_INT: DecimalFormatter = DecimalFormatter::new();
+        static FMT_FRACTION: FractionalFormatter = FractionalFormatter::new();
+
+        let mut non_zero_greater_than_second = false;
+        wtr.write_str("PT")?;
+
+        let mut secs = dur.as_secs();
+        let nanos = dur.subsec_nanos();
+        let hours = secs / (60 * 60);
+        secs %= 60 * 60;
+        let minutes = secs / 60;
+        secs = secs % 60;
+        if hours != 0 {
+            wtr.write_uint(&FMT_INT, hours)?;
+            wtr.write_char(self.label('H'))?;
+            non_zero_greater_than_second = true;
+        }
+        if minutes != 0 {
+            wtr.write_uint(&FMT_INT, minutes)?;
+            wtr.write_char(self.label('M'))?;
+            non_zero_greater_than_second = true;
+        }
+        if (secs != 0 || !non_zero_greater_than_second) && nanos == 0 {
+            wtr.write_uint(&FMT_INT, secs)?;
+            wtr.write_char(self.label('S'))?;
+        } else if nanos != 0 {
+            wtr.write_uint(&FMT_INT, secs)?;
+            wtr.write_str(".")?;
+            wtr.write_fraction(&FMT_FRACTION, nanos)?;
             wtr.write_char(self.label('S'))?;
         }
         Ok(())
@@ -805,11 +847,11 @@ mod tests {
     }
 
     #[test]
-    fn print_duration() {
+    fn print_signed_duration() {
         let p = |secs, nanos| -> String {
             let dur = SignedDuration::new(secs, nanos);
             let mut buf = String::new();
-            SpanPrinter::new().print_duration(&dur, &mut buf).unwrap();
+            SpanPrinter::new().print_signed_duration(&dur, &mut buf).unwrap();
             buf
         };
 
@@ -847,6 +889,37 @@ mod tests {
         insta::assert_snapshot!(
             p(i64::MAX, 999_999_999),
             @"PT2562047788015215H30M7.999999999S",
+        );
+    }
+
+    #[test]
+    fn print_unsigned_duration() {
+        let p = |secs, nanos| -> String {
+            let dur = core::time::Duration::new(secs, nanos);
+            let mut buf = String::new();
+            SpanPrinter::new()
+                .print_unsigned_duration(&dur, &mut buf)
+                .unwrap();
+            buf
+        };
+
+        insta::assert_snapshot!(p(0, 0), @"PT0S");
+        insta::assert_snapshot!(p(0, 1), @"PT0.000000001S");
+        insta::assert_snapshot!(p(1, 0), @"PT1S");
+        insta::assert_snapshot!(p(59, 0), @"PT59S");
+        insta::assert_snapshot!(p(60, 0), @"PT1M");
+        insta::assert_snapshot!(p(60, 1), @"PT1M0.000000001S");
+        insta::assert_snapshot!(p(61, 1), @"PT1M1.000000001S");
+        insta::assert_snapshot!(p(3_600, 0), @"PT1H");
+        insta::assert_snapshot!(p(3_600, 1), @"PT1H0.000000001S");
+        insta::assert_snapshot!(p(3_660, 0), @"PT1H1M");
+        insta::assert_snapshot!(p(3_660, 1), @"PT1H1M0.000000001S");
+        insta::assert_snapshot!(p(3_661, 0), @"PT1H1M1S");
+        insta::assert_snapshot!(p(3_661, 1), @"PT1H1M1.000000001S");
+
+        insta::assert_snapshot!(
+            p(u64::MAX, 999_999_999),
+            @"PT5124095576030431H15.999999999S",
         );
     }
 }
