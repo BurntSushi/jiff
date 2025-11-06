@@ -688,7 +688,7 @@ impl DateTimeParser {
     ///
     /// # Example: parsing a timestamp from a datetime with a time zone
     ///
-    /// A timestamp can also be parsed fron a time zone aware datetime string.
+    /// A timestamp can also be parsed from a time zone aware datetime string.
     /// The time zone is ignored and the offset is always used.
     ///
     /// ```
