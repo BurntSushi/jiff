@@ -67,7 +67,7 @@ fn copy(srcdir: &Path, dstdir: &Path, dir: &Path) -> anyhow::Result<()> {
         }
         anyhow::ensure!(
             dent.file_type().is_file(),
-            "unknow file type {:?}, unsure how to handle",
+            "unknown file type {:?}, unsure how to handle",
             dent.file_type(),
         );
         copy_rust_source_file(&dent.path(), &dstpath)?;

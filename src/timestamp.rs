@@ -2942,7 +2942,7 @@ impl quickcheck::Arbitrary for Timestamp {
 /// Like the [`std::fmt::Display`] trait implementation for `Timestamp`, this
 /// always emits an RFC 3339 compliant string. Unlike `Timestamp`'s `Display`
 /// trait implementation, which always uses `Z` or "Zulu" time, this always
-/// uses an offfset.
+/// uses an offset.
 ///
 /// # Formatting options supported
 ///

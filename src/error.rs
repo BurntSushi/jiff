@@ -228,7 +228,7 @@ impl Error {
     /// A convenience constructor for building an I/O error.
     ///
     /// This returns an error that is just a simple wrapper around the
-    /// `std::io::Error` type. In general, callers should alwasys attach some
+    /// `std::io::Error` type. In general, callers should always attach some
     /// kind of context to this error (like a file path).
     ///
     /// This is only available when the `std` feature is enabled.

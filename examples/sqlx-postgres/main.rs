@@ -59,7 +59,7 @@ async fn example_span_decode(pool: &PgPool) -> anyhow::Result<()> {
     assert_eq!(
         span.to_jiff().fieldwise(),
         // The reason the span is in months/days/micros is because this
-        // is how te interval is transmitted from PostgreSQL. Years and
+        // is how the interval is transmitted from PostgreSQL. Years and
         // months collapse into months, weeks and days collapses into days
         // and everything else collapses into microseconds. If you need to
         // preserve a `Span` as-is, then you'll need to encode it using Jiff's

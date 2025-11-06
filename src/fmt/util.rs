@@ -464,7 +464,7 @@ pub(crate) fn fractional_time_to_span(
             unit = unit.singular(),
         ));
     }
-    // We switch everything over to nanoseconds and then divy that up as
+    // We switch everything over to nanoseconds and then divvy that up as
     // appropriate. In general, we always create a balanced span, but there
     // are some cases where we can't. For example, if one serializes a span
     // with both the maximum number of seconds and the maximum number of

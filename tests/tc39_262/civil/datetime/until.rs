@@ -146,7 +146,7 @@ fn largestunit_smallestunit_mismatch() {
 
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/PlainDateTime/prototype/until/no-unnecessary-units.js
 #[test]
-fn no_unncessary_units() -> Result {
+fn no_unnecessary_units() -> Result {
     let dt1 = DateTime::from(date(2021, 2, 28));
     let dt2 = DateTime::from(date(2022, 2, 28));
 

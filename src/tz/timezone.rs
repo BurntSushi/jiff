@@ -546,7 +546,7 @@ impl TimeZone {
         Ok(TimeZone { repr })
     }
 
-    /// Returns a `TimeZone` that is specifially marked as "unknown."
+    /// Returns a `TimeZone` that is specifically marked as "unknown."
     ///
     /// This corresponds to the Unicode CLDR identifier `Etc/Unknown`, which
     /// is guaranteed to never be a valid IANA time zone identifier (as of
@@ -2099,7 +2099,7 @@ mod repr {
             // Thankfully, this is the only variant that is a pointer that
             // we want to create in a const context. So we just make this
             // variant's tag `0`, and thus, no explicit pointer tagging is
-            // required. (Becuase we ensure the alignment is at least 4, and
+            // required. (Because we ensure the alignment is at least 4, and
             // thus the least significant 3 bits are 0.)
             //
             // If this ends up not working out or if we need to support

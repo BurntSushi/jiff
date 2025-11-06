@@ -529,7 +529,7 @@ Add integration with the SQLx project via the [`jiff-sqlx`] crate. `jiff-sqlx`
 provides wrapper types that implement the necessary traits in SQLx for
 reasonably ergonomic integration. This includes PostgreSQL and SQLite support,
 but not MySQL support. (It's not clear if it's possible at present to provide
-MySQL supprot fro SQLx for datetime types outside of SQLx itself.)
+MySQL support for SQLx for datetime types outside of SQLx itself.)
 * [#241](https://github.com/BurntSushi/jiff/pull/241):
 Add integration with the Diesel project via the [`jiff-diesel`] crate.
 `jiff-diesel` provides wrapper types that implement the necessary traits in
@@ -730,7 +730,7 @@ zero-length duration.
 
 0.1.20 (2025-01-03)
 ===================
-This release inclues a new type, `Pieces`, in the `jiff::fmt::temporal`
+This release includes a new type, `Pieces`, in the `jiff::fmt::temporal`
 sub-module. This exposes the individual components of a parsed Temporal
 ISO 8601 datetime string. It allows users of Jiff to circumvent the checks
 in the higher level parsing routines that prevent you from shooting yourself
@@ -1077,7 +1077,7 @@ zone identifier in some cases where it wouldn't before. While Jiff would
 previously read the symlink metadata on `/etc/localtime` by default to discover
 the system configured time zone on Unix systems, it *wouldn't* do so when
 `TZ=/etc/localtime`. There's really no reason not to, so this release of Jiff
-is fixed to use symlink sniffing on file paths provided by thw `TZ` environment
+is fixed to use symlink sniffing on file paths provided by the `TZ` environment
 variable.
 
 Bug fixes:
@@ -1165,7 +1165,7 @@ renamed to `from_duration` in `jiff 0.2`.
 to `to_duration` in `jiff 0.2`.
 
 Basically, all of the above APIs either accept or return a
-`std::time::Duration`. To avoid breaking chnages at this point, new methods
+`std::time::Duration`. To avoid breaking changes at this point, new methods
 for `SignedDuration` were added. For example, `Timestamp::as_jiff_duration`.
 In `jiff 0.2`, the above deprecated methods will be removed and replaced with
 equivalent methods that accept or return a `SignedDuration` instead. Callers

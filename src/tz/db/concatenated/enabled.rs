@@ -401,7 +401,7 @@ struct NamesInner {
 }
 
 impl Names {
-    /// See commnents in `tz/db/zoneinfo/enabled.rs` about this. We just copied
+    /// See comments in `tz/db/zoneinfo/enabled.rs` about this. We just copied
     /// it from there.
     const DEFAULT_TTL: Duration = DEFAULT_TTL;
 

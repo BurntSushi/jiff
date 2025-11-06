@@ -985,7 +985,7 @@ macro_rules! define_ranged {
                 #[cfg(debug_assertions)]
                 {
                     // We specifically allow constants that don't fit in the
-                    // bounds of the integer type, but we don't allow constans
+                    // bounds of the integer type, but we don't allow constants
                     // that can't fit in the actual integer representation.
                     // This makes doing things like `number % one-plus-max`
                     // much more convenient.

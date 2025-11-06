@@ -688,7 +688,7 @@ impl DateTimeParser {
     ///
     /// # Example: parsing a timestamp from a datetime with a time zone
     ///
-    /// A timestamp can also be parsed fron a time zone aware datetime string.
+    /// A timestamp can also be parsed from a time zone aware datetime string.
     /// The time zone is ignored and the offset is always used.
     ///
     /// ```
@@ -1118,7 +1118,7 @@ impl DateTimeParser {
 /// type to a machine (but also human) readable format. Using this printer, one
 /// can convert [`Zoned`], [`Timestamp`], [`civil::DateTime`], [`civil::Date`]
 /// or [`civil::Time`] values to a string. Note that all of those types provide
-/// [`Diplay`](core::fmt::Display) implementations that utilize the default
+/// [`Display`](core::fmt::Display) implementations that utilize the default
 /// configuration of this printer. However, this printer can be configured to
 /// behave differently and can also print directly to anything that implements
 /// the [`fmt::Write`](Write) trait.

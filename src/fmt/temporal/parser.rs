@@ -509,7 +509,7 @@ impl DateTimeParser {
             Ok(Parsed { value, input: remaining })
         };
         // This part get tricky. The common case is absolutely an IANA time
-        // zone identifer. So we try to parse something that looks like an IANA
+        // zone identifier. So we try to parse something that looks like an IANA
         // tz id.
         //
         // In theory, IANA tz ids can never be valid POSIX TZ strings, since

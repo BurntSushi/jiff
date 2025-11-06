@@ -318,7 +318,7 @@ impl IDate {
 
     /// Returns the date corresponding to the day of the given year. The day
     /// of the year should be a value in `1..=365`, with February 29 being
-    /// completely ignored. That is, it is guaranteed that Febraury 29 will
+    /// completely ignored. That is, it is guaranteed that February 29 will
     /// never be returned by this function. It is impossible.
     ///
     /// This assumes that `year` is valid, but returns an error if `day` is

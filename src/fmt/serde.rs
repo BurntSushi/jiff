@@ -287,7 +287,7 @@ pub mod duration {
 /// However, it is perhaps easier to read, and crucially, unambiguously
 /// represents all components of a `Span` faithfully. (In contrast, the ISO
 /// 8601 format always normalizes sub-second durations into fractional seconds,
-/// which means durations like `1100ms` and `1s100ms` are alwasys considered
+/// which means durations like `1100ms` and `1s100ms` are always considered
 /// equivalent.)
 ///
 /// # Available routines
@@ -1124,7 +1124,7 @@ pub mod timestamp {
 ///
 /// For example, when a time zone was created from
 /// [`TimeZone::system`](crate::tz::TimeZone::system) and a system configured
-/// time zone could not be found. One can artifically create this situation
+/// time zone could not be found. One can artificially create this situation
 /// with [`TimeZone::unknown`](crate::tz::TimeZone::unknown):
 ///
 /// ```
