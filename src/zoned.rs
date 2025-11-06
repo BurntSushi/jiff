@@ -6002,7 +6002,7 @@ mod tests {
         assert_eq!(zdt2.to_string(), "2024-03-10T01:30:00-05:00[US/Eastern]");
 
         // This should also respect the disambiguation setting even without
-        // explicitly specifying an invalid offset. This is becaue `02:30-05`
+        // explicitly specifying an invalid offset. This is because `02:30-05`
         // is regarded as invalid since `02:30` isn't a valid civil time on
         // this date in this time zone.
         let zdt1: Zoned = "2024-03-10T01:30[US/Eastern]".parse().unwrap();
