@@ -5457,7 +5457,7 @@ impl From<(Unit, i64)> for SpanRound<'static> {
 /// * Span arithmetic via [`Span::checked_add`] and [`Span::checked_sub`].
 /// A relative datetime is needed when adding or subtracting spans with
 /// calendar units.
-/// * Span comarisons via [`Span::compare`] require a relative datetime when
+/// * Span comparisons via [`Span::compare`] require a relative datetime when
 /// comparing spans with calendar units.
 /// * Computing the "total" duration as a single floating point number via
 /// [`Span::total`] also requires a relative datetime when dealing with

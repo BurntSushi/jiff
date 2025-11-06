@@ -297,7 +297,7 @@ impl Date {
     /// Construct a Gregorian date from an [ISO 8601 week date].
     ///
     /// The [`ISOWeekDate`] type describes itself in more detail, but in
-    /// breif, the ISO week date calendar system eschews months in favor of
+    /// brief, the ISO week date calendar system eschews months in favor of
     /// weeks.
     ///
     /// The minimum and maximum values of an `ISOWeekDate` correspond
