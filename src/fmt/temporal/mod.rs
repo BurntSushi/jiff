@@ -1118,7 +1118,7 @@ impl DateTimeParser {
 /// type to a machine (but also human) readable format. Using this printer, one
 /// can convert [`Zoned`], [`Timestamp`], [`civil::DateTime`], [`civil::Date`]
 /// or [`civil::Time`] values to a string. Note that all of those types provide
-/// [`Diplay`](core::fmt::Display) implementations that utilize the default
+/// [`Display`](core::fmt::Display) implementations that utilize the default
 /// configuration of this printer. However, this printer can be configured to
 /// behave differently and can also print directly to anything that implements
 /// the [`fmt::Write`](Write) trait.

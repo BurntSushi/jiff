@@ -430,11 +430,11 @@ impl RuleP {
 
 /// A group of one or more `Zone` lines.
 ///
-/// A group of zones alwasys starts with a `Zone` line that has a name, and is
+/// A group of zones always starts with a `Zone` line that has a name, and is
 /// followed by zero or more continuation `Zone` lines.
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ZoneP {
-    /// The first zone line, alwasys present.
+    /// The first zone line, always present.
     first: ZoneFirstP,
     /// All continuation lines, may be empty.
     continuations: Vec<ZoneContinuationP>,
