@@ -2210,7 +2210,6 @@ impl SignedDuration {
         const MIN_HOUR: i64 = i64::MIN / (SECS_PER_MINUTE * MINS_PER_HOUR);
         // OK because (SECS_PER_MINUTE*MINS_PER_HOUR)!={-1,0}.
         const MAX_HOUR: i64 = i64::MAX / (SECS_PER_MINUTE * MINS_PER_HOUR);
-        // OK because (SECS_PER_MINUTE*MINS_PER_HOUR)!={-1,0}.
         if !(MIN_HOUR <= hours && hours <= MAX_HOUR) {
             return None;
         }
@@ -2230,7 +2229,6 @@ impl SignedDuration {
         const MIN_MINUTE: i64 = i64::MIN / SECS_PER_MINUTE;
         // OK because SECS_PER_MINUTE!={-1,0}.
         const MAX_MINUTE: i64 = i64::MAX / SECS_PER_MINUTE;
-        // OK because SECS_PER_MINUTE!={-1,0}.
         if !(MIN_MINUTE <= mins && mins <= MAX_MINUTE) {
             return None;
         }
