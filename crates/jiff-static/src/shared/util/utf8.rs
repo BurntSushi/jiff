@@ -3,7 +3,7 @@
 /// Decodes the next UTF-8 encoded codepoint from the given byte slice.
 ///
 /// If no valid encoding of a codepoint exists at the beginning of the
-/// given byte slice, then a 1-3 byte slice is returned (which is guarnateed
+/// given byte slice, then a 1-3 byte slice is returned (which is guaranteed
 /// to be a prefix of `bytes`). That byte slice corresponds either to a single
 /// invalid byte, or to a prefix of a valid UTF-8 encoding of a Unicode scalar
 /// value (but which ultimately did not lead to a valid encoding).

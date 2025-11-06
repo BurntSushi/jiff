@@ -13,7 +13,7 @@ use sqlx::{
 
 use crate::{Date, DateTime, Span, Time, Timestamp, ToSqlx};
 
-/// Apprently the actual format of values on the wire is not
+/// Apparently the actual format of values on the wire is not
 /// a documented guarantee of PostgreSQL.[1] Instead, I just `sqlx`'s
 /// source code for `chrono` to figure out what the type of the source
 /// data is.
