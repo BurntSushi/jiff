@@ -1,8 +1,14 @@
 # CHANGELOG
 
-0.2.16 (TBD)
-============
-TODO
+0.2.16 (2025-11-07)
+===================
+This release contains a number of enhancements and bug fixes that have accrued
+over the last few months. Most are small polishes. A couple of the bug fixes
+apply to panics that could occur when parsing invalid `TZ` strings or invalid
+`strptime` format strings.
+
+Also, parsing into a `Span` should now be much faster (for both the ISO 8601
+and "friendly" duration formats).
 
 Enhancements:
 
