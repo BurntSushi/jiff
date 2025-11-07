@@ -1,5 +1,5 @@
 use crate::{
-    civil::{Date, DateTime, Time},
+    civil::{Date, DateTime, ISOWeekDate, Time},
     error::{err, Error},
     fmt::{
         temporal::{Pieces, PiecesOffset, TimeZoneAnnotationKind},
@@ -252,6 +252,34 @@ impl DateTimePrinter {
             }
             wtr.write_str("]")?;
         }
+        Ok(())
+    }
+
+    pub(super) fn print_iso_week_date<W: Write>(
+        &self,
+        iso_week_date: &ISOWeekDate,
+        mut wtr: W,
+    ) -> Result<(), Error> {
+        static FMT_YEAR_POSITIVE: DecimalFormatter =
+            DecimalFormatter::new().padding(4);
+        static FMT_YEAR_NEGATIVE: DecimalFormatter =
+            DecimalFormatter::new().padding(6);
+        static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
+        static FMT_ONE: DecimalFormatter = DecimalFormatter::new().padding(1);
+
+        if iso_week_date.year() >= 0 {
+            wtr.write_int(&FMT_YEAR_POSITIVE, iso_week_date.year())?;
+        } else {
+            wtr.write_int(&FMT_YEAR_NEGATIVE, iso_week_date.year())?;
+        }
+        wtr.write_str("-")?;
+        wtr.write_char(if self.lowercase { 'w' } else { 'W' })?;
+        wtr.write_int(&FMT_TWO, iso_week_date.week())?;
+        wtr.write_str("-")?;
+        wtr.write_int(
+            &FMT_ONE,
+            iso_week_date.weekday().to_monday_one_offset(),
+        )?;
         Ok(())
     }
 
@@ -620,7 +648,10 @@ impl SpanPrinter {
 mod tests {
     use alloc::string::String;
 
-    use crate::{civil::date, span::ToSpan};
+    use crate::{
+        civil::{date, Weekday},
+        span::ToSpan,
+    };
 
     use super::*;
 
@@ -920,6 +951,24 @@ mod tests {
         insta::assert_snapshot!(
             p(u64::MAX, 999_999_999),
             @"PT5124095576030431H15.999999999S",
+        );
+    }
+
+    #[test]
+    fn print_iso_week_date() {
+        let p = |d: ISOWeekDate| -> String {
+            let mut buf = String::new();
+            DateTimePrinter::new().print_iso_week_date(&d, &mut buf).unwrap();
+            buf
+        };
+
+        insta::assert_snapshot!(
+            p(ISOWeekDate::new(2024, 52, Weekday::Monday).unwrap()),
+            @"2024-W52-1",
+        );
+        insta::assert_snapshot!(
+            p(ISOWeekDate::new(2004, 1, Weekday::Sunday).unwrap()),
+            @"2004-W01-7",
         );
     }
 }

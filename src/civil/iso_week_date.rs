@@ -1,6 +1,7 @@
 use crate::{
     civil::{Date, DateTime, Weekday},
     error::{err, Error},
+    fmt::temporal::{DEFAULT_DATETIME_PARSER, DEFAULT_DATETIME_PRINTER},
     util::{
         rangeint::RInto,
         t::{self, ISOWeek, ISOYear, C},
@@ -34,6 +35,51 @@ use crate::{
 /// Some domains use this method of timekeeping. Otherwise, unless you
 /// specifically want a week oriented calendar, it's likely that you'll never
 /// need to care about this type.
+///
+/// # Parsing and printing
+///
+/// The `ISOWeekDate` type provides convenient trait implementations of
+/// [`std::str::FromStr`] and [`std::fmt::Display`]. These use the format
+/// specified by ISO 8601 for week dates:
+///
+/// ```
+/// use jiff::civil::ISOWeekDate;
+///
+/// let week_date: ISOWeekDate = "2024-W24-7".parse()?;
+/// assert_eq!(week_date.to_string(), "2024-W24-7");
+/// assert_eq!(week_date.date().to_string(), "2024-06-16");
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// ISO 8601 allows the `-` separator to be absent:
+///
+/// ```
+/// use jiff::civil::ISOWeekDate;
+///
+/// let week_date: ISOWeekDate = "2024W241".parse()?;
+/// assert_eq!(week_date.to_string(), "2024-W24-1");
+/// assert_eq!(week_date.date().to_string(), "2024-06-10");
+///
+/// // But you cannot mix and match. Either `-` separates
+/// // both the year and week, or neither.
+/// assert!("2024W24-1".parse::<ISOWeekDate>().is_err());
+/// assert!("2024-W241".parse::<ISOWeekDate>().is_err());
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// And the `W` may also be lowercase:
+///
+/// ```
+/// use jiff::civil::ISOWeekDate;
+///
+/// let week_date: ISOWeekDate = "2024-w24-2".parse()?;
+/// assert_eq!(week_date.to_string(), "2024-W24-2");
+/// assert_eq!(week_date.date().to_string(), "2024-06-11");
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 ///
 /// # Default value
 ///
@@ -747,6 +793,24 @@ impl core::fmt::Debug for ISOWeekDate {
     }
 }
 
+impl core::fmt::Display for ISOWeekDate {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use crate::fmt::StdFmtWrite;
+
+        DEFAULT_DATETIME_PRINTER
+            .print_iso_week_date(self, StdFmtWrite(f))
+            .map_err(|_| core::fmt::Error)
+    }
+}
+
+impl core::str::FromStr for ISOWeekDate {
+    type Err = Error;
+
+    fn from_str(string: &str) -> Result<ISOWeekDate, Error> {
+        DEFAULT_DATETIME_PARSER.parse_iso_week_date(string)
+    }
+}
+
 impl Eq for ISOWeekDate {}
 
 impl PartialEq for ISOWeekDate {
@@ -805,6 +869,60 @@ impl<'a> From<&'a Zoned> for ISOWeekDate {
     #[inline]
     fn from(zdt: &'a Zoned) -> ISOWeekDate {
         ISOWeekDate::from(zdt.date())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde_core::Serialize for ISOWeekDate {
+    #[inline]
+    fn serialize<S: serde_core::Serializer>(
+        &self,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde_core::Deserialize<'de> for ISOWeekDate {
+    #[inline]
+    fn deserialize<D: serde_core::Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<ISOWeekDate, D::Error> {
+        use serde_core::de;
+
+        struct ISOWeekDateVisitor;
+
+        impl<'de> de::Visitor<'de> for ISOWeekDateVisitor {
+            type Value = ISOWeekDate;
+
+            fn expecting(
+                &self,
+                f: &mut core::fmt::Formatter,
+            ) -> core::fmt::Result {
+                f.write_str("an ISO 8601 week date string")
+            }
+
+            #[inline]
+            fn visit_bytes<E: de::Error>(
+                self,
+                value: &[u8],
+            ) -> Result<ISOWeekDate, E> {
+                DEFAULT_DATETIME_PARSER
+                    .parse_iso_week_date(value)
+                    .map_err(de::Error::custom)
+            }
+
+            #[inline]
+            fn visit_str<E: de::Error>(
+                self,
+                value: &str,
+            ) -> Result<ISOWeekDate, E> {
+                self.visit_bytes(value.as_bytes())
+            }
+        }
+
+        deserializer.deserialize_str(ISOWeekDateVisitor)
     }
 }
 

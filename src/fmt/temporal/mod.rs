@@ -171,7 +171,7 @@ There is some more [background on Temporal's format] available.
 */
 
 use crate::{
-    civil,
+    civil::{self, ISOWeekDate},
     error::Error,
     fmt::Write,
     span::Span,
@@ -1110,6 +1110,22 @@ impl DateTimeParser {
         let pieces = parsed.to_pieces()?;
         Ok(pieces)
     }
+
+    /// Parses an ISO 8601 week date.
+    ///
+    /// This isn't exported because it's not clear that it's worth it.
+    /// Moreover, this isn't part of the Temporal spec, so it's a little odd
+    /// to have it here. If this really needs to be exported, we probably need
+    /// a new module that wraps and re-uses this module's internal parser to
+    /// avoid too much code duplication.
+    pub(crate) fn parse_iso_week_date<I: AsRef<[u8]>>(
+        &self,
+        input: I,
+    ) -> Result<ISOWeekDate, Error> {
+        let input = input.as_ref();
+        let wd = self.p.parse_iso_week_date(input)?.into_full()?;
+        Ok(wd)
+    }
 }
 
 /// A printer for Temporal datetimes.
@@ -1964,6 +1980,25 @@ impl DateTimePrinter {
     ) -> Result<(), Error> {
         self.p.print_pieces(pieces, wtr)
     }
+
+    /// Prints an ISO 8601 week date.
+    ///
+    /// This isn't exported because it's not clear that it's worth it.
+    /// Moreover, this isn't part of the Temporal spec, so it's a little odd
+    /// to have it here. But it's very convenient to have the ISO 8601 week
+    /// date parser in this module, and so we stick the printer here along
+    /// with it.
+    ///
+    /// Note that this printer will use `w` when `lowercase` is enabled. (It
+    /// isn't possible to enable this using the current Jiff public API. But
+    /// it's probably fine.)
+    pub(crate) fn print_iso_week_date<W: Write>(
+        &self,
+        iso_week_date: &ISOWeekDate,
+        wtr: W,
+    ) -> Result<(), Error> {
+        self.p.print_iso_week_date(iso_week_date, wtr)
+    }
 }
 
 /// A parser for Temporal durations.
@@ -2455,7 +2490,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             DateTimeParser::new().parse_date("-000000-01-01").unwrap_err(),
-            @r###"failed to parse year in date "-000000-01-01": year zero must be written without a sign or a positive sign, but not a negative sign"###,
+            @"failed to parse year in date `-000000-01-01`: year zero must be written without a sign or a positive sign, but not a negative sign",
         );
     }
 

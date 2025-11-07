@@ -1,5 +1,16 @@
 # CHANGELOG
 
+0.2.17 (TBD)
+============
+TODO
+
+Enhancements:
+
+* [#412](https://github.com/BurntSushi/jiff/issues/412):
+Add `Display`, `FromStr`, `Serialize` and `Deserialize` trait implementations
+for `jiff::civil::ISOWeekDate`. These all use the ISO 8601 week date format.
+
+
 0.2.16 (2025-11-07)
 ===================
 This release contains a number of enhancements and bug fixes that have accrued
