@@ -6,6 +6,8 @@ TODO
 
 Enhancements:
 
+* [#298](https://github.com/BurntSushi/jiff/issues/298):
+Add Serde helpers for (de)serializing `std::time::Duration` values.
 * [#396](https://github.com/BurntSushi/jiff/issues/396):
 Add `Sub` and `Add` trait implementations for `Zoned` (in addition to the
 already existing trait implementations for `&Zoned`).
@@ -48,6 +50,14 @@ using `TimeZone::UTC`).
 Fix a panicking bug when reading malformed TZif data.
 * [#426](https://github.com/BurntSushi/jiff/issues/426):
 Fix a panicking bug when parsing century (`%C`) via `strptime`.
+* [#445](https://github.com/BurntSushi/jiff/pull/445):
+Fixed bugs with parsing durations like `-9223372036854775808s`
+and `-PT9223372036854775808S`.
+
+Performance:
+
+* [#445](https://github.com/BurntSushi/jiff/pull/445):
+Parsing into `Span` or `SignedDuration` is now a fair bit faster in some cases.
 
 
 0.2.15 (2025-06-13)
