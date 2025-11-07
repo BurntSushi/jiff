@@ -5564,11 +5564,11 @@ impl From<(Unit, i64)> for SpanRound<'static> {
 /// `2024-04-01` is 30 days. Similar for years.
 ///
 /// When a relative datetime in time zone aware (i.e., it is a `Zoned`), then
-/// a `Span` will also consider its day units to be variable in length. For
-/// example, `2024-03-10` in `America/New_York` was only 23 hours long, where
-/// as `2024-11-03` in `America/New_York` was 25 hours long. When a relative
-/// datetime is civil, then days are considered to always be of a fixed 24
-/// hour length.
+/// operations on a `Span` will also consider its day units to be variable in
+/// length. For example, `2024-03-10` in `America/New_York` was only 23 hours
+/// long, where as `2024-11-03` in `America/New_York` was 25 hours long. When
+/// a relative datetime is civil, then days are considered to always be of a
+/// fixed 24 hour length.
 ///
 /// This type is principally used as an input to one of several different
 /// [`Span`] APIs:

@@ -624,7 +624,7 @@ impl<C> Config<C> {
 /// This trait currently does not support parsing based on locale in any way.
 ///
 /// This trait also does not support locale specific behavior for `%a`/`%A`
-/// (day of the week), `%b/`%B` (name of the month) or `%p`/`%P` (AM or PM).
+/// (day of the week), `%b`/`%B` (name of the month) or `%p`/`%P` (AM or PM).
 /// Supporting these is problematic with modern localization APIs, since
 /// modern APIs do not expose options to localize these things independent of
 /// anything else. Instead, they are subsumed most holistically into, e.g.,
