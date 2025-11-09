@@ -1223,19 +1223,19 @@ impl SpanPrinter {
     ) -> Result<(), Error> {
         let span = span.abs();
         if span.get_years() != 0 {
-            wtr.write(Unit::Year, span.get_years().unsigned_abs())?;
+            wtr.write(Unit::Year, span.get_years().unsigned_abs().into())?;
         }
         if span.get_months() != 0 {
-            wtr.write(Unit::Month, span.get_months().unsigned_abs())?;
+            wtr.write(Unit::Month, span.get_months().unsigned_abs().into())?;
         }
         if span.get_weeks() != 0 {
-            wtr.write(Unit::Week, span.get_weeks().unsigned_abs())?;
+            wtr.write(Unit::Week, span.get_weeks().unsigned_abs().into())?;
         }
         if span.get_days() != 0 {
-            wtr.write(Unit::Day, span.get_days().unsigned_abs())?;
+            wtr.write(Unit::Day, span.get_days().unsigned_abs().into())?;
         }
         if span.get_hours() != 0 {
-            wtr.write(Unit::Hour, span.get_hours().unsigned_abs())?;
+            wtr.write(Unit::Hour, span.get_hours().unsigned_abs().into())?;
         }
         if span.get_minutes() != 0 {
             wtr.write(Unit::Minute, span.get_minutes().unsigned_abs())?;
@@ -1366,10 +1366,16 @@ impl SpanPrinter {
                 wtr.write(Unit::Minute, secs / SECS_PER_MIN)?;
                 wtr.write(Unit::Second, secs % SECS_PER_MIN)?;
                 let mut nanos = dur.subsec_nanos();
-                wtr.write(Unit::Millisecond, nanos / NANOS_PER_MILLI)?;
+                wtr.write(
+                    Unit::Millisecond,
+                    (nanos / NANOS_PER_MILLI).into(),
+                )?;
                 nanos %= NANOS_PER_MILLI;
-                wtr.write(Unit::Microsecond, nanos / NANOS_PER_MICRO)?;
-                wtr.write(Unit::Nanosecond, nanos % NANOS_PER_MICRO)?;
+                wtr.write(
+                    Unit::Microsecond,
+                    (nanos / NANOS_PER_MICRO).into(),
+                )?;
+                wtr.write(Unit::Nanosecond, (nanos % NANOS_PER_MICRO).into())?;
             }
             Some(FractionalUnit::Hour) => {
                 wtr.write_fractional_duration(FractionalUnit::Hour, &dur)?;
@@ -1421,7 +1427,10 @@ impl SpanPrinter {
                 wtr.write(Unit::Minute, secs / SECS_PER_MIN)?;
                 wtr.write(Unit::Second, secs % SECS_PER_MIN)?;
                 let mut nanos = dur.subsec_nanos();
-                wtr.write(Unit::Millisecond, nanos / NANOS_PER_MILLI)?;
+                wtr.write(
+                    Unit::Millisecond,
+                    (nanos / NANOS_PER_MILLI).into(),
+                )?;
                 nanos %= NANOS_PER_MILLI;
 
                 let leftovers = core::time::Duration::new(0, nanos);
@@ -1670,12 +1679,7 @@ impl<'p, 'w, W: Write> DesignatorWriter<'p, 'w, W> {
         Ok(())
     }
 
-    fn write(
-        &mut self,
-        unit: Unit,
-        value: impl Into<u64>,
-    ) -> Result<(), Error> {
-        let value = value.into();
+    fn write(&mut self, unit: Unit, value: u64) -> Result<(), Error> {
         if value == 0 {
             return Ok(());
         }
