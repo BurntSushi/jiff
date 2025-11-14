@@ -1,7 +1,7 @@
 use crate::{
-    error::{err, ErrorContext},
+    error::{fmt::util::Error as E, ErrorContext},
     fmt::Parsed,
-    util::{c::Sign, escape, parse, t},
+    util::{c::Sign, parse, t},
     Error, SignedDuration, Span, Unit,
 };
 
@@ -462,14 +462,10 @@ impl DurationUnits {
 
         if let Some(min) = self.min {
             if min <= unit {
-                return Err(err!(
-                    "found value {value:?} with unit {unit} \
-                     after unit {prev_unit}, but units must be \
-                     written from largest to smallest \
-                     (and they can't be repeated)",
-                    unit = unit.singular(),
-                    prev_unit = min.singular(),
-                ));
+                return Err(Error::from(E::OutOfOrderUnits {
+                    found: unit,
+                    previous: min,
+                }));
             }
         }
         // Given the above check, the given unit must be smaller than any we
@@ -503,12 +499,7 @@ impl DurationUnits {
     ) -> Result<(), Error> {
         if let Some(min) = self.min {
             if min <= Unit::Hour {
-                return Err(err!(
-                    "found `HH:MM:SS` after unit {min}, \
-                             but `HH:MM:SS` can only appear after \
-                             years, months, weeks or days",
-                    min = min.singular(),
-                ));
+                return Err(Error::from(E::OutOfOrderHMS { found: min }));
             }
         }
         self.set_unit_value(Unit::Hour, hours)?;
@@ -539,15 +530,11 @@ impl DurationUnits {
     /// return an error if the minimum unit is bigger than `Unit::Hour`.
     pub(crate) fn set_fraction(&mut self, fraction: u32) -> Result<(), Error> {
         assert!(fraction <= 999_999_999);
-        if self.min == Some(Unit::Nanosecond) {
-            return Err(err!("fractional nanoseconds are not supported"));
-        }
         if let Some(min) = self.min {
-            if min > Unit::Hour {
-                return Err(err!(
-                    "fractional {plural} are not supported",
-                    plural = min.plural()
-                ));
+            if min > Unit::Hour || min == Unit::Nanosecond {
+                return Err(Error::from(E::NotAllowedFractionalUnit {
+                    found: min,
+                }));
             }
         }
         self.fraction = Some(fraction);
@@ -642,13 +629,6 @@ impl DurationUnits {
     #[cold]
     #[inline(never)]
     fn to_span_general(&self) -> Result<Span, Error> {
-        fn error_context(unit: Unit, value: i64) -> Error {
-            err!(
-                "failed to set value {value:?} as {unit} unit on span",
-                unit = unit.singular(),
-            )
-        }
-
         #[cfg_attr(feature = "perf-inline", inline(always))]
         fn set_time_unit(
             unit: Unit,
@@ -682,7 +662,7 @@ impl DurationUnits {
 
             set(span)
                 .or_else(|err| fractional_fallback(err, unit, value, span))
-                .with_context(|| error_context(unit, value))
+                .context(E::FailedValueSet { unit })
         }
 
         let (min, _) = self.get_min_max_units()?;
@@ -692,25 +672,25 @@ impl DurationUnits {
             let value = self.get_unit_value(Unit::Year)?;
             span = span
                 .try_years(value)
-                .with_context(|| error_context(Unit::Year, value))?;
+                .context(E::FailedValueSet { unit: Unit::Year })?;
         }
         if self.values[Unit::Month.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Month)?;
             span = span
                 .try_months(value)
-                .with_context(|| error_context(Unit::Month, value))?;
+                .context(E::FailedValueSet { unit: Unit::Month })?;
         }
         if self.values[Unit::Week.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Week)?;
             span = span
                 .try_weeks(value)
-                .with_context(|| error_context(Unit::Week, value))?;
+                .context(E::FailedValueSet { unit: Unit::Week })?;
         }
         if self.values[Unit::Day.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Day)?;
             span = span
                 .try_days(value)
-                .with_context(|| error_context(Unit::Day, value))?;
+                .context(E::FailedValueSet { unit: Unit::Day })?;
         }
         if self.values[Unit::Hour.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Hour)?;
@@ -822,11 +802,7 @@ impl DurationUnits {
     fn to_signed_duration_general(&self) -> Result<SignedDuration, Error> {
         let (min, max) = self.get_min_max_units()?;
         if max > Unit::Hour {
-            return Err(err!(
-                "parsing {unit} units into a `SignedDuration` is not supported \
-                 (perhaps try parsing into a `Span` instead)",
-                unit = max.singular(),
-            ));
+            return Err(Error::from(E::NotAllowedCalendarUnit { unit: max }));
         }
 
         let mut sdur = SignedDuration::ZERO;
@@ -834,85 +810,43 @@ impl DurationUnits {
             let value = self.get_unit_value(Unit::Hour)?;
             sdur = SignedDuration::try_from_hours(value)
                 .and_then(|nanos| sdur.checked_add(nanos))
-                .ok_or_else(|| {
-                    err!(
-                        "accumulated `SignedDuration` of `{sdur:?}` \
-                         overflowed when adding {value} of unit {unit}",
-                        unit = Unit::Hour.singular(),
-                    )
-                })?;
+                .ok_or(E::OverflowForUnit { unit: Unit::Hour })?;
         }
         if self.values[Unit::Minute.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Minute)?;
             sdur = SignedDuration::try_from_mins(value)
                 .and_then(|nanos| sdur.checked_add(nanos))
-                .ok_or_else(|| {
-                    err!(
-                        "accumulated `SignedDuration` of `{sdur:?}` \
-                         overflowed when adding {value} of unit {unit}",
-                        unit = Unit::Minute.singular(),
-                    )
-                })?;
+                .ok_or(E::OverflowForUnit { unit: Unit::Minute })?;
         }
         if self.values[Unit::Second.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Second)?;
             sdur = SignedDuration::from_secs(value)
                 .checked_add(sdur)
-                .ok_or_else(|| {
-                    err!(
-                        "accumulated `SignedDuration` of `{sdur:?}` \
-                         overflowed when adding {value} of unit {unit}",
-                        unit = Unit::Second.singular(),
-                    )
-                })?;
+                .ok_or(E::OverflowForUnit { unit: Unit::Second })?;
         }
         if self.values[Unit::Millisecond.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Millisecond)?;
             sdur = SignedDuration::from_millis(value)
                 .checked_add(sdur)
-                .ok_or_else(|| {
-                    err!(
-                        "accumulated `SignedDuration` of `{sdur:?}` \
-                         overflowed when adding {value} of unit {unit}",
-                        unit = Unit::Millisecond.singular(),
-                    )
-                })?;
+                .ok_or(E::OverflowForUnit { unit: Unit::Millisecond })?;
         }
         if self.values[Unit::Microsecond.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Microsecond)?;
             sdur = SignedDuration::from_micros(value)
                 .checked_add(sdur)
-                .ok_or_else(|| {
-                    err!(
-                        "accumulated `SignedDuration` of `{sdur:?}` \
-                         overflowed when adding {value} of unit {unit}",
-                        unit = Unit::Microsecond.singular(),
-                    )
-                })?;
+                .ok_or(E::OverflowForUnit { unit: Unit::Microsecond })?;
         }
         if self.values[Unit::Nanosecond.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Nanosecond)?;
             sdur = SignedDuration::from_nanos(value)
                 .checked_add(sdur)
-                .ok_or_else(|| {
-                    err!(
-                        "accumulated `SignedDuration` of `{sdur:?}` \
-                         overflowed when adding {value} of unit {unit}",
-                        unit = Unit::Nanosecond.singular(),
-                    )
-                })?;
+                .ok_or(E::OverflowForUnit { unit: Unit::Nanosecond })?;
         }
 
         if let Some(fraction) = self.get_fraction()? {
             sdur = sdur
                 .checked_add(fractional_duration(min, fraction)?)
-                .ok_or_else(|| {
-                    err!(
-                        "accumulated `SignedDuration` of `{sdur:?}` \
-                         overflowed when adding 0.{fraction} of unit {unit}",
-                        unit = min.singular(),
-                    )
-                })?;
+                .ok_or(E::OverflowForUnitFractional { unit: min })?;
         }
 
         Ok(sdur)
@@ -1003,19 +937,12 @@ impl DurationUnits {
         }
 
         if self.sign.is_negative() {
-            return Err(err!(
-                "cannot parse negative duration into unsigned \
-                 `std::time::Duration`",
-            ));
+            return Err(Error::from(E::NotAllowedNegative));
         }
 
         let (min, max) = self.get_min_max_units()?;
         if max > Unit::Hour {
-            return Err(err!(
-                "parsing {unit} units into a `std::time::Duration` \
-                 is not supported (perhaps try parsing into a `Span` instead)",
-                unit = max.singular(),
-            ));
+            return Err(Error::from(E::NotAllowedCalendarUnit { unit: max }));
         }
 
         let mut sdur = core::time::Duration::ZERO;
@@ -1023,73 +950,37 @@ impl DurationUnits {
             let value = self.values[Unit::Hour.as_usize()];
             sdur = try_from_hours(value)
                 .and_then(|nanos| sdur.checked_add(nanos))
-                .ok_or_else(|| {
-                    err!(
-                        "accumulated `std::time::Duration` of `{sdur:?}` \
-                         overflowed when adding {value} of unit {unit}",
-                        unit = Unit::Hour.singular(),
-                    )
-                })?;
+                .ok_or(E::OverflowForUnit { unit: Unit::Hour })?;
         }
         if self.values[Unit::Minute.as_usize()] != 0 {
             let value = self.values[Unit::Minute.as_usize()];
             sdur = try_from_mins(value)
                 .and_then(|nanos| sdur.checked_add(nanos))
-                .ok_or_else(|| {
-                    err!(
-                        "accumulated `std::time::Duration` of `{sdur:?}` \
-                         overflowed when adding {value} of unit {unit}",
-                        unit = Unit::Minute.singular(),
-                    )
-                })?;
+                .ok_or(E::OverflowForUnit { unit: Unit::Minute })?;
         }
         if self.values[Unit::Second.as_usize()] != 0 {
             let value = self.values[Unit::Second.as_usize()];
             sdur = core::time::Duration::from_secs(value)
                 .checked_add(sdur)
-                .ok_or_else(|| {
-                    err!(
-                        "accumulated `std::time::Duration` of `{sdur:?}` \
-                         overflowed when adding {value} of unit {unit}",
-                        unit = Unit::Second.singular(),
-                    )
-                })?;
+                .ok_or(E::OverflowForUnit { unit: Unit::Second })?;
         }
         if self.values[Unit::Millisecond.as_usize()] != 0 {
             let value = self.values[Unit::Millisecond.as_usize()];
             sdur = core::time::Duration::from_millis(value)
                 .checked_add(sdur)
-                .ok_or_else(|| {
-                    err!(
-                        "accumulated `std::time::Duration` of `{sdur:?}` \
-                         overflowed when adding {value} of unit {unit}",
-                        unit = Unit::Millisecond.singular(),
-                    )
-                })?;
+                .ok_or(E::OverflowForUnit { unit: Unit::Millisecond })?;
         }
         if self.values[Unit::Microsecond.as_usize()] != 0 {
             let value = self.values[Unit::Microsecond.as_usize()];
             sdur = core::time::Duration::from_micros(value)
                 .checked_add(sdur)
-                .ok_or_else(|| {
-                    err!(
-                        "accumulated `std::time::Duration` of `{sdur:?}` \
-                         overflowed when adding {value} of unit {unit}",
-                        unit = Unit::Microsecond.singular(),
-                    )
-                })?;
+                .ok_or(E::OverflowForUnit { unit: Unit::Microsecond })?;
         }
         if self.values[Unit::Nanosecond.as_usize()] != 0 {
             let value = self.values[Unit::Nanosecond.as_usize()];
             sdur = core::time::Duration::from_nanos(value)
                 .checked_add(sdur)
-                .ok_or_else(|| {
-                err!(
-                    "accumulated `std::time::Duration` of `{sdur:?}` \
-                         overflowed when adding {value} of unit {unit}",
-                    unit = Unit::Nanosecond.singular(),
-                )
-            })?;
+                .ok_or(E::OverflowForUnit { unit: Unit::Nanosecond })?;
         }
 
         if let Some(fraction) = self.get_fraction()? {
@@ -1097,13 +988,7 @@ impl DurationUnits {
                 .checked_add(
                     fractional_duration(min, fraction)?.unsigned_abs(),
                 )
-                .ok_or_else(|| {
-                    err!(
-                        "accumulated `std::time::Duration` of `{sdur:?}` \
-                         overflowed when adding 0.{fraction} of unit {unit}",
-                        unit = min.singular(),
-                    )
-                })?;
+                .ok_or(E::OverflowForUnitFractional { unit: Unit::Hour })?;
         }
 
         Ok(sdur)
@@ -1122,7 +1007,7 @@ impl DurationUnits {
     /// were no parsed duration components.)
     fn get_min_max_units(&self) -> Result<(Unit, Unit), Error> {
         let (Some(min), Some(max)) = (self.min, self.max) else {
-            return Err(err!("no parsed duration components"));
+            return Err(Error::from(E::EmptyDuration));
         };
         Ok((min, max))
     }
@@ -1143,21 +1028,12 @@ impl DurationUnits {
             }
             // Otherwise, if a conversion to `i64` fails, then that failure
             // is correct.
-            let mut value = i64::try_from(value).map_err(|_| {
-                err!(
-                    "`{sign}{value}` {unit} is too big (or small) \
-                     to fit into a signed 64-bit integer",
-                    unit = unit.plural()
-                )
-            })?;
+            let mut value = i64::try_from(value)
+                .map_err(|_| E::SignedOverflowForUnit { unit })?;
             if sign.is_negative() {
-                value = value.checked_neg().ok_or_else(|| {
-                    err!(
-                        "`{sign}{value}` {unit} is too big (or small) \
-                         to fit into a signed 64-bit integer",
-                        unit = unit.plural()
-                    )
-                })?;
+                value = value
+                    .checked_neg()
+                    .ok_or(E::SignedOverflowForUnit { unit })?;
             }
             Ok(value)
         }
@@ -1258,21 +1134,13 @@ pub(crate) fn parse_temporal_fraction<'i>(
         }
         let digits = mkdigits(input);
         if digits.is_empty() {
-            return Err(err!(
-                "found decimal after seconds component, \
-                 but did not find any decimal digits after decimal",
-            ));
+            return Err(Error::from(E::MissingFractionalDigits));
         }
         // I believe this error can never happen, since we know we have no more
         // than 9 ASCII digits. Any sequence of 9 ASCII digits can be parsed
         // into an `i64`.
-        let nanoseconds = parse::fraction(digits).map_err(|err| {
-            err!(
-                "failed to parse {digits:?} as fractional component \
-                 (up to 9 digits, nanosecond precision): {err}",
-                digits = escape::Bytes(digits),
-            )
-        })?;
+        let nanoseconds =
+            parse::fraction(digits).context(E::InvalidFraction)?;
         // OK because parsing is forcefully limited to 9 digits,
         // which can never be greater than `999_999_99`,
         // which is less than `u32::MAX`.
@@ -1411,18 +1279,10 @@ fn fractional_time_to_span(
     }
     if !sdur.is_zero() {
         let nanos = sdur.as_nanos();
-        let nanos64 = i64::try_from(nanos).map_err(|_| {
-            err!(
-                "failed to set nanosecond value {nanos} (it overflows \
-                 `i64`) on span determined from {value}.{fraction}",
-            )
-        })?;
-        span = span.try_nanoseconds(nanos64).with_context(|| {
-            err!(
-                "failed to set nanosecond value {nanos64} on span \
-                 determined from {value}.{fraction}",
-            )
-        })?;
+        let nanos64 =
+            i64::try_from(nanos).map_err(|_| E::InvalidFractionNanos)?;
+        span =
+            span.try_nanoseconds(nanos64).context(E::InvalidFractionNanos)?;
     }
 
     Ok(span)
@@ -1452,13 +1312,9 @@ fn fractional_time_to_duration(
 ) -> Result<SignedDuration, Error> {
     let sdur = duration_unit_value(unit, value)?;
     let fraction_dur = fractional_duration(unit, fraction)?;
-    sdur.checked_add(fraction_dur).ok_or_else(|| {
-        err!(
-            "accumulated `SignedDuration` of `{sdur:?}` overflowed \
-             when adding `{fraction_dur:?}` (from fractional {unit} units)",
-            unit = unit.singular(),
-        )
-    })
+    Ok(sdur
+        .checked_add(fraction_dur)
+        .ok_or(E::OverflowForUnitFractional { unit })?)
 }
 
 /// Converts the fraction of the given unit to a signed duration.
@@ -1488,10 +1344,9 @@ fn fractional_duration(
         Unit::Millisecond => fraction / t::NANOS_PER_MICRO.value(),
         Unit::Microsecond => fraction / t::NANOS_PER_MILLI.value(),
         unit => {
-            return Err(err!(
-                "fractional {unit} units are not allowed",
-                unit = unit.singular(),
-            ))
+            return Err(Error::from(E::NotAllowedFractionalUnit {
+                found: unit,
+            }));
         }
     };
     Ok(SignedDuration::from_nanos(nanos))
@@ -1516,17 +1371,13 @@ fn duration_unit_value(
         Unit::Hour => {
             let seconds = value
                 .checked_mul(t::SECONDS_PER_HOUR.value())
-                .ok_or_else(|| {
-                    err!("converting {value} hours to seconds overflows i64")
-                })?;
+                .ok_or(E::ConversionToSecondsFailed { unit: Unit::Hour })?;
             SignedDuration::from_secs(seconds)
         }
         Unit::Minute => {
             let seconds = value
                 .checked_mul(t::SECONDS_PER_MINUTE.value())
-                .ok_or_else(|| {
-                    err!("converting {value} minutes to seconds overflows i64")
-                })?;
+                .ok_or(E::ConversionToSecondsFailed { unit: Unit::Minute })?;
             SignedDuration::from_secs(seconds)
         }
         Unit::Second => SignedDuration::from_secs(value),
@@ -1534,11 +1385,9 @@ fn duration_unit_value(
         Unit::Microsecond => SignedDuration::from_micros(value),
         Unit::Nanosecond => SignedDuration::from_nanos(value),
         unsupported => {
-            return Err(err!(
-                "parsing {unit} units into a `SignedDuration` is not supported \
-                 (perhaps try parsing into a `Span` instead)",
-                unit = unsupported.singular(),
-            ));
+            return Err(Error::from(E::NotAllowedCalendarUnit {
+                unit: unsupported,
+            }))
         }
     };
     Ok(sdur)

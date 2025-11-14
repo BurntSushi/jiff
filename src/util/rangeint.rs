@@ -164,16 +164,15 @@ macro_rules! define_ranged {
                 val: impl Into<i64>,
             ) -> Result<Self, Error> {
                 let val = val.into();
-                #[allow(irrefutable_let_patterns)]
-                let Ok(val) = <$repr>::try_from(val) else {
-                    return Err(Error::range(
-                        what,
-                        val,
-                        Self::MIN_REPR,
-                        Self::MAX_REPR,
-                    ));
-                };
-                Self::new(val).ok_or_else(|| Self::error(what, val))
+                <$repr>::try_from(val).ok().and_then(Self::new).ok_or_else(
+                    || {
+                        Error::range(
+                            what,
+                            val,
+                            Self::MIN_REPR,
+                            Self::MAX_REPR,
+                        )
+                    })
             }
 
             #[inline]
@@ -182,16 +181,15 @@ macro_rules! define_ranged {
                 val: impl Into<i128>,
             ) -> Result<Self, Error> {
                 let val = val.into();
-                #[allow(irrefutable_let_patterns)]
-                let Ok(val) = <$repr>::try_from(val) else {
-                    return Err(Error::range(
-                        what,
-                        val,
-                        Self::MIN_REPR,
-                        Self::MAX_REPR,
-                    ));
-                };
-                Self::new(val).ok_or_else(|| Self::error(what, val))
+                <$repr>::try_from(val).ok().and_then(Self::new).ok_or_else(
+                    || {
+                        Error::range(
+                            what,
+                            val,
+                            Self::MIN_REPR,
+                            Self::MAX_REPR,
+                        )
+                    })
             }
 
             #[inline]

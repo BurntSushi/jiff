@@ -6,7 +6,7 @@ use crate::{
         Weekday,
     },
     duration::{Duration, SDuration},
-    error::{err, Error, ErrorContext},
+    error::{zoned::Error as E, Error, ErrorContext},
     fmt::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
@@ -2216,41 +2216,20 @@ impl Zoned {
                 .timestamp()
                 .checked_add(span)
                 .map(|ts| ts.to_zoned(self.time_zone().clone()))
-                .with_context(|| {
-                    err!(
-                        "failed to add span {span} to timestamp {timestamp} \
-                         from zoned datetime {zoned}",
-                        timestamp = self.timestamp(),
-                        zoned = self,
-                    )
-                });
+                .context(E::AddTimestamp);
         }
         let span_time = span.only_time();
-        let dt =
-            self.datetime().checked_add(span_calendar).with_context(|| {
-                err!(
-                    "failed to add span {span_calendar} to datetime {dt} \
-                     from zoned datetime {zoned}",
-                    dt = self.datetime(),
-                    zoned = self,
-                )
-            })?;
+        let dt = self
+            .datetime()
+            .checked_add(span_calendar)
+            .context(E::AddDateTime)?;
 
         let tz = self.time_zone();
-        let mut ts =
-            tz.to_ambiguous_timestamp(dt).compatible().with_context(|| {
-                err!(
-                    "failed to convert civil datetime {dt} to timestamp \
-                     with time zone {tz}",
-                    tz = self.time_zone().diagnostic_name(),
-                )
-            })?;
-        ts = ts.checked_add(span_time).with_context(|| {
-            err!(
-                "failed to add span {span_time} to timestamp {ts} \
-                 (which was created from {dt})"
-            )
-        })?;
+        let mut ts = tz
+            .to_ambiguous_timestamp(dt)
+            .compatible()
+            .context(E::ConvertDateTimeToTimestamp)?;
+        ts = ts.checked_add(span_time).context(E::AddTimestamp)?;
         Ok(ts.to_zoned(tz.clone()))
     }
 
@@ -4327,13 +4306,7 @@ impl<'a> ZonedDifference<'a> {
             return zdt1.timestamp().until((largest, zdt2.timestamp()));
         }
         if zdt1.time_zone() != zdt2.time_zone() {
-            return Err(err!(
-                "computing the span between zoned datetimes, with \
-                 {largest} units, requires that the time zones are \
-                 equivalent, but {zdt1} and {zdt2} have distinct \
-                 time zones",
-                largest = largest.singular(),
-            ));
+            return Err(Error::from(E::MismatchTimeZoneUntil { largest }));
         }
         let tz = zdt1.time_zone();
 
@@ -4347,43 +4320,27 @@ impl<'a> ZonedDifference<'a> {
         let mut mid = dt2
             .date()
             .checked_add(Span::new().days_ranged(day_correct * -sign))
-            .with_context(|| {
-                err!(
-                    "failed to add {days} days to date in {dt2}",
-                    days = day_correct * -sign,
-                )
-            })?
+            .context(E::AddDays)?
             .to_datetime(dt1.time());
-        let mut zmid: Zoned = mid.to_zoned(tz.clone()).with_context(|| {
-            err!(
-                "failed to convert intermediate datetime {mid} \
-                     to zoned timestamp in time zone {tz}",
-                tz = tz.diagnostic_name(),
-            )
-        })?;
+        let mut zmid: Zoned = mid
+            .to_zoned(tz.clone())
+            .context(E::ConvertIntermediateDatetime)?;
         if t::sign(zdt2, &zmid) == -sign {
             if sign == C(-1) {
+                // FIXME
                 panic!("this should be an error");
             }
             day_correct += C(1);
             mid = dt2
                 .date()
                 .checked_add(Span::new().days_ranged(day_correct * -sign))
-                .with_context(|| {
-                    err!(
-                        "failed to add {days} days to date in {dt2}",
-                        days = day_correct * -sign,
-                    )
-                })?
+                .context(E::AddDays)?
                 .to_datetime(dt1.time());
-            zmid = mid.to_zoned(tz.clone()).with_context(|| {
-                err!(
-                    "failed to convert intermediate datetime {mid} \
-                         to zoned timestamp in time zone {tz}",
-                    tz = tz.diagnostic_name(),
-                )
-            })?;
+            zmid = mid
+                .to_zoned(tz.clone())
+                .context(E::ConvertIntermediateDatetime)?;
             if t::sign(zdt2, &zmid) == -sign {
+                // FIXME
                 panic!("this should be an error too");
             }
         }
@@ -4635,32 +4592,18 @@ impl ZonedRound {
         // and a &TimeZone. Fixing just this should just be some minor annoying
         // work. The grander refactor is something like an `Unzoned` type, but
         // I'm not sure that's really worth it. ---AG
-        let start = zdt.start_of_day().with_context(move || {
-            err!("failed to find start of day for {zdt}")
-        })?;
+        let start = zdt.start_of_day().context(E::FailedStartOfDay)?;
         let end = start
             .checked_add(Span::new().days_ranged(C(1).rinto()))
-            .with_context(|| {
-                err!("failed to add 1 day to {start} to find length of day")
-            })?;
+            .context(E::FailedLengthOfDay)?;
         let span = start
             .timestamp()
             .until((Unit::Nanosecond, end.timestamp()))
-            .with_context(|| {
-                err!(
-                    "failed to compute span in nanoseconds \
-                     from {start} until {end}"
-                )
-            })?;
+            .context(E::FailedSpanNanoseconds)?;
         let nanos = span.get_nanoseconds_ranged();
         let day_length =
             ZonedDayNanoseconds::try_rfrom("nanoseconds-per-zoned-day", nanos)
-                .with_context(|| {
-                    err!(
-                        "failed to convert span between {start} until {end} \
-                         to nanoseconds",
-                    )
-                })?;
+                .context(E::FailedSpanNanoseconds)?;
         let progress = zdt.timestamp().as_nanosecond_ranged()
             - start.timestamp().as_nanosecond_ranged();
         let rounded = self.round.get_mode().round(progress, day_length);
@@ -6078,21 +6021,21 @@ mod tests {
 
         insta::assert_snapshot!(
             zdt.round(Unit::Year).unwrap_err(),
-            @"datetime rounding does not support years"
+            @"failed rounding datetime: rounding to years is not supported"
         );
         insta::assert_snapshot!(
             zdt.round(Unit::Month).unwrap_err(),
-            @"datetime rounding does not support months"
+            @"failed rounding datetime: rounding to months is not supported"
         );
         insta::assert_snapshot!(
             zdt.round(Unit::Week).unwrap_err(),
-            @"datetime rounding does not support weeks"
+            @"failed rounding datetime: rounding to weeks is not supported"
         );
 
         let options = ZonedRound::new().smallest(Unit::Day).increment(2);
         insta::assert_snapshot!(
             zdt.round(options).unwrap_err(),
-            @"increment 2 for rounding datetime to days must be 1) less than 2, 2) divide into it evenly and 3) greater than zero"
+            @"failed rounding datetime: increment for rounding to days must be 1) less than 2, 2) divide into it evenly and 3) greater than zero"
         );
     }
 
@@ -6124,12 +6067,12 @@ mod tests {
 
         insta::assert_snapshot!(
             "1970-06-01T00:00:00-00:44:40[Africa/Monrovia]".parse::<Zoned>().unwrap_err(),
-            @r#"parsing "1970-06-01T00:00:00-00:44:40[Africa/Monrovia]" failed: datetime 1970-06-01T00:00:00 could not resolve to a timestamp since 'reject' conflict resolution was chosen, and because datetime has offset -00:44:40, but the time zone Africa/Monrovia for the given datetime unambiguously has offset -00:44:30"#,
+            @"datetime could not resolve to a timestamp since `reject` conflict resolution was chosen, and because datetime has offset `-00:44:40`, but the time zone `Africa/Monrovia` for the given datetime unambiguously has offset `-00:44:30`",
         );
 
         insta::assert_snapshot!(
             "1970-06-01T00:00:00-00:45:00[Africa/Monrovia]".parse::<Zoned>().unwrap_err(),
-            @r#"parsing "1970-06-01T00:00:00-00:45:00[Africa/Monrovia]" failed: datetime 1970-06-01T00:00:00 could not resolve to a timestamp since 'reject' conflict resolution was chosen, and because datetime has offset -00:45, but the time zone Africa/Monrovia for the given datetime unambiguously has offset -00:44:30"#,
+            @"datetime could not resolve to a timestamp since `reject` conflict resolution was chosen, and because datetime has offset `-00:45`, but the time zone `Africa/Monrovia` for the given datetime unambiguously has offset `-00:44:30`",
         );
     }
 

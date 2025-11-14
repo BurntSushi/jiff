@@ -5,7 +5,7 @@ use crate::{
         datetime, Date, DateWith, Era, ISOWeekDate, Time, TimeWith, Weekday,
     },
     duration::{Duration, SDuration},
-    error::{err, Error, ErrorContext},
+    error::{civil::Error as E, Error, ErrorContext},
     fmt::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
@@ -1695,25 +1695,18 @@ impl DateTime {
         {
             (true, true) => Ok(self),
             (false, true) => {
-                let new_date =
-                    old_date.checked_add(span).with_context(|| {
-                        err!("failed to add {span} to {old_date}")
-                    })?;
+                let new_date = old_date
+                    .checked_add(span)
+                    .context(E::FailedAddSpanDate)?;
                 Ok(DateTime::from_parts(new_date, old_time))
             }
             (true, false) => {
-                let (new_time, leftovers) =
-                    old_time.overflowing_add(span).with_context(|| {
-                        err!("failed to add {span} to {old_time}")
-                    })?;
-                let new_date =
-                    old_date.checked_add(leftovers).with_context(|| {
-                        err!(
-                            "failed to add overflowing span, {leftovers}, \
-                             from adding {span} to {old_time}, \
-                             to {old_date}",
-                        )
-                    })?;
+                let (new_time, leftovers) = old_time
+                    .overflowing_add(span)
+                    .context(E::FailedAddSpanTime)?;
+                let new_date = old_date
+                    .checked_add(leftovers)
+                    .context(E::FailedAddSpanOverflowing)?;
                 Ok(DateTime::from_parts(new_date, new_time))
             }
             (false, false) => self.checked_add_span_general(&span),
@@ -1727,20 +1720,14 @@ impl DateTime {
         let span_date = span.without_lower(Unit::Day);
         let span_time = span.only_lower(Unit::Day);
 
-        let (new_time, leftovers) =
-            old_time.overflowing_add(span_time).with_context(|| {
-                err!("failed to add {span_time} to {old_time}")
-            })?;
-        let new_date = old_date.checked_add(span_date).with_context(|| {
-            err!("failed to add {span_date} to {old_date}")
-        })?;
-        let new_date = new_date.checked_add(leftovers).with_context(|| {
-            err!(
-                "failed to add overflowing span, {leftovers}, \
-                             from adding {span_time} to {old_time}, \
-                             to {new_date}",
-            )
-        })?;
+        let (new_time, leftovers) = old_time
+            .overflowing_add(span_time)
+            .context(E::FailedAddSpanTime)?;
+        let new_date =
+            old_date.checked_add(span_date).context(E::FailedAddSpanDate)?;
+        let new_date = new_date
+            .checked_add(leftovers)
+            .context(E::FailedAddSpanOverflowing)?;
         Ok(DateTime::from_parts(new_date, new_time))
     }
 
@@ -1751,13 +1738,9 @@ impl DateTime {
     ) -> Result<DateTime, Error> {
         let (date, time) = (self.date(), self.time());
         let (new_time, leftovers) = time.overflowing_add_duration(duration)?;
-        let new_date = date.checked_add(leftovers).with_context(|| {
-            err!(
-                "failed to add overflowing signed duration, {leftovers:?}, \
-                 from adding {duration:?} to {time},
-                 to {date}",
-            )
-        })?;
+        let new_date = date
+            .checked_add(leftovers)
+            .context(E::FailedAddDurationOverflowing)?;
         Ok(DateTime::from_parts(new_date, new_time))
     }
 
@@ -3552,9 +3535,10 @@ impl DateTimeRound {
         // it for good reasons.
         match self.smallest {
             Unit::Year | Unit::Month | Unit::Week => {
-                return Err(err!(
-                    "rounding datetimes does not support {unit}",
-                    unit = self.smallest.plural()
+                return Err(Error::from(
+                    crate::error::util::RoundingIncrementError::Unsupported {
+                        unit: self.smallest,
+                    },
                 ));
             }
             // We don't do any rounding in this case, so just bail now.
@@ -3592,9 +3576,7 @@ impl DateTimeRound {
         // supported datetimes.
         let end = start
             .checked_add(Span::new().days_ranged(days_len))
-            .with_context(|| {
-                err!("adding {days_len} days to {start} failed")
-            })?;
+            .context(E::FailedAddDays)?;
         Ok(DateTime::from_parts(end, time))
     }
 

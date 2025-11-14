@@ -1,5 +1,5 @@
 use crate::{
-    error::{err, Error},
+    error::{tz::db::Error as E, Error},
     tz::TimeZone,
     util::{sync::Arc, utf8},
 };
@@ -457,22 +457,10 @@ impl TimeZoneDatabase {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn get(&self, name: &str) -> Result<TimeZone, Error> {
-        let inner = self.inner.as_deref().ok_or_else(|| {
-            if cfg!(feature = "std") {
-                err!(
-                    "failed to find time zone `{name}` since there is no \
-                     time zone database configured",
-                )
-            } else {
-                err!(
-                    "failed to find time zone `{name}`, there is no \
-                     global time zone database configured (and is currently \
-                     impossible to do so without Jiff's `std` feature \
-                     enabled, if you need this functionality, please file \
-                     an issue on Jiff's tracker with your use case)",
-                )
-            }
-        })?;
+        let inner = self
+            .inner
+            .as_deref()
+            .ok_or_else(|| E::failed_time_zone_no_database_configured(name))?;
         match *inner {
             Kind::ZoneInfo(ref db) => {
                 if let Some(tz) = db.get(name) {
@@ -493,7 +481,7 @@ impl TimeZoneDatabase {
                 }
             }
         }
-        Err(err!("failed to find time zone `{name}` in time zone database"))
+        Err(Error::from(E::failed_time_zone(name)))
     }
 
     /// Returns a list of all available time zone identifiers from this

@@ -3,7 +3,7 @@ use core::time::Duration as UnsignedDuration;
 use crate::{
     civil::{DateTime, Era, ISOWeekDate, Time, Weekday},
     duration::{Duration, SDuration},
-    error::{err, Error, ErrorContext},
+    error::{civil::Error as E, Error, ErrorContext},
     fmt::{
         self,
         temporal::{DEFAULT_DATETIME_PARSER, DEFAULT_DATETIME_PRINTER},
@@ -1057,7 +1057,7 @@ impl Date {
 
         let nth = t::SpanWeeks::try_new("nth weekday", nth)?;
         if nth == C(0) {
-            Err(err!("nth weekday cannot be `0`"))
+            Err(Error::from(E::NthWeekdayNonZero))
         } else if nth > C(0) {
             let nth = nth.max(C(1));
             let weekday_diff = weekday.since_ranged(self.weekday().next());
@@ -1515,14 +1515,8 @@ impl Date {
             -1 => self.yesterday(),
             1 => self.tomorrow(),
             days => {
-                let days = UnixEpochDay::try_new("days", days).with_context(
-                    || {
-                        err!(
-                            "{days} computed from duration {duration:?} \
-                             overflows Jiff's datetime limits",
-                        )
-                    },
-                )?;
+                let days = UnixEpochDay::try_new("days", days)
+                    .context(E::OverflowDaysDuration)?;
                 let days =
                     self.to_unix_epoch_day().try_checked_add("days", days)?;
                 Ok(Date::from_unix_epoch_day(days))
@@ -2941,11 +2935,9 @@ impl DateDifference {
             //
             // NOTE: I take the above back. It's actually possible for the
             // months component to overflow when largest=month.
-            return Err(err!(
-                "rounding the span between two dates must use days \
-                 or bigger for its units, but found {units}",
-                units = largest.plural(),
-            ));
+            return Err(Error::from(E::RoundMustUseDaysOrBigger {
+                unit: largest,
+            }));
         }
         if largest <= Unit::Week {
             let mut weeks = t::SpanWeeks::rfrom(C(0));

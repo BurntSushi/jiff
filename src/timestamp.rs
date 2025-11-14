@@ -2,7 +2,7 @@ use core::time::Duration as UnsignedDuration;
 
 use crate::{
     duration::{Duration, SDuration},
-    error::{err, Error, ErrorContext},
+    error::{timestamp::Error as E, Error, ErrorContext},
     fmt::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
@@ -279,8 +279,7 @@ use crate::{
 /// let result = "2024-06-30 08:30[America/New_York]".parse::<Timestamp>();
 /// assert_eq!(
 ///     result.unwrap_err().to_string(),
-///     "failed to find offset component in \
-///      \"2024-06-30 08:30[America/New_York]\", \
+///     "failed to find offset component, \
 ///      which is required for parsing a timestamp",
 /// );
 /// ```
@@ -1520,9 +1519,7 @@ impl Timestamp {
                 let time_seconds = self.as_second_ranged();
                 let sum = time_seconds
                     .try_checked_add("span", span_seconds)
-                    .with_context(|| {
-                    err!("adding {span} to {self} overflowed")
-                })?;
+                    .context(E::OverflowAddSpan)?;
                 return Ok(Timestamp::from_second_ranged(sum));
             }
         }
@@ -1530,7 +1527,7 @@ impl Timestamp {
         let span_nanos = span.to_invariant_nanoseconds();
         let sum = time_nanos
             .try_checked_add("span", span_nanos)
-            .with_context(|| err!("adding {span} to {self} overflowed"))?;
+            .context(E::OverflowAddSpan)?;
         Ok(Timestamp::from_nanosecond_ranged(sum))
     }
 
@@ -1540,9 +1537,7 @@ impl Timestamp {
         duration: SignedDuration,
     ) -> Result<Timestamp, Error> {
         let start = self.as_duration();
-        let end = start.checked_add(duration).ok_or_else(|| {
-            err!("overflow when adding {duration:?} to {self}")
-        })?;
+        let end = start.checked_add(duration).ok_or(E::OverflowAddDuration)?;
         Timestamp::from_duration(end)
     }
 
@@ -1648,9 +1643,7 @@ impl Timestamp {
         duration: A,
     ) -> Result<Timestamp, Error> {
         let duration: TimestampArithmetic = duration.into();
-        duration.saturating_add(self).context(
-            "saturating `Timestamp` arithmetic requires only time units",
-        )
+        duration.saturating_add(self).context(E::RequiresSaturatingTimeUnits)
     }
 
     /// This routine is identical to [`Timestamp::saturating_add`] with the
@@ -3429,11 +3422,10 @@ impl TimestampDifference {
             .get_largest()
             .unwrap_or_else(|| self.round.get_smallest().max(Unit::Second));
         if largest >= Unit::Day {
-            return Err(err!(
-                "unit {largest} is not supported when computing the \
-                 difference between timestamps (must use units smaller \
-                 than 'day')",
-                largest = largest.singular(),
+            return Err(Error::from(
+                crate::error::util::RoundingIncrementError::Unsupported {
+                    unit: largest,
+                },
             ));
         }
         let nano1 = t1.as_nanosecond_ranged().without_bounds();
@@ -3856,7 +3848,7 @@ mod tests {
     fn timestamp_saturating_add() {
         insta::assert_snapshot!(
             Timestamp::MIN.saturating_add(Span::new().days(1)).unwrap_err(),
-            @"saturating `Timestamp` arithmetic requires only time units: operation can only be performed with units of hours or smaller, but found non-zero day units (operations on `Timestamp`, `tz::Offset` and `civil::Time` don't support calendar units in a `Span`)",
+            @"saturating timestamp arithmetic requires only time units: operation can only be performed with units of hours or smaller, but found non-zero 'day' units (operations on `jiff::Timestamp`, `jiff::tz::Offset` and `jiff::civil::Time` don't support calendar units in a `jiff::Span`)",
         )
     }
 
@@ -3864,7 +3856,7 @@ mod tests {
     fn timestamp_saturating_sub() {
         insta::assert_snapshot!(
             Timestamp::MAX.saturating_sub(Span::new().days(1)).unwrap_err(),
-            @"saturating `Timestamp` arithmetic requires only time units: operation can only be performed with units of hours or smaller, but found non-zero day units (operations on `Timestamp`, `tz::Offset` and `civil::Time` don't support calendar units in a `Span`)",
+            @"saturating timestamp arithmetic requires only time units: operation can only be performed with units of hours or smaller, but found non-zero 'day' units (operations on `jiff::Timestamp`, `jiff::tz::Offset` and `jiff::civil::Time` don't support calendar units in a `jiff::Span`)",
         )
     }
 

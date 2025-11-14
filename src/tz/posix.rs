@@ -72,14 +72,14 @@ use core::fmt::Debug;
 
 use crate::{
     civil::DateTime,
-    error::{err, Error, ErrorContext},
+    error::{tz::posix::Error as E, Error, ErrorContext},
     shared,
     timestamp::Timestamp,
     tz::{
         timezone::TimeZoneAbbreviation, AmbiguousOffset, Dst, Offset,
         TimeZoneOffsetInfo, TimeZoneTransition,
     },
-    util::{array_str::Abbreviation, escape::Bytes, parse},
+    util::{array_str::Abbreviation, parse},
 };
 
 /// The result of parsing the POSIX `TZ` environment variable.
@@ -114,11 +114,7 @@ impl PosixTzEnv {
         let bytes = bytes.as_ref();
         if bytes.get(0) == Some(&b':') {
             let Ok(string) = core::str::from_utf8(&bytes[1..]) else {
-                return Err(err!(
-                    "POSIX time zone string with a ':' prefix contains \
-                     invalid UTF-8: {:?}",
-                    Bytes(&bytes[1..]),
-                ));
+                return Err(Error::from(E::ColonPrefixInvalidUtf8));
             };
             Ok(PosixTzEnv::Implementation(string.into()))
         } else {
@@ -138,8 +134,11 @@ impl PosixTzEnv {
 impl core::fmt::Display for PosixTzEnv {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match *self {
-            PosixTzEnv::Rule(ref tz) => write!(f, "{tz}"),
-            PosixTzEnv::Implementation(ref imp) => write!(f, ":{imp}"),
+            PosixTzEnv::Rule(ref tz) => core::fmt::Display::fmt(tz, f),
+            PosixTzEnv::Implementation(ref imp) => {
+                f.write_str(":")?;
+                core::fmt::Display::fmt(imp, f)
+            }
         }
     }
 }
@@ -212,9 +211,7 @@ impl PosixTimeZone<Abbreviation> {
         let bytes = bytes.as_ref();
         let inner = shared::PosixTimeZone::parse(bytes.as_ref())
             .map_err(Error::shared)
-            .map_err(|e| {
-                e.context(err!("invalid POSIX TZ string {:?}", Bytes(bytes)))
-            })?;
+            .context(E::InvalidPosixTz)?;
         Ok(PosixTimeZone { inner })
     }
 
@@ -228,12 +225,7 @@ impl PosixTimeZone<Abbreviation> {
         let (inner, remaining) =
             shared::PosixTimeZone::parse_prefix(bytes.as_ref())
                 .map_err(Error::shared)
-                .map_err(|e| {
-                    e.context(err!(
-                        "invalid POSIX TZ string {:?}",
-                        Bytes(bytes)
-                    ))
-                })?;
+                .context(E::InvalidPosixTz)?;
         Ok((PosixTimeZone { inner }, remaining))
     }
 

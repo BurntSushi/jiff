@@ -1,5 +1,8 @@
 use crate::{
-    error::{err, ErrorContext},
+    error::{
+        fmt::strtime::{Error as E, FormatError as FE},
+        ErrorContext,
+    },
     fmt::{
         strtime::{
             month_name_abbrev, month_name_full, weekday_name_abbrev,
@@ -9,8 +12,8 @@ use crate::{
         util::{DecimalFormatter, FractionalFormatter},
         Write, WriteExt,
     },
+    shared::util::utf8,
     tz::Offset,
-    util::{escape, utf8},
     Error,
 };
 
@@ -39,10 +42,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                     self.wtr.write_str("%")?;
                     break;
                 }
-                return Err(err!(
-                    "invalid format string, expected byte after '%', \
-                     but found end of format string",
-                ));
+                return Err(E::UnexpectedEndAfterPercent.into());
             }
             let orig = self.fmt;
             if let Err(err) = self.format_one() {
@@ -61,100 +61,92 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     }
 
     fn format_one(&mut self) -> Result<(), Error> {
+        let failc =
+            |directive, colons| E::DirectiveFailure { directive, colons };
+        let fail = |directive| failc(directive, 0);
+
         // Parse extensions like padding/case options and padding width.
         let ext = self.parse_extension()?;
         match self.f() {
-            b'%' => self.wtr.write_str("%").context("%% failed")?,
-            b'A' => self.fmt_weekday_full(&ext).context("%A failed")?,
-            b'a' => self.fmt_weekday_abbrev(&ext).context("%a failed")?,
-            b'B' => self.fmt_month_full(&ext).context("%B failed")?,
-            b'b' => self.fmt_month_abbrev(&ext).context("%b failed")?,
-            b'C' => self.fmt_century(&ext).context("%C failed")?,
-            b'c' => self.fmt_datetime(&ext).context("%c failed")?,
-            b'D' => self.fmt_american_date(&ext).context("%D failed")?,
-            b'd' => self.fmt_day_zero(&ext).context("%d failed")?,
-            b'e' => self.fmt_day_space(&ext).context("%e failed")?,
-            b'F' => self.fmt_iso_date(&ext).context("%F failed")?,
-            b'f' => self.fmt_fractional(&ext).context("%f failed")?,
-            b'G' => self.fmt_iso_week_year(&ext).context("%G failed")?,
-            b'g' => self.fmt_iso_week_year2(&ext).context("%g failed")?,
-            b'H' => self.fmt_hour24_zero(&ext).context("%H failed")?,
-            b'h' => self.fmt_month_abbrev(&ext).context("%b failed")?,
-            b'I' => self.fmt_hour12_zero(&ext).context("%H failed")?,
-            b'j' => self.fmt_day_of_year(&ext).context("%j failed")?,
-            b'k' => self.fmt_hour24_space(&ext).context("%k failed")?,
-            b'l' => self.fmt_hour12_space(&ext).context("%l failed")?,
-            b'M' => self.fmt_minute(&ext).context("%M failed")?,
-            b'm' => self.fmt_month(&ext).context("%m failed")?,
-            b'N' => self.fmt_nanoseconds(&ext).context("%N failed")?,
-            b'n' => self.fmt_literal("\n").context("%n failed")?,
-            b'P' => self.fmt_ampm_lower(&ext).context("%P failed")?,
-            b'p' => self.fmt_ampm_upper(&ext).context("%p failed")?,
+            b'%' => self.wtr.write_str("%").context(fail(b'%')),
+            b'A' => self.fmt_weekday_full(&ext).context(fail(b'A')),
+            b'a' => self.fmt_weekday_abbrev(&ext).context(fail(b'a')),
+            b'B' => self.fmt_month_full(&ext).context(fail(b'B')),
+            b'b' => self.fmt_month_abbrev(&ext).context(fail(b'b')),
+            b'C' => self.fmt_century(&ext).context(fail(b'C')),
+            b'c' => self.fmt_datetime(&ext).context(fail(b'c')),
+            b'D' => self.fmt_american_date(&ext).context(fail(b'D')),
+            b'd' => self.fmt_day_zero(&ext).context(fail(b'd')),
+            b'e' => self.fmt_day_space(&ext).context(fail(b'e')),
+            b'F' => self.fmt_iso_date(&ext).context(fail(b'F')),
+            b'f' => self.fmt_fractional(&ext).context(fail(b'f')),
+            b'G' => self.fmt_iso_week_year(&ext).context(fail(b'G')),
+            b'g' => self.fmt_iso_week_year2(&ext).context(fail(b'g')),
+            b'H' => self.fmt_hour24_zero(&ext).context(fail(b'H')),
+            b'h' => self.fmt_month_abbrev(&ext).context(fail(b'b')),
+            b'I' => self.fmt_hour12_zero(&ext).context(fail(b'H')),
+            b'j' => self.fmt_day_of_year(&ext).context(fail(b'j')),
+            b'k' => self.fmt_hour24_space(&ext).context(fail(b'k')),
+            b'l' => self.fmt_hour12_space(&ext).context(fail(b'l')),
+            b'M' => self.fmt_minute(&ext).context(fail(b'M')),
+            b'm' => self.fmt_month(&ext).context(fail(b'm')),
+            b'N' => self.fmt_nanoseconds(&ext).context(fail(b'N')),
+            b'n' => self.fmt_literal("\n").context(fail(b'n')),
+            b'P' => self.fmt_ampm_lower(&ext).context(fail(b'P')),
+            b'p' => self.fmt_ampm_upper(&ext).context(fail(b'p')),
             b'Q' => match ext.colons {
-                0 => self.fmt_iana_nocolon().context("%Q failed")?,
-                1 => self.fmt_iana_colon().context("%:Q failed")?,
-                _ => {
-                    return Err(err!(
-                        "invalid number of `:` in `%Q` directive"
-                    ))
-                }
+                0 => self.fmt_iana_nocolon().context(fail(b'Q')),
+                1 => self.fmt_iana_colon().context(failc(b'Q', 1)),
+                _ => return Err(E::ColonCount { directive: b'Q' }.into()),
             },
-            b'q' => self.fmt_quarter(&ext).context("%q failed")?,
-            b'R' => self.fmt_clock_nosecs(&ext).context("%R failed")?,
-            b'r' => self.fmt_12hour_time(&ext).context("%r failed")?,
-            b'S' => self.fmt_second(&ext).context("%S failed")?,
-            b's' => self.fmt_timestamp(&ext).context("%s failed")?,
-            b'T' => self.fmt_clock_secs(&ext).context("%T failed")?,
-            b't' => self.fmt_literal("\t").context("%t failed")?,
-            b'U' => self.fmt_week_sun(&ext).context("%U failed")?,
-            b'u' => self.fmt_weekday_mon(&ext).context("%u failed")?,
-            b'V' => self.fmt_week_iso(&ext).context("%V failed")?,
-            b'W' => self.fmt_week_mon(&ext).context("%W failed")?,
-            b'w' => self.fmt_weekday_sun(&ext).context("%w failed")?,
-            b'X' => self.fmt_time(&ext).context("%X failed")?,
-            b'x' => self.fmt_date(&ext).context("%x failed")?,
-            b'Y' => self.fmt_year(&ext).context("%Y failed")?,
-            b'y' => self.fmt_year2(&ext).context("%y failed")?,
-            b'Z' => self.fmt_tzabbrev(&ext).context("%Z failed")?,
+            b'q' => self.fmt_quarter(&ext).context(fail(b'q')),
+            b'R' => self.fmt_clock_nosecs(&ext).context(fail(b'R')),
+            b'r' => self.fmt_12hour_time(&ext).context(fail(b'r')),
+            b'S' => self.fmt_second(&ext).context(fail(b'S')),
+            b's' => self.fmt_timestamp(&ext).context(fail(b's')),
+            b'T' => self.fmt_clock_secs(&ext).context(fail(b'T')),
+            b't' => self.fmt_literal("\t").context(fail(b't')),
+            b'U' => self.fmt_week_sun(&ext).context(fail(b'U')),
+            b'u' => self.fmt_weekday_mon(&ext).context(fail(b'u')),
+            b'V' => self.fmt_week_iso(&ext).context(fail(b'V')),
+            b'W' => self.fmt_week_mon(&ext).context(fail(b'W')),
+            b'w' => self.fmt_weekday_sun(&ext).context(fail(b'w')),
+            b'X' => self.fmt_time(&ext).context(fail(b'X')),
+            b'x' => self.fmt_date(&ext).context(fail(b'x')),
+            b'Y' => self.fmt_year(&ext).context(fail(b'Y')),
+            b'y' => self.fmt_year2(&ext).context(fail(b'y')),
+            b'Z' => self.fmt_tzabbrev(&ext).context(fail(b'Z')),
             b'z' => match ext.colons {
-                0 => self.fmt_offset_nocolon().context("%z failed")?,
-                1 => self.fmt_offset_colon().context("%:z failed")?,
-                2 => self.fmt_offset_colon2().context("%::z failed")?,
-                3 => self.fmt_offset_colon3().context("%:::z failed")?,
-                _ => {
-                    return Err(err!(
-                        "invalid number of `:` in `%z` directive"
-                    ))
-                }
+                0 => self.fmt_offset_nocolon().context(fail(b'z')),
+                1 => self.fmt_offset_colon().context(failc(b'z', 1)),
+                2 => self.fmt_offset_colon2().context(failc(b'z', 2)),
+                3 => self.fmt_offset_colon3().context(failc(b'z', 3)),
+                _ => return Err(E::ColonCount { directive: b'z' }.into()),
             },
             b'.' => {
                 if !self.bump_fmt() {
-                    return Err(err!(
-                        "invalid format string, expected directive after '%.'",
-                    ));
+                    return Err(E::UnexpectedEndAfterDot.into());
                 }
                 // Parse precision settings after the `.`, effectively
                 // overriding any digits that came before it.
                 let ext = Extension { width: self.parse_width()?, ..ext };
                 match self.f() {
-                    b'f' => {
-                        self.fmt_dot_fractional(&ext).context("%.f failed")?
-                    }
+                    b'f' => self
+                        .fmt_dot_fractional(&ext)
+                        .context(E::DirectiveFailureDot { directive: b'f' }),
                     unk => {
-                        return Err(err!(
-                            "found unrecognized directive %{unk} following %.",
-                            unk = escape::Byte(unk),
+                        return Err(Error::from(
+                            E::UnknownDirectiveAfterDot { directive: unk },
                         ));
                     }
                 }
             }
             unk => {
-                return Err(err!(
-                    "found unrecognized specifier directive %{unk}",
-                    unk = escape::Byte(unk),
-                ));
+                return Err(Error::from(E::UnknownDirective {
+                    directive: unk,
+                }))
             }
-        }
+        }?;
         self.bump_fmt();
         Ok(())
     }
@@ -200,21 +192,17 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     /// some remaining bytes to parse.
     #[cold]
     #[inline(never)]
-    fn utf8_decode_and_bump(&mut self) -> Result<char, Error> {
+    fn utf8_decode_and_bump(&mut self) -> Result<char, FE> {
         match utf8::decode(self.fmt).expect("non-empty fmt") {
             Ok(ch) => {
                 self.fmt = &self.fmt[ch.len_utf8()..];
                 return Ok(ch);
             }
-            Err(errant_bytes) if self.config.lenient => {
-                self.fmt = &self.fmt[errant_bytes.len()..];
+            Err(err) if self.config.lenient => {
+                self.fmt = &self.fmt[err.len()..];
                 return Ok(char::REPLACEMENT_CHARACTER);
             }
-            Err(errant_bytes) => Err(err!(
-                "found invalid UTF-8 byte {errant_bytes:?} in format \
-                 string (format strings must be valid UTF-8)",
-                errant_bytes = escape::Bytes(errant_bytes),
-            )),
+            Err(_) => Err(FE::InvalidUtf8),
         }
     }
 
@@ -270,11 +258,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
 
     /// %P
     fn fmt_ampm_lower(&mut self, ext: &Extension) -> Result<(), Error> {
-        let hour = self
-            .tm
-            .hour_ranged()
-            .ok_or_else(|| err!("requires time to format AM/PM"))?
-            .get();
+        let hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
         ext.write_str(
             Case::AsIs,
             if hour < 12 { "am" } else { "pm" },
@@ -284,11 +268,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
 
     /// %p
     fn fmt_ampm_upper(&mut self, ext: &Extension) -> Result<(), Error> {
-        let hour = self
-            .tm
-            .hour_ranged()
-            .ok_or_else(|| err!("requires time to format AM/PM"))?
-            .get();
+        let hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
         // Manually specialize this case to avoid hitting `write_str_cold`.
         let s = if matches!(ext.flag, Some(Flag::Swapcase)) {
             if hour < 12 {
@@ -343,7 +323,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.day_ranged()),
             )
-            .ok_or_else(|| err!("requires date to format day"))?
+            .ok_or(FE::RequiresDate)?
             .get();
         ext.write_int(b'0', Some(2), day, self.wtr)
     }
@@ -357,18 +337,14 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.day_ranged()),
             )
-            .ok_or_else(|| err!("requires date to format day"))?
+            .ok_or(FE::RequiresDate)?
             .get();
         ext.write_int(b' ', Some(2), day, self.wtr)
     }
 
     /// %I
     fn fmt_hour12_zero(&mut self, ext: &Extension) -> Result<(), Error> {
-        let mut hour = self
-            .tm
-            .hour_ranged()
-            .ok_or_else(|| err!("requires time to format hour"))?
-            .get();
+        let mut hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
         if hour == 0 {
             hour = 12;
         } else if hour > 12 {
@@ -379,21 +355,13 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
 
     /// %H
     fn fmt_hour24_zero(&mut self, ext: &Extension) -> Result<(), Error> {
-        let hour = self
-            .tm
-            .hour_ranged()
-            .ok_or_else(|| err!("requires time to format hour"))?
-            .get();
+        let hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
         ext.write_int(b'0', Some(2), hour, self.wtr)
     }
 
     /// %l
     fn fmt_hour12_space(&mut self, ext: &Extension) -> Result<(), Error> {
-        let mut hour = self
-            .tm
-            .hour_ranged()
-            .ok_or_else(|| err!("requires time to format hour"))?
-            .get();
+        let mut hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
         if hour == 0 {
             hour = 12;
         } else if hour > 12 {
@@ -404,11 +372,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
 
     /// %k
     fn fmt_hour24_space(&mut self, ext: &Extension) -> Result<(), Error> {
-        let hour = self
-            .tm
-            .hour_ranged()
-            .ok_or_else(|| err!("requires time to format hour"))?
-            .get();
+        let hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
         ext.write_int(b' ', Some(2), hour, self.wtr)
     }
 
@@ -424,11 +388,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
 
     /// %M
     fn fmt_minute(&mut self, ext: &Extension) -> Result<(), Error> {
-        let minute = self
-            .tm
-            .minute
-            .ok_or_else(|| err!("requires time to format minute"))?
-            .get();
+        let minute = self.tm.minute.ok_or(FE::RequiresTime)?.get();
         ext.write_int(b'0', Some(2), minute, self.wtr)
     }
 
@@ -441,7 +401,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.month_ranged()),
             )
-            .ok_or_else(|| err!("requires date to format month"))?
+            .ok_or(FE::RequiresDate)?
             .get();
         ext.write_int(b'0', Some(2), month, self.wtr)
     }
@@ -455,7 +415,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.month_ranged()),
             )
-            .ok_or_else(|| err!("requires date to format month"))?;
+            .ok_or(FE::RequiresDate)?;
         ext.write_str(Case::AsIs, month_name_full(month), self.wtr)
     }
 
@@ -468,19 +428,14 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.month_ranged()),
             )
-            .ok_or_else(|| err!("requires date to format month"))?;
+            .ok_or(FE::RequiresDate)?;
         ext.write_str(Case::AsIs, month_name_abbrev(month), self.wtr)
     }
 
     /// %Q
     fn fmt_iana_nocolon(&mut self) -> Result<(), Error> {
         let Some(iana) = self.tm.iana_time_zone() else {
-            let offset = self.tm.offset.ok_or_else(|| {
-                err!(
-                    "requires IANA time zone identifier or time \
-                     zone offset, but none were present"
-                )
-            })?;
+            let offset = self.tm.offset.ok_or(FE::RequiresTimeZoneOrOffset)?;
             return write_offset(offset, false, true, false, &mut self.wtr);
         };
         self.wtr.write_str(iana)?;
@@ -490,12 +445,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
     /// %:Q
     fn fmt_iana_colon(&mut self) -> Result<(), Error> {
         let Some(iana) = self.tm.iana_time_zone() else {
-            let offset = self.tm.offset.ok_or_else(|| {
-                err!(
-                    "requires IANA time zone identifier or time \
-                     zone offset, but none were present"
-                )
-            })?;
+            let offset = self.tm.offset.ok_or(FE::RequiresTimeZoneOrOffset)?;
             return write_offset(offset, true, true, false, &mut self.wtr);
         };
         self.wtr.write_str(iana)?;
@@ -504,62 +454,44 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
 
     /// %z
     fn fmt_offset_nocolon(&mut self) -> Result<(), Error> {
-        let offset = self.tm.offset.ok_or_else(|| {
-            err!("requires offset to format time zone offset")
-        })?;
+        let offset = self.tm.offset.ok_or(FE::RequiresOffset)?;
         write_offset(offset, false, true, false, self.wtr)
     }
 
     /// %:z
     fn fmt_offset_colon(&mut self) -> Result<(), Error> {
-        let offset = self.tm.offset.ok_or_else(|| {
-            err!("requires offset to format time zone offset")
-        })?;
+        let offset = self.tm.offset.ok_or(FE::RequiresOffset)?;
         write_offset(offset, true, true, false, self.wtr)
     }
 
     /// %::z
     fn fmt_offset_colon2(&mut self) -> Result<(), Error> {
-        let offset = self.tm.offset.ok_or_else(|| {
-            err!("requires offset to format time zone offset")
-        })?;
+        let offset = self.tm.offset.ok_or(FE::RequiresOffset)?;
         write_offset(offset, true, true, true, self.wtr)
     }
 
     /// %:::z
     fn fmt_offset_colon3(&mut self) -> Result<(), Error> {
-        let offset = self.tm.offset.ok_or_else(|| {
-            err!("requires offset to format time zone offset")
-        })?;
+        let offset = self.tm.offset.ok_or(FE::RequiresOffset)?;
         write_offset(offset, true, false, false, self.wtr)
     }
 
     /// %S
     fn fmt_second(&mut self, ext: &Extension) -> Result<(), Error> {
-        let second = self
-            .tm
-            .second
-            .ok_or_else(|| err!("requires time to format second"))?
-            .get();
+        let second = self.tm.second.ok_or(FE::RequiresTime)?.get();
         ext.write_int(b'0', Some(2), second, self.wtr)
     }
 
     /// %s
     fn fmt_timestamp(&mut self, ext: &Extension) -> Result<(), Error> {
-        let timestamp = self.tm.to_timestamp().map_err(|_| {
-            err!(
-                "requires instant (a date, time and offset) \
-                 to format Unix timestamp",
-            )
-        })?;
+        let timestamp =
+            self.tm.to_timestamp().map_err(|_| FE::RequiresInstant)?;
         ext.write_int(b' ', None, timestamp.as_second(), self.wtr)
     }
 
     /// %f
     fn fmt_fractional(&mut self, ext: &Extension) -> Result<(), Error> {
-        let subsec = self.tm.subsec.ok_or_else(|| {
-            err!("requires time to format subsecond nanoseconds")
-        })?;
+        let subsec = self.tm.subsec.ok_or(FE::RequiresTime)?;
         let subsec = i32::from(subsec).unsigned_abs();
         // For %f, we always want to emit at least one digit. The only way we
         // wouldn't is if our fractional component is zero. One exception to
@@ -568,7 +500,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         // but this seems very odd. And an empty string cannot be parsed by
         // `%f`.
         if ext.width == Some(0) {
-            return Err(err!("zero precision with %f is not allowed"));
+            return Err(Error::from(FE::ZeroPrecisionFloat));
         }
         if subsec == 0 && ext.width.is_none() {
             self.wtr.write_str("0")?;
@@ -592,11 +524,9 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
 
     /// %N
     fn fmt_nanoseconds(&mut self, ext: &Extension) -> Result<(), Error> {
-        let subsec = self.tm.subsec.ok_or_else(|| {
-            err!("requires time to format subsecond nanoseconds")
-        })?;
+        let subsec = self.tm.subsec.ok_or(FE::RequiresTime)?;
         if ext.width == Some(0) {
-            return Err(err!("zero precision with %N is not allowed"));
+            return Err(Error::from(FE::ZeroPrecisionNano));
         }
         let subsec = i32::from(subsec).unsigned_abs();
         // Since `%N` is actually an alias for `%9f`, when the precision
@@ -611,14 +541,8 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
 
     /// %Z
     fn fmt_tzabbrev(&mut self, ext: &Extension) -> Result<(), Error> {
-        let tz =
-            self.tm.tz.as_ref().ok_or_else(|| {
-                err!("requires time zone in broken down time")
-            })?;
-        let ts = self
-            .tm
-            .to_timestamp()
-            .context("requires timestamp in broken down time")?;
+        let tz = self.tm.tz.as_ref().ok_or(FE::RequiresTimeZone)?;
+        let ts = self.tm.to_timestamp().map_err(|_| FE::RequiresInstant)?;
         let oinfo = tz.to_offset_info(ts);
         ext.write_str(Case::Upper, oinfo.abbreviation(), self.wtr)
     }
@@ -632,7 +556,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.weekday()),
             )
-            .ok_or_else(|| err!("requires date to format weekday"))?;
+            .ok_or(FE::RequiresDate)?;
         ext.write_str(Case::AsIs, weekday_name_full(weekday), self.wtr)
     }
 
@@ -645,7 +569,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.weekday()),
             )
-            .ok_or_else(|| err!("requires date to format weekday"))?;
+            .ok_or(FE::RequiresDate)?;
         ext.write_str(Case::AsIs, weekday_name_abbrev(weekday), self.wtr)
     }
 
@@ -658,7 +582,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.weekday()),
             )
-            .ok_or_else(|| err!("requires date to format weekday number"))?;
+            .ok_or(FE::RequiresDate)?;
         ext.write_int(b' ', None, weekday.to_monday_one_offset(), self.wtr)
     }
 
@@ -671,7 +595,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.weekday()),
             )
-            .ok_or_else(|| err!("requires date to format weekday number"))?;
+            .ok_or(FE::RequiresDate)?;
         ext.write_int(b' ', None, weekday.to_sunday_zero_offset(), self.wtr)
     }
 
@@ -689,9 +613,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.day_of_year()),
             )
-            .ok_or_else(|| {
-                err!("requires date to format Sunday-based week number")
-            })?;
+            .ok_or(FE::RequiresDate)?;
         let weekday = self
             .tm
             .weekday
@@ -699,9 +621,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.weekday()),
             )
-            .ok_or_else(|| {
-                err!("requires date to format Sunday-based week number")
-            })?
+            .ok_or(FE::RequiresDate)?
             .to_sunday_zero_offset();
         // Example: 2025-01-05 is the first Sunday in 2025, and thus the start
         // of week 1. This means that 2025-01-04 (Saturday) is in week 0.
@@ -726,9 +646,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                         .map(|d| d.iso_week_date().week_ranged())
                 },
             )
-            .ok_or_else(|| {
-                err!("requires date to format ISO 8601 week number")
-            })?;
+            .ok_or(FE::RequiresDate)?;
         ext.write_int(b'0', Some(2), weeknum, self.wtr)
     }
 
@@ -746,9 +664,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.day_of_year()),
             )
-            .ok_or_else(|| {
-                err!("requires date to format Monday-based week number")
-            })?;
+            .ok_or(FE::RequiresDate)?;
         let weekday = self
             .tm
             .weekday
@@ -756,9 +672,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.weekday()),
             )
-            .ok_or_else(|| {
-                err!("requires date to format Monday-based week number")
-            })?
+            .ok_or(FE::RequiresDate)?
             .to_sunday_zero_offset();
         // Example: 2025-01-06 is the first Monday in 2025, and thus the start
         // of week 1. This means that 2025-01-05 (Sunday) is in week 0.
@@ -778,7 +692,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.year_ranged()),
             )
-            .ok_or_else(|| err!("requires date to format year"))?
+            .ok_or(FE::RequiresDate)?
             .get();
         ext.write_int(b'0', Some(4), year, self.wtr)
     }
@@ -792,7 +706,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.year_ranged()),
             )
-            .ok_or_else(|| err!("requires date to format year (2-digit)"))?
+            .ok_or(FE::RequiresDate)?
             .get();
         let year = year % 100;
         ext.write_int(b'0', Some(2), year, self.wtr)
@@ -807,7 +721,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.year_ranged()),
             )
-            .ok_or_else(|| err!("requires date to format century (2-digit)"))?
+            .ok_or(FE::RequiresDate)?
             .get();
         let century = year / 100;
         ext.write_int(b' ', None, century, self.wtr)
@@ -827,9 +741,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                         .map(|d| d.iso_week_date().year_ranged())
                 },
             )
-            .ok_or_else(|| {
-                err!("requires date to format ISO 8601 week-based year")
-            })?
+            .ok_or(FE::RequiresDate)?
             .get();
         ext.write_int(b'0', Some(4), year, self.wtr)
     }
@@ -848,12 +760,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                         .map(|d| d.iso_week_date().year_ranged())
                 },
             )
-            .ok_or_else(|| {
-                err!(
-                    "requires date to format \
-                     ISO 8601 week-based year (2-digit)"
-                )
-            })?
+            .ok_or(FE::RequiresDate)?
             .get();
         let year = year % 100;
         ext.write_int(b'0', Some(2), year, self.wtr)
@@ -868,7 +775,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.month_ranged()),
             )
-            .ok_or_else(|| err!("requires date to format quarter"))?
+            .ok_or(FE::RequiresDate)?
             .get();
         let quarter = match month {
             1..=3 => 1,
@@ -890,7 +797,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 #[inline(never)]
                 || self.tm.to_date().ok().map(|d| d.day_of_year()),
             )
-            .ok_or_else(|| err!("requires date to format day of year"))?;
+            .ok_or(FE::RequiresDate)?;
         ext.write_int(b'0', Some(3), day, self.wtr)
     }
 
@@ -1580,7 +1487,7 @@ mod tests {
         let dt = date(2025, 1, 20).at(13, 9, 0, 0);
         insta::assert_snapshot!(
             f("%s", dt),
-            @"strftime formatting failed: %s failed: requires instant (a date, time and offset) to format Unix timestamp",
+            @"strftime formatting failed: %s failed: requires instant (a timestamp or a date, time and offset)",
         );
     }
 
@@ -1593,7 +1500,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             format(b"abc %F \xFFxyz", d).unwrap_err(),
-            @r#"strftime formatting failed: found invalid UTF-8 byte "\xff" in format string (format strings must be valid UTF-8)"#,
+            @"strftime formatting failed: invalid format string, it must be valid UTF-8",
         );
     }
 

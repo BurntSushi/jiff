@@ -1,6 +1,6 @@
 use crate::{
     civil::DateTime,
-    error::{err, Error},
+    error::{tz::timezone::Error as E, Error},
     tz::{
         ambiguous::{AmbiguousOffset, AmbiguousTimestamp, AmbiguousZoned},
         offset::{Dst, Offset},
@@ -392,10 +392,7 @@ impl TimeZone {
     pub fn try_system() -> Result<TimeZone, Error> {
         #[cfg(not(feature = "tz-system"))]
         {
-            Err(err!(
-                "failed to get system time zone since 'tz-system' \
-                 crate feature is not enabled",
-            ))
+            Err(Error::from(E::FailedSystem))
         }
         #[cfg(feature = "tz-system")]
         {
@@ -916,7 +913,7 @@ impl TimeZone {
     /// assert_eq!(
     ///     tz.to_fixed_offset().unwrap_err().to_string(),
     ///     "cannot convert non-fixed IANA time zone \
-    ///      to offset without timestamp or civil datetime",
+    ///      to offset without a timestamp or civil datetime",
     /// );
     ///
     /// let tz = TimeZone::UTC;
@@ -935,11 +932,7 @@ impl TimeZone {
     #[inline]
     pub fn to_fixed_offset(&self) -> Result<Offset, Error> {
         let mkerr = || {
-            err!(
-                "cannot convert non-fixed {kind} time zone to offset \
-                 without timestamp or civil datetime",
-                kind = self.kind_description(),
-            )
+            Error::from(E::ConvertNonFixed { kind: self.kind_description() })
         };
         repr::each! {
             &self.repr,
@@ -1392,7 +1385,7 @@ impl TimeZone {
     /// Returns a short description about the kind of this time zone.
     ///
     /// This is useful in error messages.
-    fn kind_description(&self) -> &str {
+    fn kind_description(&self) -> &'static str {
         repr::each! {
             &self.repr,
             UTC => "UTC",
@@ -1887,12 +1880,12 @@ impl<'a> core::fmt::Display for DiagnosticName<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         repr::each! {
             &self.0.repr,
-            UTC => write!(f, "UTC"),
-            UNKNOWN => write!(f, "Etc/Unknown"),
-            FIXED(offset) => write!(f, "{offset}"),
-            STATIC_TZIF(tzif) => write!(f, "{}", tzif.name().unwrap_or("Local")),
-            ARC_TZIF(tzif) => write!(f, "{}", tzif.name().unwrap_or("Local")),
-            ARC_POSIX(posix) => write!(f, "{posix}"),
+            UTC => f.write_str("UTC"),
+            UNKNOWN => f.write_str("Etc/Unknown"),
+            FIXED(offset) => offset.fmt(f),
+            STATIC_TZIF(tzif) => f.write_str(tzif.name().unwrap_or("Local")),
+            ARC_TZIF(tzif) => f.write_str(tzif.name().unwrap_or("Local")),
+            ARC_POSIX(posix) => posix.fmt(f),
         }
     }
 }

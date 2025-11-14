@@ -9,7 +9,7 @@ for time units must divide evenly into 1 unit of the next highest unit.
 */
 
 use crate::{
-    error::{err, Error},
+    error::{util::RoundingIncrementError as E, Error, ErrorContext},
     util::{
         rangeint::RFrom,
         t::{self, Constant, C},
@@ -45,7 +45,7 @@ pub(crate) fn for_span(
         // bounds of i64 and not i128.
         Ok(t::NoUnits128::rfrom(t::NoUnits::new_unchecked(increment)))
     } else {
-        get_with_limit(unit, increment, "span", LIMIT)
+        get_with_limit(unit, increment, LIMIT).context(E::ForSpan)
     }
 }
 
@@ -67,7 +67,7 @@ pub(crate) fn for_datetime(
         t::HOURS_PER_CIVIL_DAY,
         Constant(2),
     ];
-    get_with_limit(unit, increment, "datetime", LIMIT)
+    get_with_limit(unit, increment, LIMIT).context(E::ForDateTime)
 }
 
 /// Validates the given rounding increment for the given unit.
@@ -87,7 +87,7 @@ pub(crate) fn for_time(
         t::MINUTES_PER_HOUR,
         t::HOURS_PER_CIVIL_DAY,
     ];
-    get_with_limit(unit, increment, "time", LIMIT)
+    get_with_limit(unit, increment, LIMIT).context(E::ForTime)
 }
 
 /// Validates the given rounding increment for the given unit.
@@ -107,38 +107,25 @@ pub(crate) fn for_timestamp(
         t::MINUTES_PER_CIVIL_DAY,
         t::HOURS_PER_CIVIL_DAY,
     ];
-    get_with_max(unit, increment, "timestamp", MAX)
+    get_with_max(unit, increment, MAX).context(E::ForTimestamp)
 }
 
 fn get_with_limit(
     unit: Unit,
     increment: i64,
-    what: &'static str,
     limit: &[t::Constant],
-) -> Result<t::NoUnits128, Error> {
+) -> Result<t::NoUnits128, E> {
     // OK because `NoUnits` specifically allows any `i64` value.
     let increment = t::NoUnits::new_unchecked(increment);
     if increment <= C(0) {
-        return Err(err!(
-            "rounding increment {increment} for {unit} must be \
-             greater than zero",
-            unit = unit.plural(),
-        ));
+        return Err(E::GreaterThanZero { unit });
     }
     let Some(must_divide) = limit.get(unit as usize) else {
-        return Err(err!(
-            "{what} rounding does not support {unit}",
-            unit = unit.plural()
-        ));
+        return Err(E::Unsupported { unit });
     };
     let must_divide = t::NoUnits::rfrom(*must_divide);
     if increment >= must_divide || must_divide % increment != C(0) {
-        Err(err!(
-            "increment {increment} for rounding {what} to {unit} \
-             must be 1) less than {must_divide}, 2) divide into \
-             it evenly and 3) greater than zero",
-            unit = unit.plural(),
-        ))
+        Err(E::InvalidDivide { unit, must_divide: must_divide.get() })
     } else {
         Ok(t::NoUnits128::rfrom(increment))
     }
@@ -147,32 +134,19 @@ fn get_with_limit(
 fn get_with_max(
     unit: Unit,
     increment: i64,
-    what: &'static str,
     max: &[t::Constant],
-) -> Result<t::NoUnits128, Error> {
+) -> Result<t::NoUnits128, E> {
     // OK because `NoUnits` specifically allows any `i64` value.
     let increment = t::NoUnits::new_unchecked(increment);
     if increment <= C(0) {
-        return Err(err!(
-            "rounding increment {increment} for {unit} must be \
-             greater than zero",
-            unit = unit.plural(),
-        ));
+        return Err(E::GreaterThanZero { unit });
     }
     let Some(must_divide) = max.get(unit as usize) else {
-        return Err(err!(
-            "{what} rounding does not support {unit}",
-            unit = unit.plural()
-        ));
+        return Err(E::Unsupported { unit });
     };
     let must_divide = t::NoUnits::rfrom(*must_divide);
     if increment > must_divide || must_divide % increment != C(0) {
-        Err(err!(
-            "increment {increment} for rounding {what} to {unit} \
-             must be 1) less than or equal to {must_divide}, \
-             2) divide into it evenly and 3) greater than zero",
-            unit = unit.plural(),
-        ))
+        Err(E::InvalidDivide { unit, must_divide: must_divide.get() })
     } else {
         Ok(t::NoUnits128::rfrom(increment))
     }

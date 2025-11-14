@@ -3,7 +3,7 @@ use core::time::Duration as UnsignedDuration;
 use crate::{
     civil::{Date, DateTime},
     duration::{Duration, SDuration},
-    error::{err, Error, ErrorContext},
+    error::{civil::Error as E, Error, ErrorContext},
     fmt::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
@@ -950,7 +950,6 @@ impl Time {
         self,
         duration: SignedDuration,
     ) -> Result<Time, Error> {
-        let original = duration;
         let start = t::NoUnits128::rfrom(self.to_nanosecond());
         let duration = t::NoUnits128::new_unchecked(duration.as_nanos());
         // This can never fail because the maximum duration fits into a
@@ -958,15 +957,7 @@ impl Time {
         // integer can never overflow a 128-bit integer.
         let end = start.try_checked_add("nanoseconds", duration).unwrap();
         let end = CivilDayNanosecond::try_rfrom("nanoseconds", end)
-            .with_context(|| {
-                err!(
-                    "adding signed duration {duration:?}, equal to
-                     {nanos} nanoseconds, to {time} overflowed",
-                    duration = original,
-                    nanos = original.as_nanos(),
-                    time = self,
-                )
-            })?;
+            .context(E::OverflowTimeNanoseconds)?;
         Ok(Time::from_nanosecond(end))
     }
 
@@ -2603,11 +2594,9 @@ impl TimeDifference {
         }
         let largest = self.round.get_largest().unwrap_or(Unit::Hour);
         if largest > Unit::Hour {
-            return Err(err!(
-                "rounding the span between two times must use hours \
-                 or smaller for its units, but found {units}",
-                units = largest.plural(),
-            ));
+            return Err(Error::from(E::RoundMustUseHoursOrSmaller {
+                unit: largest,
+            }));
         }
         let start = t1.to_nanosecond();
         let end = t2.to_nanosecond();
@@ -3012,22 +3001,13 @@ impl TimeWith {
             None => self.original.subsec_nanosecond_ranged(),
             Some(subsec_nanosecond) => {
                 if self.millisecond.is_some() {
-                    return Err(err!(
-                        "cannot set both TimeWith::millisecond \
-                         and TimeWith::subsec_nanosecond",
-                    ));
+                    return Err(Error::from(E::IllegalTimeWithMillisecond));
                 }
                 if self.microsecond.is_some() {
-                    return Err(err!(
-                        "cannot set both TimeWith::microsecond \
-                         and TimeWith::subsec_nanosecond",
-                    ));
+                    return Err(Error::from(E::IllegalTimeWithMicrosecond));
                 }
                 if self.nanosecond.is_some() {
-                    return Err(err!(
-                        "cannot set both TimeWith::nanosecond \
-                         and TimeWith::subsec_nanosecond",
-                    ));
+                    return Err(Error::from(E::IllegalTimeWithNanosecond));
                 }
                 SubsecNanosecond::try_new(
                     "subsec_nanosecond",

@@ -6,7 +6,7 @@ use core::{
 use crate::{
     civil,
     duration::{Duration, SDuration},
-    error::{err, Error, ErrorContext},
+    error::{tz::offset::Error as E, Error, ErrorContext},
     shared::util::itime::IOffset,
     span::Span,
     timestamp::Timestamp,
@@ -526,12 +526,8 @@ impl Offset {
             .to_idatetime()
             .zip2(self.to_ioffset())
             .map(|(idt, ioff)| idt.to_timestamp(ioff));
-        Timestamp::from_itimestamp(its).with_context(|| {
-            err!(
-                "converting {dt} with offset {offset} to timestamp overflowed",
-                offset = self,
-            )
-        })
+        Timestamp::from_itimestamp(its)
+            .context(E::ConvertDateTimeToTimestamp { offset: self })
     }
 
     /// Adds the given span of time to this offset.
@@ -660,21 +656,11 @@ impl Offset {
     ) -> Result<Offset, Error> {
         let duration =
             t::SpanZoneOffset::try_new("duration-seconds", duration.as_secs())
-                .with_context(|| {
-                    err!(
-                        "adding signed duration {duration:?} \
-                         to offset {self} overflowed maximum offset seconds"
-                    )
-                })?;
+                .context(E::OverflowAddSignedDuration)?;
         let offset_seconds = self.seconds_ranged();
         let seconds = offset_seconds
             .try_checked_add("offset-seconds", duration)
-            .with_context(|| {
-                err!(
-                    "adding signed duration {duration:?} \
-                     to offset {self} overflowed"
-                )
-            })?;
+            .context(E::OverflowAddSignedDuration)?;
         Ok(Offset::from_seconds_ranged(seconds))
     }
 
@@ -975,8 +961,7 @@ impl Offset {
     /// assert_eq!(Offset::MAX.to_string(), "+25:59:59");
     /// assert_eq!(
     ///     Offset::MAX.round(Unit::Minute).unwrap_err().to_string(),
-    ///     "rounding offset `+25:59:59` resulted in a duration of 26h, \
-    ///      which overflows `Offset`",
+    ///     "rounding time zone offset resulted in a duration that overflows",
     /// );
     /// ```
     #[inline]
@@ -1347,11 +1332,10 @@ impl TryFrom<SignedDuration> for Offset {
         } else if subsec <= -500_000_000 {
             seconds = seconds.saturating_sub(1);
         }
-        let seconds = i32::try_from(seconds).map_err(|_| {
-            err!("`SignedDuration` of {sdur} overflows `Offset`")
-        })?;
+        let seconds =
+            i32::try_from(seconds).map_err(|_| E::OverflowSignedDuration)?;
         Offset::from_seconds(seconds)
-            .map_err(|_| err!("`SignedDuration` of {sdur} overflows `Offset`"))
+            .map_err(|_| Error::from(E::OverflowSignedDuration))
     }
 }
 
@@ -1599,20 +1583,11 @@ impl OffsetRound {
     fn round(&self, offset: Offset) -> Result<Offset, Error> {
         let smallest = self.0.get_smallest();
         if !(Unit::Second <= smallest && smallest <= Unit::Hour) {
-            return Err(err!(
-                "rounding `Offset` failed because \
-                 a unit of {plural} was provided, but offset rounding \
-                 can only use hours, minutes or seconds",
-                plural = smallest.plural(),
-            ));
+            return Err(Error::from(E::RoundInvalidUnit { unit: smallest }));
         }
         let rounded_sdur = SignedDuration::from(offset).round(self.0)?;
-        Offset::try_from(rounded_sdur).map_err(|_| {
-            err!(
-                "rounding offset `{offset}` resulted in a duration \
-                 of {rounded_sdur:?}, which overflows `Offset`",
-            )
-        })
+        Offset::try_from(rounded_sdur)
+            .map_err(|_| Error::from(E::RoundOverflow))
     }
 }
 
@@ -1888,10 +1863,10 @@ impl OffsetConflict {
     /// let result = OffsetConflict::Reject.resolve(dt, offset, tz.clone());
     /// assert_eq!(
     ///     result.unwrap_err().to_string(),
-    ///     "datetime 1968-02-01T23:15:00 could not resolve to a timestamp \
-    ///      since 'reject' conflict resolution was chosen, and because \
-    ///      datetime has offset -00:45, but the time zone Africa/Monrovia \
-    ///      for the given datetime unambiguously has offset -00:44:30",
+    ///     "datetime could not resolve to a timestamp since `reject` \
+    ///      conflict resolution was chosen, and because datetime has offset \
+    ///      `-00:45`, but the time zone `Africa/Monrovia` for the given \
+    ///      datetime unambiguously has offset `-00:44:30`",
     /// );
     /// let is_equal = |parsed: Offset, candidate: Offset| {
     ///     parsed == candidate || candidate.round(Unit::Minute).map_or(
@@ -1950,11 +1925,10 @@ impl OffsetConflict {
     /// let result = "1970-06-01T00-00:45:00[Africa/Monrovia]".parse::<Zoned>();
     /// assert_eq!(
     ///     result.unwrap_err().to_string(),
-    ///     "parsing \"1970-06-01T00-00:45:00[Africa/Monrovia]\" failed: \
-    ///      datetime 1970-06-01T00:00:00 could not resolve to a timestamp \
-    ///      since 'reject' conflict resolution was chosen, and because \
-    ///      datetime has offset -00:45, but the time zone Africa/Monrovia \
-    ///      for the given datetime unambiguously has offset -00:44:30",
+    ///     "datetime could not resolve to a timestamp since `reject` \
+    ///      conflict resolution was chosen, and because datetime has offset \
+    ///      `-00:45`, but the time zone `Africa/Monrovia` for the given \
+    ///      datetime unambiguously has offset `-00:44:30`",
     /// );
     /// ```
     pub fn resolve_with<F>(
@@ -2046,13 +2020,13 @@ impl OffsetConflict {
 
         let amb = tz.to_ambiguous_timestamp(dt);
         match amb.offset() {
-            Unambiguous { offset } if !is_equal(given, offset) => Err(err!(
-                "datetime {dt} could not resolve to a timestamp since \
-                 'reject' conflict resolution was chosen, and because \
-                 datetime has offset {given}, but the time zone {tzname} for \
-                 the given datetime unambiguously has offset {offset}",
-                tzname = tz.diagnostic_name(),
-            )),
+            Unambiguous { offset } if !is_equal(given, offset) => {
+                Err(Error::from(E::ResolveRejectUnambiguous {
+                    given,
+                    offset,
+                    tz,
+                }))
+            }
             Unambiguous { .. } => Ok(amb.into_ambiguous_zoned(tz)),
             Gap { before, after } => {
                 // In `jiff 0.1`, we reported an error when we found a gap
@@ -2065,28 +2039,22 @@ impl OffsetConflict {
                 // changed to treat all offsets in a gap as invalid).
                 //
                 // Ref: https://github.com/tc39/proposal-temporal/issues/2892
-                Err(err!(
-                    "datetime {dt} could not resolve to timestamp \
-                     since 'reject' conflict resolution was chosen, and \
-                     because datetime has offset {given}, but the time \
-                     zone {tzname} for the given datetime falls in a gap \
-                     (between offsets {before} and {after}), and all \
-                     offsets for a gap are regarded as invalid",
-                    tzname = tz.diagnostic_name(),
-                ))
+                Err(Error::from(E::ResolveRejectGap {
+                    given,
+                    before,
+                    after,
+                    tz,
+                }))
             }
             Fold { before, after }
                 if !is_equal(given, before) && !is_equal(given, after) =>
             {
-                Err(err!(
-                    "datetime {dt} could not resolve to timestamp \
-                     since 'reject' conflict resolution was chosen, and \
-                     because datetime has offset {given}, but the time \
-                     zone {tzname} for the given datetime falls in a fold \
-                     between offsets {before} and {after}, neither of which \
-                     match the offset",
-                    tzname = tz.diagnostic_name(),
-                ))
+                Err(Error::from(E::ResolveRejectFold {
+                    given,
+                    before,
+                    after,
+                    tz,
+                }))
             }
             Fold { .. } => {
                 let kind = Unambiguous { offset: given };

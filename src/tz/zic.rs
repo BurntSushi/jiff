@@ -111,7 +111,10 @@ use alloc::{
 
 use crate::{
     civil::{Date, DateTime, Time, Weekday},
-    error::{err, Error, ErrorContext},
+    error::{
+        tz::zic::{Error as E, MAX_LINE_LEN},
+        Error, ErrorContext,
+    },
     span::{Span, SpanFieldwise, ToSpan},
     timestamp::Timestamp,
     tz::{Dst, Offset},
@@ -205,12 +208,12 @@ impl Rules {
                 "every name in rule group must be identical"
             );
             let dst = Dst::from(r.save.suffix() == RuleSaveSuffixP::Dst);
-            let offset = r.save.to_offset().map_err(|e| {
-                err!("SAVE value in rule {:?} is too big: {e}", inner.name)
+            let offset = r.save.to_offset().with_context(|| {
+                E::FailedRule { name: inner.name.as_str().into() }
             })?;
-            let years = r
-                .years()
-                .map_err(|e| e.context(err!("rule {:?}", inner.name)))?;
+            let years = r.years().with_context(|| E::FailedRule {
+                name: inner.name.as_str().into(),
+            })?;
             let month = r.inn.month;
             let letters = r.letters.part;
             let day = r.on;
@@ -260,13 +263,12 @@ impl ZicP {
     ) -> Result<(), Error> {
         while parser.read_next_fields()? {
             self.parse_one(&mut parser)
-                .map_err(|e| e.context(err!("line {}", parser.line_number)))?;
+                .context(E::Line { number: parser.line_number })?;
         }
         if let Some(ref name) = parser.continuation_zone_for {
-            return Err(err!(
-                "expected continuation zone line for {name:?}, \
-                 but found end of data instead",
-            ));
+            return Err(Error::from(E::ExpectedContinuationZoneLine {
+                name: name.as_str().into(),
+            }));
         }
         Ok(())
     }
@@ -277,9 +279,8 @@ impl ZicP {
         assert!(!p.fields.is_empty());
 
         if let Some(name) = p.continuation_zone_for.take() {
-            let zone = ZoneContinuationP::parse(&p.fields).map_err(|e| {
-                e.context("failed to parse continuation 'Zone' line")
-            })?;
+            let zone = ZoneContinuationP::parse(&p.fields)
+                .context(E::FailedContinuationZone)?;
             let more_continuations = zone.until.is_some();
             // OK because `p.continuation_zone_for` is only set when we have
             // seen a first zone with the corresponding name.
@@ -293,51 +294,45 @@ impl ZicP {
 
         let (first, rest) = (&p.fields[0], &p.fields[1..]);
         if first.starts_with("R") && "Rule".starts_with(first) {
-            let rule = RuleP::parse(rest)
-                .map_err(|e| e.context("failed to parse 'Rule' line"))?;
+            let rule = RuleP::parse(rest).context(E::FailedRuleLine)?;
             let name = rule.name.name.clone();
             self.rules.entry(name).or_default().push(rule);
         } else if first.starts_with("Z") && "Zone".starts_with(first) {
-            let first = ZoneFirstP::parse(rest)
-                .map_err(|e| e.context("failed to parse first 'Zone' line"))?;
+            let first = ZoneFirstP::parse(rest).context(E::FailedZoneFirst)?;
             let name = first.name.name.clone();
             if first.until.is_some() {
                 p.continuation_zone_for = Some(name.clone());
             }
             let zone = ZoneP { first, continuations: vec![] };
             if self.links.contains_key(&name) {
-                return Err(err!(
-                    "found zone with name {name:?} that conflicts \
-                     with a link of the same name",
-                ));
+                return Err(Error::from(E::DuplicateZoneLink {
+                    name: name.into(),
+                }));
             }
             if let Some(previous_zone) = self.zones.insert(name, zone) {
-                return Err(err!(
-                    "found duplicate zone for {:?}",
-                    previous_zone.first.name.name,
-                ));
+                return Err(Error::from(E::DuplicateZone {
+                    name: previous_zone.first.name.name.into(),
+                }));
             }
         } else if first.starts_with("L") && "Link".starts_with(first) {
-            let link = LinkP::parse(rest)
-                .map_err(|e| e.context("failed to parse 'Link' line"))?;
+            let link = LinkP::parse(rest).context(E::FailedLinkLine)?;
             let name = link.name.name.clone();
             if self.zones.contains_key(&name) {
-                return Err(err!(
-                    "found link with name {name:?} that conflicts \
-                     with a zone of the same name",
-                ));
+                return Err(Error::from(E::DuplicateLinkZone {
+                    name: name.into(),
+                }));
             }
             if let Some(previous_link) = self.links.insert(name, link) {
-                return Err(err!(
-                    "found duplicate link for {:?}",
-                    previous_link.name.name,
-                ));
+                return Err(Error::from(E::DuplicateLink {
+                    name: previous_link.name.name.into(),
+                }));
             }
             // N.B. We don't check that the link's target name refers to some
             // other zone/link here, because the corresponding zone/link might
             // be defined later.
         } else {
-            return Err(err!("unrecognized zic line: {first:?}"));
+            return Err(Error::from(E::UnrecognizedZicLine)
+                .context(E::Line { number: p.line_number }));
         }
         Ok(())
     }
@@ -369,10 +364,9 @@ struct RuleP {
 impl RuleP {
     fn parse(fields: &[&str]) -> Result<RuleP, Error> {
         if fields.len() != 9 {
-            return Err(err!(
-                "expected exactly 9 fields for rule, but found {} fields",
-                fields.len(),
-            ));
+            return Err(Error::from(E::ExpectedRuleNineFields {
+                got: fields.len(),
+            }));
         }
         let (name_field, fields) = (fields[0], &fields[1..]);
         let (from_field, fields) = (fields[0], &fields[1..]);
@@ -386,28 +380,21 @@ impl RuleP {
 
         let name = name_field
             .parse::<RuleNameP>()
-            .map_err(|e| e.context("failed to parse NAME field"))?;
+            .context(E::FailedParseFieldName)?;
         let from = from_field
             .parse::<RuleFromP>()
-            .map_err(|e| e.context("failed to parse FROM field"))?;
-        let to = to_field
-            .parse::<RuleToP>()
-            .map_err(|e| e.context("failed to parse TO field"))?;
-        let inn = in_field
-            .parse::<RuleInP>()
-            .map_err(|e| e.context("failed to parse IN field"))?;
-        let on = on_field
-            .parse::<RuleOnP>()
-            .map_err(|e| e.context("failed to parse ON field"))?;
-        let at = at_field
-            .parse::<RuleAtP>()
-            .map_err(|e| e.context("failed to parse AT field"))?;
+            .context(E::FailedParseFieldFrom)?;
+        let to = to_field.parse::<RuleToP>().context(E::FailedParseFieldTo)?;
+        let inn =
+            in_field.parse::<RuleInP>().context(E::FailedParseFieldIn)?;
+        let on = on_field.parse::<RuleOnP>().context(E::FailedParseFieldOn)?;
+        let at = at_field.parse::<RuleAtP>().context(E::FailedParseFieldAt)?;
         let save = save_field
             .parse::<RuleSaveP>()
-            .map_err(|e| e.context("failed to parse SAVE field"))?;
+            .context(E::FailedParseFieldSave)?;
         let letters = letters_field
             .parse::<RuleLettersP>()
-            .map_err(|e| e.context("failed to parse LETTERS field"))?;
+            .context(E::FailedParseFieldLetters)?;
 
         Ok(RuleP { name, from, to, inn, on, at, save, letters })
     }
@@ -420,9 +407,10 @@ impl RuleP {
             RuleToP::Year { year } => year,
         };
         if start > end {
-            return Err(err!(
-                "found start year {start} to be greater than end year {end}"
-            ));
+            return Err(Error::from(E::InvalidRuleYear {
+                start: start.get(),
+                end: end.get(),
+            }));
         }
         Ok(start..=end)
     }
@@ -462,7 +450,7 @@ struct ZoneFirstP {
 impl ZoneFirstP {
     fn parse(fields: &[&str]) -> Result<ZoneFirstP, Error> {
         if fields.len() < 4 {
-            return Err(err!("first ZONE line must have at least 4 fields"));
+            return Err(Error::from(E::ExpectedFirstZoneFourFields));
         }
         let (name_field, fields) = (fields[0], &fields[1..]);
         let (stdoff_field, fields) = (fields[0], &fields[1..]);
@@ -470,23 +458,20 @@ impl ZoneFirstP {
         let (format_field, fields) = (fields[0], &fields[1..]);
         let name = name_field
             .parse::<ZoneNameP>()
-            .map_err(|e| e.context("failed to parse NAME field"))?;
+            .context(E::FailedParseFieldName)?;
         let stdoff = stdoff_field
             .parse::<ZoneStdoffP>()
-            .map_err(|e| e.context("failed to parse STDOFF field"))?;
+            .context(E::FailedParseFieldStdOff)?;
         let rules = rules_field
             .parse::<ZoneRulesP>()
-            .map_err(|e| e.context("failed to parse RULES field"))?;
+            .context(E::FailedParseFieldRules)?;
         let format = format_field
             .parse::<ZoneFormatP>()
-            .map_err(|e| e.context("failed to parse FORMAT field"))?;
+            .context(E::FailedParseFieldFormat)?;
         let until = if fields.is_empty() {
             None
         } else {
-            Some(
-                ZoneUntilP::parse(fields)
-                    .map_err(|e| e.context("failed to parse UNTIL field"))?,
-            )
+            Some(ZoneUntilP::parse(fields).context(E::FailedParseFieldUntil)?)
         };
         Ok(ZoneFirstP { name, stdoff, rules, format, until })
     }
@@ -512,29 +497,24 @@ struct ZoneContinuationP {
 impl ZoneContinuationP {
     fn parse(fields: &[&str]) -> Result<ZoneContinuationP, Error> {
         if fields.len() < 3 {
-            return Err(err!(
-                "continuation ZONE line must have at least 3 fields"
-            ));
+            return Err(Error::from(E::ExpectedContinuationZoneThreeFields));
         }
         let (stdoff_field, fields) = (fields[0], &fields[1..]);
         let (rules_field, fields) = (fields[0], &fields[1..]);
         let (format_field, fields) = (fields[0], &fields[1..]);
         let stdoff = stdoff_field
             .parse::<ZoneStdoffP>()
-            .map_err(|e| e.context("failed to parse STDOFF field"))?;
+            .context(E::FailedParseFieldStdOff)?;
         let rules = rules_field
             .parse::<ZoneRulesP>()
-            .map_err(|e| e.context("failed to parse RULES field"))?;
+            .context(E::FailedParseFieldRules)?;
         let format = format_field
             .parse::<ZoneFormatP>()
-            .map_err(|e| e.context("failed to parse FORMAT field"))?;
+            .context(E::FailedParseFieldFormat)?;
         let until = if fields.is_empty() {
             None
         } else {
-            Some(
-                ZoneUntilP::parse(fields)
-                    .map_err(|e| e.context("failed to parse UNTIL field"))?,
-            )
+            Some(ZoneUntilP::parse(fields).context(E::FailedParseFieldUntil)?)
         };
         Ok(ZoneContinuationP { stdoff, rules, format, until })
     }
@@ -553,17 +533,14 @@ struct LinkP {
 impl LinkP {
     fn parse(fields: &[&str]) -> Result<LinkP, Error> {
         if fields.len() != 2 {
-            return Err(err!(
-                "expected exactly 2 fields after LINK, but found {}",
-                fields.len()
-            ));
+            return Err(Error::from(E::ExpectedLinkTwoFields));
         }
         let target = fields[0]
             .parse::<ZoneNameP>()
-            .map_err(|e| e.context("failed to parse LINK target"))?;
+            .context(E::FailedParseFieldLinkTarget)?;
         let name = fields[1]
             .parse::<ZoneNameP>()
-            .map_err(|e| e.context("failed to parse LINK name"))?;
+            .context(E::FailedParseFieldLinkName)?;
         Ok(LinkP { target, name })
     }
 }
@@ -592,12 +569,9 @@ impl FromStr for RuleNameP {
         // or not. We erase that information. We could rejigger things to keep
         // that information around, but... Meh.
         if name.is_empty() {
-            Err(err!("NAME field for rule cannot be empty"))
+            Err(Error::from(E::ExpectedNonEmptyName))
         } else if name.starts_with(|ch| matches!(ch, '0'..='9' | '+' | '-')) {
-            Err(err!(
-                "NAME field cannot begin with a digit, + or -, \
-                 but {name:?} begins with one of those",
-            ))
+            Err(Error::from(E::ExpectedNameBegin))
         } else {
             Ok(RuleNameP { name: name.to_string() })
         }
@@ -614,8 +588,7 @@ impl FromStr for RuleFromP {
     type Err = Error;
 
     fn from_str(from: &str) -> Result<RuleFromP, Error> {
-        let year = parse_year(from)
-            .map_err(|e| e.context("failed to parse FROM field"))?;
+        let year = parse_year(from).context(E::FailedParseFieldFrom)?;
         Ok(RuleFromP { year })
     }
 }
@@ -642,8 +615,7 @@ impl FromStr for RuleToP {
         } else if to.starts_with("o") && "only".starts_with(to) {
             Ok(RuleToP::Only)
         } else {
-            let year = parse_year(to)
-                .map_err(|e| e.context("failed to parse TO field"))?;
+            let year = parse_year(to).context(E::FailedParseFieldTo)?;
             Ok(RuleToP::Year { year })
         }
     }
@@ -679,7 +651,7 @@ impl FromStr for RuleInP {
                 return Ok(RuleInP { month });
             }
         }
-        Err(err!("unrecognized month name: {field:?}"))
+        Err(Error::from(E::UnrecognizedMonthName))
     }
 }
 
@@ -747,7 +719,7 @@ impl FromStr for RuleOnP {
             // field. That gets checked at a higher level.
             Ok(RuleOnP::Day { day })
         } else {
-            Err(err!("unrecognized format for day-of-month: {field:?}"))
+            Err(Error::from(E::UnrecognizedDayOfMonthFormat))
         }
     }
 }
@@ -782,7 +754,7 @@ impl FromStr for RuleAtP {
 
     fn from_str(at: &str) -> Result<RuleAtP, Error> {
         if at.is_empty() {
-            return Err(err!("empty field is not a valid AT value"));
+            return Err(Error::from(E::ExpectedNonEmptyAt));
         }
         let (span_string, suffix_string) = at.split_at(at.len() - 1);
         if suffix_string.chars().all(|ch| ch.is_ascii_alphabetic()) {
@@ -813,7 +785,7 @@ impl FromStr for RuleAtSuffixP {
             "w" => Ok(RuleAtSuffixP::Wall),
             "s" => Ok(RuleAtSuffixP::Standard),
             "u" | "g" | "z" => Ok(RuleAtSuffixP::Universal),
-            _ => Err(err!("unrecognized AT time suffix {suffix:?}")),
+            _ => Err(Error::from(E::UnrecognizedAtTimeSuffix)),
         }
     }
 }
@@ -867,7 +839,7 @@ impl FromStr for RuleSaveP {
 
     fn from_str(at: &str) -> Result<RuleSaveP, Error> {
         if at.is_empty() {
-            return Err(err!("empty field is not a valid SAVE value"));
+            return Err(Error::from(E::ExpectedNonEmptySave));
         }
         let (span_string, suffix_string) = at.split_at(at.len() - 1);
         if suffix_string.chars().all(|ch| ch.is_ascii_alphabetic()) {
@@ -902,7 +874,7 @@ impl FromStr for RuleSaveSuffixP {
         match suffix {
             "s" => Ok(RuleSaveSuffixP::Standard),
             "d" => Ok(RuleSaveSuffixP::Dst),
-            _ => Err(err!("unrecognized SAVE time suffix {suffix:?}")),
+            _ => Err(Error::from(E::UnrecognizedSaveTimeSuffix)),
         }
     }
 }
@@ -939,14 +911,13 @@ impl FromStr for ZoneNameP {
 
     fn from_str(name: &str) -> Result<ZoneNameP, Error> {
         if name.is_empty() {
-            return Err(err!("zone names cannot be empty"));
+            return Err(Error::from(E::ExpectedNonEmptyZoneName));
         }
         for component in name.split('/') {
             if component == "." || component == ".." {
-                return Err(err!(
-                    "component {component:?} in zone name {name:?} cannot \
-                     be \".\" or \"..\"",
-                ));
+                return Err(Error::from(E::ExpectedZoneNameComponentNoDots {
+                    component: component.into(),
+                }));
             }
         }
         Ok(ZoneNameP { name: name.to_string() })
@@ -1035,16 +1006,12 @@ impl FromStr for ZoneFormatP {
     fn from_str(format: &str) -> Result<ZoneFormatP, Error> {
         fn check_abbrev(abbrev: &str) -> Result<String, Error> {
             if abbrev.is_empty() {
-                return Err(err!("empty abbreviations are not allowed"));
+                return Err(Error::from(E::ExpectedNonEmptyAbbreviation));
             }
             let is_ok =
                 |ch| matches!(ch, '+'|'-'|'0'..='9'|'A'..='Z'|'a'..='z');
             if !abbrev.chars().all(is_ok) {
-                return Err(err!(
-                    "abbreviation {abbrev:?} \
-                     contains invalid character; only \"+\", \"-\" and \
-                     ASCII alpha-numeric characters are allowed"
-                ));
+                return Err(Error::from(E::InvalidAbbreviation));
             }
             Ok(abbrev.to_string())
         }
@@ -1098,28 +1065,24 @@ enum ZoneUntilP {
 impl ZoneUntilP {
     fn parse(fields: &[&str]) -> Result<ZoneUntilP, Error> {
         if fields.is_empty() {
-            return Err(err!("expected at least a year"));
+            return Err(Error::from(E::ExpectedUntilYear));
         }
 
         let (year_field, fields) = (fields[0], &fields[1..]);
-        let year = parse_year(year_field)
-            .map_err(|e| e.context("failed to parse year"))?;
+        let year = parse_year(year_field).context(E::FailedParseYear)?;
         if fields.is_empty() {
             return Ok(ZoneUntilP::Year { year });
         }
 
         let (month_field, fields) = (fields[0], &fields[1..]);
-        let month = month_field
-            .parse::<RuleInP>()
-            .map_err(|e| e.context("failed to parse month"))?;
+        let month =
+            month_field.parse::<RuleInP>().context(E::FailedParseMonth)?;
         if fields.is_empty() {
             return Ok(ZoneUntilP::YearMonth { year, month });
         }
 
         let (day_field, fields) = (fields[0], &fields[1..]);
-        let day = day_field
-            .parse::<RuleOnP>()
-            .map_err(|e| e.context("failed to parse day"))?;
+        let day = day_field.parse::<RuleOnP>().context(E::FailedParseDay)?;
         if fields.is_empty() {
             return Ok(ZoneUntilP::YearMonthDay { year, month, day });
         }
@@ -1127,13 +1090,9 @@ impl ZoneUntilP {
         let (duration_field, fields) = (fields[0], &fields[1..]);
         let duration = duration_field
             .parse::<RuleAtP>()
-            .map_err(|e| e.context("failed to parse time duration"))?;
+            .context(E::FailedParseTimeDuration)?;
         if !fields.is_empty() {
-            return Err(err!(
-                "expected no more fields after time of day, \
-                 but found: {fields:?}",
-                fields = fields.join(" "),
-            ));
+            return Err(Error::from(E::ExpectedNothingAfterTime));
         }
         Ok(ZoneUntilP::YearMonthDayTime { year, month, day, duration })
     }
@@ -1200,10 +1159,8 @@ fn parse_year(year: &str) -> Result<t::Year, Error> {
     } else {
         (t::Sign::N::<1>(), year)
     };
-    let number = parse::i64(rest.as_bytes())
-        .map_err(|e| e.context("failed to parse year"))?;
-    let year = t::Year::new(number)
-        .ok_or_else(|| err!("year is out of range: {number}"))?;
+    let number = parse::i64(rest.as_bytes()).context(E::FailedParseYear)?;
+    let year = t::Year::try_new("year", number)?;
     Ok(year * sign)
 }
 
@@ -1239,36 +1196,28 @@ fn parse_span(span: &str) -> Result<Span, Error> {
     let hour_len = rest.chars().take_while(|c| c.is_ascii_digit()).count();
     let (hour_digits, rest) = rest.split_at(hour_len);
     if hour_digits.is_empty() {
-        return Err(err!(
-            "expected time duration to contain at least one hour digit"
-        ));
+        return Err(Error::from(E::ExpectedTimeOneHour));
     }
-    let hours = parse::i64(hour_digits.as_bytes())
-        .map_err(|e| e.context("failed to parse hours in time duration"))?;
-    span = span
-        .try_hours(hours.saturating_mul(i64::from(sign.get())))
-        .map_err(|_| err!("duration hours '{hours:?}' is out of range"))?;
+    let hours =
+        parse::i64(hour_digits.as_bytes()).context(E::FailedParseHour)?;
+    span = span.try_hours(hours.saturating_mul(i64::from(sign.get())))?;
     if rest.is_empty() {
         return Ok(span);
     }
 
     // Now pluck out the minute component.
     if !rest.starts_with(":") {
-        return Err(err!("expected ':' after hours, but found {rest:?}"));
+        return Err(Error::from(E::ExpectedColonAfterHour));
     }
     let rest = &rest[1..];
     let minute_len = rest.chars().take_while(|c| c.is_ascii_digit()).count();
     let (minute_digits, rest) = rest.split_at(minute_len);
     if minute_digits.is_empty() {
-        return Err(err!(
-            "expected minute digits after 'HH:', but found {rest:?} instead"
-        ));
+        return Err(Error::from(E::ExpectedMinuteAfterHours));
     }
-    let minutes = parse::i64(minute_digits.as_bytes())
-        .map_err(|e| e.context("failed to parse minutes in time duration"))?;
-    let minutes_ranged = t::Minute::new(minutes).ok_or_else(|| {
-        err!("duration minutes '{minutes:?}' is out of range")
-    })?;
+    let minutes =
+        parse::i64(minute_digits.as_bytes()).context(E::FailedParseMinute)?;
+    let minutes_ranged = t::Minute::try_new("minutes", minutes)?;
     span = span.minutes_ranged((minutes_ranged * sign).rinto());
     if rest.is_empty() {
         return Ok(span);
@@ -1276,21 +1225,17 @@ fn parse_span(span: &str) -> Result<Span, Error> {
 
     // Now pluck out the second component.
     if !rest.starts_with(":") {
-        return Err(err!("expected ':' after minutes, but found {rest:?}"));
+        return Err(Error::from(E::ExpectedColonAfterMinute));
     }
     let rest = &rest[1..];
     let second_len = rest.chars().take_while(|c| c.is_ascii_digit()).count();
     let (second_digits, rest) = rest.split_at(second_len);
     if second_digits.is_empty() {
-        return Err(err!(
-            "expected second digits after 'MM:', but found {rest:?} instead"
-        ));
+        return Err(Error::from(E::ExpectedSecondAfterMinutes));
     }
-    let seconds = parse::i64(second_digits.as_bytes())
-        .map_err(|e| e.context("failed to parse seconds in time duration"))?;
-    let seconds_ranged = t::Second::new(seconds).ok_or_else(|| {
-        err!("duration seconds '{seconds:?}' is out of range")
-    })?;
+    let seconds =
+        parse::i64(second_digits.as_bytes()).context(E::FailedParseSecond)?;
+    let seconds_ranged = t::Second::try_new("seconds", seconds)?;
     span = span.seconds_ranged((seconds_ranged * sign).rinto());
     if rest.is_empty() {
         return Ok(span);
@@ -1298,33 +1243,24 @@ fn parse_span(span: &str) -> Result<Span, Error> {
 
     // Now look for the fractional nanosecond component.
     if !rest.starts_with(".") {
-        return Err(err!("expected '.' after seconds, but found {rest:?}"));
+        return Err(Error::from(E::ExpectedDotAfterSeconds));
     }
     let rest = &rest[1..];
     let nanosecond_len =
         rest.chars().take_while(|c| c.is_ascii_digit()).count();
     let (nanosecond_digits, rest) = rest.split_at(nanosecond_len);
     if nanosecond_digits.is_empty() {
-        return Err(err!(
-            "expected nanosecond digits after 'SS.', \
-             but found {rest:?} instead"
-        ));
+        return Err(Error::from(E::ExpectedNanosecondDigits));
     }
-    let nanoseconds =
-        parse::fraction(nanosecond_digits.as_bytes()).map_err(|e| {
-            e.context("failed to parse nanoseconds in time duration")
-        })?;
-    let nanoseconds_ranged = t::FractionalNanosecond::new(nanoseconds)
-        .ok_or_else(|| {
-            err!("duration nanoseconds '{nanoseconds:?}' is out of range")
-        })?;
+    let nanoseconds = parse::fraction(nanosecond_digits.as_bytes())
+        .context(E::FailedParseNanosecond)?;
+    let nanoseconds_ranged =
+        t::FractionalNanosecond::try_new("nanoseconds", nanoseconds)?;
     span = span.nanoseconds_ranged((nanoseconds_ranged * sign).rinto());
 
     // We should have consumed everything at this point.
     if !rest.is_empty() {
-        return Err(err!(
-            "found unrecognized trailing {rest:?} in time duration"
-        ));
+        return Err(Error::from(E::UnrecognizedTrailingTimeDuration));
     }
     span.rebalance(Unit::Hour)
 }
@@ -1334,10 +1270,8 @@ fn parse_span(span: &str) -> Result<Span, Error> {
 /// This checks that the day is in the range 1-31, but otherwise doesn't
 /// check that it is valid for a particular month.
 fn parse_day(string: &str) -> Result<t::Day, Error> {
-    let number = parse::i64(string.as_bytes())
-        .map_err(|e| e.context("failed to parse number for day"))?;
-    let day = t::Day::new(number)
-        .ok_or_else(|| err!("{number} is not a valid day"))?;
+    let number = parse::i64(string.as_bytes()).context(E::FailedParseDay)?;
+    let day = t::Day::try_new("day", number)?;
     Ok(day)
 }
 
@@ -1357,7 +1291,7 @@ fn parse_weekday(string: &str) -> Result<Weekday, Error> {
             return Ok(weekday);
         }
     }
-    Err(err!("unrecognized day of the week: {string:?}"))
+    Err(Error::from(E::UnrecognizedDayOfWeek))
 }
 
 /// A parser that emits lines as sequences of fields.
@@ -1393,7 +1327,7 @@ impl<'a> FieldParser<'a> {
     /// This returns an error if the given bytes are not valid UTF-8.
     fn from_bytes(src: &'a [u8]) -> Result<FieldParser, Error> {
         let src = core::str::from_utf8(src)
-            .map_err(|e| err!("invalid UTF-8: {e}"))?;
+            .map_err(|_| Error::from(E::InvalidUtf8))?;
         Ok(FieldParser::new(src))
     }
 
@@ -1409,12 +1343,10 @@ impl<'a> FieldParser<'a> {
         self.fields.clear();
         loop {
             let Some(mut line) = self.lines.next() else { return Ok(false) };
-            self.line_number = self
-                .line_number
-                .checked_add(1)
-                .ok_or_else(|| err!("line count overflowed"))?;
+            self.line_number =
+                self.line_number.checked_add(1).ok_or(E::LineOverflow)?;
             parse_fields(&line, &mut self.fields)
-                .with_context(|| err!("line {}", self.line_number))?;
+                .context(E::Line { number: self.line_number })?;
             if self.fields.is_empty() {
                 continue;
             }
@@ -1452,13 +1384,6 @@ fn parse_fields<'a>(
         matches!(ch, ' ' | '\x0C' | '\n' | '\r' | '\t' | '\x0B')
     }
 
-    // `man zic` says that the max line length including the line
-    // terminator is 2048. The `core::str::Lines` iterator doesn't include
-    // the terminator, so we subtract 1 to account for that. Note that this
-    // could potentially allow one extra byte in the case of a \r\n line
-    // terminator, but this seems fine.
-    const MAX_LINE_LEN: usize = 2047;
-
     // The different possible states of the field parser below.
     enum State {
         Whitespace,
@@ -1469,15 +1394,11 @@ fn parse_fields<'a>(
 
     fields.clear();
     if line.len() > MAX_LINE_LEN {
-        return Err(err!(
-            "line with length {} exceeds \
-             max length of {MAX_LINE_LEN}",
-            line.len()
-        ));
+        return Err(Error::from(E::LineMaxLength));
     }
     // Do a quick scan for a NUL terminator. They are illegal in all cases.
     if line.contains('\x00') {
-        return Err(err!("found line with NUL byte, which isn't allowed"));
+        return Err(Error::from(E::LineNul));
     }
     // The current state of the parser. We start at whitespace, since it also
     // means "before a field."
@@ -1522,9 +1443,8 @@ fn parse_fields<'a>(
             }
             State::AfterQuote => {
                 if !is_space(ch) {
-                    return Err(err!(
-                        "expected whitespace after quoted field, \
-                         but found {ch:?} instead",
+                    return Err(Error::from(
+                        E::ExpectedWhitespaceAfterQuotedField,
                     ));
                 }
                 State::Whitespace
@@ -1537,7 +1457,7 @@ fn parse_fields<'a>(
             fields.push(&line[start..]);
         }
         State::InQuote => {
-            return Err(err!("found unclosed quote"));
+            return Err(Error::from(E::ExpectedCloseQuote));
         }
     }
     Ok(())

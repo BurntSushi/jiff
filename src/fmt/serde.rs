@@ -1778,28 +1778,24 @@ pub mod unsigned_duration {
     fn parse_iso_or_friendly(
         bytes: &[u8],
     ) -> Result<core::time::Duration, crate::Error> {
-        if bytes.is_empty() {
-            return Err(crate::error::err!(
-                "an empty string is not a valid `std::time::Duration`, \
-                 expected either a ISO 8601 or Jiff's 'friendly' \
-                 format",
+        let Some((&byte, tail)) = bytes.split_first() else {
+            return Err(crate::Error::from(
+                crate::error::fmt::Error::HybridDurationEmpty,
             ));
-        }
-        let mut first = bytes[0];
+        };
+        let mut first = byte;
         // N.B. Unsigned durations don't support negative durations (of
         // course), but we still check for it here so that we can defer to
         // the dedicated parsers. They will provide their own error messages.
         if first == b'+' || first == b'-' {
-            if bytes.len() == 1 {
-                return Err(crate::error::err!(
-                    "found nothing after sign `{sign}`, \
-                     which is not a valid `std::time::Duration`, \
-                     expected either a ISO 8601 or Jiff's 'friendly' \
-                     format",
-                    sign = crate::util::escape::Byte(first),
+            let Some(&byte) = tail.first() else {
+                return Err(crate::Error::from(
+                    crate::error::fmt::Error::HybridDurationPrefix {
+                        sign: first,
+                    },
                 ));
-            }
-            first = bytes[1];
+            };
+            first = byte;
         }
         let dur = if first == b'P' || first == b'p' {
             crate::fmt::temporal::DEFAULT_SPAN_PARSER

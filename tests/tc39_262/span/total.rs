@@ -54,7 +54,7 @@ fn calendar_possibly_required() -> Result {
 
     insta::assert_snapshot!(
         week.total(Unit::Day).unwrap_err(),
-        @"using unit 'week' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+        @"using unit 'week' in a span or configuration requires that either a relative reference time be given or `jiff::SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     let result = week.total((Unit::Day, d))?;
     assert_eq!(result, 7.0);
@@ -62,7 +62,7 @@ fn calendar_possibly_required() -> Result {
     // Differs from Temporal. We require explicit opt-in for 24-hour days.
     insta::assert_snapshot!(
         day.total(Unit::Day).unwrap_err(),
-        @"using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+        @"using unit 'day' in a span or configuration requires that either a relative reference time be given or `jiff::SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     let result = day.total((Unit::Day, DAY24))?;
     assert_eq!(result, 42.0);

@@ -256,7 +256,9 @@ assert_eq!(dur, Duration::new(30 * 24 * 60 * 60 + 38_016, 0));
 // In contrast, Jiff will reject `1M`:
 assert_eq!(
     "1M".parse::<jiff::Span>().unwrap_err().to_string(),
-    "failed to parse \"1M\" in the \"friendly\" format: expected to find unit designator suffix (e.g., 'years' or 'secs'), but found input beginning with \"M\" instead",
+    "failed to parse input in the \"friendly\" duration format: \
+     expected to find unit designator suffix \
+     (e.g., `years` or `secs`) after parsing integer",
 );
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -335,7 +337,9 @@ assert_eq!(
 // Jiff is saving you from doing something wrong
 assert_eq!(
     "1 day".parse::<SignedDuration>().unwrap_err().to_string(),
-    "failed to parse \"1 day\" in the \"friendly\" format: parsing day units into a `SignedDuration` is not supported (perhaps try parsing into a `Span` instead)",
+    "failed to parse input in the \"friendly\" duration format: \
+     parsing calendar units (days in this case) in this context \
+     is not supported (perhaps try parsing into a `jiff::Span` instead)",
 );
 ```
 
