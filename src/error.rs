@@ -647,7 +647,11 @@ impl ErrorContext for Error {
 impl<T> ErrorContext for Result<T, Error> {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     fn context(self, consequent: impl IntoError) -> Result<T, Error> {
-        self.map_err(|err| err.context_impl(consequent.into_error()))
+        self.map_err(
+            #[cold]
+            #[inline(never)]
+            |err| err.context_impl(consequent.into_error()),
+        )
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
@@ -655,7 +659,11 @@ impl<T> ErrorContext for Result<T, Error> {
         self,
         consequent: impl FnOnce() -> E,
     ) -> Result<T, Error> {
-        self.map_err(|err| err.context_impl(consequent().into_error()))
+        self.map_err(
+            #[cold]
+            #[inline(never)]
+            |err| err.context_impl(consequent().into_error()),
+        )
     }
 }
 
