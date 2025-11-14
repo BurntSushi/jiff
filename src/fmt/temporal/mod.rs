@@ -320,13 +320,12 @@ impl DateTimeParser {
     /// );
     /// assert_eq!(
     ///     result.unwrap_err().to_string(),
-    ///     "parsing \"2006-04-02T02:30-05[America/Indiana/Vevay]\" failed: \
-    ///      datetime 2006-04-02T02:30:00 could not resolve to timestamp \
-    ///      since 'reject' conflict resolution was chosen, and because \
-    ///      datetime has offset -05, but the time zone America/Indiana/Vevay \
-    ///      for the given datetime falls in a gap \
-    ///      (between offsets -05 and -04), \
-    ///      and all offsets for a gap are regarded as invalid",
+    ///     "datetime could not resolve to timestamp since `reject` \
+    ///      conflict resolution was chosen, and because datetime \
+    ///      has offset `-05`, but the time zone `America/Indiana/Vevay` \
+    ///      for the given datetime falls in a gap (between offsets \
+    ///      `-05` and `-04`), and all offsets for a gap are \
+    ///      regarded as invalid",
     /// );
     /// ```
     ///
@@ -410,11 +409,10 @@ impl DateTimeParser {
     /// );
     /// assert_eq!(
     ///     result.unwrap_err().to_string(),
-    ///     "parsing \"2025-06-20T17:30+00[America/New_York]\" failed: \
-    ///      datetime 2025-06-20T17:30:00 could not resolve to a timestamp \
-    ///      since 'reject' conflict resolution was chosen, and because \
-    ///      datetime has offset +00, but the time zone America/New_York \
-    ///      for the given datetime unambiguously has offset -04",
+    ///     "datetime could not resolve to a timestamp since `reject` \
+    ///      conflict resolution was chosen, and because datetime has \
+    ///      offset `+00`, but the time zone `America/New_York` \
+    ///      for the given datetime unambiguously has offset `-04`",
     /// );
     /// ```
     ///
@@ -1027,9 +1025,8 @@ impl DateTimeParser {
     /// // Normally this operation will fail.
     /// assert_eq!(
     ///     PARSER.parse_zoned(timestamp).unwrap_err().to_string(),
-    ///     "failed to find time zone in square brackets in \
-    ///      \"2025-01-02T15:13-05\", which is required for \
-    ///      parsing a zoned instant",
+    ///     "failed to find time zone annotation in square brackets, \
+    ///      which is required for parsing a zoned datetime",
     /// );
     ///
     /// // But you can work-around this with `Pieces`, which gives you direct
@@ -1073,8 +1070,8 @@ impl DateTimeParser {
     ///
     /// assert_eq!(
     ///     PARSER.parse_date("2024-03-10T00:00:00Z").unwrap_err().to_string(),
-    ///     "cannot parse civil date from string with a Zulu offset, \
-    ///      parse as a `Timestamp` and convert to a civil date instead",
+    ///     "cannot parse civil date/time from string with a Zulu offset, \
+    ///      parse as a `jiff::Timestamp` first and convert to a civil date/time instead",
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -2490,7 +2487,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             DateTimeParser::new().parse_date("-000000-01-01").unwrap_err(),
-            @"failed to parse year in date `-000000-01-01`: year zero must be written without a sign or a positive sign, but not a negative sign",
+            @"failed to parse year in date: year zero must be written without a sign or a positive sign, but not a negative sign",
         );
     }
 

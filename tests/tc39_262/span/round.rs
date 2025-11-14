@@ -87,7 +87,7 @@ fn calendar_possibly_required() -> Result {
     let sp = 5.weeks();
     insta::assert_snapshot!(
         sp.round(Unit::Hour).unwrap_err(),
-        @"error with largest unit in span to be rounded: using unit 'week' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+        @"error with largest unit in span to be rounded: using unit 'week' in a span or configuration requires that either a relative reference time be given or `jiff::SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     span_eq!(sp.round(relative_years)?, 1.month().days(4));
     span_eq!(sp.round(relative_months)?, 1.month().days(4));
@@ -98,7 +98,7 @@ fn calendar_possibly_required() -> Result {
     // We differ from Temporal in that we require opt-in for 24-hour days.
     insta::assert_snapshot!(
         sp.round(Unit::Hour).unwrap_err(),
-        @"error with largest unit in span to be rounded: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+        @"error with largest unit in span to be rounded: using unit 'day' in a span or configuration requires that either a relative reference time be given or `jiff::SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     span_eq!(sp.round(relative_years)?, 1.month().days(11));
     span_eq!(sp.round(relative_months)?, 1.month().days(11));
@@ -218,14 +218,14 @@ fn duration_out_of_range_added_to_relative() -> Result {
     let relative = SpanRound::new().relative(d);
     insta::assert_snapshot!(
         sp.round(relative.smallest(Unit::Year)).unwrap_err(),
-        @"failed to add P2000000DT170000000H to 2000-01-01T00:00:00: failed to add overflowing span, P7083333D, from adding PT170000000H to 00:00:00, to 7475-10-25: parameter 'days' with value 7083333 is not in the required range of -4371587..=2932896",
+        @"failed to add overflowing span: parameter 'days' with value 7083333 is not in the required range of -4371587..=2932896",
     );
 
     let sp = -2_000_000.days().hours(170_000_000);
     let relative = SpanRound::new().relative(d);
     insta::assert_snapshot!(
         sp.round(relative.smallest(Unit::Year)).unwrap_err(),
-        @"failed to add -P2000000DT170000000H to 2000-01-01T00:00:00: failed to add overflowing span, -P7083334D, from adding -PT170000000H to 00:00:00, to -003476-03-09: parameter 'days' with value -7083334 is not in the required range of -4371587..=2932896",
+        @"failed to add overflowing span: parameter 'days' with value -7083334 is not in the required range of -4371587..=2932896",
     );
 
     Ok(())
@@ -713,7 +713,7 @@ fn out_of_range_when_adjusting_rounded_days() -> Result {
     insta::assert_snapshot!(
         sp.round(options).unwrap_err(),
         // Kind of a brutal error message...
-        @"failed to add P1DT631107331200.999999999S to 1970-01-01T00:00:00+00:00[UTC]: failed to add span PT631107331200.999999999S to timestamp 1970-01-02T00:00:00Z (which was created from 1970-01-02T00:00:00): adding PT631107331200.999999999S to 1970-01-02T00:00:00Z overflowed: parameter 'span' with value 631107331200999999999 is not in the required range of -377705023201000000000..=253402207200999999999",
+        @"failed to add span to timestamp from zoned datetime: adding span overflowed timestamp: parameter 'span' with value 631107331200999999999 is not in the required range of -377705023201000000000..=253402207200999999999",
     );
 
     Ok(())
@@ -728,7 +728,7 @@ fn out_of_range_when_converting_from_normalized_duration() -> Result {
     insta::assert_snapshot!(
         sp.round(options).unwrap_err(),
         // Kind of a brutal error message...
-        @"failed to convert rounded nanoseconds 631107417600999999999 to span for largest unit as nanoseconds: parameter 'nanoseconds' with value 631107417600999999999 is not in the required range of -9223372036854775807..=9223372036854775807",
+        @"failed to convert rounded nanoseconds to span for largest unit set to 'nanoseconds': parameter 'nanoseconds' with value 631107417600999999999 is not in the required range of -9223372036854775807..=9223372036854775807",
     );
 
     Ok(())
@@ -759,15 +759,15 @@ fn precision_exact_in_round_duration() -> Result {
 fn relativeto_undefined_throw_on_calendar_units() -> Result {
     insta::assert_snapshot!(
         1.day().round(SpanRound::new().largest(Unit::Hour)).unwrap_err(),
-        @"error with largest unit in span to be rounded: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+        @"error with largest unit in span to be rounded: using unit 'day' in a span or configuration requires that either a relative reference time be given or `jiff::SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     insta::assert_snapshot!(
         1.day().round(SpanRound::new().largest(Unit::Hour)).unwrap_err(),
-        @"error with largest unit in span to be rounded: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+        @"error with largest unit in span to be rounded: using unit 'day' in a span or configuration requires that either a relative reference time be given or `jiff::SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     insta::assert_snapshot!(
         1.week().round(SpanRound::new().largest(Unit::Hour)).unwrap_err(),
-        @"error with largest unit in span to be rounded: using unit 'week' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+        @"error with largest unit in span to be rounded: using unit 'week' in a span or configuration requires that either a relative reference time be given or `jiff::SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     insta::assert_snapshot!(
         1.month().round(SpanRound::new().largest(Unit::Hour)).unwrap_err(),
@@ -780,37 +780,37 @@ fn relativeto_undefined_throw_on_calendar_units() -> Result {
 
     insta::assert_snapshot!(
         1.month().round(SpanRound::new().largest(Unit::Hour).days_are_24_hours()).unwrap_err(),
-        @"using unit 'month' in span or configuration requires that a relative reference time be given (`SpanRelativeTo::days_are_24_hours()` was given but this only permits using days and weeks without a relative reference time)",
+        @"using unit 'month' in span or configuration requires that a relative reference time be given (`jiff::SpanRelativeTo::days_are_24_hours()` was given but this only permits using days and weeks without a relative reference time)",
     );
     insta::assert_snapshot!(
         1.year().round(SpanRound::new().largest(Unit::Hour).days_are_24_hours()).unwrap_err(),
-        @"using unit 'year' in span or configuration requires that a relative reference time be given (`SpanRelativeTo::days_are_24_hours()` was given but this only permits using days and weeks without a relative reference time)",
+        @"using unit 'year' in span or configuration requires that a relative reference time be given (`jiff::SpanRelativeTo::days_are_24_hours()` was given but this only permits using days and weeks without a relative reference time)",
     );
 
     insta::assert_snapshot!(
         1.hour().round(SpanRound::new().largest(Unit::Day)).unwrap_err(),
-        @"error with `largest` rounding option: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+        @"error with `largest` rounding option: using unit 'day' in a span or configuration requires that either a relative reference time be given or `jiff::SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     insta::assert_snapshot!(
         1.day().round(SpanRound::new().largest(Unit::Day)).unwrap_err(),
-        @"error with `largest` rounding option: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+        @"error with `largest` rounding option: using unit 'day' in a span or configuration requires that either a relative reference time be given or `jiff::SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     insta::assert_snapshot!(
         1.week().round(SpanRound::new().largest(Unit::Day)).unwrap_err(),
-        @"error with `largest` rounding option: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+        @"error with `largest` rounding option: using unit 'day' in a span or configuration requires that either a relative reference time be given or `jiff::SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     insta::assert_snapshot!(
         1.month().round(SpanRound::new().largest(Unit::Day)).unwrap_err(),
-        @"error with `largest` rounding option: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+        @"error with `largest` rounding option: using unit 'day' in a span or configuration requires that either a relative reference time be given or `jiff::SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     insta::assert_snapshot!(
         1.year().round(SpanRound::new().largest(Unit::Day)).unwrap_err(),
-        @"error with `largest` rounding option: using unit 'day' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+        @"error with `largest` rounding option: using unit 'day' in a span or configuration requires that either a relative reference time be given or `jiff::SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
 
     insta::assert_snapshot!(
         1.day().round(SpanRound::new().largest(Unit::Week)).unwrap_err(),
-        @"error with `largest` rounding option: using unit 'week' in a span or configuration requires that either a relative reference time be given or `SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
+        @"error with `largest` rounding option: using unit 'week' in a span or configuration requires that either a relative reference time be given or `jiff::SpanRelativeTo::days_are_24_hours()` is used to indicate invariant 24-hour days, but neither were provided",
     );
     insta::assert_snapshot!(
         1.day().round(SpanRound::new().largest(Unit::Month)).unwrap_err(),
@@ -842,7 +842,7 @@ fn result_out_of_range() -> Result {
     let sp = MAX_SPAN_SECONDS.seconds().nanoseconds(999_999_999);
     insta::assert_snapshot!(
         sp.round(Unit::Second).unwrap_err(),
-        @"failed to convert rounded nanoseconds 631107417601000000000 to span for largest unit as seconds: parameter 'seconds' with value 631107417601 is not in the required range of -631107417600..=631107417600",
+        @"failed to convert rounded nanoseconds to span for largest unit set to 'seconds': parameter 'seconds' with value 631107417601 is not in the required range of -631107417600..=631107417600",
     );
 
     Ok(())

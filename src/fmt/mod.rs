@@ -166,7 +166,7 @@ and features.)
 */
 
 use crate::{
-    error::{err, Error},
+    error::{fmt::Error as E, Error},
     util::escape,
 };
 
@@ -218,12 +218,7 @@ impl<'i, V: core::fmt::Display> Parsed<'i, V> {
         if self.input.is_empty() {
             return Ok(self.value);
         }
-        Err(err!(
-            "parsed value '{value}', but unparsed input {unparsed:?} \
-             remains (expected no unparsed input)",
-            value = self.value,
-            unparsed = escape::Bytes(self.input),
-        ))
+        Err(Error::from(E::into_full_error(&self.value, self.input)))
     }
 }
 
@@ -244,12 +239,7 @@ impl<'i, V> Parsed<'i, V> {
         if self.input.is_empty() {
             return Ok(self.value);
         }
-        Err(err!(
-            "parsed value '{value}', but unparsed input {unparsed:?} \
-             remains (expected no unparsed input)",
-            value = display,
-            unparsed = escape::Bytes(self.input),
-        ))
+        Err(Error::from(E::into_full_error(&display, self.input)))
     }
 }
 
@@ -379,7 +369,7 @@ pub struct StdIoWrite<W>(pub W);
 impl<W: std::io::Write> Write for StdIoWrite<W> {
     #[inline]
     fn write_str(&mut self, string: &str) -> Result<(), Error> {
-        self.0.write_all(string.as_bytes()).map_err(Error::adhoc)
+        self.0.write_all(string.as_bytes()).map_err(Error::io)
     }
 }
 
@@ -422,7 +412,7 @@ impl<W: core::fmt::Write> Write for StdFmtWrite<W> {
     fn write_str(&mut self, string: &str) -> Result<(), Error> {
         self.0
             .write_str(string)
-            .map_err(|_| err!("an error occurred when formatting an argument"))
+            .map_err(|_| Error::from(E::StdFmtWriteAdapter))
     }
 }
 

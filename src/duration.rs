@@ -1,7 +1,7 @@
 use core::time::Duration as UnsignedDuration;
 
 use crate::{
-    error::{err, ErrorContext},
+    error::{duration::Error as E, ErrorContext},
     Error, SignedDuration, Span,
 };
 
@@ -24,12 +24,8 @@ impl Duration {
             Duration::Span(span) => Ok(SDuration::Span(span)),
             Duration::Signed(sdur) => Ok(SDuration::Absolute(sdur)),
             Duration::Unsigned(udur) => {
-                let sdur =
-                    SignedDuration::try_from(udur).with_context(|| {
-                        err!(
-                            "unsigned duration {udur:?} exceeds Jiff's limits"
-                        )
-                    })?;
+                let sdur = SignedDuration::try_from(udur)
+                    .context(E::RangeUnsignedDuration)?;
                 Ok(SDuration::Absolute(sdur))
             }
         }
@@ -91,9 +87,8 @@ impl Duration {
                     // Otherwise, this is the only failure point in this entire
                     // routine. And specifically, we fail here in precisely
                     // the cases where `udur.as_secs() > |i64::MIN|`.
-                    -SignedDuration::try_from(udur).with_context(|| {
-                        err!("failed to negate unsigned duration {udur:?}")
-                    })?
+                    -SignedDuration::try_from(udur)
+                        .context(E::FailedNegateUnsignedDuration)?
                 };
                 Ok(Duration::Signed(sdur))
             }

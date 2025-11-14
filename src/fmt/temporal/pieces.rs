@@ -146,9 +146,8 @@ use crate::{
 ///
 /// assert_eq!(
 ///     "2025-01-03T17:28-05".parse::<Zoned>().unwrap_err().to_string(),
-///     "failed to find time zone in square brackets in \
-///      \"2025-01-03T17:28-05\", which is required for \
-///      parsing a zoned instant",
+///     "failed to find time zone annotation in square brackets, \
+///      which is required for parsing a zoned datetime",
 /// );
 /// ```
 ///

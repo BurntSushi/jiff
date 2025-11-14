@@ -1,6 +1,6 @@
 use crate::{
     civil::DateTime,
-    error::{err, Error, ErrorContext},
+    error::{tz::ambiguous::Error as E, Error, ErrorContext},
     shared::util::itime::IAmbiguousOffset,
     tz::{Offset, TimeZone},
     Timestamp, Zoned,
@@ -655,18 +655,10 @@ impl AmbiguousTimestamp {
         let offset = match self.offset() {
             AmbiguousOffset::Unambiguous { offset } => offset,
             AmbiguousOffset::Gap { before, after } => {
-                return Err(err!(
-                    "the datetime {dt} is ambiguous since it falls into \
-                     a gap between offsets {before} and {after}",
-                    dt = self.dt,
-                ));
+                return Err(Error::from(E::BecauseGap { before, after }));
             }
             AmbiguousOffset::Fold { before, after } => {
-                return Err(err!(
-                    "the datetime {dt} is ambiguous since it falls into \
-                     a fold between offsets {before} and {after}",
-                    dt = self.dt,
-                ));
+                return Err(Error::from(E::BecauseFold { before, after }));
             }
         };
         offset.to_timestamp(self.dt)
@@ -1039,13 +1031,10 @@ impl AmbiguousZoned {
     /// ```
     #[inline]
     pub fn compatible(self) -> Result<Zoned, Error> {
-        let ts = self.ts.compatible().with_context(|| {
-            err!(
-                "error converting datetime {dt} to instant in time zone {tz}",
-                dt = self.datetime(),
-                tz = self.time_zone().diagnostic_name(),
-            )
-        })?;
+        let ts = self
+            .ts
+            .compatible()
+            .with_context(|| E::InTimeZone { tz: self.time_zone().clone() })?;
         Ok(ts.to_zoned(self.tz))
     }
 
@@ -1101,13 +1090,10 @@ impl AmbiguousZoned {
     /// ```
     #[inline]
     pub fn earlier(self) -> Result<Zoned, Error> {
-        let ts = self.ts.earlier().with_context(|| {
-            err!(
-                "error converting datetime {dt} to instant in time zone {tz}",
-                dt = self.datetime(),
-                tz = self.time_zone().diagnostic_name(),
-            )
-        })?;
+        let ts = self
+            .ts
+            .earlier()
+            .with_context(|| E::InTimeZone { tz: self.time_zone().clone() })?;
         Ok(ts.to_zoned(self.tz))
     }
 
@@ -1163,13 +1149,10 @@ impl AmbiguousZoned {
     /// ```
     #[inline]
     pub fn later(self) -> Result<Zoned, Error> {
-        let ts = self.ts.later().with_context(|| {
-            err!(
-                "error converting datetime {dt} to instant in time zone {tz}",
-                dt = self.datetime(),
-                tz = self.time_zone().diagnostic_name(),
-            )
-        })?;
+        let ts = self
+            .ts
+            .later()
+            .with_context(|| E::InTimeZone { tz: self.time_zone().clone() })?;
         Ok(ts.to_zoned(self.tz))
     }
 
@@ -1220,13 +1203,10 @@ impl AmbiguousZoned {
     /// ```
     #[inline]
     pub fn unambiguous(self) -> Result<Zoned, Error> {
-        let ts = self.ts.unambiguous().with_context(|| {
-            err!(
-                "error converting datetime {dt} to instant in time zone {tz}",
-                dt = self.datetime(),
-                tz = self.time_zone().diagnostic_name(),
-            )
-        })?;
+        let ts = self
+            .ts
+            .unambiguous()
+            .with_context(|| E::InTimeZone { tz: self.time_zone().clone() })?;
         Ok(ts.to_zoned(self.tz))
     }
 

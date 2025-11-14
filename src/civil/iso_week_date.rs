@@ -1,6 +1,6 @@
 use crate::{
     civil::{Date, DateTime, Weekday},
-    error::{err, Error},
+    error::{civil::Error as E, Error},
     fmt::temporal::{DEFAULT_DATETIME_PARSER, DEFAULT_DATETIME_PRINTER},
     util::{
         rangeint::RInto,
@@ -711,9 +711,7 @@ impl ISOWeekDate {
         debug_assert_eq!(t::Year::MIN, ISOYear::MIN);
         debug_assert_eq!(t::Year::MAX, ISOYear::MAX);
         if week == C(53) && !is_long_year(year) {
-            return Err(err!(
-                "ISO week number `{week}` is invalid for year `{year}`"
-            ));
+            return Err(Error::from(E::InvalidISOWeekNumber));
         }
         // And also, the maximum Date constrains what we can utter with
         // ISOWeekDate so that we can preserve infallible conversions between

@@ -7,9 +7,9 @@ fn main() {
     }
     assert_eq!(
         jiff::tz::TimeZone::try_system().unwrap_err().to_string(),
-        "TZ environment variable set, but failed to read value: \
-         failed to read TZ=\"WAT5HUH\" as a TZif file \
-         after attempting a tzdb lookup for `WAT5HUH`",
+        "`TZ` environment variable set, but failed to read value: \
+         failed to read `TZ` environment variable value as a TZif file \
+         after attempting (and failing) a tzdb lookup for that same value",
     );
 
     // SAFETY: This is a single threaded program.
@@ -18,9 +18,9 @@ fn main() {
     }
     assert_eq!(
         jiff::tz::TimeZone::try_system().unwrap_err().to_string(),
-        "TZ environment variable set, but failed to read value: \
-         failed to read TZ=\"/usr/share/zoneinfo/WAT5HUH\" as a TZif file \
-         after attempting a tzdb lookup for `WAT5HUH`",
+        "`TZ` environment variable set, but failed to read value: \
+         failed to read `TZ` environment variable value as a TZif file \
+         after attempting (and failing) a tzdb lookup for that same value",
     );
 
     unsafe {

@@ -1,24 +1,5 @@
 use core::cmp::Ordering;
 
-/// Decodes the next UTF-8 encoded codepoint from the given byte slice.
-///
-/// If no valid encoding of a codepoint exists at the beginning of the
-/// given byte slice, then a 1-3 byte slice is returned (which is guaranteed
-/// to be a prefix of `bytes`). That byte slice corresponds either to a single
-/// invalid byte, or to a prefix of a valid UTF-8 encoding of a Unicode scalar
-/// value (but which ultimately did not lead to a valid encoding).
-///
-/// This returns `None` if and only if `bytes` is empty.
-///
-/// This never panics.
-///
-/// *WARNING*: This is not designed for performance. If you're looking for a
-/// fast UTF-8 decoder, this is not it. If you feel like you need one in this
-/// crate, then please file an issue and discuss your use case.
-pub(crate) fn decode(bytes: &[u8]) -> Option<Result<char, &[u8]>> {
-    crate::shared::util::utf8::decode(bytes)
-}
-
 /// Like std's `eq_ignore_ascii_case`, but returns a full `Ordering`.
 #[inline]
 pub(crate) fn cmp_ignore_ascii_case(s1: &str, s2: &str) -> Ordering {

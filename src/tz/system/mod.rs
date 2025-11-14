@@ -3,7 +3,7 @@ use std::{sync::RwLock, time::Duration};
 use alloc::string::ToString;
 
 use crate::{
-    error::{err, Error, ErrorContext},
+    error::{tz::system::Error as E, Error, ErrorContext},
     tz::{posix::PosixTzEnv, TimeZone, TimeZoneDatabase},
     util::cache::Expiration,
 };
@@ -141,22 +141,20 @@ pub(crate) fn get(db: &TimeZoneDatabase) -> Result<TimeZone, Error> {
 pub(crate) fn get_force(db: &TimeZoneDatabase) -> Result<TimeZone, Error> {
     match get_env_tz(db) {
         Ok(Some(tz)) => {
-            debug!("checked TZ environment variable and found {tz:?}");
+            debug!("checked `TZ` environment variable and found {tz:?}");
             return Ok(tz);
         }
         Ok(None) => {
-            debug!("TZ environment variable is not set");
+            debug!("`TZ` environment variable is not set");
         }
         Err(err) => {
-            return Err(err.context(
-                "TZ environment variable set, but failed to read value",
-            ));
+            return Err(err.context(E::FailedEnvTz));
         }
     }
     if let Some(tz) = sys::get(db) {
         return Ok(tz);
     }
-    Err(err!("failed to find system time zone"))
+    Err(Error::from(E::FailedSystemTimeZone))
 }
 
 /// Materializes a `TimeZone` from a `TZ` environment variable.
@@ -184,8 +182,8 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
     // `TZ=UTC`.
     if tzenv.is_empty() {
         debug!(
-            "TZ environment variable set to empty value, \
-             assuming TZ=UTC in order to conform to \
+            "`TZ` environment variable set to empty value, \
+             assuming `TZ=UTC` in order to conform to \
              widespread convention among Unix tooling",
         );
         return Ok(Some(TimeZone::UTC));
@@ -196,15 +194,7 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
                 "failed to parse {tzenv:?} as POSIX TZ rule \
                  (attempting to treat it as an IANA time zone): {_err}",
             );
-            tzenv
-                .to_str()
-                .ok_or_else(|| {
-                    err!(
-                        "failed to parse {tzenv:?} as a POSIX TZ transition \
-                         string, or as valid UTF-8",
-                    )
-                })?
-                .to_string()
+            tzenv.to_str().ok_or(E::FailedPosixTzAndUtf8)?.to_string()
         }
         Ok(PosixTzEnv::Implementation(string)) => string.to_string(),
         Ok(PosixTzEnv::Rule(tz)) => {
@@ -231,26 +221,20 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
         // No zoneinfo means this is probably a IANA Time Zone name. But...
         // it could just be a file path.
         debug!(
-            "could not find {needle:?} in TZ={tz_name_or_path:?}, \
-             therefore attempting lookup in {db:?}",
+            "could not find {needle:?} in `TZ={tz_name_or_path:?}`, \
+             therefore attempting lookup in `{db:?}`",
         );
         return match db.get(&tz_name_or_path) {
             Ok(tz) => Ok(Some(tz)),
             Err(_err) => {
                 debug!(
-                    "using TZ={tz_name_or_path:?} as time zone name failed, \
-                     could not find time zone in zoneinfo database {db:?} \
+                    "using `TZ={tz_name_or_path:?}` as time zone name failed, \
+                     could not find time zone in zoneinfo database `{db:?}` \
                      (continuing to try and read `{tz_name_or_path}` as \
                       a TZif file)",
                 );
                 sys::read(db, &tz_name_or_path)
-                    .ok_or_else(|| {
-                        err!(
-                            "failed to read TZ={tz_name_or_path:?} \
-                             as a TZif file after attempting a tzdb \
-                             lookup for `{tz_name_or_path}`",
-                        )
-                    })
+                    .ok_or_else(|| Error::from(E::FailedEnvTzAsTzif))
                     .map(Some)
             }
         };
@@ -260,16 +244,16 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
     // `zoneinfo/`. Once we have that, we try to look it up in our tzdb.
     let name = &tz_name_or_path[rpos + needle.len()..];
     debug!(
-        "extracted {name:?} from TZ={tz_name_or_path:?} \
+        "extracted `{name}` from `TZ={tz_name_or_path}` \
          and assuming it is an IANA time zone name",
     );
     match db.get(&name) {
         Ok(tz) => return Ok(Some(tz)),
         Err(_err) => {
             debug!(
-                "using {name:?} from TZ={tz_name_or_path:?}, \
-                 could not find time zone in zoneinfo database {db:?} \
-                 (continuing to try and use {tz_name_or_path:?})",
+                "using `{name}` from `TZ={tz_name_or_path}`, \
+                 could not find time zone in zoneinfo database `{db:?}` \
+                 (continuing to try and use `{tz_name_or_path}`)",
             );
         }
     }
@@ -279,13 +263,7 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
     // and read the data as TZif. This will give us time zone data if it works,
     // but without a name.
     sys::read(db, &tz_name_or_path)
-        .ok_or_else(|| {
-            err!(
-                "failed to read TZ={tz_name_or_path:?} \
-                 as a TZif file after attempting a tzdb \
-                 lookup for `{name}`",
-            )
-        })
+        .ok_or_else(|| Error::from(E::FailedEnvTzAsTzif))
         .map(Some)
 }
 
@@ -298,8 +276,8 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
 fn read_unnamed_tzif_file(path: &str) -> Result<TimeZone, Error> {
     let data = std::fs::read(path)
         .map_err(Error::io)
-        .with_context(|| err!("failed to read {path:?} as TZif file"))?;
-    let tz = TimeZone::tzif_system(&data)
-        .with_context(|| err!("found invalid TZif data at {path:?}"))?;
+        .context(E::FailedUnnamedTzifRead)?;
+    let tz =
+        TimeZone::tzif_system(&data).context(E::FailedUnnamedTzifInvalid)?;
     Ok(tz)
 }

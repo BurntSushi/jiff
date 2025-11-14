@@ -43,11 +43,11 @@ general interchange format for new applications.
 
 use crate::{
     civil::{Date, DateTime, Time, Weekday},
-    error::{err, ErrorContext},
+    error::{fmt::rfc2822::Error as E, ErrorContext},
     fmt::{util::DecimalFormatter, Parsed, Write, WriteExt},
     tz::{Offset, TimeZone},
     util::{
-        escape, parse,
+        parse,
         rangeint::{ri8, RFrom},
         t::{self, C},
     },
@@ -313,9 +313,7 @@ impl DateTimeParser {
         let input = input.as_ref();
         let zdt = self
             .parse_zoned_internal(input)
-            .context(
-                "failed to parse RFC 2822 datetime into Jiff zoned datetime",
-            )?
+            .context(E::FailedZoned)?
             .into_full()?;
         Ok(zdt)
     }
@@ -351,7 +349,7 @@ impl DateTimeParser {
         let input = input.as_ref();
         let ts = self
             .parse_timestamp_internal(input)
-            .context("failed to parse RFC 2822 datetime into Jiff timestamp")?
+            .context(E::FailedTimestamp)?
             .into_full()?;
         Ok(ts)
     }
@@ -367,9 +365,7 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, Zoned>, Error> {
         let Parsed { value: (dt, offset), input } =
             self.parse_datetime_offset(input)?;
-        let ts = offset
-            .to_timestamp(dt)
-            .context("RFC 2822 datetime out of Jiff's range")?;
+        let ts = offset.to_timestamp(dt)?;
         let zdt = ts.to_zoned(TimeZone::fixed(offset));
         Ok(Parsed { value: zdt, input })
     }
@@ -385,9 +381,7 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, Timestamp>, Error> {
         let Parsed { value: (dt, offset), input } =
             self.parse_datetime_offset(input)?;
-        let ts = offset
-            .to_timestamp(dt)
-            .context("RFC 2822 datetime out of Jiff's range")?;
+        let ts = offset.to_timestamp(dt)?;
         Ok(Parsed { value: ts, input })
     }
 
@@ -425,16 +419,11 @@ impl DateTimeParser {
         input: &'i [u8],
     ) -> Result<Parsed<'i, DateTime>, Error> {
         if input.is_empty() {
-            return Err(err!(
-                "expected RFC 2822 datetime, but got empty string"
-            ));
+            return Err(Error::from(E::Empty));
         }
         let Parsed { input, .. } = self.skip_whitespace(input);
         if input.is_empty() {
-            return Err(err!(
-                "expected RFC 2822 datetime, but got empty string after \
-                 trimming whitespace",
-            ));
+            return Err(Error::from(E::EmptyAfterWhitespace));
         }
         let Parsed { value: wd, input } = self.parse_weekday(input)?;
         let Parsed { value: day, input } = self.parse_day(input)?;
@@ -451,26 +440,19 @@ impl DateTimeParser {
             self.skip_whitespace(input);
         let (second, input) = if !input.starts_with(b":") {
             if !whitespace_after_minute {
-                return Err(err!(
-                    "expected whitespace after parsing time: \
-                     expected at least one whitespace character \
-                     (space or tab), but found none",
-                ));
+                return Err(Error::from(E::WhitespaceAfterTime));
             }
             (t::Second::N::<0>(), input)
         } else {
             let Parsed { input, .. } = self.parse_time_separator(input)?;
             let Parsed { input, .. } = self.skip_whitespace(input);
             let Parsed { value: second, input } = self.parse_second(input)?;
-            let Parsed { input, .. } =
-                self.parse_whitespace(input).with_context(|| {
-                    err!("expected whitespace after parsing time")
-                })?;
+            let Parsed { input, .. } = self.parse_whitespace(input)?;
             (second, input)
         };
 
         let date =
-            Date::new_ranged(year, month, day).context("invalid date")?;
+            Date::new_ranged(year, month, day).context(E::InvalidDate)?;
         let time = Time::new_ranged(
             hour,
             minute,
@@ -480,13 +462,10 @@ impl DateTimeParser {
         let dt = DateTime::from_parts(date, time);
         if let Some(wd) = wd {
             if !self.relaxed_weekday && wd != dt.weekday() {
-                return Err(err!(
-                    "found parsed weekday of {parsed}, \
-                     but parsed datetime of {dt} has weekday \
-                     {has}",
-                    parsed = weekday_abbrev(wd),
-                    has = weekday_abbrev(dt.weekday()),
-                ));
+                return Err(Error::from(E::InconsistentWeekday {
+                    parsed: wd,
+                    from_date: dt.weekday(),
+                }));
             }
         }
         Ok(Parsed { value: dt, input })
@@ -517,15 +496,13 @@ impl DateTimeParser {
         if matches!(input[0], b'0'..=b'9') {
             return Ok(Parsed { value: None, input });
         }
-        if input.len() < 4 {
-            return Err(err!(
-                "expected day at beginning of RFC 2822 datetime \
-                 since first non-whitespace byte, {first:?}, \
-                 is not a digit, but given string is too short \
-                 (length is {length})",
-                first = escape::Byte(input[0]),
-                length = input.len(),
-            ));
+        if let Ok(len) = u8::try_from(input.len()) {
+            if len < 4 {
+                return Err(Error::from(E::TooShortWeekday {
+                    got_non_digit: input[0],
+                    len,
+                }));
+            }
         }
         let b1 = input[0];
         let b2 = input[1];
@@ -543,31 +520,19 @@ impl DateTimeParser {
             b"fri" => Weekday::Friday,
             b"sat" => Weekday::Saturday,
             _ => {
-                return Err(err!(
-                    "expected day at beginning of RFC 2822 datetime \
-                     since first non-whitespace byte, {first:?}, \
-                     is not a digit, but did not recognize {got:?} \
-                     as a valid weekday abbreviation",
-                    first = escape::Byte(input[0]),
-                    got = escape::Bytes(&input[..3]),
-                ));
+                return Err(Error::from(E::InvalidWeekday {
+                    got_non_digit: input[0],
+                }));
             }
         };
         let Parsed { input, .. } = self.skip_whitespace(&input[3..]);
         let Some(should_be_comma) = input.get(0).copied() else {
-            return Err(err!(
-                "expected comma after parsed weekday `{weekday}` in \
-                 RFC 2822 datetime, but found end of string instead",
-                weekday = escape::Bytes(&[b1, b2, b3]),
-            ));
+            return Err(Error::from(E::EndOfInputComma));
         };
         if should_be_comma != b',' {
-            return Err(err!(
-                "expected comma after parsed weekday `{weekday}` in \
-                 RFC 2822 datetime, but found `{got:?}` instead",
-                weekday = escape::Bytes(&[b1, b2, b3]),
-                got = escape::Byte(should_be_comma),
-            ));
+            return Err(Error::from(E::UnexpectedByteComma {
+                byte: should_be_comma,
+            }));
         }
         let Parsed { input, .. } = self.skip_whitespace(&input[1..]);
         Ok(Parsed { value: Some(wd), input })
@@ -586,21 +551,17 @@ impl DateTimeParser {
         input: &'i [u8],
     ) -> Result<Parsed<'i, t::Day>, Error> {
         if input.is_empty() {
-            return Err(err!("expected day, but found end of input"));
+            return Err(Error::from(E::EndOfInputDay));
         }
         let mut digits = 1;
         if input.len() >= 2 && matches!(input[1], b'0'..=b'9') {
             digits = 2;
         }
         let (day, input) = input.split_at(digits);
-        let day = parse::i64(day).with_context(|| {
-            err!("failed to parse {day:?} as day", day = escape::Bytes(day))
-        })?;
-        let day = t::Day::try_new("day", day).context("day is not valid")?;
+        let day = parse::i64(day).context(E::ParseDay)?;
+        let day = t::Day::try_new("day", day).context(E::ParseDay)?;
         let Parsed { input, .. } =
-            self.parse_whitespace(input).with_context(|| {
-                err!("expected whitespace after parsing day {day}")
-            })?;
+            self.parse_whitespace(input).context(E::WhitespaceAfterDay)?;
         Ok(Parsed { value: day, input })
     }
 
@@ -617,16 +578,12 @@ impl DateTimeParser {
         input: &'i [u8],
     ) -> Result<Parsed<'i, t::Month>, Error> {
         if input.is_empty() {
-            return Err(err!(
-                "expected abbreviated month name, but found end of input"
-            ));
+            return Err(Error::from(E::EndOfInputMonth));
         }
-        if input.len() < 3 {
-            return Err(err!(
-                "expected abbreviated month name, but remaining input \
-                 is too short (remaining bytes is {length})",
-                length = input.len(),
-            ));
+        if let Ok(len) = u8::try_from(input.len()) {
+            if len < 3 {
+                return Err(Error::from(E::TooShortMonth { len }));
+            }
         }
         let b1 = input[0].to_ascii_lowercase();
         let b2 = input[1].to_ascii_lowercase();
@@ -644,22 +601,14 @@ impl DateTimeParser {
             b"oct" => 10,
             b"nov" => 11,
             b"dec" => 12,
-            _ => {
-                return Err(err!(
-                    "expected abbreviated month name, \
-                     but did not recognize {got:?} \
-                     as a valid month",
-                    got = escape::Bytes(&input[..3]),
-                ));
-            }
+            _ => return Err(Error::from(E::InvalidMonth)),
         };
         // OK because we just assigned a numeric value ourselves
         // above, and all values are valid months.
         let month = t::Month::new(month).unwrap();
-        let Parsed { input, .. } =
-            self.parse_whitespace(&input[3..]).with_context(|| {
-                err!("expected whitespace after parsing month name")
-            })?;
+        let Parsed { input, .. } = self
+            .parse_whitespace(&input[3..])
+            .context(E::WhitespaceAfterMonth)?;
         Ok(Parsed { value: month, input })
     }
 
@@ -692,31 +641,22 @@ impl DateTimeParser {
         {
             digits += 1;
         }
-        if digits <= 1 {
-            return Err(err!(
-                "expected at least two ASCII digits for parsing \
-                 a year, but only found {digits}",
-            ));
+        if let Ok(len) = u8::try_from(digits) {
+            if len <= 1 {
+                return Err(Error::from(E::TooShortYear { len }));
+            }
         }
         let (year, input) = input.split_at(digits);
-        let year = parse::i64(year).with_context(|| {
-            err!(
-                "failed to parse {year:?} as year \
-                 (a two, three or four digit integer)",
-                year = escape::Bytes(year),
-            )
-        })?;
+        let year = parse::i64(year).context(E::ParseYear)?;
         let year = match digits {
             2 if year <= 49 => year + 2000,
             2 | 3 => year + 1900,
             4 => year,
             _ => unreachable!("digits={digits} must be 2, 3 or 4"),
         };
-        let year =
-            t::Year::try_new("year", year).context("year is not valid")?;
-        let Parsed { input, .. } = self
-            .parse_whitespace(input)
-            .with_context(|| err!("expected whitespace after parsing year"))?;
+        let year = t::Year::try_new("year", year).context(E::InvalidYear)?;
+        let Parsed { input, .. } =
+            self.parse_whitespace(input).context(E::WhitespaceAfterYear)?;
         Ok(Parsed { value: year, input })
     }
 
@@ -730,17 +670,9 @@ impl DateTimeParser {
         &self,
         input: &'i [u8],
     ) -> Result<Parsed<'i, t::Hour>, Error> {
-        let (hour, input) = parse::split(input, 2).ok_or_else(|| {
-            err!("expected two digit hour, but found end of input")
-        })?;
-        let hour = parse::i64(hour).with_context(|| {
-            err!(
-                "failed to parse {hour:?} as hour (a two digit integer)",
-                hour = escape::Bytes(hour),
-            )
-        })?;
-        let hour =
-            t::Hour::try_new("hour", hour).context("hour is not valid")?;
+        let (hour, input) = parse::split(input, 2).ok_or(E::EndOfInputHour)?;
+        let hour = parse::i64(hour).context(E::ParseHour)?;
+        let hour = t::Hour::try_new("hour", hour).context(E::InvalidHour)?;
         Ok(Parsed { value: hour, input })
     }
 
@@ -751,17 +683,11 @@ impl DateTimeParser {
         &self,
         input: &'i [u8],
     ) -> Result<Parsed<'i, t::Minute>, Error> {
-        let (minute, input) = parse::split(input, 2).ok_or_else(|| {
-            err!("expected two digit minute, but found end of input")
-        })?;
-        let minute = parse::i64(minute).with_context(|| {
-            err!(
-                "failed to parse {minute:?} as minute (a two digit integer)",
-                minute = escape::Bytes(minute),
-            )
-        })?;
-        let minute = t::Minute::try_new("minute", minute)
-            .context("minute is not valid")?;
+        let (minute, input) =
+            parse::split(input, 2).ok_or(E::EndOfInputMinute)?;
+        let minute = parse::i64(minute).context(E::ParseMinute)?;
+        let minute =
+            t::Minute::try_new("minute", minute).context(E::InvalidMinute)?;
         Ok(Parsed { value: minute, input })
     }
 
@@ -772,20 +698,14 @@ impl DateTimeParser {
         &self,
         input: &'i [u8],
     ) -> Result<Parsed<'i, t::Second>, Error> {
-        let (second, input) = parse::split(input, 2).ok_or_else(|| {
-            err!("expected two digit second, but found end of input")
-        })?;
-        let mut second = parse::i64(second).with_context(|| {
-            err!(
-                "failed to parse {second:?} as second (a two digit integer)",
-                second = escape::Bytes(second),
-            )
-        })?;
+        let (second, input) =
+            parse::split(input, 2).ok_or(E::EndOfInputSecond)?;
+        let mut second = parse::i64(second).context(E::ParseSecond)?;
         if second == 60 {
             second = 59;
         }
-        let second = t::Second::try_new("second", second)
-            .context("second is not valid")?;
+        let second =
+            t::Second::try_new("second", second).context(E::InvalidSecond)?;
         Ok(Parsed { value: second, input })
     }
 
@@ -801,13 +721,7 @@ impl DateTimeParser {
         type ParsedOffsetHours = ri8<0, { t::SpanZoneOffsetHours::MAX }>;
         type ParsedOffsetMinutes = ri8<0, { t::SpanZoneOffsetMinutes::MAX }>;
 
-        let sign = input.get(0).copied().ok_or_else(|| {
-            err!(
-                "expected sign for time zone offset, \
-                 (or a legacy time zone name abbreviation), \
-                 but found end of input",
-            )
-        })?;
+        let sign = input.get(0).copied().ok_or(E::EndOfInputOffset)?;
         let sign = if sign == b'+' {
             t::Sign::N::<1>()
         } else if sign == b'-' {
@@ -816,32 +730,16 @@ impl DateTimeParser {
             return self.parse_offset_obsolete(input);
         };
         let input = &input[1..];
-        let (hhmm, input) = parse::split(input, 4).ok_or_else(|| {
-            err!(
-                "expected at least 4 digits for time zone offset \
-                 after sign, but found only {len} bytes remaining",
-                len = input.len(),
-            )
-        })?;
+        let (hhmm, input) = parse::split(input, 4).ok_or(E::TooShortOffset)?;
 
-        let hh = parse::i64(&hhmm[0..2]).with_context(|| {
-            err!(
-                "failed to parse hours from time zone offset {hhmm}",
-                hhmm = escape::Bytes(hhmm)
-            )
-        })?;
+        let hh = parse::i64(&hhmm[0..2]).context(E::ParseOffsetHour)?;
         let hh = ParsedOffsetHours::try_new("zone-offset-hours", hh)
-            .context("time zone offset hours are not valid")?;
+            .context(E::InvalidOffsetHour)?;
         let hh = t::SpanZoneOffset::rfrom(hh);
 
-        let mm = parse::i64(&hhmm[2..4]).with_context(|| {
-            err!(
-                "failed to parse minutes from time zone offset {hhmm}",
-                hhmm = escape::Bytes(hhmm)
-            )
-        })?;
+        let mm = parse::i64(&hhmm[2..4]).context(E::ParseOffsetMinute)?;
         let mm = ParsedOffsetMinutes::try_new("zone-offset-minutes", mm)
-            .context("time zone offset minutes are not valid")?;
+            .context(E::InvalidOffsetMinute)?;
         let mm = t::SpanZoneOffset::rfrom(mm);
 
         let seconds = hh * C(3_600) + mm * C(60);
@@ -865,11 +763,7 @@ impl DateTimeParser {
             len += 1;
         }
         if len == 0 {
-            return Err(err!(
-                "expected obsolete RFC 2822 time zone abbreviation, \
-                 but found no remaining non-whitespace characters \
-                 after time",
-            ));
+            return Err(Error::from(E::WhitespaceAfterTimeForObsoleteOffset));
         }
         let offset = match &letters[..len] {
             b"ut" | b"gmt" | b"z" => Offset::UTC,
@@ -917,11 +811,7 @@ impl DateTimeParser {
                     Offset::UTC
                 } else {
                     // But anything else we throw our hands up I guess.
-                    return Err(err!(
-                        "expected obsolete RFC 2822 time zone abbreviation, \
-                         but found {found:?}",
-                        found = escape::Bytes(&input[..len]),
-                    ));
+                    return Err(Error::from(E::InvalidObsoleteOffset));
                 }
             }
         };
@@ -936,15 +826,12 @@ impl DateTimeParser {
         input: &'i [u8],
     ) -> Result<Parsed<'i, ()>, Error> {
         if input.is_empty() {
-            return Err(err!(
-                "expected time separator of ':', but found end of input",
-            ));
+            return Err(Error::from(E::EndOfInputTimeSeparator));
         }
         if input[0] != b':' {
-            return Err(err!(
-                "expected time separator of ':', but found {got}",
-                got = escape::Byte(input[0]),
-            ));
+            return Err(Error::from(E::UnexpectedByteTimeSeparator {
+                byte: input[0],
+            }));
         }
         Ok(Parsed { value: (), input: &input[1..] })
     }
@@ -959,10 +846,7 @@ impl DateTimeParser {
         let Parsed { input, value: had_whitespace } =
             self.skip_whitespace(input);
         if !had_whitespace {
-            return Err(err!(
-                "expected at least one whitespace character (space or tab), \
-                 but found none",
-            ));
+            return Err(Error::from(E::WhitespaceAfterTime));
         }
         Ok(Parsed { value: (), input })
     }
@@ -1012,26 +896,20 @@ impl DateTimeParser {
                 // I believe this error case is actually impossible, since as
                 // soon as we hit 0, we break out. If there is more "comment,"
                 // then it will flag an error as unparsed input.
-                depth = depth.checked_sub(1).ok_or_else(|| {
-                    err!(
-                        "found closing parenthesis in comment with \
-                         no matching opening parenthesis"
-                    )
-                })?;
+                depth = depth
+                    .checked_sub(1)
+                    .ok_or(E::CommentClosingParenWithoutOpen)?;
                 if depth == 0 {
                     break;
                 }
             } else if byte == b'(' {
-                depth = depth.checked_add(1).ok_or_else(|| {
-                    err!("found too many nested parenthesis in comment")
-                })?;
+                depth = depth
+                    .checked_add(1)
+                    .ok_or(E::CommentTooManyNestedParens)?;
             }
         }
         if depth > 0 {
-            return Err(err!(
-                "found opening parenthesis in comment with \
-                 no matching closing parenthesis"
-            ));
+            return Err(Error::from(E::CommentOpeningParenWithoutClose));
         }
         let Parsed { input, .. } = self.skip_whitespace(input);
         Ok(Parsed { value: (), input })
@@ -1423,10 +1301,7 @@ impl DateTimePrinter {
             // RFC 2822 actually says the year must be at least 1900, but
             // other implementations (like Chrono) allow any positive 4-digit
             // year.
-            return Err(err!(
-                "datetime {dt} has negative year, \
-                 which cannot be formatted with RFC 2822",
-            ));
+            return Err(Error::from(E::NegativeYear));
         }
 
         wtr.write_str(weekday_abbrev(dt.weekday()))?;
@@ -1484,10 +1359,7 @@ impl DateTimePrinter {
             // RFC 2822 actually says the year must be at least 1900, but
             // other implementations (like Chrono) allow any positive 4-digit
             // year.
-            return Err(err!(
-                "datetime {dt} has negative year, \
-                 which cannot be formatted with RFC 2822",
-            ));
+            return Err(Error::from(E::NegativeYear));
         }
 
         wtr.write_str(weekday_abbrev(dt.weekday()))?;
@@ -1743,7 +1615,7 @@ mod tests {
 
         insta::assert_snapshot!(
             p("Thu, 10 Jan 2024 05:34:45 -0500"),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: found parsed weekday of Thu, but parsed datetime of 2024-01-10T05:34:45 has weekday Wed",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: found parsed weekday of `Thursday`, but parsed datetime has weekday `Wednesday`",
         );
         insta::assert_snapshot!(
             p("Wed, 29 Feb 2023 05:34:45 -0500"),
@@ -1755,11 +1627,11 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("Tue, 32 Jun 2024 05:34:45 -0500"),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: day is not valid: parameter 'day' with value 32 is not in the required range of 1..=31",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: failed to parse day: parameter 'day' with value 32 is not in the required range of 1..=31",
         );
         insta::assert_snapshot!(
             p("Sun, 30 Jun 2024 24:00:00 -0500"),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: hour is not valid: parameter 'hour' with value 24 is not in the required range of 0..=23",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: invalid hour: parameter 'hour' with value 24 is not in the required range of 0..=23",
         );
         // No whitespace after time
         insta::assert_snapshot!(
@@ -1780,43 +1652,43 @@ mod tests {
         );
         insta::assert_snapshot!(
             p(" "),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected RFC 2822 datetime, but got empty string after trimming whitespace",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected RFC 2822 datetime, but got empty string after trimming leading whitespace",
         );
         insta::assert_snapshot!(
             p("Wat"),
-            @r###"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected day at beginning of RFC 2822 datetime since first non-whitespace byte, "W", is not a digit, but given string is too short (length is 3)"###,
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected day at beginning of RFC 2822 datetime since first non-whitespace byte, `W`, is not a digit, but given string is too short (length is 3)",
         );
         insta::assert_snapshot!(
             p("Wed"),
-            @r###"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected day at beginning of RFC 2822 datetime since first non-whitespace byte, "W", is not a digit, but given string is too short (length is 3)"###,
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected day at beginning of RFC 2822 datetime since first non-whitespace byte, `W`, is not a digit, but given string is too short (length is 3)",
         );
         insta::assert_snapshot!(
             p("Wed "),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected comma after parsed weekday `Wed` in RFC 2822 datetime, but found end of string instead",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected comma after parsed weekday in RFC 2822 datetime, but found end of input instead",
         );
         insta::assert_snapshot!(
             p("Wed   ,"),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected day, but found end of input",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected numeric day, but found end of input",
         );
         insta::assert_snapshot!(
             p("Wed   ,   "),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected day, but found end of input",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected numeric day, but found end of input",
         );
         insta::assert_snapshot!(
             p("Wat, "),
-            @r###"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected day at beginning of RFC 2822 datetime since first non-whitespace byte, "W", is not a digit, but did not recognize "Wat" as a valid weekday abbreviation"###,
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected day at beginning of RFC 2822 datetime since first non-whitespace byte, `W`, is not a digit, but did not recognize a valid weekday abbreviation",
         );
         insta::assert_snapshot!(
             p("Wed, "),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected day, but found end of input",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected numeric day, but found end of input",
         );
         insta::assert_snapshot!(
             p("Wed, 1"),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected whitespace after parsing day 1: expected at least one whitespace character (space or tab), but found none",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected whitespace after parsing day: expected whitespace after parsing time: expected at least one whitespace character (space or tab), but found none",
         );
         insta::assert_snapshot!(
             p("Wed, 10"),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected whitespace after parsing day 10: expected at least one whitespace character (space or tab), but found none",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected whitespace after parsing day: expected whitespace after parsing time: expected at least one whitespace character (space or tab), but found none",
         );
         insta::assert_snapshot!(
             p("Wed, 10 J"),
@@ -1824,11 +1696,11 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("Wed, 10 Wat"),
-            @r###"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected abbreviated month name, but did not recognize "Wat" as a valid month"###,
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected abbreviated month name, but did not recognize a valid abbreviated month name",
         );
         insta::assert_snapshot!(
             p("Wed, 10 Jan"),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected whitespace after parsing month name: expected at least one whitespace character (space or tab), but found none",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected whitespace after parsing abbreviated month name: expected whitespace after parsing time: expected at least one whitespace character (space or tab), but found none",
         );
         insta::assert_snapshot!(
             p("Wed, 10 Jan 2"),
@@ -1836,15 +1708,15 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("Wed, 10 Jan 2024"),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected whitespace after parsing year: expected at least one whitespace character (space or tab), but found none",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected whitespace after parsing year: expected whitespace after parsing time: expected at least one whitespace character (space or tab), but found none",
         );
         insta::assert_snapshot!(
             p("Wed, 10 Jan 2024 05"),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected time separator of ':', but found end of input",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected time separator of `:`, but found end of input",
         );
         insta::assert_snapshot!(
             p("Wed, 10 Jan 2024 053"),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected time separator of ':', but found 3",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected time separator of `:`, but found `3`",
         );
         insta::assert_snapshot!(
             p("Wed, 10 Jan 2024 05:34"),
@@ -1860,7 +1732,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("Wed, 10 Jan 2024 05:34:45 J"),
-            @r###"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected obsolete RFC 2822 time zone abbreviation, but found "J""###,
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: expected obsolete RFC 2822 time zone abbreviation, but did not recognize a valid abbreviation",
         );
     }
 
@@ -2040,7 +1912,7 @@ mod tests {
             .at(5, 34, 45, 0)
             .in_tz("America/New_York")
             .unwrap();
-        insta::assert_snapshot!(p(&zdt), @"datetime -000001-01-10T05:34:45 has negative year, which cannot be formatted with RFC 2822");
+        insta::assert_snapshot!(p(&zdt), @"datetime has negative year, which cannot be formatted with RFC 2822");
     }
 
     #[test]
@@ -2062,6 +1934,6 @@ mod tests {
             .in_tz("America/New_York")
             .unwrap()
             .timestamp();
-        insta::assert_snapshot!(p(ts), @"datetime -000001-01-10T10:30:47 has negative year, which cannot be formatted with RFC 2822");
+        insta::assert_snapshot!(p(ts), @"datetime has negative year, which cannot be formatted with RFC 2822");
     }
 }

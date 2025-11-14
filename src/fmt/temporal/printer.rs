@@ -1,6 +1,6 @@
 use crate::{
     civil::{Date, DateTime, ISOWeekDate, Time},
-    error::{err, Error},
+    error::{fmt::temporal::Error as E, Error},
     fmt::{
         temporal::{Pieces, PiecesOffset, TimeZoneAnnotationKind},
         util::{DecimalFormatter, FractionalFormatter},
@@ -197,13 +197,7 @@ impl DateTimePrinter {
         //
         // Anyway, if you're seeing this error and think there should be a
         // different behavior, please file an issue.
-        Err(err!(
-            "time zones without IANA identifiers that aren't either \
-             fixed offsets or a POSIX time zone can't be serialized \
-             (this typically occurs when this is a system time zone \
-              derived from `/etc/localtime` on Unix systems that \
-              isn't symlinked to an entry in `/usr/share/zoneinfo`)",
-        ))
+        Err(Error::from(E::PrintTimeZoneFailure))
     }
 
     pub(super) fn print_pieces<W: Write>(

@@ -17,6 +17,7 @@ use super::utf8;
 pub(crate) struct Byte(pub u8);
 
 impl core::fmt::Display for Byte {
+    #[inline(never)]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if self.0 == b' ' {
             return write!(f, " ");
@@ -37,6 +38,7 @@ impl core::fmt::Display for Byte {
 }
 
 impl core::fmt::Debug for Byte {
+    #[inline(never)]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "\"")?;
         core::fmt::Display::fmt(self, f)?;
@@ -54,15 +56,16 @@ impl core::fmt::Debug for Byte {
 pub(crate) struct Bytes<'a>(pub &'a [u8]);
 
 impl<'a> core::fmt::Display for Bytes<'a> {
+    #[inline(never)]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         // This is a sad re-implementation of a similar impl found in bstr.
         let mut bytes = self.0;
         while let Some(result) = utf8::decode(bytes) {
             let ch = match result {
                 Ok(ch) => ch,
-                Err(errant_bytes) => {
+                Err(err) => {
                     // The decode API guarantees `errant_bytes` is non-empty.
-                    write!(f, r"\x{:02x}", errant_bytes[0])?;
+                    write!(f, r"\x{:02x}", err.as_slice()[0])?;
                     bytes = &bytes[1..];
                     continue;
                 }
@@ -81,6 +84,37 @@ impl<'a> core::fmt::Display for Bytes<'a> {
 }
 
 impl<'a> core::fmt::Debug for Bytes<'a> {
+    #[inline(never)]
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "\"")?;
+        core::fmt::Display::fmt(self, f)?;
+        write!(f, "\"")?;
+        Ok(())
+    }
+}
+
+/// A helper for repeating a single byte utilizing `Byte`.
+///
+/// This is limited to repeating a byte up to `u8::MAX` times in order
+/// to reduce its size overhead. And in practice, Jiff just doesn't
+/// need more than this (at time of writing, 2025-11-29).
+pub(crate) struct RepeatByte {
+    pub(crate) byte: u8,
+    pub(crate) count: u8,
+}
+
+impl core::fmt::Display for RepeatByte {
+    #[inline(never)]
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        for _ in 0..self.count {
+            write!(f, "{}", Byte(self.byte))?;
+        }
+        Ok(())
+    }
+}
+
+impl core::fmt::Debug for RepeatByte {
+    #[inline(never)]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "\"")?;
         core::fmt::Display::fmt(self, f)?;

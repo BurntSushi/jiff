@@ -2,10 +2,10 @@ use core::time::Duration;
 
 use crate::{
     civil::{Date, DateTime, Time},
-    error::{err, ErrorContext},
+    error::{signed_duration::Error as E, ErrorContext},
     fmt::{friendly, temporal},
     tz::Offset,
-    util::{escape, rangeint::TryRFrom, t},
+    util::{rangeint::TryRFrom, t},
     Error, RoundMode, Timestamp, Unit, Zoned,
 };
 
@@ -65,8 +65,7 @@ const MINS_PER_HOUR: i64 = 60;
 ///
 /// assert_eq!(
 ///     "P1d".parse::<SignedDuration>().unwrap_err().to_string(),
-///     "failed to parse \"P1d\" as an ISO 8601 duration string: \
-///      parsing ISO 8601 duration into a `SignedDuration` requires that \
+///     "parsing ISO 8601 duration in this context requires that \
 ///      the duration contain a time component and no components of days or \
 ///      greater",
 /// );
@@ -1456,24 +1455,13 @@ impl SignedDuration {
     #[inline]
     pub fn try_from_secs_f64(secs: f64) -> Result<SignedDuration, Error> {
         if !secs.is_finite() {
-            return Err(err!(
-                "could not convert non-finite seconds \
-                 {secs} to signed duration",
-            ));
+            return Err(Error::from(E::ConvertNonFinite));
         }
         if secs < (i64::MIN as f64) {
-            return Err(err!(
-                "floating point seconds {secs} overflows signed duration \
-                 minimum value of {:?}",
-                SignedDuration::MIN,
-            ));
+            return Err(Error::slim_range("floating point seconds"));
         }
         if secs > (i64::MAX as f64) {
-            return Err(err!(
-                "floating point seconds {secs} overflows signed duration \
-                 maximum value of {:?}",
-                SignedDuration::MAX,
-            ));
+            return Err(Error::slim_range("floating point seconds"));
         }
 
         let mut int_secs = secs.trunc() as i64;
@@ -1481,15 +1469,9 @@ impl SignedDuration {
             (secs.fract() * (NANOS_PER_SEC as f64)).round() as i32;
         if int_nanos.unsigned_abs() == 1_000_000_000 {
             let increment = i64::from(int_nanos.signum());
-            int_secs = int_secs.checked_add(increment).ok_or_else(|| {
-                err!(
-                    "floating point seconds {secs} overflows signed duration \
-                     maximum value of {max:?} after rounding its fractional \
-                     component of {fract:?}",
-                    max = SignedDuration::MAX,
-                    fract = secs.fract(),
-                )
-            })?;
+            int_secs = int_secs
+                .checked_add(increment)
+                .ok_or_else(|| Error::slim_range("floating point seconds"))?;
             int_nanos = 0;
         }
         Ok(SignedDuration::new_unchecked(int_secs, int_nanos))
@@ -1528,24 +1510,13 @@ impl SignedDuration {
     #[inline]
     pub fn try_from_secs_f32(secs: f32) -> Result<SignedDuration, Error> {
         if !secs.is_finite() {
-            return Err(err!(
-                "could not convert non-finite seconds \
-                 {secs} to signed duration",
-            ));
+            return Err(Error::from(E::ConvertNonFinite));
         }
         if secs < (i64::MIN as f32) {
-            return Err(err!(
-                "floating point seconds {secs} overflows signed duration \
-                 minimum value of {:?}",
-                SignedDuration::MIN,
-            ));
+            return Err(Error::slim_range("floating point seconds"));
         }
         if secs > (i64::MAX as f32) {
-            return Err(err!(
-                "floating point seconds {secs} overflows signed duration \
-                 maximum value of {:?}",
-                SignedDuration::MAX,
-            ));
+            return Err(Error::slim_range("floating point seconds"));
         }
         let mut int_nanos =
             (secs.fract() * (NANOS_PER_SEC as f32)).round() as i32;
@@ -1553,15 +1524,9 @@ impl SignedDuration {
         if int_nanos.unsigned_abs() == 1_000_000_000 {
             let increment = i64::from(int_nanos.signum());
             // N.B. I haven't found a way to trigger this error path in tests.
-            int_secs = int_secs.checked_add(increment).ok_or_else(|| {
-                err!(
-                    "floating point seconds {secs} overflows signed duration \
-                     maximum value of {max:?} after rounding its fractional \
-                     component of {fract:?}",
-                    max = SignedDuration::MAX,
-                    fract = secs.fract(),
-                )
-            })?;
+            int_secs = int_secs
+                .checked_add(increment)
+                .ok_or_else(|| Error::slim_range("floating point seconds"))?;
             int_nanos = 0;
         }
         Ok(SignedDuration::new_unchecked(int_secs, int_nanos))
@@ -2023,25 +1988,18 @@ impl SignedDuration {
         time2: std::time::SystemTime,
     ) -> Result<SignedDuration, Error> {
         match time2.duration_since(time1) {
-            Ok(dur) => SignedDuration::try_from(dur).with_context(|| {
-                err!(
-                    "unsigned duration {dur:?} for system time since \
-                     Unix epoch overflowed signed duration"
-                )
-            }),
+            Ok(dur) => {
+                SignedDuration::try_from(dur).context(E::ConvertSystemTime)
+            }
             Err(err) => {
                 let dur = err.duration();
-                let dur =
-                    SignedDuration::try_from(dur).with_context(|| {
-                        err!(
-                        "unsigned duration {dur:?} for system time before \
-                         Unix epoch overflowed signed duration"
-                    )
-                    })?;
-                dur.checked_neg().ok_or_else(|| {
-                    err!("negating duration {dur:?} from before the Unix epoch \
-                     overflowed signed duration")
-                })
+                let dur = SignedDuration::try_from(dur)
+                    .context(E::ConvertSystemTime)?;
+                dur.checked_neg()
+                    .ok_or_else(|| {
+                        Error::slim_range("signed duration seconds")
+                    })
+                    .context(E::ConvertSystemTime)
             }
         }
     }
@@ -2155,17 +2113,15 @@ impl SignedDuration {
     ///
     /// assert_eq!(
     ///     SignedDuration::MAX.round(Unit::Hour).unwrap_err().to_string(),
-    ///     "rounding `2562047788015215h 30m 7s 999ms 999µs 999ns` to \
-    ///      nearest hour in increments of 1 resulted in \
-    ///      9223372036854777600 seconds, which does not fit into an i64 \
-    ///      and thus overflows `SignedDuration`",
+    ///     "rounding signed duration to nearest hour \
+    ///      resulted in a value outside the supported \
+    ///      range of a `jiff::SignedDuration`",
     /// );
     /// assert_eq!(
     ///     SignedDuration::MIN.round(Unit::Hour).unwrap_err().to_string(),
-    ///     "rounding `2562047788015215h 30m 8s 999ms 999µs 999ns ago` to \
-    ///      nearest hour in increments of 1 resulted in \
-    ///      -9223372036854777600 seconds, which does not fit into an i64 \
-    ///      and thus overflows `SignedDuration`",
+    ///     "rounding signed duration to nearest hour \
+    ///      resulted in a value outside the supported \
+    ///      range of a `jiff::SignedDuration`",
     /// );
     /// ```
     ///
@@ -2176,9 +2132,9 @@ impl SignedDuration {
     ///
     /// assert_eq!(
     ///     SignedDuration::ZERO.round(Unit::Day).unwrap_err().to_string(),
-    ///     "rounding `SignedDuration` failed \
-    ///      because a calendar unit of days was provided \
-    ///      (to round by calendar units, you must use a `Span`)",
+    ///     "rounding `jiff::SignedDuration` failed \
+    ///      because a calendar unit of 'days' was provided \
+    ///      (to round by calendar units, you must use a `jiff::Span`)",
     /// );
     /// ```
     #[inline]
@@ -2414,9 +2370,8 @@ impl TryFrom<Duration> for SignedDuration {
     type Error = Error;
 
     fn try_from(d: Duration) -> Result<SignedDuration, Error> {
-        let secs = i64::try_from(d.as_secs()).map_err(|_| {
-            err!("seconds in unsigned duration {d:?} overflowed i64")
-        })?;
+        let secs = i64::try_from(d.as_secs())
+            .map_err(|_| Error::slim_range("unsigned duration seconds"))?;
         // Guaranteed to succeed since 0<=nanos<=999,999,999.
         let nanos = i32::try_from(d.subsec_nanos()).unwrap();
         Ok(SignedDuration::new_unchecked(secs, nanos))
@@ -2429,14 +2384,10 @@ impl TryFrom<SignedDuration> for Duration {
     fn try_from(sd: SignedDuration) -> Result<Duration, Error> {
         // This isn't needed, but improves error messages.
         if sd.is_negative() {
-            return Err(err!(
-                "cannot convert negative duration `{sd:?}` to \
-                 unsigned `std::time::Duration`",
-            ));
+            return Err(Error::slim_range("negative duration seconds"));
         }
-        let secs = u64::try_from(sd.as_secs()).map_err(|_| {
-            err!("seconds in signed duration {sd:?} overflowed u64")
-        })?;
+        let secs = u64::try_from(sd.as_secs())
+            .map_err(|_| Error::slim_range("signed duration seconds"))?;
         // Guaranteed to succeed because the above only succeeds
         // when `sd` is non-negative. And when `sd` is non-negative,
         // we are guaranteed that 0<=nanos<=999,999,999.
@@ -2771,12 +2722,9 @@ impl SignedDurationRound {
     /// Does the actual duration rounding.
     fn round(&self, dur: SignedDuration) -> Result<SignedDuration, Error> {
         if self.smallest > Unit::Hour {
-            return Err(err!(
-                "rounding `SignedDuration` failed because \
-                 a calendar unit of {plural} was provided \
-                 (to round by calendar units, you must use a `Span`)",
-                plural = self.smallest.plural(),
-            ));
+            return Err(Error::from(E::RoundCalendarUnit {
+                unit: self.smallest,
+            }));
         }
         let nanos = t::NoUnits128::new_unchecked(dur.as_nanos());
         let increment = t::NoUnits::new_unchecked(self.increment);
@@ -2789,12 +2737,7 @@ impl SignedDurationRound {
         let seconds = rounded / t::NANOS_PER_SECOND;
         let seconds =
             t::NoUnits::try_rfrom("seconds", seconds).map_err(|_| {
-                err!(
-                    "rounding `{dur:#}` to nearest {singular} in increments \
-                     of {increment} resulted in {seconds} seconds, which does \
-                     not fit into an i64 and thus overflows `SignedDuration`",
-                    singular = self.smallest.singular(),
-                )
+                Error::from(E::RoundOverflowed { unit: self.smallest })
             })?;
         let subsec_nanos = rounded % t::NANOS_PER_SECOND;
         // OK because % 1_000_000_000 above guarantees that the result fits
@@ -2838,25 +2781,22 @@ impl From<(Unit, i64)> for SignedDurationRound {
 /// (We do the same thing for `Span`.)
 #[cfg_attr(feature = "perf-inline", inline(always))]
 fn parse_iso_or_friendly(bytes: &[u8]) -> Result<SignedDuration, Error> {
-    if bytes.is_empty() {
-        return Err(err!(
-            "an empty string is not a valid `SignedDuration`, \
-             expected either a ISO 8601 or Jiff's 'friendly' \
-             format",
+    let Some((&byte, tail)) = bytes.split_first() else {
+        return Err(crate::Error::from(
+            crate::error::fmt::Error::HybridDurationEmpty,
         ));
-    }
-    let mut first = bytes[0];
+    };
+    let mut first = byte;
+    // N.B. Unsigned durations don't support negative durations (of
+    // course), but we still check for it here so that we can defer to
+    // the dedicated parsers. They will provide their own error messages.
     if first == b'+' || first == b'-' {
-        if bytes.len() == 1 {
-            return Err(err!(
-                "found nothing after sign `{sign}`, \
-                 which is not a valid `SignedDuration`, \
-                 expected either a ISO 8601 or Jiff's 'friendly' \
-                 format",
-                sign = escape::Byte(first),
+        let Some(&byte) = tail.first() else {
+            return Err(crate::Error::from(
+                crate::error::fmt::Error::HybridDurationPrefix { sign: first },
             ));
-        }
-        first = bytes[1];
+        };
+        first = byte;
     }
     if first == b'P' || first == b'p' {
         temporal::DEFAULT_SPAN_PARSER.parse_duration(bytes)
@@ -3048,15 +2988,15 @@ mod tests {
 
         insta::assert_snapshot!(
             p("").unwrap_err(),
-            @"an empty string is not a valid `SignedDuration`, expected either a ISO 8601 or Jiff's 'friendly' format",
+            @r#"an empty string is not a valid duration in either the ISO 8601 format or Jiff's "friendly" format"#,
         );
         insta::assert_snapshot!(
             p("+").unwrap_err(),
-            @"found nothing after sign `+`, which is not a valid `SignedDuration`, expected either a ISO 8601 or Jiff's 'friendly' format",
+            @r#"found nothing after sign `+`, which is not a valid duration in either the ISO 8601 format or Jiff's "friendly" format"#,
         );
         insta::assert_snapshot!(
             p("-").unwrap_err(),
-            @"found nothing after sign `-`, which is not a valid `SignedDuration`, expected either a ISO 8601 or Jiff's 'friendly' format",
+            @r#"found nothing after sign `-`, which is not a valid duration in either the ISO 8601 format or Jiff's "friendly" format"#,
         );
     }
 
@@ -3093,15 +3033,15 @@ mod tests {
 
         insta::assert_snapshot!(
             p("").unwrap_err(),
-            @"an empty string is not a valid `SignedDuration`, expected either a ISO 8601 or Jiff's 'friendly' format at line 1 column 2",
+            @r#"an empty string is not a valid duration in either the ISO 8601 format or Jiff's "friendly" format at line 1 column 2"#,
         );
         insta::assert_snapshot!(
             p("+").unwrap_err(),
-            @"found nothing after sign `+`, which is not a valid `SignedDuration`, expected either a ISO 8601 or Jiff's 'friendly' format at line 1 column 3",
+            @r#"found nothing after sign `+`, which is not a valid duration in either the ISO 8601 format or Jiff's "friendly" format at line 1 column 3"#,
         );
         insta::assert_snapshot!(
             p("-").unwrap_err(),
-            @"found nothing after sign `-`, which is not a valid `SignedDuration`, expected either a ISO 8601 or Jiff's 'friendly' format at line 1 column 3",
+            @r#"found nothing after sign `-`, which is not a valid duration in either the ISO 8601 format or Jiff's "friendly" format at line 1 column 3"#,
         );
     }
 

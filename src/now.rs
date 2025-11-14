@@ -83,15 +83,16 @@ mod sys {
         } else {
             SystemTime::UNIX_EPOCH.checked_sub(duration)
         };
-        // It's a little sad that we have to panic here, but the standard
-        // SystemTime::now() API is infallible, so we kind of have to match it.
-        // With that said, a panic here would be highly unusual. It would imply
-        // that the system time is set to some extreme timestamp very far in the
-        // future or the past.
+        // It's a little sad that we have to panic here, but the
+        // standard SystemTime::now() API is infallible, so we kind
+        // of have to match it. With that said, a panic here would be
+        // highly unusual. It would imply that the system time is set
+        // to some extreme timestamp very far in the future or the
+        // past.
         let Some(timestamp) = result else {
             panic!(
-                "failed to get current time: \
-             subtracting {duration:?} from Unix epoch overflowed"
+                "failed to get current time from Javascript date: \
+                 arithmetic on Unix epoch overflowed"
             )
         };
         timestamp
