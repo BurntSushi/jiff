@@ -1584,21 +1584,27 @@ impl BrokenDownTime {
     /// ```
     #[inline]
     pub fn to_timestamp(&self) -> Result<Timestamp, Error> {
+        #[cold]
+        #[inline(never)]
+        fn fallback(tm: &BrokenDownTime) -> Result<Timestamp, Error> {
+            let dt = tm
+                .to_datetime()
+                .context("datetime required to parse timestamp")?;
+            let offset = tm
+                .to_offset()
+                .context("offset required to parse timestamp")?;
+            offset.to_timestamp(dt).with_context(|| {
+                err!(
+                    "parsed datetime {dt} and offset {offset}, \
+                     but combining them into a timestamp is outside \
+                     Jiff's supported timestamp range",
+                )
+            })
+        }
         if let Some(timestamp) = self.timestamp() {
             return Ok(timestamp);
         }
-        let dt = self
-            .to_datetime()
-            .context("datetime required to parse timestamp")?;
-        let offset =
-            self.to_offset().context("offset required to parse timestamp")?;
-        offset.to_timestamp(dt).with_context(|| {
-            err!(
-                "parsed datetime {dt} and offset {offset}, \
-                 but combining them into a timestamp is outside \
-                 Jiff's supported timestamp range",
-            )
-        })
+        fallback(self)
     }
 
     #[inline]
@@ -1681,45 +1687,60 @@ impl BrokenDownTime {
     /// ```
     #[inline]
     pub fn to_date(&self) -> Result<Date, Error> {
-        let Some(year) = self.year else {
-            // The Gregorian year and ISO week year may be parsed separately.
-            // That is, they are two different fields. So if the Gregorian year
-            // is absent, we might still have an ISO 8601 week date.
-            if let Some(date) = self.to_date_from_iso()? {
-                return Ok(date);
+        #[cold]
+        #[inline(never)]
+        fn to_date(tm: &BrokenDownTime) -> Result<Date, Error> {
+            let Some(year) = tm.year else {
+                // The Gregorian year and ISO week year may be parsed
+                // separately. That is, they are two different fields. So if
+                // the Gregorian year is absent, we might still have an ISO
+                // 8601 week date.
+                if let Some(date) = tm.to_date_from_iso()? {
+                    return Ok(date);
+                }
+                return Err(err!("missing year, date cannot be created"));
+            };
+            let mut date = tm.to_date_from_gregorian(year)?;
+            if date.is_none() {
+                date = tm.to_date_from_iso()?;
             }
-            return Err(err!("missing year, date cannot be created"));
-        };
-        let mut date = self.to_date_from_gregorian(year)?;
-        if date.is_none() {
-            date = self.to_date_from_iso()?;
-        }
-        if date.is_none() {
-            date = self.to_date_from_day_of_year(year)?;
-        }
-        if date.is_none() {
-            date = self.to_date_from_week_sun(year)?;
-        }
-        if date.is_none() {
-            date = self.to_date_from_week_mon(year)?;
-        }
-        let Some(date) = date else {
-            return Err(err!(
-                "a month/day, day-of-year or week date must be \
-                 present to create a date, but none were found",
-            ));
-        };
-        if let Some(weekday) = self.weekday {
-            if weekday != date.weekday() {
+            if date.is_none() {
+                date = tm.to_date_from_day_of_year(year)?;
+            }
+            if date.is_none() {
+                date = tm.to_date_from_week_sun(year)?;
+            }
+            if date.is_none() {
+                date = tm.to_date_from_week_mon(year)?;
+            }
+            let Some(date) = date else {
                 return Err(err!(
-                    "parsed weekday {weekday} does not match \
-                     weekday {got} from parsed date {date}",
-                    weekday = weekday_name_full(weekday),
-                    got = weekday_name_full(date.weekday()),
+                    "a month/day, day-of-year or week date must be \
+                     present to create a date, but none were found",
                 ));
+            };
+            if let Some(weekday) = tm.weekday {
+                if weekday != date.weekday() {
+                    return Err(err!(
+                        "parsed weekday {weekday} does not match \
+                         weekday {got} from parsed date {date}",
+                        weekday = weekday_name_full(weekday),
+                        got = weekday_name_full(date.weekday()),
+                    ));
+                }
             }
+            Ok(date)
         }
-        Ok(date)
+
+        // The common case is a simple Gregorian date.
+        // We put the rest behind a non-inlineable function
+        // to avoid code bloat for very uncommon cases.
+        let (Some(year), Some(month), Some(day)) =
+            (self.year, self.month, self.day)
+        else {
+            return to_date(self);
+        };
+        Ok(Date::new_ranged(year, month, day).context("invalid date")?)
     }
 
     #[inline]
