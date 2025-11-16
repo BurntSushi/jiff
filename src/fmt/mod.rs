@@ -334,6 +334,17 @@ impl<W: Write> Write for &mut W {
     }
 }
 
+impl Write for &mut dyn Write {
+    fn write_str(&mut self, string: &str) -> Result<(), Error> {
+        (**self).write_str(string)
+    }
+
+    #[inline]
+    fn write_char(&mut self, char: char) -> Result<(), Error> {
+        (**self).write_char(char)
+    }
+}
+
 /// An adapter for using `std::io::Write` implementations with `fmt::Write`.
 ///
 /// This is useful when one wants to format a datetime or span directly
