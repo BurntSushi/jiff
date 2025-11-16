@@ -379,7 +379,7 @@ macro_rules! define_ranged {
             /// dependent bounds. For example, when the day of the month is out
             /// of bounds. The maximum value can vary based on the month (and
             /// year).
-            #[inline]
+            #[inline(never)]
             pub(crate) fn to_error_with_bounds(
                 self,
                 what: &'static str,
