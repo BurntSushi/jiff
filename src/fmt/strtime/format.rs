@@ -339,7 +339,10 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let day = self
             .tm
             .day
-            .or_else(|| self.tm.to_date().ok().map(|d| d.day_ranged()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.day_ranged()),
+            )
             .ok_or_else(|| err!("requires date to format day"))?
             .get();
         ext.write_int(b'0', Some(2), day, self.wtr)
@@ -350,7 +353,10 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let day = self
             .tm
             .day
-            .or_else(|| self.tm.to_date().ok().map(|d| d.day_ranged()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.day_ranged()),
+            )
             .ok_or_else(|| err!("requires date to format day"))?
             .get();
         ext.write_int(b' ', Some(2), day, self.wtr)
@@ -431,7 +437,10 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let month = self
             .tm
             .month
-            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.month_ranged()),
+            )
             .ok_or_else(|| err!("requires date to format month"))?
             .get();
         ext.write_int(b'0', Some(2), month, self.wtr)
@@ -442,7 +451,10 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let month = self
             .tm
             .month
-            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.month_ranged()),
+            )
             .ok_or_else(|| err!("requires date to format month"))?;
         ext.write_str(Case::AsIs, month_name_full(month), self.wtr)
     }
@@ -452,7 +464,10 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let month = self
             .tm
             .month
-            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.month_ranged()),
+            )
             .ok_or_else(|| err!("requires date to format month"))?;
         ext.write_str(Case::AsIs, month_name_abbrev(month), self.wtr)
     }
@@ -613,7 +628,10 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let weekday = self
             .tm
             .weekday
-            .or_else(|| self.tm.to_date().ok().map(|d| d.weekday()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.weekday()),
+            )
             .ok_or_else(|| err!("requires date to format weekday"))?;
         ext.write_str(Case::AsIs, weekday_name_full(weekday), self.wtr)
     }
@@ -623,7 +641,10 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let weekday = self
             .tm
             .weekday
-            .or_else(|| self.tm.to_date().ok().map(|d| d.weekday()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.weekday()),
+            )
             .ok_or_else(|| err!("requires date to format weekday"))?;
         ext.write_str(Case::AsIs, weekday_name_abbrev(weekday), self.wtr)
     }
@@ -633,7 +654,10 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let weekday = self
             .tm
             .weekday
-            .or_else(|| self.tm.to_date().ok().map(|d| d.weekday()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.weekday()),
+            )
             .ok_or_else(|| err!("requires date to format weekday number"))?;
         ext.write_int(b' ', None, weekday.to_monday_one_offset(), self.wtr)
     }
@@ -643,7 +667,10 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let weekday = self
             .tm
             .weekday
-            .or_else(|| self.tm.to_date().ok().map(|d| d.weekday()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.weekday()),
+            )
             .ok_or_else(|| err!("requires date to format weekday number"))?;
         ext.write_int(b' ', None, weekday.to_sunday_zero_offset(), self.wtr)
     }
@@ -658,14 +685,20 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
             .tm
             .day_of_year
             .map(|day| day.get())
-            .or_else(|| self.tm.to_date().ok().map(|d| d.day_of_year()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.day_of_year()),
+            )
             .ok_or_else(|| {
                 err!("requires date to format Sunday-based week number")
             })?;
         let weekday = self
             .tm
             .weekday
-            .or_else(|| self.tm.to_date().ok().map(|d| d.weekday()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.weekday()),
+            )
             .ok_or_else(|| {
                 err!("requires date to format Sunday-based week number")
             })?
@@ -684,9 +717,15 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let weeknum = self
             .tm
             .iso_week
-            .or_else(|| {
-                self.tm.to_date().ok().map(|d| d.iso_week_date().week_ranged())
-            })
+            .or_else(
+                #[inline(never)]
+                || {
+                    self.tm
+                        .to_date()
+                        .ok()
+                        .map(|d| d.iso_week_date().week_ranged())
+                },
+            )
             .ok_or_else(|| {
                 err!("requires date to format ISO 8601 week number")
             })?;
@@ -703,14 +742,20 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
             .tm
             .day_of_year
             .map(|day| day.get())
-            .or_else(|| self.tm.to_date().ok().map(|d| d.day_of_year()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.day_of_year()),
+            )
             .ok_or_else(|| {
                 err!("requires date to format Monday-based week number")
             })?;
         let weekday = self
             .tm
             .weekday
-            .or_else(|| self.tm.to_date().ok().map(|d| d.weekday()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.weekday()),
+            )
             .ok_or_else(|| {
                 err!("requires date to format Monday-based week number")
             })?
@@ -729,7 +774,10 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let year = self
             .tm
             .year
-            .or_else(|| self.tm.to_date().ok().map(|d| d.year_ranged()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.year_ranged()),
+            )
             .ok_or_else(|| err!("requires date to format year"))?
             .get();
         ext.write_int(b'0', Some(4), year, self.wtr)
@@ -740,7 +788,10 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let year = self
             .tm
             .year
-            .or_else(|| self.tm.to_date().ok().map(|d| d.year_ranged()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.year_ranged()),
+            )
             .ok_or_else(|| err!("requires date to format year (2-digit)"))?
             .get();
         let year = year % 100;
@@ -752,7 +803,10 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let year = self
             .tm
             .year
-            .or_else(|| self.tm.to_date().ok().map(|d| d.year_ranged()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.year_ranged()),
+            )
             .ok_or_else(|| err!("requires date to format century (2-digit)"))?
             .get();
         let century = year / 100;
@@ -764,9 +818,15 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let year = self
             .tm
             .iso_week_year
-            .or_else(|| {
-                self.tm.to_date().ok().map(|d| d.iso_week_date().year_ranged())
-            })
+            .or_else(
+                #[inline(never)]
+                || {
+                    self.tm
+                        .to_date()
+                        .ok()
+                        .map(|d| d.iso_week_date().year_ranged())
+                },
+            )
             .ok_or_else(|| {
                 err!("requires date to format ISO 8601 week-based year")
             })?
@@ -779,9 +839,15 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let year = self
             .tm
             .iso_week_year
-            .or_else(|| {
-                self.tm.to_date().ok().map(|d| d.iso_week_date().year_ranged())
-            })
+            .or_else(
+                #[inline(never)]
+                || {
+                    self.tm
+                        .to_date()
+                        .ok()
+                        .map(|d| d.iso_week_date().year_ranged())
+                },
+            )
             .ok_or_else(|| {
                 err!(
                     "requires date to format \
@@ -798,7 +864,10 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         let month = self
             .tm
             .month
-            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.month_ranged()),
+            )
             .ok_or_else(|| err!("requires date to format quarter"))?
             .get();
         let quarter = match month {
@@ -817,7 +886,10 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
             .tm
             .day_of_year
             .map(|day| day.get())
-            .or_else(|| self.tm.to_date().ok().map(|d| d.day_of_year()))
+            .or_else(
+                #[inline(never)]
+                || self.tm.to_date().ok().map(|d| d.day_of_year()),
+            )
             .ok_or_else(|| err!("requires date to format day of year"))?;
         ext.write_int(b'0', Some(3), day, self.wtr)
     }
