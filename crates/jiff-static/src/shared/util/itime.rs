@@ -173,31 +173,40 @@ impl IEpochDay {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     #[allow(non_upper_case_globals, non_snake_case)] // to mimic source
     pub(crate) const fn to_date(&self) -> IDate {
-        const s: u32 = 82;
-        const K: u32 = 719468 + 146097 * s;
-        const L: u32 = 400 * s;
+        // Ported from:
+        // https://github.com/benjoffe/fast-date-benchmarks/blob/7fcf82b07d340ddbec866e15cfe333485439ab7f/algorithms/benjoffe_fast64.hpp#L73
 
-        let N_U = self.epoch_day as u32;
-        let N = N_U.wrapping_add(K);
+        const ERAS: u32 = 14704;
+        const D_SHIFT: u32 = 146097 * ERAS - 719469;
+        const Y_SHIFT: u32 = 400 * ERAS - 1;
+        const SCALE: u32 = 32;
+        const SHIFT_0: u32 = 30556 * SCALE;
+        const SHIFT_1: u32 = 5980 * SCALE;
+        const C1: u64 = 505054698555331; // floor(2^64*4/146097):
+        const C2: u64 = 50504432782230121; // ceil(2^64*4/1461):
+        const C3: u64 = 8619973866219416 * 32 / (SCALE as u64); // floor(2^64/2140):
 
-        let N_1 = 4 * N + 3;
-        let C = N_1 / 146097;
-        let N_C = (N_1 % 146097) / 4;
+        let day_number = self.epoch_day as u32;
+        let rev = D_SHIFT.wrapping_sub(day_number) as u64;
+        let cen = ((C1 as u128) * (rev as u128) >> 64) as u64;
+        let jul = rev - cen / 4 + cen;
 
-        let N_2 = 4 * N_C + 3;
-        let P_2 = 2939745 * (N_2 as u64);
-        let Z = (P_2 / 4294967296) as u32;
-        let N_Y = (P_2 % 4294967296) as u32 / 2939745 / 4;
-        let Y = 100 * C + Z;
+        let num = (C2 as u128) * (jul as u128);
+        let yrs = Y_SHIFT.wrapping_sub((num >> 64) as u32);
+        let low = num as u64;
+        let ypt = ((24451 * SCALE as u128) * (low as u128) >> 64) as u32;
 
-        let N_3 = 2141 * N_Y + 197913;
-        let M = N_3 / 65536;
-        let D = (N_3 % 65536) / 2141;
+        let bump = ypt < 3952 * SCALE;
+        let shift = if bump { SHIFT_1 } else { SHIFT_0 };
 
-        let J = N_Y >= 306;
-        let year = Y.wrapping_sub(L).wrapping_add(J as u32) as i16;
-        let month = (if J { M - 12 } else { M }) as i8;
+        let N = (yrs % 4) * (16 * SCALE) + shift - ypt;
+        let M = N / (2048 * SCALE);
+        let D = ((C3 as u128) * ((N % (2048 * SCALE)) as u128) >> 64) as u32;
+
+        let month = M as i8;
         let day = (D + 1) as i8;
+        let year = yrs.wrapping_add(bump as u32) as i16;
+
         IDate { year, month, day }
     }
 
@@ -351,26 +360,23 @@ impl IDate {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     #[allow(non_upper_case_globals, non_snake_case)] // to mimic source
     pub(crate) const fn to_epoch_day(&self) -> IEpochDay {
-        const s: u32 = 82;
-        const K: u32 = 719468 + 146097 * s;
-        const L: u32 = 400 * s;
+        // Ported from:
+        // https://github.com/benjoffe/fast-date-benchmarks/blob/7fcf82b07d340ddbec866e15cfe333485439ab7f/algorithms/benjoffe_fast64.hpp#L130
 
         let year = self.year as u32;
         let month = self.month as u32;
         let day = self.day as u32;
 
-        let J = month <= 2;
-        let Y = year.wrapping_add(L).wrapping_sub(J as u32);
-        let M = if J { month + 12 } else { month };
-        let D = day - 1;
-        let C = Y / 100;
+        let bump = month <= 2;
+        let yrs = year.wrapping_add(5880000).wrapping_sub(bump as u32);
+        let cen = yrs / 100;
+        let shift = if bump { 8829 } else { -2919 };
 
-        let y_star = 1461 * Y / 4 - C + C / 4;
-        let m_star = (979 * M - 2919) / 32;
-        let N = y_star + m_star + D;
+        let year_days = yrs * 365 + yrs / 4 - cen + cen / 4;
+        let month_days = ((979 * (month as i32) + shift) / 32) as u32;
+        let epoch_day =
+            (year_days + month_days + day).wrapping_sub(2148345369) as i32;
 
-        let N_U = N.wrapping_sub(K);
-        let epoch_day = N_U as i32;
         IEpochDay { epoch_day }
     }
 
