@@ -1571,18 +1571,20 @@ impl BrokenDownTime {
     /// ```
     #[inline]
     pub fn to_timestamp(&self) -> Result<Timestamp, Error> {
-        #[cold]
-        #[inline(never)]
-        fn fallback(tm: &BrokenDownTime) -> Result<Timestamp, Error> {
-            let dt =
-                tm.to_datetime().context(E::RequiredDateTimeForTimestamp)?;
-            let offset = tm.offset.ok_or(E::RequiredOffsetForTimestamp)?;
-            offset.to_timestamp(dt).context(E::RangeTimestamp)
-        }
+        // Previously, I had used this as the "fast path" and
+        // put the conversion code below into a cold unlineable
+        // function. But this "fast path" is actually the unusual
+        // case. It's rare to parse a timestamp (as an integer
+        // number of seconds since the Unix epoch) directly.
+        // So the code below, while bigger, is the common case.
+        // So it probably makes sense to keep it inlined.
         if let Some(timestamp) = self.timestamp() {
             return Ok(timestamp);
         }
-        fallback(self)
+        let dt =
+            self.to_datetime().context(E::RequiredDateTimeForTimestamp)?;
+        let offset = self.offset.ok_or(E::RequiredOffsetForTimestamp)?;
+        offset.to_timestamp(dt).context(E::RangeTimestamp)
     }
 
     /// Extracts a civil datetime from this broken down time.
@@ -1632,8 +1634,12 @@ impl BrokenDownTime {
     /// # Errors
     ///
     /// This returns an error if there weren't enough components to construct
-    /// a civil date. This means there must be at least a year and a way to
-    /// determine the day of the year.
+    /// a civil date, or if the components don't form into a valid date. This
+    /// means there must be at least a year and a way to determine the day of
+    /// the year.
+    ///
+    /// This will also return an error when there is a weekday component
+    /// set to a value inconsistent with the date returned.
     ///
     /// It's okay if there are more units than are needed to construct a civil
     /// datetime. For example, if this broken down time contains a civil time,
@@ -1696,12 +1702,22 @@ impl BrokenDownTime {
         // The common case is a simple Gregorian date.
         // We put the rest behind a non-inlineable function
         // to avoid code bloat for very uncommon cases.
-        let (Some(year), Some(month), Some(day), None) =
-            (self.year, self.month, self.day, self.weekday)
+        let (Some(year), Some(month), Some(day)) =
+            (self.year, self.month, self.day)
         else {
             return to_date(self);
         };
-        Ok(Date::new_ranged(year, month, day).context(E::InvalidDate)?)
+        let date =
+            Date::new_ranged(year, month, day).context(E::InvalidDate)?;
+        if let Some(weekday) = self.weekday {
+            if weekday != date.weekday() {
+                return Err(Error::from(E::MismatchWeekday {
+                    parsed: weekday,
+                    got: date.weekday(),
+                }));
+            }
+        }
+        Ok(date)
     }
 
     #[inline]
