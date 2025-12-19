@@ -2079,8 +2079,8 @@ impl BrokenDownTime {
     /// // An error only occurs when you try to extract a date:
     /// assert_eq!(
     ///     tm.to_date().unwrap_err().to_string(),
-    ///     "invalid date: day-of-year=366 is out of range \
-    ///      for year=2023, must be in range 1..=365",
+    ///     "invalid date: number of days for `2023` is invalid, \
+    ///      must be in range `1..=365`",
     /// );
     /// // But parsing a value that is always illegal will
     /// // result in an error:

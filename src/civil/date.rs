@@ -903,7 +903,9 @@ impl Date {
         let weekday = weekday.to_iweekday();
         let idate = self.to_idate_const();
         Ok(Date::from_idate_const(
-            idate.nth_weekday_of_month(nth, weekday).map_err(Error::shared)?,
+            idate
+                .nth_weekday_of_month(nth, weekday)
+                .map_err(Error::shared2)?,
         ))
     }
 
@@ -3189,13 +3191,13 @@ impl DateWith {
             Some(DateWithDay::OfYear(day)) => {
                 let year = year.get_unchecked();
                 let idate = IDate::from_day_of_year(year, day)
-                    .map_err(Error::shared)?;
+                    .map_err(Error::shared2)?;
                 return Ok(Date::from_idate_const(idate));
             }
             Some(DateWithDay::OfYearNoLeap(day)) => {
                 let year = year.get_unchecked();
                 let idate = IDate::from_day_of_year_no_leap(year, day)
-                    .map_err(Error::shared)?;
+                    .map_err(Error::shared2)?;
                 return Ok(Date::from_idate_const(idate));
             }
         };

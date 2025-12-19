@@ -502,6 +502,7 @@ impl PosixTimeZone<&'static str> {
 // Does not require `alloc`, but is only used when `alloc` is enabled.
 #[cfg(feature = "alloc")]
 pub(crate) mod crc32;
+pub(crate) mod error;
 pub(crate) mod posix;
 #[cfg(feature = "alloc")]
 pub(crate) mod tzif;

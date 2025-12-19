@@ -1,4 +1,9 @@
-use crate::{shared::util::error::Error as SharedError, util::sync::Arc};
+use crate::{
+    shared::{
+        error::Error as SharedError2, util::error::Error as SharedError,
+    },
+    util::sync::Arc,
+};
 
 pub(crate) mod civil;
 pub(crate) mod duration;
@@ -151,6 +156,11 @@ impl Error {
         Error::from(ErrorKind::Shared(err))
     }
 
+    /// Creates a new error from the special "shared" error type.
+    pub(crate) fn shared2(err: SharedError2) -> Error {
+        Error::from(ErrorKind::Shared2(err))
+    }
+
     /// A convenience constructor for building an I/O error.
     ///
     /// This returns an error that is just a simple wrapper around the
@@ -281,6 +291,7 @@ enum ErrorKind {
     Range(RangeError),
     RoundingIncrement(self::util::RoundingIncrementError),
     Shared(SharedError),
+    Shared2(SharedError2),
     SignedDuration(self::signed_duration::Error),
     SlimRange(SlimRangeError),
     Span(self::span::Error),
@@ -324,6 +335,7 @@ impl core::fmt::Display for ErrorKind {
             Range(ref err) => err.fmt(f),
             RoundingIncrement(ref err) => err.fmt(f),
             Shared(ref err) => err.fmt(f),
+            Shared2(ref err) => err.fmt(f),
             SignedDuration(ref err) => err.fmt(f),
             SlimRange(ref err) => err.fmt(f),
             Span(ref err) => err.fmt(f),

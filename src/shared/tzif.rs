@@ -230,8 +230,8 @@ impl TzifOwned {
                 let clamped = timestamp.clamp(TIMESTAMP_MIN, TIMESTAMP_MAX);
                 // only-jiff-start
                 warn!(
-                    "found Unix timestamp {timestamp} that is outside \
-                     Jiff's supported range, clamping to {clamped}",
+                    "found Unix timestamp `{timestamp}` that is outside \
+                     Jiff's supported range, clamping to `{clamped}`",
                 );
                 // only-jiff-end
                 timestamp = clamped;
@@ -378,7 +378,7 @@ impl TzifOwned {
             if !(TIMESTAMP_MIN <= occur && occur <= TIMESTAMP_MAX) {
                 // only-jiff-start
                 warn!(
-                    "leap second occurrence {occur} is \
+                    "leap second occurrence `{occur}` is \
                      not in Jiff's supported range"
                 )
                 // only-jiff-end
