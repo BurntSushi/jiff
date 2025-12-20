@@ -22,8 +22,6 @@ they are internal types. Specifically, to distinguish them from Jiff's public
 types. For example, `Date` versus `IDate`.
 */
 
-use crate::shared::error::{itime::Error as E, Error};
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub(crate) struct ITimestamp {
     pub(crate) second: i64,
@@ -141,13 +139,13 @@ impl IDateTime {
     pub(crate) fn checked_add_seconds(
         &self,
         seconds: i32,
-    ) -> Result<IDateTime, Error> {
+    ) -> Result<IDateTime, RangeError> {
         let day_second = self
             .time
             .to_second()
             .second
             .checked_add(seconds)
-            .ok_or_else(|| Error::from(E::DateTimeSeconds))?;
+            .ok_or_else(|| RangeError::DateTimeSeconds)?;
         let days = day_second.div_euclid(86400);
         let second = day_second.rem_euclid(86400);
         let date = self.date.checked_add_days(days)?;
@@ -219,14 +217,17 @@ impl IEpochDay {
     /// If this would overflow an `i32` or result in an out-of-bounds epoch
     /// day, then this returns an error.
     #[inline]
-    pub(crate) fn checked_add(&self, amount: i32) -> Result<IEpochDay, Error> {
+    pub(crate) fn checked_add(
+        &self,
+        amount: i32,
+    ) -> Result<IEpochDay, RangeError> {
         let epoch_day = self.epoch_day;
         let sum = epoch_day
             .checked_add(amount)
-            .ok_or_else(|| Error::from(E::EpochDayI32))?;
+            .ok_or_else(|| RangeError::EpochDayI32)?;
         let ret = IEpochDay { epoch_day: sum };
         if !(IEpochDay::MIN <= ret && ret <= IEpochDay::MAX) {
-            return Err(Error::from(E::EpochDayDays));
+            return Err(RangeError::EpochDayDays);
         }
         Ok(ret)
     }
@@ -254,11 +255,11 @@ impl IDate {
         year: i16,
         month: i8,
         day: i8,
-    ) -> Result<IDate, Error> {
+    ) -> Result<IDate, RangeError> {
         if day > 28 {
             let max_day = days_in_month(year, month);
             if day > max_day {
-                return Err(Error::from(E::DateInvalidDays { year, month }));
+                return Err(RangeError::DateInvalidDays { year, month });
             }
         }
         Ok(IDate { year, month, day })
@@ -274,21 +275,22 @@ impl IDate {
     pub(crate) fn from_day_of_year(
         year: i16,
         day: i16,
-    ) -> Result<IDate, Error> {
+    ) -> Result<IDate, RangeError> {
         if !(1 <= day && day <= 366) {
-            return Err(Error::from(E::DateInvalidDayOfYear { year }));
+            return Err(RangeError::DateInvalidDayOfYear { year });
         }
         let start = IDate { year, month: 1, day: 1 }.to_epoch_day();
         let end = start
             .checked_add(i32::from(day) - 1)
-            .map_err(|_| Error::from(E::DayOfYear))?
+            // This can only happen when `year=9999` and `day=366`.
+            .map_err(|_| RangeError::DayOfYear)?
             .to_date();
         // If we overflowed into the next year, then `day` is too big.
         if year != end.year {
             // Can only happen given day=366 and this is a leap year.
             debug_assert_eq!(day, 366);
             debug_assert!(!is_leap_year(year));
-            return Err(Error::from(E::DateInvalidDayOfYear { year }));
+            return Err(RangeError::DateInvalidDayOfYear { year });
         }
         Ok(end)
     }
@@ -304,9 +306,9 @@ impl IDate {
     pub(crate) fn from_day_of_year_no_leap(
         year: i16,
         mut day: i16,
-    ) -> Result<IDate, Error> {
+    ) -> Result<IDate, RangeError> {
         if !(1 <= day && day <= 365) {
-            return Err(Error::from(E::DateInvalidDayOfYearNoLeap));
+            return Err(RangeError::DateInvalidDayOfYearNoLeap);
         }
         if day >= 60 && is_leap_year(year) {
             day += 1;
@@ -364,9 +366,9 @@ impl IDate {
         &self,
         nth: i8,
         weekday: IWeekday,
-    ) -> Result<IDate, Error> {
+    ) -> Result<IDate, RangeError> {
         if nth == 0 || !(-5 <= nth && nth <= 5) {
-            return Err(Error::from(E::NthWeekdayOfMonth));
+            return Err(RangeError::NthWeekdayOfMonth);
         }
         if nth > 0 {
             let first_weekday = self.first_of_month().weekday();
@@ -383,10 +385,10 @@ impl IDate {
             // of `Day`, we can't let this boundary condition escape. So we
             // check it here.
             if day < 1 {
-                return Err(Error::from(E::DateInvalidDays {
+                return Err(RangeError::DateInvalidDays {
                     year: self.year,
                     month: self.month,
-                }));
+                });
             }
             IDate::try_new(self.year, self.month, day)
         }
@@ -394,12 +396,12 @@ impl IDate {
 
     /// Returns the day before this date.
     #[inline]
-    pub(crate) fn yesterday(self) -> Result<IDate, Error> {
+    pub(crate) fn yesterday(self) -> Result<IDate, RangeError> {
         if self.day == 1 {
             if self.month == 1 {
                 let year = self.year - 1;
                 if year <= -10000 {
-                    return Err(Error::from(E::Yesterday));
+                    return Err(RangeError::Yesterday);
                 }
                 return Ok(IDate { year, month: 12, day: 31 });
             }
@@ -412,12 +414,12 @@ impl IDate {
 
     /// Returns the day after this date.
     #[inline]
-    pub(crate) fn tomorrow(self) -> Result<IDate, Error> {
+    pub(crate) fn tomorrow(self) -> Result<IDate, RangeError> {
         if self.day >= 28 && self.day == days_in_month(self.year, self.month) {
             if self.month == 12 {
                 let year = self.year + 1;
                 if year >= 10000 {
-                    return Err(Error::from(E::Tomorrow));
+                    return Err(RangeError::Tomorrow);
                 }
                 return Ok(IDate { year, month: 1, day: 1 });
             }
@@ -429,20 +431,20 @@ impl IDate {
 
     /// Returns the year one year before this date.
     #[inline]
-    pub(crate) fn prev_year(self) -> Result<i16, Error> {
+    pub(crate) fn prev_year(self) -> Result<i16, RangeError> {
         let year = self.year - 1;
         if year <= -10_000 {
-            return Err(Error::from(E::YearPrevious));
+            return Err(RangeError::YearPrevious);
         }
         Ok(year)
     }
 
     /// Returns the year one year from this date.
     #[inline]
-    pub(crate) fn next_year(self) -> Result<i16, Error> {
+    pub(crate) fn next_year(self) -> Result<i16, RangeError> {
         let year = self.year + 1;
         if year >= 10_000 {
-            return Err(Error::from(E::YearNext));
+            return Err(RangeError::YearNext);
         }
         Ok(year)
     }
@@ -452,7 +454,7 @@ impl IDate {
     pub(crate) fn checked_add_days(
         &self,
         amount: i32,
-    ) -> Result<IDate, Error> {
+    ) -> Result<IDate, RangeError> {
         match amount {
             0 => Ok(*self),
             -1 => self.yesterday(),
@@ -664,6 +666,84 @@ pub(crate) enum IAmbiguousOffset {
     Fold { before: IOffset, after: IOffset },
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum RangeError {
+    DateInvalidDayOfYear { year: i16 },
+    DateInvalidDayOfYearNoLeap,
+    DateInvalidDays { year: i16, month: i8 },
+    DateTimeSeconds,
+    DayOfYear,
+    EpochDayDays,
+    EpochDayI32,
+    NthWeekdayOfMonth,
+    Tomorrow,
+    YearNext,
+    YearPrevious,
+    Yesterday,
+}
+
+impl core::fmt::Display for RangeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use self::RangeError::*;
+
+        match *self {
+            DateInvalidDayOfYear { year } => write!(
+                f,
+                "number of days for `{year:04}` is invalid, \
+                 must be in range `1..={max_day}`",
+                max_day = days_in_year(year),
+            ),
+            DateInvalidDayOfYearNoLeap => f.write_str(
+                "number of days is invalid, must be in range `1..=365`",
+            ),
+            DateInvalidDays { year, month } => write!(
+                f,
+                "number of days for `{year:04}-{month:02}` is invalid, \
+                 must be in range `1..={max_day}`",
+                max_day = days_in_month(year, month),
+            ),
+            DateTimeSeconds => {
+                f.write_str("adding seconds to datetime overflowed")
+            }
+            DayOfYear => f.write_str("day of year is invalid"),
+            EpochDayDays => write!(
+                f,
+                "adding to epoch day resulted in a value outside \
+                 the allowed range of `{min}..={max}`",
+                min = IEpochDay::MIN.epoch_day,
+                max = IEpochDay::MAX.epoch_day,
+            ),
+            EpochDayI32 => f.write_str(
+                "adding to epoch day overflowed 32-bit signed integer",
+            ),
+            NthWeekdayOfMonth => f.write_str(
+                "invalid nth weekday of month, \
+                 must be non-zero and in range `-5..=5`",
+            ),
+            Tomorrow => f.write_str(
+                "returning tomorrow for `9999-12-31` is not \
+                 possible because it is greater than Jiff's supported
+                 maximum date",
+            ),
+            YearNext => f.write_str(
+                "creating a date for a year following `9999` is \
+                 not possible because it is greater than Jiff's supported \
+                 maximum date",
+            ),
+            YearPrevious => f.write_str(
+                "creating a date for a year preceding `-9999` is \
+                 not possible because it is less than Jiff's supported \
+                 minimum date",
+            ),
+            Yesterday => f.write_str(
+                "returning yesterday for `-9999-01-01` is not \
+                 possible because it is less than Jiff's supported
+                 minimum date",
+            ),
+        }
+    }
+}
+
 /// Returns true if and only if the given year is a leap year.
 ///
 /// A leap year is a year with 366 days. Typical years have 365 days.
@@ -865,5 +945,21 @@ mod tests {
 
         let d1 = IDate { year: 9999, month: 12, day: 31 };
         assert_eq!(d1.tomorrow().ok(), None);
+    }
+
+    #[test]
+    fn from_day_of_year() {
+        assert_eq!(
+            IDate::from_day_of_year(9999, 365),
+            Ok(IDate { year: 9999, month: 12, day: 31 }),
+        );
+        assert_eq!(
+            IDate::from_day_of_year(9998, 366),
+            Err(RangeError::DateInvalidDayOfYear { year: 9998 }),
+        );
+        assert_eq!(
+            IDate::from_day_of_year(9999, 366),
+            Err(RangeError::DayOfYear),
+        );
     }
 }

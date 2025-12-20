@@ -474,7 +474,6 @@ pub struct PosixOffset {
 
 // Does not require `alloc`, but is only used when `alloc` is enabled.
 pub(crate) mod crc32;
-pub(crate) mod error;
 pub(crate) mod posix;
 pub(crate) mod tzif;
 pub(crate) mod util;

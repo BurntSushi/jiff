@@ -1,4 +1,4 @@
-use crate::{shared::error::Error as SharedError2, util::sync::Arc};
+use crate::util::sync::Arc;
 
 pub(crate) mod civil;
 pub(crate) mod duration;
@@ -147,8 +147,10 @@ impl Error {
     }
 
     /// Creates a new error from the special "shared" error type.
-    pub(crate) fn shared2(err: SharedError2) -> Error {
-        Error::from(ErrorKind::Shared2(err))
+    pub(crate) fn itime_range(
+        err: crate::shared::util::itime::RangeError,
+    ) -> Error {
+        Error::from(ErrorKind::ITimeRange(err))
     }
 
     /// Creates a new error from the special TZif error type.
@@ -288,13 +290,13 @@ enum ErrorKind {
     FmtStrtimeParse(self::fmt::strtime::ParseError),
     #[allow(dead_code)] // not used in some feature configs
     IO(IOError),
+    ITimeRange(crate::shared::util::itime::RangeError),
     OsStrUtf8(self::util::OsStrUtf8Error),
     ParseInt(self::util::ParseIntError),
     ParseFraction(self::util::ParseFractionError),
     PosixTz(crate::shared::posix::PosixTimeZoneError),
     Range(RangeError),
     RoundingIncrement(self::util::RoundingIncrementError),
-    Shared2(SharedError2),
     SignedDuration(self::signed_duration::Error),
     SlimRange(SlimRangeError),
     Span(self::span::Error),
@@ -334,13 +336,13 @@ impl core::fmt::Display for ErrorKind {
             FmtStrtimeParse(ref err) => err.fmt(f),
             FmtTemporal(ref err) => err.fmt(f),
             IO(ref err) => err.fmt(f),
+            ITimeRange(ref err) => err.fmt(f),
             OsStrUtf8(ref err) => err.fmt(f),
             ParseInt(ref err) => err.fmt(f),
             ParseFraction(ref err) => err.fmt(f),
             PosixTz(ref err) => err.fmt(f),
             Range(ref err) => err.fmt(f),
             RoundingIncrement(ref err) => err.fmt(f),
-            Shared2(ref err) => err.fmt(f),
             SignedDuration(ref err) => err.fmt(f),
             SlimRange(ref err) => err.fmt(f),
             Span(ref err) => err.fmt(f),
