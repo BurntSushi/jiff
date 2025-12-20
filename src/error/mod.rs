@@ -161,6 +161,11 @@ impl Error {
         Error::from(ErrorKind::Shared2(err))
     }
 
+    /// Creates a new error from the special TZif error type.
+    pub(crate) fn tzif(err: crate::shared::tzif::TzifError) -> Error {
+        Error::from(ErrorKind::Tzif(err))
+    }
+
     /// A convenience constructor for building an I/O error.
     ///
     /// This returns an error that is just a simple wrapper around the
@@ -305,6 +310,7 @@ enum ErrorKind {
     TzTimeZone(self::tz::timezone::Error),
     #[allow(dead_code)]
     TzZic(self::tz::zic::Error),
+    Tzif(crate::shared::tzif::TzifError),
     Unknown,
     Zoned(self::zoned::Error),
 }
@@ -348,6 +354,7 @@ impl core::fmt::Display for ErrorKind {
             TzSystem(ref err) => err.fmt(f),
             TzTimeZone(ref err) => err.fmt(f),
             TzZic(ref err) => err.fmt(f),
+            Tzif(ref err) => err.fmt(f),
             Unknown => f.write_str("unknown jiff error"),
             Zoned(ref err) => err.fmt(f),
         }

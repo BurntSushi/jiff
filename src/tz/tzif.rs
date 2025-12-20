@@ -157,8 +157,7 @@ impl TzifOwned {
         name: Option<String>,
         bytes: &[u8],
     ) -> Result<Self, Error> {
-        let sh =
-            shared::TzifOwned::parse(name, bytes).map_err(Error::shared)?;
+        let sh = shared::TzifOwned::parse(name, bytes).map_err(Error::tzif)?;
         Ok(TzifOwned::from_shared_owned(sh))
     }
 
