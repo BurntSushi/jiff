@@ -342,12 +342,11 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
 
 impl<ABBREV: AsRef<str>> core::fmt::Display for PosixTimeZone<ABBREV> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(
+        core::fmt::Display::fmt(
+            &AbbreviationDisplay(self.std_abbrev.as_ref()),
             f,
-            "{}{}",
-            AbbreviationDisplay(self.std_abbrev.as_ref()),
-            self.std_offset
         )?;
+        core::fmt::Display::fmt(&self.std_offset, f)?;
         if let Some(ref dst) = self.dst {
             dst.display(&self.std_offset, f)?;
         }
@@ -361,22 +360,29 @@ impl<ABBREV: AsRef<str>> PosixDst<ABBREV> {
         std_offset: &PosixOffset,
         f: &mut core::fmt::Formatter,
     ) -> core::fmt::Result {
-        write!(f, "{}", AbbreviationDisplay(self.abbrev.as_ref()))?;
+        core::fmt::Display::fmt(
+            &AbbreviationDisplay(self.abbrev.as_ref()),
+            f,
+        )?;
         // The overwhelming common case is that DST is exactly one hour ahead
         // of standard time. So common that this is the default. So don't write
         // the offset if we don't need to.
         let default = PosixOffset { second: std_offset.second + 3600 };
         if self.offset != default {
-            write!(f, "{}", self.offset)?;
+            core::fmt::Display::fmt(&self.offset, f)?;
         }
-        write!(f, ",{}", self.rule)?;
+        f.write_str(",")?;
+        core::fmt::Display::fmt(&self.rule, f)?;
         Ok(())
     }
 }
 
 impl core::fmt::Display for PosixRule {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{},{}", self.start, self.end)
+        core::fmt::Display::fmt(&self.start, f)?;
+        f.write_str(",")?;
+        core::fmt::Display::fmt(&self.end, f)?;
+        Ok(())
     }
 }
 
@@ -427,11 +433,12 @@ impl PosixDayTime {
 
 impl core::fmt::Display for PosixDayTime {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{}", self.date)?;
+        core::fmt::Display::fmt(&self.date, f)?;
         // This is the default time, so don't write it if we
         // don't need to.
         if self.time != PosixTime::DEFAULT {
-            write!(f, "/{}", self.time)?;
+            f.write_str("/")?;
+            core::fmt::Display::fmt(&self.time, f)?;
         }
         Ok(())
     }
@@ -499,10 +506,19 @@ impl PosixDay {
 impl core::fmt::Display for PosixDay {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match *self {
-            PosixDay::JulianOne(n) => write!(f, "J{n}"),
-            PosixDay::JulianZero(n) => write!(f, "{n}"),
+            PosixDay::JulianOne(n) => {
+                f.write_str("J")?;
+                core::fmt::Display::fmt(&n, f)
+            }
+            PosixDay::JulianZero(n) => core::fmt::Display::fmt(&n, f),
             PosixDay::WeekdayOfMonth { month, week, weekday } => {
-                write!(f, "M{month}.{week}.{weekday}")
+                f.write_str("M")?;
+                core::fmt::Display::fmt(&month, f)?;
+                f.write_str(".")?;
+                core::fmt::Display::fmt(&week, f)?;
+                f.write_str(".")?;
+                core::fmt::Display::fmt(&weekday, f)?;
+                Ok(())
             }
         }
     }
@@ -515,7 +531,7 @@ impl PosixTime {
 impl core::fmt::Display for PosixTime {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if self.second.is_negative() {
-            write!(f, "-")?;
+            f.write_str("-")?;
             // The default is positive, so when
             // positive, we write nothing.
         }
@@ -523,7 +539,7 @@ impl core::fmt::Display for PosixTime {
         let h = second / 3600;
         let m = (second / 60) % 60;
         let s = second % 60;
-        write!(f, "{h}")?;
+        core::fmt::Display::fmt(&h, f)?;
         if m != 0 || s != 0 {
             write!(f, ":{m:02}")?;
             if s != 0 {
@@ -546,13 +562,13 @@ impl core::fmt::Display for PosixOffset {
         // N.B. `+` is the default, so we don't
         // need to write that out.
         if self.second > 0 {
-            write!(f, "-")?;
+            f.write_str("-")?;
         }
         let second = self.second.unsigned_abs();
         let h = second / 3600;
         let m = (second / 60) % 60;
         let s = second % 60;
-        write!(f, "{h}")?;
+        core::fmt::Display::fmt(&h, f)?;
         if m != 0 || s != 0 {
             write!(f, ":{m:02}")?;
             if s != 0 {
@@ -574,9 +590,11 @@ impl<S: AsRef<str>> core::fmt::Display for AbbreviationDisplay<S> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         let s = self.0.as_ref();
         if s.chars().any(|ch| ch == '+' || ch == '-') {
-            write!(f, "<{s}>")
+            f.write_str("<")?;
+            core::fmt::Display::fmt(&s, f)?;
+            f.write_str(">")
         } else {
-            write!(f, "{s}")
+            core::fmt::Display::fmt(&s, f)
         }
     }
 }
