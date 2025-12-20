@@ -1577,10 +1577,8 @@ impl<'s> Parser<'s> {
     }
 }
 
-// Tests require parsing, and parsing requires alloc.
 #[cfg(test)]
 mod tests {
-    use alloc::string::ToString;
 
     use super::*;
 
@@ -1589,21 +1587,25 @@ mod tests {
     ) -> PosixTimeZone<Abbreviation> {
         let input = input.as_ref();
         let tz = PosixTimeZone::parse(input).unwrap();
-        // While we're here, assert that converting the TZ back
-        // to a string matches what we got. In the original version
-        // of the POSIX TZ parser, we were very meticulous about
-        // capturing the exact AST of the time zone. But I've
-        // since simplified the data structure considerably such
-        // that it is lossy in terms of what was actually parsed
-        // (but of course, not lossy in terms of the semantic
-        // meaning of the time zone).
-        //
-        // So to account for this, we serialize to a string and
-        // then parse it back. We should get what we started with.
-        let reparsed =
-            PosixTimeZone::parse(tz.to_string().as_bytes()).unwrap();
-        assert_eq!(tz, reparsed);
-        assert_eq!(tz.to_string(), reparsed.to_string());
+        {
+            use alloc::string::ToString;
+
+            // While we're here, assert that converting the TZ back
+            // to a string matches what we got. In the original version
+            // of the POSIX TZ parser, we were very meticulous about
+            // capturing the exact AST of the time zone. But I've
+            // since simplified the data structure considerably such
+            // that it is lossy in terms of what was actually parsed
+            // (but of course, not lossy in terms of the semantic
+            // meaning of the time zone).
+            //
+            // So to account for this, we serialize to a string and
+            // then parse it back. We should get what we started with.
+            let reparsed =
+                PosixTimeZone::parse(tz.to_string().as_bytes()).unwrap();
+            assert_eq!(tz, reparsed);
+            assert_eq!(tz.to_string(), reparsed.to_string());
+        }
         tz
     }
 
