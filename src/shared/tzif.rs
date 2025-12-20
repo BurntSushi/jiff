@@ -3,8 +3,6 @@ use alloc::{string::String, vec};
 use super::{
     util::{
         array_str::Abbreviation,
-        error::{err, Error},
-        escape::{Byte, Bytes},
         itime::{IOffset, ITimestamp},
     },
     PosixTimeZone, TzifDateTime, TzifFixed, TzifIndicator, TzifLocalTimeType,
@@ -57,7 +55,7 @@ const FATTEN_UP_TO_YEAR: i16 = 2038;
 //
 // For "normal" cases, there should be at most two transitions per
 // year. So this limit permits 300/2=150 years of transition data.
-// (Although we won't go above 2036. See above.)
+// (Although we won't go above `FATTEN_UP_TO_YEAR`. See above.)
 const FATTEN_MAX_TRANSITIONS: usize = 300;
 
 impl TzifOwned {
@@ -78,11 +76,11 @@ impl TzifOwned {
     pub(crate) fn parse(
         name: Option<String>,
         bytes: &[u8],
-    ) -> Result<TzifOwned, Error> {
+    ) -> Result<TzifOwned, TzifError> {
         let original = bytes;
         let name = name.into();
-        let (header32, rest) = Header::parse(4, bytes)
-            .map_err(|e| err!("failed to parse 32-bit header: {e}"))?;
+        let (header32, rest) =
+            Header::parse(4, bytes).map_err(TzifErrorKind::Header32)?;
         let (mut tzif, rest) = if header32.version == 0 {
             TzifOwned::parse32(name, header32, rest)?
         } else {
@@ -115,7 +113,7 @@ impl TzifOwned {
         name: Option<String>,
         header32: Header,
         bytes: &'b [u8],
-    ) -> Result<(TzifOwned, &'b [u8]), Error> {
+    ) -> Result<(TzifOwned, &'b [u8]), TzifError> {
         let mut tzif = TzifOwned {
             fixed: TzifFixed {
                 name,
@@ -146,14 +144,11 @@ impl TzifOwned {
         name: Option<String>,
         header32: Header,
         bytes: &'b [u8],
-    ) -> Result<(TzifOwned, &'b [u8]), Error> {
-        let (_, rest) = try_split_at(
-            "V1 TZif data block",
-            bytes,
-            header32.data_block_len()?,
-        )?;
-        let (header64, rest) = Header::parse(8, rest)
-            .map_err(|e| err!("failed to parse 64-bit header: {e}"))?;
+    ) -> Result<(TzifOwned, &'b [u8]), TzifError> {
+        let (_, rest) =
+            try_split_at(SplitAtError::V1, bytes, header32.data_block_len()?)?;
+        let (header64, rest) =
+            Header::parse(8, rest).map_err(TzifErrorKind::Header64)?;
         let mut tzif = TzifOwned {
             fixed: TzifFixed {
                 name,
@@ -188,9 +183,9 @@ impl TzifOwned {
         &mut self,
         header: &Header,
         bytes: &'b [u8],
-    ) -> Result<&'b [u8], Error> {
+    ) -> Result<&'b [u8], TzifError> {
         let (bytes, rest) = try_split_at(
-            "transition times data block",
+            SplitAtError::TransitionTimes,
             bytes,
             header.transition_times_len()?,
         )?;
@@ -246,21 +241,17 @@ impl TzifOwned {
         &mut self,
         header: &Header,
         bytes: &'b [u8],
-    ) -> Result<&'b [u8], Error> {
+    ) -> Result<&'b [u8], TransitionTypeError> {
         let (bytes, rest) = try_split_at(
-            "transition types data block",
+            SplitAtError::TransitionTypes,
             bytes,
-            header.transition_types_len()?,
+            header.transition_types_len(),
         )?;
         // We skip the first transition because it is our minimum dummy
         // transition.
         for (transition_index, &type_index) in (1..).zip(bytes) {
             if usize::from(type_index) >= header.tzh_typecnt {
-                return Err(err!(
-                    "found transition type index {type_index},
-                     but there are only {} local time types",
-                    header.tzh_typecnt,
-                ));
+                return Err(TransitionTypeError::ExceedsLocalTimeTypes);
             }
             self.transitions.infos[transition_index].type_index = type_index;
         }
@@ -271,9 +262,9 @@ impl TzifOwned {
         &mut self,
         header: &Header,
         bytes: &'b [u8],
-    ) -> Result<&'b [u8], Error> {
+    ) -> Result<&'b [u8], TzifError> {
         let (bytes, rest) = try_split_at(
-            "local time types data block",
+            SplitAtError::LocalTimeTypes,
             bytes,
             header.local_time_types_len()?,
         )?;
@@ -281,8 +272,8 @@ impl TzifOwned {
         while let Some(chunk) = it.next() {
             let offset = from_be_bytes_i32(&chunk[..4]);
             if !(OFFSET_MIN <= offset && offset <= OFFSET_MAX) {
-                return Err(err!(
-                    "found local time type with out-of-bounds offset: {offset}"
+                return Err(TzifError::from(
+                    LocalTimeTypeError::InvalidOffset { offset },
                 ));
             }
             let is_dst = chunk[4] == 1;
@@ -302,49 +293,30 @@ impl TzifOwned {
         &mut self,
         header: &Header,
         bytes: &'b [u8],
-    ) -> Result<&'b [u8], Error> {
+    ) -> Result<&'b [u8], TimeZoneDesignatorError> {
         let (bytes, rest) = try_split_at(
-            "time zone designations data block",
+            SplitAtError::TimeZoneDesignations,
             bytes,
-            header.time_zone_designations_len()?,
+            header.time_zone_designations_len(),
         )?;
-        self.fixed.designations =
-            String::from_utf8(bytes.to_vec()).map_err(|_| {
-                err!(
-                    "time zone designations are not valid UTF-8: {:?}",
-                    Bytes(bytes),
-                )
-            })?;
+        self.fixed.designations = String::from_utf8(bytes.to_vec())
+            .map_err(|_| TimeZoneDesignatorError::InvalidUtf8)?;
         // Holy hell, this is brutal. The boundary conditions are crazy.
-        for (i, typ) in self.types.iter_mut().enumerate() {
+        for typ in self.types.iter_mut() {
             let start = usize::from(typ.designation.0);
-            let Some(suffix) = self.fixed.designations.get(start..) else {
-                return Err(err!(
-                    "local time type {i} has designation index of {start}, \
-                     but cannot be more than {}",
-                    self.fixed.designations.len(),
-                ));
-            };
-            let Some(len) = suffix.find('\x00') else {
-                return Err(err!(
-                    "local time type {i} has designation index of {start}, \
-                     but could not find NUL terminator after it in \
-                     designations: {:?}",
-                    self.fixed.designations,
-                ));
-            };
-            let Some(end) = start.checked_add(len) else {
-                return Err(err!(
-                    "local time type {i} has designation index of {start}, \
-                     but its length {len} is too big",
-                ));
-            };
-            typ.designation.1 = u8::try_from(end).map_err(|_| {
-                err!(
-                    "local time type {i} has designation range of \
-                     {start}..{end}, but end is too big",
-                )
-            })?;
+            let suffix = self
+                .fixed
+                .designations
+                .get(start..)
+                .ok_or(TimeZoneDesignatorError::InvalidStart)?;
+            let len = suffix
+                .find('\x00')
+                .ok_or(TimeZoneDesignatorError::MissingNul)?;
+            let end = start
+                .checked_add(len)
+                .ok_or(TimeZoneDesignatorError::InvalidLength)?;
+            typ.designation.1 = u8::try_from(end)
+                .map_err(|_| TimeZoneDesignatorError::InvalidEnd)?;
         }
         Ok(rest)
     }
@@ -357,9 +329,9 @@ impl TzifOwned {
         &mut self,
         header: &Header,
         bytes: &'b [u8],
-    ) -> Result<&'b [u8], Error> {
+    ) -> Result<&'b [u8], TzifError> {
         let (bytes, rest) = try_split_at(
-            "leap seconds data block",
+            SplitAtError::LeapSeconds,
             bytes,
             header.leap_second_len()?,
         )?;
@@ -392,16 +364,16 @@ impl TzifOwned {
         &mut self,
         header: &Header,
         bytes: &'b [u8],
-    ) -> Result<&'b [u8], Error> {
+    ) -> Result<&'b [u8], IndicatorError> {
         let (std_wall_bytes, rest) = try_split_at(
-            "standard/wall indicators data block",
+            SplitAtError::StandardWallIndicators,
             bytes,
-            header.standard_wall_len()?,
+            header.standard_wall_len(),
         )?;
         let (ut_local_bytes, rest) = try_split_at(
-            "UT/local indicators data block",
+            SplitAtError::UTLocalIndicators,
             rest,
-            header.ut_local_len()?,
+            header.ut_local_len(),
         )?;
         if std_wall_bytes.is_empty() && !ut_local_bytes.is_empty() {
             // This is a weird case, but technically possible only if all
@@ -409,14 +381,8 @@ impl TzifOwned {
             // because it would require the corresponding std/wall indicator
             // to be 1 too. Which it can't be, because there aren't any. So
             // we just check that they're all zeros.
-            for (i, &byte) in ut_local_bytes.iter().enumerate() {
-                if byte != 0 {
-                    return Err(err!(
-                        "found UT/local indicator '{byte}' for local time \
-                         type {i}, but it must be 0 since all std/wall \
-                         indicators are 0",
-                    ));
-                }
+            if ut_local_bytes.iter().any(|&byte| byte != 0) {
+                return Err(IndicatorError::UtLocalNonZero);
             }
         } else if !std_wall_bytes.is_empty() && ut_local_bytes.is_empty() {
             for (i, &byte) in std_wall_bytes.iter().enumerate() {
@@ -427,10 +393,7 @@ impl TzifOwned {
                 } else if byte == 1 {
                     TzifIndicator::LocalStandard
                 } else {
-                    return Err(err!(
-                        "found invalid std/wall indicator '{byte}' for \
-                         local time type {i}, it must be 0 or 1",
-                    ));
+                    return Err(IndicatorError::InvalidStdWallIndicator);
                 };
             }
         } else if !std_wall_bytes.is_empty() && !ut_local_bytes.is_empty() {
@@ -444,18 +407,9 @@ impl TzifOwned {
                     (1, 0) => TzifIndicator::LocalStandard,
                     (1, 1) => TzifIndicator::UTStandard,
                     (0, 1) => {
-                        return Err(err!(
-                            "found illegal ut-wall combination for \
-                             local time type {i}, only local-wall, \
-                             local-standard and ut-standard are allowed",
-                        ))
+                        return Err(IndicatorError::InvalidUtWallCombination);
                     }
-                    _ => {
-                        return Err(err!(
-                            "found illegal std/wall or ut/local value for \
-                             local time type {i}, each must be 0 or 1",
-                        ))
-                    }
+                    _ => return Err(IndicatorError::InvalidCombination),
                 };
             }
         } else {
@@ -472,42 +426,31 @@ impl TzifOwned {
         &mut self,
         _header: &Header,
         bytes: &'b [u8],
-    ) -> Result<&'b [u8], Error> {
+    ) -> Result<&'b [u8], FooterError> {
         if bytes.is_empty() {
-            return Err(err!(
-                "invalid V2+ TZif footer, expected \\n, \
-                 but found unexpected end of data",
-            ));
+            return Err(FooterError::UnexpectedEnd);
         }
         if bytes[0] != b'\n' {
-            return Err(err!(
-                "invalid V2+ TZif footer, expected {:?}, but found {:?}",
-                Byte(b'\n'),
-                Byte(bytes[0]),
-            ));
+            return Err(FooterError::MismatchEnd);
         }
         let bytes = &bytes[1..];
         // Only scan up to 1KB for a NUL terminator in case we somehow got
         // passed a huge block of bytes.
         let toscan = &bytes[..bytes.len().min(1024)];
-        let Some(nlat) = toscan.iter().position(|&b| b == b'\n') else {
-            return Err(err!(
-                "invalid V2 TZif footer, could not find {:?} \
-                 terminator in: {:?}",
-                Byte(b'\n'),
-                Bytes(toscan),
-            ));
-        };
+        let nlat = toscan
+            .iter()
+            .position(|&b| b == b'\n')
+            .ok_or(FooterError::TerminatorNotFound)?;
         let (bytes, rest) = bytes.split_at(nlat);
         if !bytes.is_empty() {
             // We could in theory limit TZ strings to their strict POSIX
             // definition here for TZif V2, but I don't think there is any
             // harm in allowing the extensions in V2 formatted TZif data. Note
-            // that the GNU tooling allow it via the `TZ` environment variable
+            // that GNU tooling allows it via the `TZ` environment variable
             // even though POSIX doesn't specify it. This all seems okay to me
             // because the V3+ extension is a strict superset of functionality.
-            let posix_tz =
-                PosixTimeZone::parse(bytes).map_err(|e| err!("{e}"))?;
+            let posix_tz = PosixTimeZone::parse(bytes)
+                .map_err(FooterError::InvalidPosixTz)?;
             self.fixed.posix_tz = Some(posix_tz);
         }
         Ok(&rest[1..])
@@ -520,7 +463,9 @@ impl TzifOwned {
     /// RFC 8536 says, "If the string is nonempty and one or more
     /// transitions appear in the version 2+ data, the string MUST be
     /// consistent with the last version 2+ transition."
-    fn verify_posix_time_zone_consistency(&self) -> Result<(), Error> {
+    fn verify_posix_time_zone_consistency(
+        &self,
+    ) -> Result<(), InconsistentPosixTimeZoneError> {
         // We need to be a little careful, since we always have at least one
         // transition (accounting for the dummy `Timestamp::MIN` transition).
         // So if we only have 1 transition and a POSIX TZ string, then we
@@ -547,35 +492,13 @@ impl TzifOwned {
         let (ioff, abbrev, is_dst) =
             tz.to_offset_info(ITimestamp::from_second(*last));
         if ioff.second != typ.offset {
-            return Err(err!(
-                "expected last transition to have DST offset \
-                 of {expected_offset}, but got {got_offset} \
-                 according to POSIX TZ string {tz}",
-                expected_offset = typ.offset,
-                got_offset = ioff.second,
-                tz = tz,
-            ));
+            return Err(InconsistentPosixTimeZoneError::Offset);
         }
         if is_dst != typ.is_dst {
-            return Err(err!(
-                "expected last transition to have is_dst={expected_dst}, \
-                 but got is_dst={got_dst} according to POSIX TZ \
-                 string {tz}",
-                expected_dst = typ.is_dst,
-                got_dst = is_dst,
-                tz = tz,
-            ));
+            return Err(InconsistentPosixTimeZoneError::Dst);
         }
         if abbrev != self.designation(&typ) {
-            return Err(err!(
-                "expected last transition to have \
-                 designation={expected_abbrev}, \
-                 but got designation={got_abbrev} according to POSIX TZ \
-                 string {tz}",
-                expected_abbrev = self.designation(&typ),
-                got_abbrev = abbrev,
-                tz = tz,
-            ));
+            return Err(InconsistentPosixTimeZoneError::Designation);
         }
         Ok(())
     }
@@ -866,14 +789,14 @@ impl Header {
     fn parse(
         time_size: usize,
         bytes: &[u8],
-    ) -> Result<(Header, &[u8]), Error> {
+    ) -> Result<(Header, &[u8]), HeaderError> {
         assert!(time_size == 4 || time_size == 8, "time size must be 4 or 8");
         if bytes.len() < 44 {
-            return Err(err!("invalid header: too short"));
+            return Err(HeaderError::TooShort);
         }
         let (magic, rest) = bytes.split_at(4);
         if magic != b"TZif" {
-            return Err(err!("invalid header: magic bytes mismatch"));
+            return Err(HeaderError::MismatchMagic);
         }
         let (version, rest) = rest.split_at(1);
         let (_reserved, rest) = rest.split_at(15);
@@ -885,40 +808,42 @@ impl Header {
         let (tzh_typecnt_bytes, rest) = rest.split_at(4);
         let (tzh_charcnt_bytes, rest) = rest.split_at(4);
 
-        let tzh_ttisutcnt = from_be_bytes_u32_to_usize(tzh_ttisutcnt_bytes)
-            .map_err(|e| err!("failed to parse tzh_ttisutcnt: {e}"))?;
-        let tzh_ttisstdcnt = from_be_bytes_u32_to_usize(tzh_ttisstdcnt_bytes)
-            .map_err(|e| err!("failed to parse tzh_ttisstdcnt: {e}"))?;
-        let tzh_leapcnt = from_be_bytes_u32_to_usize(tzh_leapcnt_bytes)
-            .map_err(|e| err!("failed to parse tzh_leapcnt: {e}"))?;
-        let tzh_timecnt = from_be_bytes_u32_to_usize(tzh_timecnt_bytes)
-            .map_err(|e| err!("failed to parse tzh_timecnt: {e}"))?;
-        let tzh_typecnt = from_be_bytes_u32_to_usize(tzh_typecnt_bytes)
-            .map_err(|e| err!("failed to parse tzh_typecnt: {e}"))?;
-        let tzh_charcnt = from_be_bytes_u32_to_usize(tzh_charcnt_bytes)
-            .map_err(|e| err!("failed to parse tzh_charcnt: {e}"))?;
+        let tzh_ttisutcnt =
+            from_be_bytes_u32_to_usize(tzh_ttisutcnt_bytes).map_err(|e| {
+                HeaderError::ParseCount { kind: CountKind::Ut, convert: e }
+            })?;
+        let tzh_ttisstdcnt =
+            from_be_bytes_u32_to_usize(tzh_ttisstdcnt_bytes).map_err(|e| {
+                HeaderError::ParseCount { kind: CountKind::Std, convert: e }
+            })?;
+        let tzh_leapcnt =
+            from_be_bytes_u32_to_usize(tzh_leapcnt_bytes).map_err(|e| {
+                HeaderError::ParseCount { kind: CountKind::Leap, convert: e }
+            })?;
+        let tzh_timecnt =
+            from_be_bytes_u32_to_usize(tzh_timecnt_bytes).map_err(|e| {
+                HeaderError::ParseCount { kind: CountKind::Time, convert: e }
+            })?;
+        let tzh_typecnt =
+            from_be_bytes_u32_to_usize(tzh_typecnt_bytes).map_err(|e| {
+                HeaderError::ParseCount { kind: CountKind::Type, convert: e }
+            })?;
+        let tzh_charcnt =
+            from_be_bytes_u32_to_usize(tzh_charcnt_bytes).map_err(|e| {
+                HeaderError::ParseCount { kind: CountKind::Char, convert: e }
+            })?;
 
         if tzh_ttisutcnt != 0 && tzh_ttisutcnt != tzh_typecnt {
-            return Err(err!(
-                "expected tzh_ttisutcnt={tzh_ttisutcnt} to be zero \
-                 or equal to tzh_typecnt={tzh_typecnt}",
-            ));
+            return Err(HeaderError::MismatchUtType);
         }
         if tzh_ttisstdcnt != 0 && tzh_ttisstdcnt != tzh_typecnt {
-            return Err(err!(
-                "expected tzh_ttisstdcnt={tzh_ttisstdcnt} to be zero \
-                 or equal to tzh_typecnt={tzh_typecnt}",
-            ));
+            return Err(HeaderError::MismatchStdType);
         }
         if tzh_typecnt < 1 {
-            return Err(err!(
-                "expected tzh_typecnt={tzh_typecnt} to be at least 1",
-            ));
+            return Err(HeaderError::ZeroType);
         }
         if tzh_charcnt < 1 {
-            return Err(err!(
-                "expected tzh_charcnt={tzh_charcnt} to be at least 1",
-            ));
+            return Err(HeaderError::ZeroChar);
         }
 
         let header = Header {
@@ -949,64 +874,514 @@ impl Header {
     ///
     /// This is useful for, e.g., skipping over the 32-bit V1 data block in
     /// V2+ TZif formatted files.
-    fn data_block_len(&self) -> Result<usize, Error> {
+    fn data_block_len(&self) -> Result<usize, HeaderError> {
         let a = self.transition_times_len()?;
-        let b = self.transition_types_len()?;
+        let b = self.transition_types_len();
         let c = self.local_time_types_len()?;
-        let d = self.time_zone_designations_len()?;
+        let d = self.time_zone_designations_len();
         let e = self.leap_second_len()?;
-        let f = self.standard_wall_len()?;
-        let g = self.ut_local_len()?;
+        let f = self.standard_wall_len();
+        let g = self.ut_local_len();
         a.checked_add(b)
             .and_then(|z| z.checked_add(c))
             .and_then(|z| z.checked_add(d))
             .and_then(|z| z.checked_add(e))
             .and_then(|z| z.checked_add(f))
             .and_then(|z| z.checked_add(g))
-            .ok_or_else(|| {
-                err!(
-                    "length of data block in V{} tzfile is too big",
-                    self.version
-                )
-            })
+            .ok_or(HeaderError::InvalidDataBlock { version: self.version })
     }
 
-    fn transition_times_len(&self) -> Result<usize, Error> {
-        self.tzh_timecnt.checked_mul(self.time_size).ok_or_else(|| {
-            err!("tzh_timecnt value {} is too big", self.tzh_timecnt)
-        })
+    fn transition_times_len(&self) -> Result<usize, HeaderError> {
+        self.tzh_timecnt
+            .checked_mul(self.time_size)
+            .ok_or(HeaderError::InvalidTimeCount)
     }
 
-    fn transition_types_len(&self) -> Result<usize, Error> {
-        Ok(self.tzh_timecnt)
+    fn transition_types_len(&self) -> usize {
+        self.tzh_timecnt
     }
 
-    fn local_time_types_len(&self) -> Result<usize, Error> {
-        self.tzh_typecnt.checked_mul(6).ok_or_else(|| {
-            err!("tzh_typecnt value {} is too big", self.tzh_typecnt)
-        })
+    fn local_time_types_len(&self) -> Result<usize, HeaderError> {
+        self.tzh_typecnt.checked_mul(6).ok_or(HeaderError::InvalidTypeCount)
     }
 
-    fn time_zone_designations_len(&self) -> Result<usize, Error> {
-        Ok(self.tzh_charcnt)
+    fn time_zone_designations_len(&self) -> usize {
+        self.tzh_charcnt
     }
 
-    fn leap_second_len(&self) -> Result<usize, Error> {
+    fn leap_second_len(&self) -> Result<usize, HeaderError> {
         let record_len = self
             .time_size
             .checked_add(4)
             .expect("4-or-8 plus 4 always fits in usize");
-        self.tzh_leapcnt.checked_mul(record_len).ok_or_else(|| {
-            err!("tzh_leapcnt value {} is too big", self.tzh_leapcnt)
-        })
+        self.tzh_leapcnt
+            .checked_mul(record_len)
+            .ok_or(HeaderError::InvalidLeapSecondCount)
     }
 
-    fn standard_wall_len(&self) -> Result<usize, Error> {
-        Ok(self.tzh_ttisstdcnt)
+    fn standard_wall_len(&self) -> usize {
+        self.tzh_ttisstdcnt
     }
 
-    fn ut_local_len(&self) -> Result<usize, Error> {
-        Ok(self.tzh_ttisutcnt)
+    fn ut_local_len(&self) -> usize {
+        self.tzh_ttisutcnt
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TzifError {
+    kind: TzifErrorKind,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum TzifErrorKind {
+    Footer(FooterError),
+    Header(HeaderError),
+    Header32(HeaderError),
+    Header64(HeaderError),
+    InconsistentPosixTimeZone(InconsistentPosixTimeZoneError),
+    Indicator(IndicatorError),
+    LocalTimeType(LocalTimeTypeError),
+    SplitAt(SplitAtError),
+    TimeZoneDesignator(TimeZoneDesignatorError),
+    TransitionType(TransitionTypeError),
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for TzifError {}
+
+impl core::fmt::Display for TzifError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use self::TzifErrorKind::*;
+        match self.kind {
+            Footer(ref err) => {
+                f.write_str("invalid TZif footer: ")?;
+                err.fmt(f)
+            }
+            Header(ref err) => {
+                f.write_str("invalid TZif header: ")?;
+                err.fmt(f)
+            }
+            Header32(ref err) => {
+                f.write_str("invalid 32-bit TZif header: ")?;
+                err.fmt(f)
+            }
+            Header64(ref err) => {
+                f.write_str("invalid 64-bit TZif header: ")?;
+                err.fmt(f)
+            }
+            InconsistentPosixTimeZone(ref err) => {
+                f.write_str(
+                    "found inconsistency with \
+                     POSIX time zone transition rule \
+                     in TZif file footer: ",
+                )?;
+                err.fmt(f)
+            }
+            Indicator(ref err) => {
+                f.write_str("failed to parse indicators: ")?;
+                err.fmt(f)
+            }
+            LocalTimeType(ref err) => {
+                f.write_str("failed to parse local time types: ")?;
+                err.fmt(f)
+            }
+            SplitAt(ref err) => err.fmt(f),
+            TimeZoneDesignator(ref err) => {
+                f.write_str("failed to parse time zone designators: ")?;
+                err.fmt(f)
+            }
+            TransitionType(ref err) => {
+                f.write_str("failed to parse time zone transition types: ")?;
+                err.fmt(f)
+            }
+        }
+    }
+}
+
+impl From<TzifErrorKind> for TzifError {
+    fn from(kind: TzifErrorKind) -> TzifError {
+        TzifError { kind }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum TransitionTypeError {
+    ExceedsLocalTimeTypes,
+    Split(SplitAtError),
+}
+
+impl From<TransitionTypeError> for TzifError {
+    fn from(err: TransitionTypeError) -> TzifError {
+        TzifErrorKind::TransitionType(err).into()
+    }
+}
+
+impl From<SplitAtError> for TransitionTypeError {
+    fn from(err: SplitAtError) -> TransitionTypeError {
+        TransitionTypeError::Split(err)
+    }
+}
+
+impl core::fmt::Display for TransitionTypeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use self::TransitionTypeError::*;
+
+        match *self {
+            ExceedsLocalTimeTypes => f.write_str(
+                "found time zone transition type index \
+                 that exceeds the number of local time types",
+            ),
+            Split(ref err) => err.fmt(f),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum LocalTimeTypeError {
+    InvalidOffset { offset: i32 },
+    Split(SplitAtError),
+}
+
+impl From<LocalTimeTypeError> for TzifError {
+    fn from(err: LocalTimeTypeError) -> TzifError {
+        TzifErrorKind::LocalTimeType(err).into()
+    }
+}
+
+impl From<SplitAtError> for LocalTimeTypeError {
+    fn from(err: SplitAtError) -> LocalTimeTypeError {
+        LocalTimeTypeError::Split(err)
+    }
+}
+
+impl core::fmt::Display for LocalTimeTypeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use self::LocalTimeTypeError::*;
+
+        match *self {
+            InvalidOffset { offset } => write!(
+                f,
+                "found local time type with \
+                 out-of-bounds time zone offset: {offset}, \
+                 Jiff's allowed range is `{OFFSET_MIN}..={OFFSET_MAX}`"
+            ),
+            Split(ref err) => err.fmt(f),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum TimeZoneDesignatorError {
+    InvalidEnd,
+    InvalidLength,
+    InvalidStart,
+    InvalidUtf8,
+    MissingNul,
+    Split(SplitAtError),
+}
+
+impl From<TimeZoneDesignatorError> for TzifError {
+    fn from(err: TimeZoneDesignatorError) -> TzifError {
+        TzifErrorKind::TimeZoneDesignator(err).into()
+    }
+}
+
+impl From<SplitAtError> for TimeZoneDesignatorError {
+    fn from(err: SplitAtError) -> TimeZoneDesignatorError {
+        TimeZoneDesignatorError::Split(err)
+    }
+}
+
+impl core::fmt::Display for TimeZoneDesignatorError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use self::TimeZoneDesignatorError::*;
+
+        match *self {
+            InvalidEnd => f.write_str(
+                "found invalid end of time zone designator \
+                 for local time type",
+            ),
+            InvalidLength => f.write_str(
+                "found invalid length of time zone designator \
+                 for local time type",
+            ),
+            InvalidStart => f.write_str(
+                "found invalid start of time zone designator \
+                 for local time type",
+            ),
+            InvalidUtf8 => {
+                f.write_str("found invalid UTF-8 in time zone designators")
+            }
+            MissingNul => f.write_str(
+                "could not find NUL terminator for time zone designator",
+            ),
+            Split(ref err) => err.fmt(f),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum IndicatorError {
+    InvalidCombination,
+    InvalidStdWallIndicator,
+    InvalidUtWallCombination,
+    Split(SplitAtError),
+    UtLocalNonZero,
+}
+
+impl From<IndicatorError> for TzifError {
+    fn from(err: IndicatorError) -> TzifError {
+        TzifErrorKind::Indicator(err).into()
+    }
+}
+
+impl From<SplitAtError> for IndicatorError {
+    fn from(err: SplitAtError) -> IndicatorError {
+        IndicatorError::Split(err)
+    }
+}
+
+impl core::fmt::Display for IndicatorError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use self::IndicatorError::*;
+
+        match *self {
+            InvalidCombination => f.write_str(
+                "found invalid std/wall or UT/local value for \
+                 local time type, each must be 0 or 1",
+            ),
+            InvalidStdWallIndicator => f.write_str(
+                "found invalid std/wall indicator, \
+                 expected it to be 0 or 1",
+            ),
+            InvalidUtWallCombination => f.write_str(
+                "found invalid UT-wall combination for \
+                 local time type, only local-wall, \
+                 local-standard and UT-standard are allowed",
+            ),
+            Split(ref err) => err.fmt(f),
+            UtLocalNonZero => f.write_str(
+                "found non-zero UT/local indicator, \
+                 but all such indicators should be zero",
+            ),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum InconsistentPosixTimeZoneError {
+    Designation,
+    Dst,
+    Offset,
+}
+
+impl From<InconsistentPosixTimeZoneError> for TzifError {
+    fn from(err: InconsistentPosixTimeZoneError) -> TzifError {
+        TzifErrorKind::InconsistentPosixTimeZone(err).into()
+    }
+}
+
+impl core::fmt::Display for InconsistentPosixTimeZoneError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use self::InconsistentPosixTimeZoneError::*;
+
+        match *self {
+            Designation => f.write_str(
+                "expected last transition in TZif file to have \
+                 a time zone abbreviation matching the abbreviation \
+                 derived from the POSIX time zone transition rule",
+            ),
+            Dst => f.write_str(
+                "expected last transition in TZif file to have \
+                 a DST status matching the status derived from the \
+                 POSIX time zone transition rule",
+            ),
+            Offset => f.write_str(
+                "expected last transition in TZif file to have \
+                 DST offset matching the offset derived from the \
+                 POSIX time zone transition rule",
+            ),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum FooterError {
+    InvalidPosixTz(crate::shared::posix::PosixTimeZoneError),
+    MismatchEnd,
+    TerminatorNotFound,
+    UnexpectedEnd,
+}
+
+impl From<FooterError> for TzifError {
+    fn from(err: FooterError) -> TzifError {
+        TzifErrorKind::Footer(err).into()
+    }
+}
+
+impl core::fmt::Display for FooterError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use self::FooterError::*;
+
+        match *self {
+            InvalidPosixTz(ref err) => {
+                f.write_str("invalid POSIX time zone transition rule")?;
+                core::fmt::Display::fmt(err, f)
+            }
+            MismatchEnd => f.write_str(
+                "expected to find `\\n` at the beginning of \
+                 the TZif file footer, \
+                 but found something else instead",
+            ),
+            TerminatorNotFound => f.write_str(
+                "expected to find `\\n` terminating \
+                 the TZif file footer, \
+                 but no line terminator could be found",
+            ),
+            UnexpectedEnd => f.write_str(
+                "expected to find `\\n` at the beginning of \
+                 the TZif file footer, \
+                 but found unexpected end of data",
+            ),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum HeaderError {
+    InvalidDataBlock { version: u8 },
+    InvalidLeapSecondCount,
+    InvalidTimeCount,
+    InvalidTypeCount,
+    MismatchMagic,
+    MismatchStdType,
+    MismatchUtType,
+    ParseCount { kind: CountKind, convert: U32UsizeError },
+    TooShort,
+    ZeroChar,
+    ZeroType,
+}
+
+impl From<HeaderError> for TzifError {
+    fn from(err: HeaderError) -> TzifError {
+        TzifErrorKind::Header(err).into()
+    }
+}
+
+impl core::fmt::Display for HeaderError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use self::HeaderError::*;
+
+        match *self {
+            InvalidDataBlock { version } => write!(
+                f,
+                "length of data block in V{version} TZif file is too big",
+            ),
+            InvalidLeapSecondCount => {
+                f.write_str("number of leap seconds is too big")
+            }
+            InvalidTimeCount => {
+                f.write_str("number of transition times is too big")
+            }
+            InvalidTypeCount => {
+                f.write_str("number of local time types is too big")
+            }
+            MismatchMagic => f.write_str("magic bytes mismatch"),
+            MismatchStdType => f.write_str(
+                "expected number of standard/wall indicators to be zero \
+                 or equal to the number of local time types",
+            ),
+            MismatchUtType => f.write_str(
+                "expected number of UT/local indicators to be zero \
+                 or equal to the number of local time types",
+            ),
+            ParseCount { ref kind, ref convert } => {
+                write!(f, "failed to parse `{kind}`: {convert}")
+            }
+            TooShort => f.write_str("too short"),
+            ZeroChar => f.write_str(
+                "expected number of time zone abbreviations fo be at least 1",
+            ),
+            ZeroType => f.write_str(
+                "expected number of local time types fo be at least 1",
+            ),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum CountKind {
+    Ut,
+    Std,
+    Leap,
+    Time,
+    Type,
+    Char,
+}
+
+impl core::fmt::Display for CountKind {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use self::CountKind::*;
+        match *self {
+            Ut => f.write_str("tzh_ttisutcnt"),
+            Std => f.write_str("tzh_ttisstdcnt"),
+            Leap => f.write_str("tzh_leapcnt"),
+            Time => f.write_str("tzh_timecnt"),
+            Type => f.write_str("tzh_typecnt"),
+            Char => f.write_str("tzh_charcnt"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum SplitAtError {
+    V1,
+    LeapSeconds,
+    LocalTimeTypes,
+    StandardWallIndicators,
+    TimeZoneDesignations,
+    TransitionTimes,
+    TransitionTypes,
+    UTLocalIndicators,
+}
+
+impl From<SplitAtError> for TzifError {
+    fn from(err: SplitAtError) -> TzifError {
+        TzifErrorKind::SplitAt(err).into()
+    }
+}
+
+impl core::fmt::Display for SplitAtError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use self::SplitAtError::*;
+
+        f.write_str("expected bytes for '")?;
+        f.write_str(match *self {
+            V1 => "v1 TZif",
+            LeapSeconds => "leap seconds",
+            LocalTimeTypes => "local time types",
+            StandardWallIndicators => "standard/wall indicators",
+            TimeZoneDesignations => "time zone designations",
+            TransitionTimes => "transition times",
+            TransitionTypes => "transition types",
+            UTLocalIndicators => "UT/local indicators",
+        })?;
+        f.write_str("data block', but did not find enough bytes")?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct U32UsizeError;
+
+impl core::fmt::Display for U32UsizeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(
+            f,
+            "failed to parse integer because it is bigger than `{max}`",
+            max = usize::MAX,
+        )
     }
 }
 
@@ -1016,16 +1391,12 @@ impl Header {
 /// returned. The error message will include the `what` string given, which is
 /// meant to describe the thing being split.
 fn try_split_at<'b>(
-    what: &'static str,
+    what: SplitAtError,
     bytes: &'b [u8],
     at: usize,
-) -> Result<(&'b [u8], &'b [u8]), Error> {
+) -> Result<(&'b [u8], &'b [u8]), SplitAtError> {
     if at > bytes.len() {
-        Err(err!(
-            "expected at least {at} bytes for {what}, \
-             but found only {} bytes",
-            bytes.len(),
-        ))
+        Err(what)
     } else {
         Ok(bytes.split_at(at))
     }
@@ -1042,14 +1413,9 @@ fn try_split_at<'b>(
 ///
 /// This errors if the `u32` parsed from the given bytes cannot fit in a
 /// `usize`.
-fn from_be_bytes_u32_to_usize(bytes: &[u8]) -> Result<usize, Error> {
+fn from_be_bytes_u32_to_usize(bytes: &[u8]) -> Result<usize, U32UsizeError> {
     let n = from_be_bytes_u32(bytes);
-    usize::try_from(n).map_err(|_| {
-        err!(
-            "failed to parse integer {n} (too big, max allowed is {}",
-            usize::MAX
-        )
-    })
+    usize::try_from(n).map_err(|_| U32UsizeError)
 }
 
 /// Interprets the given slice as an unsigned 32-bit big endian integer and
