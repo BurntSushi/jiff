@@ -210,7 +210,7 @@ impl PosixTimeZone<Abbreviation> {
     ) -> Result<PosixTimeZoneOwned, Error> {
         let bytes = bytes.as_ref();
         let inner = shared::PosixTimeZone::parse(bytes.as_ref())
-            .map_err(Error::shared)
+            .map_err(Error::posix_tz)
             .context(E::InvalidPosixTz)?;
         Ok(PosixTimeZone { inner })
     }
@@ -224,7 +224,7 @@ impl PosixTimeZone<Abbreviation> {
         let bytes = bytes.as_ref();
         let (inner, remaining) =
             shared::PosixTimeZone::parse_prefix(bytes.as_ref())
-                .map_err(Error::shared)
+                .map_err(Error::posix_tz)
                 .context(E::InvalidPosixTz)?;
         Ok((PosixTimeZone { inner }, remaining))
     }

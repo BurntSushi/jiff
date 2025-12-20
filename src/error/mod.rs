@@ -1,9 +1,4 @@
-use crate::{
-    shared::{
-        error::Error as SharedError2, util::error::Error as SharedError,
-    },
-    util::sync::Arc,
-};
+use crate::{shared::error::Error as SharedError2, util::sync::Arc};
 
 pub(crate) mod civil;
 pub(crate) mod duration;
@@ -152,11 +147,6 @@ impl Error {
     }
 
     /// Creates a new error from the special "shared" error type.
-    pub(crate) fn shared(err: SharedError) -> Error {
-        Error::from(ErrorKind::Shared(err))
-    }
-
-    /// Creates a new error from the special "shared" error type.
     pub(crate) fn shared2(err: SharedError2) -> Error {
         Error::from(ErrorKind::Shared2(err))
     }
@@ -165,6 +155,13 @@ impl Error {
     #[cfg(feature = "alloc")]
     pub(crate) fn tzif(err: crate::shared::tzif::TzifError) -> Error {
         Error::from(ErrorKind::Tzif(err))
+    }
+
+    /// Creates a new error from the special `PosixTimeZoneError` type.
+    pub(crate) fn posix_tz(
+        err: crate::shared::posix::PosixTimeZoneError,
+    ) -> Error {
+        Error::from(ErrorKind::PosixTz(err))
     }
 
     /// A convenience constructor for building an I/O error.
@@ -294,9 +291,9 @@ enum ErrorKind {
     OsStrUtf8(self::util::OsStrUtf8Error),
     ParseInt(self::util::ParseIntError),
     ParseFraction(self::util::ParseFractionError),
+    PosixTz(crate::shared::posix::PosixTimeZoneError),
     Range(RangeError),
     RoundingIncrement(self::util::RoundingIncrementError),
-    Shared(SharedError),
     Shared2(SharedError2),
     SignedDuration(self::signed_duration::Error),
     SlimRange(SlimRangeError),
@@ -340,9 +337,9 @@ impl core::fmt::Display for ErrorKind {
             OsStrUtf8(ref err) => err.fmt(f),
             ParseInt(ref err) => err.fmt(f),
             ParseFraction(ref err) => err.fmt(f),
+            PosixTz(ref err) => err.fmt(f),
             Range(ref err) => err.fmt(f),
             RoundingIncrement(ref err) => err.fmt(f),
-            Shared(ref err) => err.fmt(f),
             Shared2(ref err) => err.fmt(f),
             SignedDuration(ref err) => err.fmt(f),
             SlimRange(ref err) => err.fmt(f),
