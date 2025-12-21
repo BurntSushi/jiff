@@ -74,6 +74,14 @@ impl Error {
     /// circumstances, it can be convenient to manufacture a Jiff error value
     /// specifically.
     ///
+    /// # Core-only environments
+    ///
+    /// In core-only environments without a dynamic memory allocator, error
+    /// messages may be degraded in some cases. For example, if the given
+    /// `core::fmt::Arguments` could not be converted to a simple borrowed
+    /// `&str`, then this will ignore the input given and return an "unknown"
+    /// Jiff error.
+    ///
     /// # Example
     ///
     /// ```
@@ -84,37 +92,6 @@ impl Error {
     /// ```
     pub fn from_args<'a>(message: core::fmt::Arguments<'a>) -> Error {
         Error::from(ErrorKind::Adhoc(AdhocError::from_args(message)))
-    }
-
-    #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn context(self, consequent: impl IntoError) -> Error {
-        self.context_impl(consequent.into_error())
-    }
-
-    #[inline(never)]
-    #[cold]
-    fn context_impl(self, consequent: Error) -> Error {
-        #[cfg(feature = "alloc")]
-        {
-            let mut err = consequent;
-            if err.inner.is_none() {
-                err = Error::from(ErrorKind::Unknown);
-            }
-            let inner = err.inner.as_mut().unwrap();
-            assert!(
-                inner.cause.is_none(),
-                "cause of consequence must be `None`"
-            );
-            // OK because we just created this error so the Arc
-            // has one reference.
-            Arc::get_mut(inner).unwrap().cause = Some(self);
-            err
-        }
-        #[cfg(not(feature = "alloc"))]
-        {
-            // We just completely drop `self`. :-(
-            consequent
-        }
     }
 }
 
@@ -199,7 +176,7 @@ impl Error {
     ///
     /// The benefit of this API is that it permits creating an `Error` in a
     /// `const` context. But the error message quality is currently pretty
-    /// bad: it's just a generic "unknown jiff error" message.
+    /// bad: it's just a generic "unknown Jiff error" message.
     ///
     /// This could be improved to take a `&'static str`, but I believe this
     /// will require pointer tagging in order to avoid increasing the size of
@@ -209,6 +186,71 @@ impl Error {
         Error { inner: None }
     }
     */
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn context(self, consequent: impl IntoError) -> Error {
+        self.context_impl(consequent.into_error())
+    }
+
+    #[inline(never)]
+    #[cold]
+    fn context_impl(self, consequent: Error) -> Error {
+        #[cfg(feature = "alloc")]
+        {
+            let mut err = consequent;
+            if err.inner.is_none() {
+                err = Error::from(ErrorKind::Unknown);
+            }
+            let inner = err.inner.as_mut().unwrap();
+            assert!(
+                inner.cause.is_none(),
+                "cause of consequence must be `None`"
+            );
+            // OK because we just created this error so the Arc
+            // has one reference.
+            Arc::get_mut(inner).unwrap().cause = Some(self);
+            err
+        }
+        #[cfg(not(feature = "alloc"))]
+        {
+            // We just completely drop `self`. :-(
+            consequent
+        }
+    }
+
+    /// Returns a chain of error values.
+    ///
+    /// This starts with the most recent error added to the chain. That is,
+    /// the highest level context. The last error in the chain is always the
+    /// "root" cause. That is, the error closest to the point where something
+    /// has gone wrong.
+    ///
+    /// The iterator returned is guaranteed to yield at least one error.
+    fn chain(&self) -> impl Iterator<Item = &Error> {
+        #[cfg(feature = "alloc")]
+        {
+            let mut err = self;
+            core::iter::once(err).chain(core::iter::from_fn(move || {
+                err = err
+                    .inner
+                    .as_ref()
+                    .and_then(|inner| inner.cause.as_ref())?;
+                Some(err)
+            }))
+        }
+        #[cfg(not(feature = "alloc"))]
+        {
+            core::iter::once(self)
+        }
+    }
+
+    /// Returns the kind of this error.
+    fn kind(&self) -> &ErrorKind {
+        self.inner
+            .as_ref()
+            .map(|inner| &inner.kind)
+            .unwrap_or(&ErrorKind::Unknown)
+    }
 }
 
 #[cfg(feature = "std")]
@@ -216,30 +258,14 @@ impl std::error::Error for Error {}
 
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        #[cfg(feature = "alloc")]
-        {
-            let mut err = self;
-            loop {
-                let Some(ref inner) = err.inner else {
-                    write!(f, "unknown jiff error")?;
-                    break;
-                };
-                write!(f, "{}", inner.kind)?;
-                err = match inner.cause.as_ref() {
-                    None => break,
-                    Some(err) => err,
-                };
-                write!(f, ": ")?;
-            }
-            Ok(())
-        }
-        #[cfg(not(feature = "alloc"))]
-        {
-            match self.inner {
-                None => write!(f, "unknown jiff error"),
-                Some(ref inner) => write!(f, "{}", inner.kind),
+        let mut it = self.chain().peekable();
+        while let Some(err) = it.next() {
+            core::fmt::Display::fmt(err.kind(), f)?;
+            if it.peek().is_some() {
+                f.write_str(": ")?;
             }
         }
+        Ok(())
     }
 }
 
@@ -357,7 +383,7 @@ impl core::fmt::Display for ErrorKind {
             TzZic(ref err) => err.fmt(f),
             #[cfg(feature = "alloc")]
             Tzif(ref err) => err.fmt(f),
-            Unknown => f.write_str("unknown jiff error"),
+            Unknown => f.write_str("unknown Jiff error"),
             Zoned(ref err) => err.fmt(f),
         }
     }
@@ -378,10 +404,10 @@ impl From<ErrorKind> for Error {
 
 /// A generic error message.
 ///
-/// This somewhat unfortunately represents most of the errors in Jiff. When I
-/// first started building Jiff, I had a goal of making every error structured.
-/// But this ended up being a ton of work, and I find it much easier and nicer
-/// for error messages to be embedded where they occur.
+/// This used to be used to represent most errors in Jiff. But then I switched
+/// to more structured error types (internally). We still keep this around to
+/// support the `Error::from_args` public API, which permits users of Jiff to
+/// manifest their own `Error` values from an arbitrary message.
 #[cfg_attr(not(feature = "alloc"), derive(Clone))]
 struct AdhocError {
     #[cfg(feature = "alloc")]

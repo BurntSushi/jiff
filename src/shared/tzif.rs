@@ -514,7 +514,6 @@ impl TzifOwned {
     /// and the timestamps in TZif data are, of course, all in UTC.)
     fn add_civil_datetimes_to_transitions(&mut self) {
         fn to_datetime(timestamp: i64, offset: i32) -> TzifDateTime {
-            use crate::shared::util::itime::{IOffset, ITimestamp};
             let its = ITimestamp { second: timestamp, nanosecond: 0 };
             let ioff = IOffset { second: offset };
             let dt = its.to_datetime(ioff);

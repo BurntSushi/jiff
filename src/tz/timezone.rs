@@ -1932,6 +1932,10 @@ impl<'t> TimeZoneAbbreviation<'t> {
 ///
 /// This module exists to _encapsulate_ the representation rigorously and
 /// expose a safe and sound API.
+// To squash warnings on older versions of Rust. Our polyfill below should
+// match what std does on newer versions of Rust, so the confusability should
+// be fine. ---AG
+#[allow(unstable_name_collisions)]
 mod repr {
     use core::mem::ManuallyDrop;
 
