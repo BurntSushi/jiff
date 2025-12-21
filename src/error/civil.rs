@@ -13,7 +13,6 @@ pub(crate) enum Error {
     InvalidISOWeekNumber,
     OverflowDaysDuration,
     OverflowTimeNanoseconds,
-    NthWeekdayNonZero,
     RoundMustUseDaysOrBigger { unit: Unit },
     RoundMustUseHoursOrSmaller { unit: Unit },
 }
@@ -68,7 +67,6 @@ impl core::fmt::Display for Error {
             OverflowTimeNanoseconds => {
                 f.write_str("adding duration to time overflowed")
             }
-            NthWeekdayNonZero => f.write_str("nth weekday cannot be `0`"),
             RoundMustUseDaysOrBigger { unit } => write!(
                 f,
                 "rounding the span between two dates must use days \

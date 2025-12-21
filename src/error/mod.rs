@@ -93,6 +93,23 @@ impl Error {
     pub fn from_args<'a>(message: core::fmt::Arguments<'a>) -> Error {
         Error::from(ErrorKind::Adhoc(AdhocError::from_args(message)))
     }
+
+    /// Returns true when this error originated as a result of a value being
+    /// out of Jiff's supported range.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::civil::Date;
+    ///
+    /// assert!(Date::new(2025, 2, 29).unwrap_err().is_range());
+    /// assert!("2025-02-29".parse::<Date>().unwrap_err().is_range());
+    /// assert!(Date::strptime("%Y-%m-%d", "2025-02-29").unwrap_err().is_range());
+    /// ```
+    pub fn is_range(&self) -> bool {
+        use self::ErrorKind::*;
+        matches!(*self.root().kind(), Range(_) | SlimRange(_) | ITimeRange(_))
+    }
 }
 
 impl Error {
@@ -216,6 +233,13 @@ impl Error {
             // We just completely drop `self`. :-(
             consequent
         }
+    }
+
+    /// Returns the root error in this chain.
+    fn root(&self) -> &Error {
+        // OK because `Error::chain` is guaranteed to return a non-empty
+        // iterator.
+        self.chain().last().unwrap()
     }
 
     /// Returns a chain of error values.
