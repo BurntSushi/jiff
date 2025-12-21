@@ -34,10 +34,7 @@ impl core::fmt::Display for Error {
                  without a timestamp or civil datetime",
             ),
             #[cfg(not(feature = "tz-system"))]
-            FailedSystem => f.write_str(
-                "failed to get system time zone since Jiff's \
-                 `tz-system` crate feature is not enabled",
-            ),
+            FailedSystem => f.write_str("failed to get system time zone"),
         }
     }
 }

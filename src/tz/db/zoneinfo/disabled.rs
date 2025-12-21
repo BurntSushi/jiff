@@ -13,8 +13,9 @@ impl Database {
         _dir: &std::path::Path,
     ) -> Result<Database, crate::Error> {
         Err(crate::error::Error::from(
-            crate::error::tz::db::Error::DisabledZoneInfo,
-        ))
+            crate::error::CrateFeatureError::TzdbZoneInfo,
+        )
+        .context(crate::error::tz::db::Error::DisabledZoneInfo))
     }
 
     pub(crate) fn none() -> Database {

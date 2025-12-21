@@ -65,24 +65,24 @@ impl core::fmt::Display for Error {
                  concatenated tzdata file",
             ),
             #[cfg(all(feature = "std", not(feature = "tzdb-concatenated")))]
-            DisabledConcatenated => f.write_str(
-                "system concatenated tzdb unavailable: \
-                 Jiff crate feature `tzdb-concatenated` is disabled, \
-                 opening tzdb at given path has therefore failed",
-            ),
+            DisabledConcatenated => {
+                f.write_str("system concatenated tzdb unavailable")
+            }
             #[cfg(all(feature = "std", not(feature = "tzdb-zoneinfo")))]
-            DisabledZoneInfo => f.write_str(
-                "system zoneinfo tzdb unavailable: \
-                 Jiff crate feature `tzdb-zoneinfo` is disabled, \
-                 opening tzdb at given path has therefore failed",
-            ),
+            DisabledZoneInfo => {
+                f.write_str("system zoneinfo tzdb unavailable")
+            }
             FailedTimeZone {
                 #[cfg(feature = "alloc")]
                 ref name,
             } => {
                 #[cfg(feature = "alloc")]
                 {
-                    write!(f, "failed to find time zone `{name}` in time zone database")
+                    write!(
+                        f,
+                        "failed to find time zone `{name}` \
+                         in time zone database",
+                    )
                 }
                 #[cfg(not(feature = "alloc"))]
                 {

@@ -110,6 +110,21 @@ impl Error {
         use self::ErrorKind::*;
         matches!(*self.root().kind(), Range(_) | SlimRange(_) | ITimeRange(_))
     }
+
+    /// Returns true when this error originated as a result of an operation
+    /// failing because an appropriate Jiff crate feature was not enabled.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use jiff::tz::TimeZone;
+    ///
+    /// // This passes when the `tz-system` crate feature is NOT enabled.
+    /// assert!(TimeZone::try_system().unwrap_err().is_crate_feature());
+    /// ```
+    pub fn is_crate_feature(&self) -> bool {
+        matches!(*self.root().kind(), ErrorKind::CrateFeature(_))
+    }
 }
 
 impl Error {
@@ -211,10 +226,10 @@ impl Error {
 
     #[inline(never)]
     #[cold]
-    fn context_impl(self, consequent: Error) -> Error {
+    fn context_impl(self, _consequent: Error) -> Error {
         #[cfg(feature = "alloc")]
         {
-            let mut err = consequent;
+            let mut err = _consequent;
             if err.inner.is_none() {
                 err = Error::from(ErrorKind::Unknown);
             }
@@ -231,7 +246,12 @@ impl Error {
         #[cfg(not(feature = "alloc"))]
         {
             // We just completely drop `self`. :-(
-            consequent
+            //
+            // 2025-12-21: ... actually, we used to drop self, but this
+            // ends up dropping the root cause. And the root cause
+            // is how the predicates on `Error` work. So we drop the
+            // consequent instead.
+            self
         }
     }
 
@@ -325,6 +345,7 @@ impl core::fmt::Debug for Error {
 enum ErrorKind {
     Adhoc(AdhocError),
     Civil(self::civil::Error),
+    CrateFeature(CrateFeatureError),
     Duration(self::duration::Error),
     #[allow(dead_code)] // not used in some feature configs
     FilePath(FilePathError),
@@ -373,6 +394,7 @@ impl core::fmt::Display for ErrorKind {
         match *self {
             Adhoc(ref msg) => msg.fmt(f),
             Civil(ref err) => err.fmt(f),
+            CrateFeature(ref err) => err.fmt(f),
             Duration(ref err) => err.fmt(f),
             FilePath(ref err) => err.fmt(f),
             Fmt(ref err) => err.fmt(f),
@@ -556,6 +578,49 @@ impl core::fmt::Display for SlimRangeError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         let SlimRangeError { what } = *self;
         write!(f, "parameter '{what}' is not in the required range")
+    }
+}
+
+/// An error used whenever a failure is caused by a missing crate feature.
+///
+/// This enum doesn't necessarily contain every Jiff crate feature. It only
+/// contains the features whose absence can result in an error.
+#[derive(Clone, Debug)]
+pub(crate) enum CrateFeatureError {
+    #[cfg(not(feature = "tz-system"))]
+    TzSystem,
+    #[cfg(not(feature = "tzdb-concatenated"))]
+    TzdbConcatenated,
+    #[cfg(not(feature = "tzdb-zoneinfo"))]
+    TzdbZoneInfo,
+}
+
+impl From<CrateFeatureError> for Error {
+    #[cold]
+    #[inline(never)]
+    fn from(err: CrateFeatureError) -> Error {
+        ErrorKind::CrateFeature(err).into()
+    }
+}
+
+impl core::fmt::Display for CrateFeatureError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        #[allow(unused_imports)]
+        use self::CrateFeatureError::*;
+
+        f.write_str("operation failed because Jiff crate feature `")?;
+        #[allow(unused_variables)]
+        let name: &str = match *self {
+            #[cfg(not(feature = "tz-system"))]
+            TzSystem => "tz-system",
+            #[cfg(not(feature = "tzdb-concatenated"))]
+            TzdbConcatenated => "tzdb-concatenated",
+            #[cfg(not(feature = "tzdb-zoneinfo"))]
+            TzdbZoneInfo => "tzdb-zoneinfo",
+        };
+        #[allow(unreachable_code)]
+        core::fmt::Display::fmt(name, f)?;
+        f.write_str("` is not enabled")
     }
 }
 
