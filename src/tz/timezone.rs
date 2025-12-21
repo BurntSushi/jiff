@@ -392,7 +392,8 @@ impl TimeZone {
     pub fn try_system() -> Result<TimeZone, Error> {
         #[cfg(not(feature = "tz-system"))]
         {
-            Err(Error::from(E::FailedSystem))
+            Err(Error::from(crate::error::CrateFeatureError::TzSystem)
+                .context(E::FailedSystem))
         }
         #[cfg(feature = "tz-system")]
         {

@@ -13,8 +13,9 @@ impl Database {
         _path: &std::path::Path,
     ) -> Result<Database, crate::Error> {
         Err(crate::error::Error::from(
-            crate::error::tz::db::Error::DisabledConcatenated,
-        ))
+            crate::error::CrateFeatureError::TzdbConcatenated,
+        )
+        .context(crate::error::tz::db::Error::DisabledConcatenated))
     }
 
     pub(crate) fn none() -> Database {
