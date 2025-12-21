@@ -1059,7 +1059,7 @@ impl Date {
 
         let nth = t::SpanWeeks::try_new("nth weekday", nth)?;
         if nth == C(0) {
-            Err(Error::from(E::NthWeekdayNonZero))
+            Err(Error::slim_range("nth weekday"))
         } else if nth > C(0) {
             let nth = nth.max(C(1));
             let weekday_diff = weekday.since_ranged(self.weekday().next());
