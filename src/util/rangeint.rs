@@ -2093,7 +2093,7 @@ macro_rules! define_ranged {
                 // its debug repr which should show some nice output.
                 match self.checked_add(Self::N::<0>()) {
                     Some(val) => core::fmt::Display::fmt(&val.get(), f),
-                    None => write!(f, "{:?}", self),
+                    None => core::fmt::Debug::fmt(self, f),
                 }
             }
         }

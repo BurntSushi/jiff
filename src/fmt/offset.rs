@@ -248,11 +248,7 @@ impl Numeric {
 // `Offset` fails.
 impl core::fmt::Display for Numeric {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        if self.sign == C(-1) {
-            write!(f, "-")?;
-        } else {
-            write!(f, "+")?;
-        }
+        f.write_str(if self.sign == C(-1) { "-" } else { "+" })?;
         write!(f, "{:02}", self.hours)?;
         if let Some(minutes) = self.minutes {
             write!(f, ":{:02}", minutes)?;
@@ -262,11 +258,8 @@ impl core::fmt::Display for Numeric {
         }
         if let Some(nanos) = self.nanoseconds {
             static FMT: FractionalFormatter = FractionalFormatter::new();
-            write!(
-                f,
-                ".{}",
-                FMT.format(i32::from(nanos).unsigned_abs()).as_str()
-            )?;
+            f.write_str(".")?;
+            f.write_str(FMT.format(i32::from(nanos).unsigned_abs()).as_str())?;
         }
         Ok(())
     }

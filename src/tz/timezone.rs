@@ -2269,9 +2269,9 @@ mod repr {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
             each! {
                 self,
-                UTC => write!(f, "UTC"),
-                UNKNOWN => write!(f, "Etc/Unknown"),
-                FIXED(offset) => write!(f, "{offset:?}"),
+                UTC => f.write_str("UTC"),
+                UNKNOWN => f.write_str("Etc/Unknown"),
+                FIXED(offset) => core::fmt::Debug::fmt(&offset, f),
                 STATIC_TZIF(tzif) => {
                     // The full debug output is a bit much, so constrain it.
                     let field = tzif.name().unwrap_or("Local");
@@ -2282,7 +2282,11 @@ mod repr {
                     let field = tzif.name().unwrap_or("Local");
                     f.debug_tuple("TZif").field(&field).finish()
                 },
-                ARC_POSIX(posix) => write!(f, "Posix({posix})"),
+                ARC_POSIX(posix) => {
+                    f.write_str("Posix(")?;
+                    core::fmt::Display::fmt(&posix, f)?;
+                    f.write_str(")")
+                },
             }
         }
     }

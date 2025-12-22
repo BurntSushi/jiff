@@ -204,13 +204,13 @@ impl Database {
 
 impl core::fmt::Debug for Database {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "ZoneInfo(")?;
+        f.write_str("ZoneInfo(")?;
         if let Some(ref dir) = self.dir {
-            write!(f, "{}", dir.display())?;
+            core::fmt::Display::fmt(&dir.display(), f)?;
         } else {
-            write!(f, "unavailable")?;
+            f.write_str("unavailable")?;
         }
-        write!(f, ")")
+        f.write_str(")")
     }
 }
 

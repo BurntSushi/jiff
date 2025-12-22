@@ -570,9 +570,9 @@ impl shared::TzifLocalTimeType {
 impl core::fmt::Display for shared::TzifIndicator {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match *self {
-            shared::TzifIndicator::LocalWall => write!(f, "local/wall"),
-            shared::TzifIndicator::LocalStandard => write!(f, "local/std"),
-            shared::TzifIndicator::UTStandard => write!(f, "ut/std"),
+            shared::TzifIndicator::LocalWall => f.write_str("local/wall"),
+            shared::TzifIndicator::LocalStandard => f.write_str("local/std"),
+            shared::TzifIndicator::UTStandard => f.write_str("ut/std"),
         }
     }
 }
