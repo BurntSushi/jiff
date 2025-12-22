@@ -122,3 +122,4 @@ impl core::fmt::Debug for RepeatByte {
         Ok(())
     }
 }
+

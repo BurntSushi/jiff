@@ -89,3 +89,4 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Result<char, Utf8Error>> {
     // yield at least one Unicode scalar value.
     Some(Ok(string.chars().next().unwrap()))
 }
+

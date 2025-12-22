@@ -1,4 +1,4 @@
-use crate::{error, shared::util::escape};
+use crate::{error, util::escape};
 
 #[derive(Clone, Debug)]
 pub(crate) enum Error {
