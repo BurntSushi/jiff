@@ -12,8 +12,8 @@ use crate::{
         util::{DecimalFormatter, FractionalFormatter},
         Write, WriteExt,
     },
-    shared::util::utf8,
     tz::Offset,
+    util::utf8,
     Error,
 };
 
