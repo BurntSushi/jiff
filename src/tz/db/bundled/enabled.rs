@@ -26,8 +26,8 @@ impl Database {
             Err(_err) => {
                 warn!(
                     "failed to parse TZif data from bundled \
-                     tzdb for time zone {canonical_name} \
-                     (this is like a bug, please report it): {_err}"
+                     tzdb for time zone `{canonical_name}` \
+                     (this is likely a bug, please report it): {_err}"
                 );
                 return None;
             }
