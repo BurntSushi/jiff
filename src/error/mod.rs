@@ -27,8 +27,11 @@ pub(crate) mod zoned;
 ///
 /// Other than implementing the [`std::error::Error`] trait when the
 /// `std` feature is enabled, the [`core::fmt::Debug`] trait and the
-/// [`core::fmt::Display`] trait, this error type currently provides no
-/// introspection capabilities.
+/// [`core::fmt::Display`] trait, this error type currently provides
+/// very limited introspection capabilities. Simple predicates like
+/// `Error::is_range` are provided, but the predicates are not
+/// exhaustive. That is, there exist some errors that do not return
+/// `true` for any of the `Error::is_*` predicates.
 ///
 /// # Design
 ///
