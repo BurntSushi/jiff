@@ -560,16 +560,16 @@ impl TimeZoneDatabase {
 
 impl core::fmt::Debug for TimeZoneDatabase {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "TimeZoneDatabase(")?;
+        f.write_str("TimeZoneDatabase(")?;
         let Some(inner) = self.inner.as_deref() else {
-            return write!(f, "unavailable)");
+            return f.write_str("unavailable)");
         };
         match *inner {
-            Kind::ZoneInfo(ref db) => write!(f, "{db:?}")?,
-            Kind::Concatenated(ref db) => write!(f, "{db:?}")?,
-            Kind::Bundled(ref db) => write!(f, "{db:?}")?,
+            Kind::ZoneInfo(ref db) => core::fmt::Debug::fmt(db, f)?,
+            Kind::Concatenated(ref db) => core::fmt::Debug::fmt(db, f)?,
+            Kind::Bundled(ref db) => core::fmt::Debug::fmt(db, f)?,
         }
-        write!(f, ")")
+        f.write_str(")")
     }
 }
 
@@ -675,7 +675,7 @@ impl<'d> TimeZoneName<'d> {
 
 impl<'d> core::fmt::Display for TimeZoneName<'d> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{}", self.as_str())
+        f.write_str(self.as_str())
     }
 }
 

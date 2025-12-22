@@ -1683,8 +1683,7 @@ impl core::fmt::Display for PosixJulianNoLeapError {
                 f.write_str("invalid one-based Julian day digits: ")?;
                 core::fmt::Display::fmt(err, f)
             }
-            Range => write!(
-                f,
+            Range => f.write_str(
                 "parsed one-based Julian day, but it's not in supported \
                  range of `1..=365`",
             ),
@@ -1706,8 +1705,7 @@ impl core::fmt::Display for PosixJulianLeapError {
                 f.write_str("invalid zero-based Julian day digits: ")?;
                 core::fmt::Display::fmt(err, f)
             }
-            Range => write!(
-                f,
+            Range => f.write_str(
                 "parsed zero-based Julian day, but it's not in supported \
                  range of `0..=365`",
             ),
@@ -1938,8 +1936,7 @@ impl core::fmt::Display for MonthError {
                 f.write_str("invalid month digits: ")?;
                 core::fmt::Display::fmt(err, f)
             }
-            Range => write!(
-                f,
+            Range => f.write_str(
                 "parsed month, but it's not in supported \
                  range of `1..=12`",
             ),
@@ -1961,8 +1958,7 @@ impl core::fmt::Display for WeekOfMonthError {
                 f.write_str("invalid week-of-month digits: ")?;
                 core::fmt::Display::fmt(err, f)
             }
-            Range => write!(
-                f,
+            Range => f.write_str(
                 "parsed week-of-month, but it's not in supported \
                  range of `1..=5`",
             ),
@@ -1984,8 +1980,7 @@ impl core::fmt::Display for WeekdayError {
                 f.write_str("invalid weekday digits: ")?;
                 core::fmt::Display::fmt(err, f)
             }
-            Range => write!(
-                f,
+            Range => f.write_str(
                 "parsed weekday, but it's not in supported \
                  range of `0..=6` (with `0` corresponding to Sunday)",
             ),
@@ -2007,8 +2002,7 @@ impl core::fmt::Display for HourIanaError {
                 f.write_str("invalid hour digits: ")?;
                 core::fmt::Display::fmt(err, f)
             }
-            Range => write!(
-                f,
+            Range => f.write_str(
                 "parsed hours, but it's not in supported \
                  range of `-167..=167`",
             ),
@@ -2030,8 +2024,7 @@ impl core::fmt::Display for HourPosixError {
                 f.write_str("invalid hour digits: ")?;
                 core::fmt::Display::fmt(err, f)
             }
-            Range => write!(
-                f,
+            Range => f.write_str(
                 "parsed hours, but it's not in supported \
                  range of `0..=24`",
             ),
@@ -2053,8 +2046,7 @@ impl core::fmt::Display for MinuteError {
                 f.write_str("invalid minute digits: ")?;
                 core::fmt::Display::fmt(err, f)
             }
-            Range => write!(
-                f,
+            Range => f.write_str(
                 "parsed minutes, but it's not in supported \
                  range of `0..=59`",
             ),
@@ -2076,8 +2068,7 @@ impl core::fmt::Display for SecondError {
                 f.write_str("invalid second digits: ")?;
                 core::fmt::Display::fmt(err, f)
             }
-            Range => write!(
-                f,
+            Range => f.write_str(
                 "parsed seconds, but it's not in supported \
                  range of `0..=59`",
             ),

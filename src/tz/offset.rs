@@ -1110,7 +1110,7 @@ impl core::fmt::Display for Offset {
         let minutes = self.part_minutes_ranged().abs().get();
         let seconds = self.part_seconds_ranged().abs().get();
         if hours == 0 && minutes == 0 && seconds == 0 {
-            write!(f, "+00")
+            f.write_str("+00")
         } else if hours != 0 && minutes == 0 && seconds == 0 {
             write!(f, "{sign}{hours:02}")
         } else if minutes != 0 && seconds == 0 {

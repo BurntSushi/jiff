@@ -2347,16 +2347,19 @@ impl core::fmt::Debug for SignedDuration {
 
         if f.alternate() {
             if self.subsec_nanos() == 0 {
-                write!(f, "{}s", self.as_secs())
+                core::fmt::Display::fmt(&self.as_secs(), f)?;
+                f.write_str("s")
             } else if self.as_secs() == 0 {
-                write!(f, "{}ns", self.subsec_nanos())
+                core::fmt::Display::fmt(&self.subsec_nanos(), f)?;
+                f.write_str("ns")
             } else {
-                write!(
+                core::fmt::Display::fmt(&self.as_secs(), f)?;
+                f.write_str("s ")?;
+                core::fmt::Display::fmt(
+                    &self.subsec_nanos().unsigned_abs(),
                     f,
-                    "{}s {}ns",
-                    self.as_secs(),
-                    self.subsec_nanos().unsigned_abs()
-                )
+                )?;
+                f.write_str("ns")
             }
         } else {
             friendly::DEFAULT_SPAN_PRINTER

@@ -3256,7 +3256,7 @@ impl Span {
         if self.nanoseconds != C(0) {
             write!(buf, ", nanoseconds: {:?}", self.nanoseconds).unwrap();
         }
-        write!(buf, " }}").unwrap();
+        buf.push_str(" }}");
         buf
     }
 
