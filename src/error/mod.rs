@@ -111,6 +111,80 @@ impl Error {
         matches!(*self.root().kind(), Range(_) | SlimRange(_) | ITimeRange(_))
     }
 
+    /// Returns true when this error originated as a result of an invalid
+    /// configuration of parameters to a function call.
+    ///
+    /// This particular error category is somewhat nebulous, but it's generally
+    /// meant to cover errors that _could_ have been statically prevented by
+    /// Jiff with more types in its API. Instead, a smaller API is preferred.
+    ///
+    /// # Example: invalid rounding options
+    ///
+    /// ```
+    /// use jiff::{SpanRound, ToSpan, Unit};
+    ///
+    /// let span = 44.seconds();
+    /// let err = span.round(
+    ///     SpanRound::new().smallest(Unit::Second).increment(45),
+    /// ).unwrap_err();
+    /// // Rounding increments for seconds must divide evenly into `60`.
+    /// // But `45` does not. Thus, this is a "configuration" error.
+    /// assert!(err.is_invalid_parameter());
+    /// ```
+    ///
+    /// # Example: invalid units
+    ///
+    /// One cannot round a span between dates to units less than days:
+    ///
+    /// ```
+    /// use jiff::{civil::date, Unit};
+    ///
+    /// let date1 = date(2025, 3, 18);
+    /// let date2 = date(2025, 12, 21);
+    /// let err = date1.until((Unit::Hour, date2)).unwrap_err();
+    /// assert!(err.is_invalid_parameter());
+    /// ```
+    ///
+    /// Similarly, one cannot round a span between times to units greater than
+    /// hours:
+    ///
+    /// ```
+    /// use jiff::{civil::time, Unit};
+    ///
+    /// let time1 = time(9, 39, 0, 0);
+    /// let time2 = time(17, 0, 0, 0);
+    /// let err = time1.until((Unit::Day, time2)).unwrap_err();
+    /// assert!(err.is_invalid_parameter());
+    /// ```
+    pub fn is_invalid_parameter(&self) -> bool {
+        use self::ErrorKind::*;
+        use self::{
+            civil::Error as CivilError, span::Error as SpanError,
+            tz::offset::Error as OffsetError, util::RoundingIncrementError,
+        };
+
+        matches!(
+            *self.root().kind(),
+            RoundingIncrement(
+                RoundingIncrementError::GreaterThanZero { .. }
+                    | RoundingIncrementError::InvalidDivide { .. }
+                    | RoundingIncrementError::Unsupported { .. }
+            ) | Span(
+                SpanError::NotAllowedCalendarUnits { .. }
+                    | SpanError::NotAllowedLargestSmallerThanSmallest { .. }
+                    | SpanError::RequiresRelativeWeekOrDay { .. }
+                    | SpanError::RequiresRelativeYearOrMonth { .. }
+                    | SpanError::RequiresRelativeYearOrMonthGivenDaysAre24Hours { .. }
+            ) | Civil(
+                CivilError::IllegalTimeWithMicrosecond
+                | CivilError::IllegalTimeWithMillisecond
+                | CivilError::IllegalTimeWithNanosecond
+                | CivilError::RoundMustUseDaysOrBigger { .. }
+                | CivilError::RoundMustUseHoursOrSmaller { .. }
+            ) | TzOffset(OffsetError::RoundInvalidUnit { .. })
+        )
+    }
+
     /// Returns true when this error originated as a result of an operation
     /// failing because an appropriate Jiff crate feature was not enabled.
     ///
