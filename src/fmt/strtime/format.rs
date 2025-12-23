@@ -9,7 +9,7 @@ use crate::{
             weekday_name_full, BrokenDownTime, Config, Custom, Extension,
             Flag,
         },
-        util::{DecimalFormatter, FractionalFormatter},
+        util::{FractionalFormatter, IntegerFormatter},
         Write, WriteExt,
     },
     tz::Offset,
@@ -850,7 +850,7 @@ fn write_offset<W: Write>(
     second: bool,
     wtr: &mut W,
 ) -> Result<(), Error> {
-    static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
+    static FMT_TWO: IntegerFormatter = IntegerFormatter::new().padding(2);
 
     let hours = offset.part_hours_ranged().abs().get();
     let minutes = offset.part_minutes_ranged().abs().get();
@@ -946,7 +946,7 @@ impl Extension {
             self.width.or(pad_width)
         };
 
-        let mut formatter = DecimalFormatter::new().padding_byte(pad_byte);
+        let mut formatter = IntegerFormatter::new().padding_byte(pad_byte);
         if let Some(width) = pad_width {
             formatter = formatter.padding(width);
         }

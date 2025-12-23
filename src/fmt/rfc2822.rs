@@ -44,7 +44,7 @@ general interchange format for new applications.
 use crate::{
     civil::{Date, DateTime, Time, Weekday},
     error::{fmt::rfc2822::Error as E, ErrorContext},
-    fmt::{util::DecimalFormatter, Parsed, Write, WriteExt},
+    fmt::{util::IntegerFormatter, Parsed, Write, WriteExt},
     tz::{Offset, TimeZone},
     util::{
         parse,
@@ -1292,10 +1292,10 @@ impl DateTimePrinter {
         offset: Option<Offset>,
         mut wtr: W,
     ) -> Result<(), Error> {
-        static FMT_DAY: DecimalFormatter = DecimalFormatter::new();
-        static FMT_YEAR: DecimalFormatter = DecimalFormatter::new().padding(4);
-        static FMT_TIME_UNIT: DecimalFormatter =
-            DecimalFormatter::new().padding(2);
+        static FMT_DAY: IntegerFormatter = IntegerFormatter::new();
+        static FMT_YEAR: IntegerFormatter = IntegerFormatter::new().padding(4);
+        static FMT_TIME_UNIT: IntegerFormatter =
+            IntegerFormatter::new().padding(2);
 
         if dt.year() < 0 {
             // RFC 2822 actually says the year must be at least 1900, but
@@ -1349,10 +1349,10 @@ impl DateTimePrinter {
         timestamp: &Timestamp,
         mut wtr: W,
     ) -> Result<(), Error> {
-        static FMT_DAY: DecimalFormatter = DecimalFormatter::new().padding(2);
-        static FMT_YEAR: DecimalFormatter = DecimalFormatter::new().padding(4);
-        static FMT_TIME_UNIT: DecimalFormatter =
-            DecimalFormatter::new().padding(2);
+        static FMT_DAY: IntegerFormatter = IntegerFormatter::new().padding(2);
+        static FMT_YEAR: IntegerFormatter = IntegerFormatter::new().padding(4);
+        static FMT_TIME_UNIT: IntegerFormatter =
+            IntegerFormatter::new().padding(2);
 
         let dt = TimeZone::UTC.to_datetime(*timestamp);
         if dt.year() < 0 {

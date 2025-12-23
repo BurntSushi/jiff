@@ -3,7 +3,7 @@ use crate::{
     error::{fmt::temporal::Error as E, Error},
     fmt::{
         temporal::{Pieces, PiecesOffset, TimeZoneAnnotationKind},
-        util::{DecimalFormatter, FractionalFormatter},
+        util::{FractionalFormatter, IntegerFormatter},
         Write, WriteExt,
     },
     span::Span,
@@ -108,11 +108,11 @@ impl DateTimePrinter {
         date: &Date,
         mut wtr: W,
     ) -> Result<(), Error> {
-        static FMT_YEAR_POSITIVE: DecimalFormatter =
-            DecimalFormatter::new().padding(4);
-        static FMT_YEAR_NEGATIVE: DecimalFormatter =
-            DecimalFormatter::new().padding(6);
-        static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
+        static FMT_YEAR_POSITIVE: IntegerFormatter =
+            IntegerFormatter::new().padding(4);
+        static FMT_YEAR_NEGATIVE: IntegerFormatter =
+            IntegerFormatter::new().padding(6);
+        static FMT_TWO: IntegerFormatter = IntegerFormatter::new().padding(2);
 
         if date.year() >= 0 {
             wtr.write_int(&FMT_YEAR_POSITIVE, date.year())?;
@@ -132,7 +132,7 @@ impl DateTimePrinter {
         time: &Time,
         mut wtr: W,
     ) -> Result<(), Error> {
-        static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
+        static FMT_TWO: IntegerFormatter = IntegerFormatter::new().padding(2);
         static FMT_FRACTION: FractionalFormatter = FractionalFormatter::new();
 
         wtr.write_int(&FMT_TWO, time.hour())?;
@@ -254,12 +254,12 @@ impl DateTimePrinter {
         iso_week_date: &ISOWeekDate,
         mut wtr: W,
     ) -> Result<(), Error> {
-        static FMT_YEAR_POSITIVE: DecimalFormatter =
-            DecimalFormatter::new().padding(4);
-        static FMT_YEAR_NEGATIVE: DecimalFormatter =
-            DecimalFormatter::new().padding(6);
-        static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
-        static FMT_ONE: DecimalFormatter = DecimalFormatter::new().padding(1);
+        static FMT_YEAR_POSITIVE: IntegerFormatter =
+            IntegerFormatter::new().padding(4);
+        static FMT_YEAR_NEGATIVE: IntegerFormatter =
+            IntegerFormatter::new().padding(6);
+        static FMT_TWO: IntegerFormatter = IntegerFormatter::new().padding(2);
+        static FMT_ONE: IntegerFormatter = IntegerFormatter::new().padding(1);
 
         if iso_week_date.year() >= 0 {
             wtr.write_int(&FMT_YEAR_POSITIVE, iso_week_date.year())?;
@@ -304,7 +304,7 @@ impl DateTimePrinter {
         offset: &Offset,
         mut wtr: W,
     ) -> Result<(), Error> {
-        static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
+        static FMT_TWO: IntegerFormatter = IntegerFormatter::new().padding(2);
 
         wtr.write_str(if offset.is_negative() { "-" } else { "+" })?;
         let mut hours = offset.part_hours_ranged().abs().get();
@@ -339,7 +339,7 @@ impl DateTimePrinter {
         offset: &Offset,
         mut wtr: W,
     ) -> Result<(), Error> {
-        static FMT_TWO: DecimalFormatter = DecimalFormatter::new().padding(2);
+        static FMT_TWO: IntegerFormatter = IntegerFormatter::new().padding(2);
 
         wtr.write_str(if offset.is_negative() { "-" } else { "+" })?;
         let hours = offset.part_hours_ranged().abs().get();
@@ -427,7 +427,7 @@ impl SpanPrinter {
         span: &Span,
         mut wtr: W,
     ) -> Result<(), Error> {
-        static FMT_INT: DecimalFormatter = DecimalFormatter::new();
+        static FMT_INT: IntegerFormatter = IntegerFormatter::new();
         static FMT_FRACTION: FractionalFormatter = FractionalFormatter::new();
 
         if span.is_negative() {
@@ -541,7 +541,7 @@ impl SpanPrinter {
         dur: &SignedDuration,
         mut wtr: W,
     ) -> Result<(), Error> {
-        static FMT_INT: DecimalFormatter = DecimalFormatter::new();
+        static FMT_INT: IntegerFormatter = IntegerFormatter::new();
         static FMT_FRACTION: FractionalFormatter = FractionalFormatter::new();
 
         let mut non_zero_greater_than_second = false;
@@ -590,7 +590,7 @@ impl SpanPrinter {
         dur: &core::time::Duration,
         mut wtr: W,
     ) -> Result<(), Error> {
-        static FMT_INT: DecimalFormatter = DecimalFormatter::new();
+        static FMT_INT: IntegerFormatter = IntegerFormatter::new();
         static FMT_FRACTION: FractionalFormatter = FractionalFormatter::new();
 
         let mut non_zero_greater_than_second = false;

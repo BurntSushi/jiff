@@ -16,29 +16,29 @@ use crate::{
 ///
 /// This only includes the sign when formatting a negative signed integer.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct DecimalFormatter {
+pub(crate) struct IntegerFormatter {
     minimum_digits: u8,
     padding_byte: u8,
 }
 
-impl DecimalFormatter {
-    /// Creates a new decimal formatter using the default configuration.
-    pub(crate) const fn new() -> DecimalFormatter {
-        DecimalFormatter { minimum_digits: 0, padding_byte: b'0' }
+impl IntegerFormatter {
+    /// Creates a new integer formatter using the default configuration.
+    pub(crate) const fn new() -> IntegerFormatter {
+        IntegerFormatter { minimum_digits: 0, padding_byte: b'0' }
     }
 
-    /// Format the given value using this configuration as a signed decimal
+    /// Format the given value using this configuration as a signed integer
     /// ASCII number.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) const fn format_signed(&self, value: i64) -> Decimal {
-        Decimal::signed(self, value)
+    pub(crate) const fn format_signed(&self, value: i64) -> Integer {
+        Integer::signed(self, value)
     }
 
-    /// Format the given value using this configuration as an unsigned decimal
+    /// Format the given value using this configuration as an unsigned integer
     /// ASCII number.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) const fn format_unsigned(&self, value: u64) -> Decimal {
-        Decimal::unsigned(self, value)
+    pub(crate) const fn format_unsigned(&self, value: u64) -> Integer {
+        Integer::unsigned(self, value)
     }
 
     /// The minimum number of digits/padding that this number should be
@@ -48,105 +48,105 @@ impl DecimalFormatter {
     ///
     /// The minimum number of digits is capped at the maximum number of digits
     /// for an i64 value (19) or a u64 value (20).
-    pub(crate) const fn padding(self, mut digits: u8) -> DecimalFormatter {
-        if digits > Decimal::MAX_LEN {
-            digits = Decimal::MAX_LEN;
+    pub(crate) const fn padding(self, mut digits: u8) -> IntegerFormatter {
+        if digits > Integer::MAX_LEN {
+            digits = Integer::MAX_LEN;
         }
-        DecimalFormatter { minimum_digits: digits, ..self }
+        IntegerFormatter { minimum_digits: digits, ..self }
     }
 
     /// The padding byte to use when `padding` is set.
     ///
     /// The default is `0`.
-    pub(crate) const fn padding_byte(self, byte: u8) -> DecimalFormatter {
-        DecimalFormatter { padding_byte: byte, ..self }
+    pub(crate) const fn padding_byte(self, byte: u8) -> IntegerFormatter {
+        IntegerFormatter { padding_byte: byte, ..self }
     }
 
     /// Returns the minimum number of digits for an integer value.
     const fn get_minimum_digits(&self) -> u8 {
-        if self.minimum_digits <= Decimal::MAX_LEN {
+        if self.minimum_digits <= Integer::MAX_LEN {
             self.minimum_digits
         } else {
-            Decimal::MAX_LEN
+            Integer::MAX_LEN
         }
     }
 }
 
-impl Default for DecimalFormatter {
-    fn default() -> DecimalFormatter {
-        DecimalFormatter::new()
+impl Default for IntegerFormatter {
+    fn default() -> IntegerFormatter {
+        IntegerFormatter::new()
     }
 }
 
-/// A formatted decimal number that can be converted to a sequence of bytes.
+/// A formatted integer number that can be converted to a sequence of bytes.
 #[derive(Debug)]
-pub(crate) struct Decimal {
+pub(crate) struct Integer {
     buf: [u8; Self::MAX_LEN as usize],
     start: u8,
 }
 
-impl Decimal {
+impl Integer {
     /// Discovered via
     /// `i64::MIN.to_string().len().max(u64::MAX.to_string().len())`.
     const MAX_LEN: u8 = 20;
 
     /// Using the given formatter, turn the value given into an unsigned
-    /// decimal representation using ASCII bytes.
+    /// integer representation using ASCII bytes.
     #[cfg_attr(feature = "perf-inline", inline(always))]
     const fn unsigned(
-        formatter: &DecimalFormatter,
+        formatter: &IntegerFormatter,
         mut value: u64,
-    ) -> Decimal {
-        let mut decimal =
-            Decimal { buf: [0; Self::MAX_LEN as usize], start: Self::MAX_LEN };
+    ) -> Integer {
+        let mut integer =
+            Integer { buf: [0; Self::MAX_LEN as usize], start: Self::MAX_LEN };
         loop {
-            decimal.start -= 1;
+            integer.start -= 1;
 
             let digit = (value % 10) as u8;
             value /= 10;
-            decimal.buf[decimal.start as usize] = b'0' + digit;
+            integer.buf[integer.start as usize] = b'0' + digit;
             if value == 0 {
                 break;
             }
         }
 
-        while decimal.len() < formatter.get_minimum_digits() {
-            decimal.start -= 1;
-            decimal.buf[decimal.start as usize] = formatter.padding_byte;
+        while integer.len() < formatter.get_minimum_digits() {
+            integer.start -= 1;
+            integer.buf[integer.start as usize] = formatter.padding_byte;
         }
-        decimal
+        integer
     }
 
-    /// Using the given formatter, turn the value given into a signed decimal
+    /// Using the given formatter, turn the value given into a signed integer
     /// representation using ASCII bytes.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    const fn signed(formatter: &DecimalFormatter, value: i64) -> Decimal {
+    const fn signed(formatter: &IntegerFormatter, value: i64) -> Integer {
         // Specialize the common case to generate tighter codegen.
         if value >= 0 {
-            return Decimal::unsigned(formatter, value.unsigned_abs());
+            return Integer::unsigned(formatter, value.unsigned_abs());
         }
-        Decimal::signed_cold(formatter, value)
+        Integer::signed_cold(formatter, value)
     }
 
     #[cold]
     #[inline(never)]
-    const fn signed_cold(formatter: &DecimalFormatter, value: i64) -> Decimal {
-        let mut decimal = Decimal::unsigned(formatter, value.unsigned_abs());
+    const fn signed_cold(formatter: &IntegerFormatter, value: i64) -> Integer {
+        let mut integer = Integer::unsigned(formatter, value.unsigned_abs());
         if value < 0 {
-            decimal.start -= 1;
-            decimal.buf[decimal.start as usize] = b'-';
+            integer.start -= 1;
+            integer.buf[integer.start as usize] = b'-';
         }
-        decimal
+        integer
     }
 
     /// Returns the total number of ASCII bytes (including the sign) that are
-    /// used to represent this decimal number.
+    /// used to represent this integer number.
     #[inline]
     const fn len(&self) -> u8 {
         Self::MAX_LEN - self.start
     }
 
-    /// Returns the ASCII representation of this decimal as a byte slice.
+    /// Returns the ASCII representation of this integer as a byte slice.
     ///
     /// The slice returned is guaranteed to be valid ASCII.
     #[inline]
@@ -154,7 +154,7 @@ impl Decimal {
         &self.buf[usize::from(self.start)..]
     }
 
-    /// Returns the ASCII representation of this decimal as a string slice.
+    /// Returns the ASCII representation of this integer as a string slice.
     #[inline]
     pub(crate) fn as_str(&self) -> &str {
         // SAFETY: This is safe because all bytes written to `self.buf` are
@@ -1311,29 +1311,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn decimal() {
-        let x = DecimalFormatter::new().format_signed(i64::MIN);
+    fn integer() {
+        let x = IntegerFormatter::new().format_signed(i64::MIN);
         assert_eq!(x.as_str(), "-9223372036854775808");
 
-        let x = DecimalFormatter::new().format_signed(i64::MIN + 1);
+        let x = IntegerFormatter::new().format_signed(i64::MIN + 1);
         assert_eq!(x.as_str(), "-9223372036854775807");
 
-        let x = DecimalFormatter::new().format_signed(i64::MAX);
+        let x = IntegerFormatter::new().format_signed(i64::MAX);
         assert_eq!(x.as_str(), "9223372036854775807");
 
-        let x = DecimalFormatter::new().format_signed(0);
+        let x = IntegerFormatter::new().format_signed(0);
         assert_eq!(x.as_str(), "0");
 
-        let x = DecimalFormatter::new().padding(4).format_signed(0);
+        let x = IntegerFormatter::new().padding(4).format_signed(0);
         assert_eq!(x.as_str(), "0000");
 
-        let x = DecimalFormatter::new().padding(4).format_signed(789);
+        let x = IntegerFormatter::new().padding(4).format_signed(789);
         assert_eq!(x.as_str(), "0789");
 
-        let x = DecimalFormatter::new().padding(4).format_signed(-789);
+        let x = IntegerFormatter::new().padding(4).format_signed(-789);
         assert_eq!(x.as_str(), "-0789");
 
-        let x = DecimalFormatter::new().padding(4).format_signed(789);
+        let x = IntegerFormatter::new().padding(4).format_signed(789);
         assert_eq!(x.as_str(), "0789");
     }
 

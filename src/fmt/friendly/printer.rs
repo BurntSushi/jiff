@@ -1,6 +1,6 @@
 use crate::{
     fmt::{
-        util::{DecimalFormatter, FractionalFormatter},
+        util::{FractionalFormatter, IntegerFormatter},
         Write, WriteExt,
     },
     Error, SignedDuration, Span, Unit,
@@ -1310,7 +1310,7 @@ impl SpanPrinter {
         span_time = span_time.abs();
 
         let fmtint =
-            DecimalFormatter::new().padding(self.padding.unwrap_or(2));
+            IntegerFormatter::new().padding(self.padding.unwrap_or(2));
         let fmtfraction = FractionalFormatter::new().precision(self.precision);
         wtr.wtr.write_int(&fmtint, span_time.get_hours_ranged().get())?;
         wtr.wtr.write_str(":")?;
@@ -1488,7 +1488,7 @@ impl SpanPrinter {
         // bigger.
 
         let fmtint =
-            DecimalFormatter::new().padding(self.padding.unwrap_or(2));
+            IntegerFormatter::new().padding(self.padding.unwrap_or(2));
         let fmtfraction = FractionalFormatter::new().precision(self.precision);
 
         let mut secs = udur.as_secs();
@@ -1618,7 +1618,7 @@ struct DesignatorWriter<'p, 'w, W> {
     wtr: &'w mut W,
     desig: Designators,
     sign: Option<DirectionSign>,
-    fmtint: DecimalFormatter,
+    fmtint: IntegerFormatter,
     fmtfraction: FractionalFormatter,
     written_non_zero_unit: bool,
 }
@@ -1633,7 +1633,7 @@ impl<'p, 'w, W: Write> DesignatorWriter<'p, 'w, W> {
         let desig = Designators::new(printer.designator);
         let sign = printer.direction.sign(printer, has_calendar, signum);
         let fmtint =
-            DecimalFormatter::new().padding(printer.padding.unwrap_or(0));
+            IntegerFormatter::new().padding(printer.padding.unwrap_or(0));
         let fmtfraction =
             FractionalFormatter::new().precision(printer.precision);
         DesignatorWriter {
@@ -1733,7 +1733,7 @@ impl<'p, 'w, W: Write> DesignatorWriter<'p, 'w, W> {
 struct FractionalPrinter {
     integer: u64,
     fraction: u32,
-    fmtint: DecimalFormatter,
+    fmtint: IntegerFormatter,
     fmtfraction: FractionalFormatter,
 }
 
@@ -1750,7 +1750,7 @@ impl FractionalPrinter {
     fn from_span(
         span: &Span,
         unit: FractionalUnit,
-        fmtint: DecimalFormatter,
+        fmtint: IntegerFormatter,
         fmtfraction: FractionalFormatter,
     ) -> FractionalPrinter {
         debug_assert!(span.largest_unit() <= Unit::from(unit));
@@ -1762,7 +1762,7 @@ impl FractionalPrinter {
     fn from_duration(
         dur: &core::time::Duration,
         unit: FractionalUnit,
-        fmtint: DecimalFormatter,
+        fmtint: IntegerFormatter,
         fmtfraction: FractionalFormatter,
     ) -> FractionalPrinter {
         match unit {
