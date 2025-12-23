@@ -170,7 +170,7 @@ use crate::{
     util::escape,
 };
 
-use self::util::{Decimal, DecimalFormatter, Fractional, FractionalFormatter};
+use self::util::{Fractional, FractionalFormatter, Integer, IntegerFormatter};
 
 pub mod friendly;
 mod offset;
@@ -434,7 +434,7 @@ trait WriteExt: Write {
     #[inline]
     fn write_int(
         &mut self,
-        formatter: &DecimalFormatter,
+        formatter: &IntegerFormatter,
         n: impl Into<i64>,
     ) -> Result<(), Error> {
         self.write_decimal(&formatter.format_signed(n.into()))
@@ -445,7 +445,7 @@ trait WriteExt: Write {
     #[inline]
     fn write_uint(
         &mut self,
-        formatter: &DecimalFormatter,
+        formatter: &IntegerFormatter,
         n: impl Into<u64>,
     ) -> Result<(), Error> {
         self.write_decimal(&formatter.format_unsigned(n.into()))
@@ -464,7 +464,7 @@ trait WriteExt: Write {
 
     /// Write the given decimal number to this buffer.
     #[inline]
-    fn write_decimal(&mut self, decimal: &Decimal) -> Result<(), Error> {
+    fn write_decimal(&mut self, decimal: &Integer) -> Result<(), Error> {
         self.write_str(decimal.as_str())
     }
 
