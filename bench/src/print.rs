@@ -1,13 +1,18 @@
 use std::hint::black_box as bb;
 
 use criterion::Criterion;
-use jiff::civil;
+use jiff::{
+    civil,
+    tz::{Offset, TimeZone},
+    Timestamp,
+};
 
 use crate::{benchmark, convert::ConvertFrom};
 
 pub(super) fn define(c: &mut Criterion) {
     print_civil_datetime(c);
     print_strftime(c);
+    print_rfc2822(c);
 }
 
 /// Measures the time it takes to print a civil datetime in ISO 8601 format.
@@ -171,6 +176,96 @@ fn print_strftime(c: &mut Criterion) {
                 buf.clear();
                 bb(odt).format_into(&mut buf, &TIME_FMT).unwrap();
                 assert_eq!(buf, EXPECTED.as_bytes());
+            })
+        });
+    }
+}
+
+/// Measures the time it takes to print a `Zoned` in the RFC 2822 format.
+fn print_rfc2822(c: &mut Criterion) {
+    const NAME: &str = "print/rfc2822";
+    const TZ: TimeZone = TimeZone::fixed(Offset::constant(-4));
+    const EXPECTED: &str = "Sat, 13 Jul 2024 17:24:59 -0400";
+    const START: Timestamp = Timestamp::constant(1720905899, 0);
+
+    let start = START.to_zoned(TZ.clone());
+    let mut buf = String::with_capacity(1024);
+
+    {
+        let zdt = &start;
+        benchmark(c, format!("{NAME}/buffer/jiff"), |b| {
+            b.iter(|| {
+                static PRINTER: jiff::fmt::rfc2822::DateTimePrinter =
+                    jiff::fmt::rfc2822::DateTimePrinter::new();
+                buf.clear();
+                PRINTER.print_zoned(bb(&zdt), &mut buf).unwrap();
+                assert_eq!(buf, EXPECTED);
+            })
+        });
+    }
+
+    {
+        let zdt = &start;
+        benchmark(c, format!("{NAME}/to_string/jiff"), |b| {
+            b.iter(|| {
+                static PRINTER: jiff::fmt::rfc2822::DateTimePrinter =
+                    jiff::fmt::rfc2822::DateTimePrinter::new();
+                let got = PRINTER.zoned_to_string(bb(&zdt)).unwrap();
+                assert_eq!(got, EXPECTED);
+            })
+        });
+    }
+
+    {
+        let dt = chrono::DateTime::convert_from(start.clone());
+        let items =
+            [chrono::format::Item::Fixed(chrono::format::Fixed::RFC2822)];
+        benchmark(c, format!("{NAME}/buffer/chrono"), |b| {
+            b.iter(|| {
+                buf.clear();
+                bb(dt)
+                    .format_with_items(items.as_slice().iter())
+                    .write_to(&mut buf)
+                    .unwrap();
+                assert_eq!(buf, EXPECTED);
+            })
+        });
+    }
+
+    {
+        let dt = chrono::DateTime::convert_from(start.clone());
+        let items =
+            [chrono::format::Item::Fixed(chrono::format::Fixed::RFC2822)];
+        benchmark(c, format!("{NAME}/to_string/chrono"), |b| {
+            b.iter(|| {
+                let got = bb(dt)
+                    .format_with_items(items.as_slice().iter())
+                    .to_string();
+                assert_eq!(got, EXPECTED);
+            })
+        });
+    }
+
+    {
+        let dt = time::OffsetDateTime::convert_from(start.clone());
+        let format = time::format_description::well_known::Rfc2822;
+        let mut buf = Vec::with_capacity(1024);
+        benchmark(c, format!("{NAME}/buffer/time"), |b| {
+            b.iter(|| {
+                buf.clear();
+                let _ = dt.format_into(&mut buf, &format).unwrap();
+                assert_eq!(buf, EXPECTED.as_bytes());
+            })
+        });
+    }
+
+    {
+        let dt = time::OffsetDateTime::convert_from(start.clone());
+        let format = time::format_description::well_known::Rfc2822;
+        benchmark(c, format!("{NAME}/to_string/time"), |b| {
+            b.iter(|| {
+                let got = dt.format(&format).unwrap();
+                assert_eq!(got, EXPECTED);
             })
         });
     }
