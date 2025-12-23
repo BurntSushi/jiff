@@ -83,7 +83,6 @@ impl Default for DecimalFormatter {
 pub(crate) struct Decimal {
     buf: [u8; Self::MAX_LEN as usize],
     start: u8,
-    end: u8,
 }
 
 impl Decimal {
@@ -98,11 +97,8 @@ impl Decimal {
         formatter: &DecimalFormatter,
         mut value: u64,
     ) -> Decimal {
-        let mut decimal = Decimal {
-            buf: [0; Self::MAX_LEN as usize],
-            start: Self::MAX_LEN,
-            end: Self::MAX_LEN,
-        };
+        let mut decimal =
+            Decimal { buf: [0; Self::MAX_LEN as usize], start: Self::MAX_LEN };
         loop {
             decimal.start -= 1;
 
@@ -147,7 +143,7 @@ impl Decimal {
     /// used to represent this decimal number.
     #[inline]
     const fn len(&self) -> u8 {
-        self.end - self.start
+        Self::MAX_LEN - self.start
     }
 
     /// Returns the ASCII representation of this decimal as a byte slice.
@@ -155,7 +151,7 @@ impl Decimal {
     /// The slice returned is guaranteed to be valid ASCII.
     #[inline]
     fn as_bytes(&self) -> &[u8] {
-        &self.buf[usize::from(self.start)..usize::from(self.end)]
+        &self.buf[usize::from(self.start)..]
     }
 
     /// Returns the ASCII representation of this decimal as a string slice.
