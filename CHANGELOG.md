@@ -1,8 +1,28 @@
 # CHANGELOG
 
-0.2.17 (TBD)
-============
-TODO
+0.2.17 (2025-12-24)
+===================
+This release contains binary size improvements to Jiff, more succinct error
+messages and some new minor APIs.
+
+While Jiff 1.0 is overdue, I've been doing a lot of experimenting with
+improving Jiff's binary size and compile times. In particular, I want to spend
+time doing this before Jiff 1.0 so that we don't box ourselves into a corner.
+(For example, some binary size improvements may require minor API breaking
+changes.)
+
+In this release, Jiff has switched to structured error handling internally
+in an effort to provide error predicates and also hopefully improve binary
+sizes and compile times. Overall this didn't have as big of an impact on
+binary sizes or compile times as I was hoping. I did take this opportunity to
+make Jiff's error messages a bit more succinct. In many cases, this involved
+de-duplicating some aspects of error messages and omitting user provided input
+in the messages. If you feel like there is a significant decrease in error
+message quality that isn't easily amended by callers providing additional
+context themselves, please open an issue.
+
+This release also updates Jiff's bundled copy of the [IANA Time Zone Database]
+to `2025c`. See the [`2025c` release announcement] for more details.
 
 Enhancements:
 
@@ -11,6 +31,15 @@ Add `Display`, `FromStr`, `Serialize` and `Deserialize` trait implementations
 for `jiff::civil::ISOWeekDate`. These all use the ISO 8601 week date format.
 * [#418](https://github.com/BurntSushi/jiff/issues/418):
 Add some basic predicates to `jiff::Error` for basic error introspection.
+* [#453](https://github.com/BurntSushi/jiff/pull/453),
+  [#454](https://github.com/BurntSushi/jiff/pull/454):
+Switch to structured error handling internally.
+* [#456](https://github.com/BurntSushi/jiff/pull/456),
+  [#457](https://github.com/BurntSushi/jiff/pull/457),
+  [#458](https://github.com/BurntSushi/jiff/pull/458):
+Various improvements to binary size.
+
+[`2025c` release announcement]: https://lists.iana.org/hyperkitty/list/tz-announce@iana.org/thread/TAGXKYLMAQRZRFTERQ33CEKOW7KRJVAK/
 
 
 0.2.16 (2025-11-07)
