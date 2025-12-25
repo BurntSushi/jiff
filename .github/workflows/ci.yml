@@ -252,6 +252,9 @@ jobs:
   # why we want to run `miri` (at present, 2025-02-25) is to check out pointer
   # tagging representation of `jiff::tz::TimeZone`. And we can run the tests in
   # `tz`.
+  #
+  # 2025-12-25: We're now also running Miri on the `jiff::fmt::buffer`
+  # implementation, which futzes around with uninitialized memory.
   test-miri:
     runs-on: ubuntu-latest
     steps:
@@ -265,6 +268,8 @@ jobs:
         components: miri
     - name: "Run tests on `jiff::tz` under miri"
       run: "cargo miri test tz:: --verbose"
+    - name: "Run tests on `jiff::fmt::buffer` under miri"
+      run: "cargo miri test fmt::buffer:: --verbose"
     - name: Run proc macro integration tests under miri
       run: cargo miri test --test integration procmacro --verbose
 

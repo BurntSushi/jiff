@@ -172,6 +172,7 @@ use crate::{
 
 use self::util::{Fractional, FractionalFormatter, Integer, IntegerFormatter};
 
+mod buffer;
 pub mod friendly;
 mod offset;
 pub mod rfc2822;
