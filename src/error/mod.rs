@@ -696,8 +696,10 @@ impl core::fmt::Display for CrateFeatureError {
             TzdbZoneInfo => "tzdb-zoneinfo",
         };
         #[allow(unreachable_code)]
-        core::fmt::Display::fmt(name, f)?;
-        f.write_str("` is not enabled")
+        {
+            core::fmt::Display::fmt(name, f)?;
+            f.write_str("` is not enabled")
+        }
     }
 }
 
