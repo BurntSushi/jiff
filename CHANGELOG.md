@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.2.18 (TBD)
+============
+TODO
+
+Enhancements:
+
+* [#460](https://github.com/BurntSushi/jiff/pull/460):
+Improve runtime performance and binary size of RFC 2822 printer.
+
+
 0.2.17 (2025-12-24)
 ===================
 This release contains binary size improvements to Jiff, more succinct error
