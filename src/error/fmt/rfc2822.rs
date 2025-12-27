@@ -29,7 +29,6 @@ pub(crate) enum Error {
     InvalidWeekday { got_non_digit: u8 },
     InvalidYear,
     NegativeYear,
-    OffsetOverflow,
     ParseDay,
     ParseHour,
     ParseMinute,
@@ -153,11 +152,6 @@ impl core::fmt::Display for Error {
             NegativeYear => f.write_str(
                 "datetime has negative year, \
                  which cannot be formatted with RFC 2822",
-            ),
-            OffsetOverflow => f.write_str(
-                "datetime has offset with non-zero second component, \
-                 and rounding it would result in an offset that exceeds \
-                 Jiff's minimum or maximum offset limit",
             ),
             ParseDay => f.write_str("failed to parse day"),
             ParseHour => f.write_str(

@@ -1353,29 +1353,9 @@ impl DateTimePrinter {
             return Ok(());
         };
         buf.write_str(if offset.is_negative() { "-" } else { "+" });
-        let mut hours = offset.part_hours_ranged().get().unsigned_abs();
-        let mut minutes = offset.part_minutes_ranged().get().unsigned_abs();
-        // RFC 2822, like RFC 3339, requires that time zone offsets are an
-        // integral number of minutes. While rounding based on seconds doesn't
-        // seem clearly indicated, we choose to do that here. An alternative
-        // would be to return an error. It isn't clear how important this is in
-        // practice though.
-        if offset.part_seconds_ranged().get().unsigned_abs() >= 30 {
-            if minutes == 59 {
-                hours += 1;
-                minutes = 0;
-                // An edge case: if rounding results in an offset beyond
-                // Jiff's boundaries, then we error. Otherwise, we'll print
-                // a datetime that cannot be parsed.
-                if hours > t::SpanZoneOffsetHours::MAX_REPR.unsigned_abs() {
-                    return Err(Error::from(E::OffsetOverflow));
-                }
-            } else {
-                minutes += 1;
-            }
-        }
-        buf.write_int_pad2(hours.into());
-        buf.write_int_pad2(minutes.into());
+        let (offset_hours, offset_minutes) = offset.round_to_nearest_minute();
+        buf.write_int_pad2(offset_hours.into());
+        buf.write_int_pad2(offset_minutes.into());
 
         Ok(())
     }
@@ -1879,6 +1859,52 @@ mod tests {
     }
 
     #[test]
+    fn ok_minimum_offset_roundtrip() {
+        let zdt = date(2025, 12, 25)
+            .at(17, 0, 0, 0)
+            .to_zoned(TimeZone::fixed(Offset::MIN))
+            .unwrap();
+        let string = DateTimePrinter::new().zoned_to_string(&zdt).unwrap();
+        assert_eq!(string, "Thu, 25 Dec 2025 17:00:00 -2559");
+
+        let got: Zoned = DateTimeParser::new().parse_zoned(&string).unwrap();
+        // Since we started with a zoned datetime with a minimal offset
+        // (to second precision) and RFC 2822 only supports minute precision
+        // in time zone offsets, printing the zoned datetime rounds the offset.
+        // But this would normally result in an offset beyond Jiff's limits,
+        // so in this case, the offset truncates to the minimum supported
+        // value by both Jiff and RFC 2822. That's what we test for here.
+        let expected = date(2025, 12, 25)
+            .at(17, 0, 0, 0)
+            .to_zoned(TimeZone::fixed(-Offset::hms(25, 59, 0)))
+            .unwrap();
+        assert_eq!(expected, got);
+    }
+
+    #[test]
+    fn ok_maximum_offset_roundtrip() {
+        let zdt = date(2025, 12, 25)
+            .at(17, 0, 0, 0)
+            .to_zoned(TimeZone::fixed(Offset::MAX))
+            .unwrap();
+        let string = DateTimePrinter::new().zoned_to_string(&zdt).unwrap();
+        assert_eq!(string, "Thu, 25 Dec 2025 17:00:00 +2559");
+
+        let got: Zoned = DateTimeParser::new().parse_zoned(&string).unwrap();
+        // Since we started with a zoned datetime with a maximal offset
+        // (to second precision) and RFC 2822 only supports minute precision
+        // in time zone offsets, printing the zoned datetime rounds the offset.
+        // But this would normally result in an offset beyond Jiff's limits,
+        // so in this case, the offset truncates to the maximum supported
+        // value by both Jiff and RFC 2822. That's what we test for here.
+        let expected = date(2025, 12, 25)
+            .at(17, 0, 0, 0)
+            .to_zoned(TimeZone::fixed(Offset::hms(25, 59, 0)))
+            .unwrap();
+        assert_eq!(expected, got);
+    }
+
+    #[test]
     fn ok_print_rfc9110_timestamp() {
         if crate::tz::db().is_definitively_empty() {
             return;
@@ -1944,18 +1970,6 @@ mod tests {
             .in_tz("America/New_York")
             .unwrap();
         insta::assert_snapshot!(p(&zdt), @"datetime has negative year, which cannot be formatted with RFC 2822");
-
-        let zdt = date(2024, 7, 31)
-            .at(5, 34, 45, 0)
-            .to_zoned(TimeZone::fixed(Offset::MIN))
-            .unwrap();
-        insta::assert_snapshot!(p(&zdt), @"datetime has offset with non-zero second component, and rounding it would result in an offset that exceeds Jiff's minimum or maximum offset limit");
-
-        let zdt = date(2024, 7, 31)
-            .at(5, 34, 45, 0)
-            .to_zoned(TimeZone::fixed(Offset::MAX))
-            .unwrap();
-        insta::assert_snapshot!(p(&zdt), @"datetime has offset with non-zero second component, and rounding it would result in an offset that exceeds Jiff's minimum or maximum offset limit");
     }
 
     #[test]

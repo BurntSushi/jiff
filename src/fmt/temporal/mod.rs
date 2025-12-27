@@ -2501,4 +2501,50 @@ mod tests {
             span2.total(Unit::Hour).unwrap()
         );
     }
+
+    #[test]
+    fn minimum_offset_roundtrip() {
+        let zdt = civil::date(2025, 12, 25)
+            .at(17, 0, 0, 0)
+            .to_zoned(TimeZone::fixed(Offset::MIN))
+            .unwrap();
+        let string = zdt.to_string();
+        assert_eq!(string, "2025-12-25T17:00:00-25:59[-25:59]");
+
+        let got: Zoned = string.parse().unwrap();
+        // Since we started with a zoned datetime with a minimal offset
+        // (to second precision) and RFC 9557 only supports minute precision
+        // in time zone offsets, printing the zoned datetime rounds the offset.
+        // But this would normally result in an offset beyond Jiff's limits,
+        // so in this case, the offset truncates to the minimum supported
+        // value by both Jiff and RFC 9557. That's what we test for here.
+        let expected = civil::date(2025, 12, 25)
+            .at(17, 0, 0, 0)
+            .to_zoned(TimeZone::fixed(-Offset::hms(25, 59, 0)))
+            .unwrap();
+        assert_eq!(expected, got);
+    }
+
+    #[test]
+    fn maximum_offset_roundtrip() {
+        let zdt = civil::date(2025, 12, 25)
+            .at(17, 0, 0, 0)
+            .to_zoned(TimeZone::fixed(Offset::MAX))
+            .unwrap();
+        let string = zdt.to_string();
+        assert_eq!(string, "2025-12-25T17:00:00+25:59[+25:59]");
+
+        let got: Zoned = string.parse().unwrap();
+        // Since we started with a zoned datetime with a maximal offset
+        // (to second precision) and RFC 9557 only supports minute precision
+        // in time zone offsets, printing the zoned datetime rounds the offset.
+        // But this would normally result in an offset beyond Jiff's limits,
+        // so in this case, the offset truncates to the maximum supported
+        // value by both Jiff and RFC 9557. That's what we test for here.
+        let expected = civil::date(2025, 12, 25)
+            .at(17, 0, 0, 0)
+            .to_zoned(TimeZone::fixed(Offset::hms(25, 59, 0)))
+            .unwrap();
+        assert_eq!(expected, got);
+    }
 }

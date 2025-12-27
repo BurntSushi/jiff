@@ -1088,6 +1088,60 @@ impl Offset {
         write!(&mut dst, "{}", self).unwrap();
         dst
     }
+
+    /// Round this offset to the nearest minute and returns the hour/minute
+    /// components as unsigned integers.
+    ///
+    /// Generally speaking, the second component on an offset is always zero.
+    /// There are _some_ cases in the tzdb where this isn't true (like
+    /// `Africa/Monrovia` before `1972-01-07`), but virtually all time zones
+    /// use offsets with whole hours. Some go to whole minutes. The only other
+    /// way to get non-zero seconds is to explicitly use a fixed offset.
+    ///
+    /// A pathological case is the minimum or maximum offset. In this case,
+    /// truncation is used instead of rounding to the nearest whole minute.
+    #[inline]
+    pub(crate) fn round_to_nearest_minute(self) -> (u8, u8) {
+        #[inline(never)]
+        #[cold]
+        fn round(mut hours: u8, mut minutes: u8) -> (u8, u8) {
+            const MAX_HOURS: u8 =
+                t::SpanZoneOffsetHours::MAX_REPR.unsigned_abs();
+            const MAX_MINS: u8 =
+                t::SpanZoneOffsetMinutes::MAX_REPR.unsigned_abs();
+
+            if minutes == 59 {
+                hours += 1;
+                minutes = 0;
+                // An edge case: if rounding results in an offset beyond
+                // Jiff's boundaries, then we truncate to the max (or min)
+                // offset supported.
+                if hours > MAX_HOURS {
+                    hours = MAX_HOURS;
+                    minutes = MAX_MINS;
+                }
+            } else {
+                minutes += 1;
+            }
+            (hours, minutes)
+        }
+
+        let total_seconds = self.seconds().unsigned_abs();
+        let hours = (total_seconds / (60 * 60)) as u8;
+        let minutes = ((total_seconds / 60) % 60) as u8;
+        let seconds = (total_seconds % 60) as u8;
+
+        // RFCs 2822, 3339 and 9557 require that time zone offsets are an
+        // integral number of minutes. While rounding based on seconds doesn't
+        // seem clearly indicated, the `1937-01-01T12:00:27.87+00:20` example
+        // in RFC 3339 seems to suggest that the number of minutes should be
+        // "as close as possible" to the actual offset. So we just do basic
+        // rounding here.
+        if seconds >= 30 {
+            return round(hours, minutes);
+        }
+        (hours, minutes)
+    }
 }
 
 impl core::fmt::Debug for Offset {
