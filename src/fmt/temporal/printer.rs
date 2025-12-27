@@ -307,25 +307,10 @@ impl DateTimePrinter {
         static FMT_TWO: IntegerFormatter = IntegerFormatter::new().padding(2);
 
         wtr.write_str(if offset.is_negative() { "-" } else { "+" })?;
-        let mut hours = offset.part_hours_ranged().abs().get();
-        let mut minutes = offset.part_minutes_ranged().abs().get();
-        // RFC 3339 requires that time zone offsets are an integral number
-        // of minutes. While rounding based on seconds doesn't seem clearly
-        // indicated, the `1937-01-01T12:00:27.87+00:20` example seems
-        // to suggest that the number of minutes should be "as close as
-        // possible" to the actual offset. So we just do basic rounding
-        // here.
-        if offset.part_seconds_ranged().abs() >= C(30) {
-            if minutes == 59 {
-                hours = hours.saturating_add(1);
-                minutes = 0;
-            } else {
-                minutes = minutes.saturating_add(1);
-            }
-        }
-        wtr.write_int(&FMT_TWO, hours)?;
+        let (offset_hours, offset_minutes) = offset.round_to_nearest_minute();
+        wtr.write_uint(&FMT_TWO, offset_hours)?;
         wtr.write_str(":")?;
-        wtr.write_int(&FMT_TWO, minutes)?;
+        wtr.write_uint(&FMT_TWO, offset_minutes)?;
         Ok(())
     }
 
@@ -667,6 +652,18 @@ mod tests {
         let mut buf = String::new();
         DateTimePrinter::new().print_zoned(&zoned, &mut buf).unwrap();
         assert_eq!(buf, "2024-03-10T09:34:45+00:00[UTC]");
+
+        let dt = date(2024, 3, 10).at(5, 34, 45, 0);
+        let zoned: Zoned = dt.to_zoned(TimeZone::fixed(Offset::MIN)).unwrap();
+        let mut buf = String::new();
+        DateTimePrinter::new().print_zoned(&zoned, &mut buf).unwrap();
+        assert_eq!(buf, "2024-03-10T05:34:45-25:59[-25:59]");
+
+        let dt = date(2024, 3, 10).at(5, 34, 45, 0);
+        let zoned: Zoned = dt.to_zoned(TimeZone::fixed(Offset::MAX)).unwrap();
+        let mut buf = String::new();
+        DateTimePrinter::new().print_zoned(&zoned, &mut buf).unwrap();
+        assert_eq!(buf, "2024-03-10T05:34:45+25:59[+25:59]");
     }
 
     #[test]

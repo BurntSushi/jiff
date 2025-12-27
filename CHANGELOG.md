@@ -8,6 +8,8 @@ Enhancements:
 
 * [#460](https://github.com/BurntSushi/jiff/pull/460):
 Improve runtime performance and binary size of RFC 2822 printer.
+* [#461](https://github.com/BurntSushi/jiff/pull/461):
+Tweak behavior of printing min/max offsets in RFC 2822 and Temporal printers.
 
 
 0.2.17 (2025-12-24)
