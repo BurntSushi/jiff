@@ -150,13 +150,17 @@ const MINS_PER_HOUR: i64 = 60;
 /// duration, like [`SignedDuration::abs`] and [`SignedDuration::checked_neg`].
 /// * A [`SignedDuration::system_until`] routine is provided as a replacement
 /// for [`std::time::SystemTime::duration_since`], but with signed durations.
-/// * Constructors and getters for units of hours and minutes are provided,
-/// where as these routines are unstable in the standard library.
+/// * Fallible constructors are provided, where as the standard library lacks
+/// them.
 /// * Unlike the standard library, this type implements the `std::fmt::Display`
 /// and `std::str::FromStr` traits via the ISO 8601 duration format, just
 /// like the [`Span`](crate::Span) type does. Also like `Span`, the ISO
 /// 8601 duration format is used to implement the serde `Serialize` and
 /// `Deserialize` traits when the `serde` crate feature is enabled.
+/// Additionally, the Jiff-specific [`friendly`] format is supported when
+/// parsing (or deserializing) automatically. And is available as an alternate
+/// via the `std::fmt::Display` implementation, i.e.,
+/// `format!("{duration:#}")`.
 /// * The `std::fmt::Debug` trait implementation is a bit different. If you
 /// have a problem with it, please file an issue.
 /// * At present, there is no `SignedDuration::abs_diff` since there are some
