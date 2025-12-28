@@ -95,6 +95,13 @@ impl ConvertFrom<jiff::civil::Time> for chrono::NaiveTime {
     }
 }
 
+impl ConvertFrom<jiff::SignedDuration> for chrono::TimeDelta {
+    fn convert_from(x: jiff::SignedDuration) -> chrono::TimeDelta {
+        chrono::TimeDelta::new(x.as_secs(), x.subsec_nanos().unsigned_abs())
+            .unwrap()
+    }
+}
+
 impl ConvertFrom<jiff::Zoned> for time::OffsetDateTime {
     fn convert_from(x: jiff::Zoned) -> time::OffsetDateTime {
         // We specifically avoid `x.offset()` here, since we only want this
