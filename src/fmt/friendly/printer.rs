@@ -821,6 +821,9 @@ impl SpanPrinter {
     /// of `2` is used for units of hours, minutes and seconds. Otherwise, a
     /// padding of `0` is used.
     ///
+    /// Padding is clamped to a maximum value of `20` (corresponding to the
+    /// number of digits in `u64::MAX`).
+    ///
     /// # Example
     ///
     /// This shows some examples of configuring padding when writing in default
@@ -869,6 +872,9 @@ impl SpanPrinter {
     /// The default value is `None`, which means the precision is automatically
     /// determined from the value. If no fractional component is needed, then
     /// none will be printed.
+    ///
+    /// Precision is capped to a maximum value of `9` (corresponding to the
+    /// maximum precision supported by Jiff).
     ///
     /// # Example
     ///

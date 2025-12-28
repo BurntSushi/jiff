@@ -47,7 +47,7 @@ impl IntegerFormatter {
     /// the minimum is reached.
     ///
     /// The minimum number of digits is capped at the maximum number of digits
-    /// for an i64 value (19) or a u64 value (20).
+    /// for an u64 value (20).
     pub(crate) const fn padding(self, mut digits: u8) -> IntegerFormatter {
         if digits > Integer::MAX_LEN {
             digits = Integer::MAX_LEN;
