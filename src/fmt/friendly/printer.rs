@@ -1295,15 +1295,17 @@ impl SpanPrinter {
         span: &Span,
         mut wtr: W,
     ) -> Result<(), Error> {
-        let span_cal = span.only_calendar();
-        let mut span_time = span.only_time();
-        let has_cal = !span_cal.is_zero();
-
+        let has_cal = !span.units().only_calendar().is_empty();
         let mut wtr =
             DesignatorWriter::new(self, &mut wtr, has_cal, span.signum());
+        let span = span.abs();
+
         wtr.maybe_write_prefix_sign()?;
         if has_cal {
-            self.print_span_designators_non_fraction(&span_cal, &mut wtr)?;
+            self.print_span_designators_non_fraction(
+                &span.only_calendar(),
+                &mut wtr,
+            )?;
             wtr.finish_preceding()?;
             // When spacing is disabled, then `finish_preceding` won't write
             // any spaces. But this would result in, e.g., `1yr15:00:00`, which
@@ -1313,17 +1315,16 @@ impl SpanPrinter {
                 wtr.wtr.write_str(" ")?;
             }
         }
-        span_time = span_time.abs();
 
         let fmtint =
             IntegerFormatter::new().padding(self.padding.unwrap_or(2));
         let fmtfraction = FractionalFormatter::new().precision(self.precision);
-        wtr.wtr.write_int(&fmtint, span_time.get_hours_ranged().get())?;
+        wtr.wtr.write_int(&fmtint, span.get_hours_ranged().get())?;
         wtr.wtr.write_str(":")?;
-        wtr.wtr.write_int(&fmtint, span_time.get_minutes_ranged().get())?;
+        wtr.wtr.write_int(&fmtint, span.get_minutes_ranged().get())?;
         wtr.wtr.write_str(":")?;
         let fp = FractionalPrinter::from_span(
-            &span_time.only_lower(Unit::Minute),
+            &span.only_lower(Unit::Minute),
             FractionalUnit::Second,
             fmtint,
             fmtfraction,
