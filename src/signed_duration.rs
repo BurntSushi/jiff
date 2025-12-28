@@ -1709,9 +1709,149 @@ impl SignedDuration {
 
 /// Additional APIs not found in the standard library.
 ///
-/// In most cases, these APIs exist as a result of the fact that this duration
+/// In some cases, these APIs exist as a result of the fact that this duration
 /// is signed.
 impl SignedDuration {
+    /// Fallibly creates a new `SignedDuration` from a 64-bit integer number
+    /// of hours.
+    ///
+    /// If the number of hours is less than [`SignedDuration::MIN`] or
+    /// more than [`SignedDuration::MAX`], then this returns `None`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::SignedDuration;
+    ///
+    /// assert_eq!(SignedDuration::try_from_hours(i64::MAX), None);
+    /// ```
+    #[inline]
+    pub const fn try_from_hours(hours: i64) -> Option<SignedDuration> {
+        // OK because (SECS_PER_MINUTE*MINS_PER_HOUR)!={-1,0}.
+        const MIN_HOUR: i64 = i64::MIN / (SECS_PER_MINUTE * MINS_PER_HOUR);
+        // OK because (SECS_PER_MINUTE*MINS_PER_HOUR)!={-1,0}.
+        const MAX_HOUR: i64 = i64::MAX / (SECS_PER_MINUTE * MINS_PER_HOUR);
+        if !(MIN_HOUR <= hours && hours <= MAX_HOUR) {
+            return None;
+        }
+        Some(SignedDuration::from_secs(
+            hours * MINS_PER_HOUR * SECS_PER_MINUTE,
+        ))
+    }
+
+    /// Fallibly creates a new `SignedDuration` from a 64-bit integer number
+    /// of minutes.
+    ///
+    /// If the number of minutes is less than [`SignedDuration::MIN`] or
+    /// more than [`SignedDuration::MAX`], then this returns `None`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::SignedDuration;
+    ///
+    /// assert_eq!(SignedDuration::try_from_mins(i64::MAX), None);
+    /// ```
+    #[inline]
+    pub const fn try_from_mins(mins: i64) -> Option<SignedDuration> {
+        // OK because SECS_PER_MINUTE!={-1,0}.
+        const MIN_MINUTE: i64 = i64::MIN / SECS_PER_MINUTE;
+        // OK because SECS_PER_MINUTE!={-1,0}.
+        const MAX_MINUTE: i64 = i64::MAX / SECS_PER_MINUTE;
+        if !(MIN_MINUTE <= mins && mins <= MAX_MINUTE) {
+            return None;
+        }
+        Some(SignedDuration::from_secs(mins * SECS_PER_MINUTE))
+    }
+
+    /// Fallibly creates a new `SignedDuration` from a 128-bit integer number
+    /// of milliseconds.
+    ///
+    /// If the number of milliseconds is less than [`SignedDuration::MIN`] or
+    /// more than [`SignedDuration::MAX`], then this returns `None`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::SignedDuration;
+    ///
+    /// assert_eq!(SignedDuration::try_from_millis_i128(i128::MAX), None);
+    /// ```
+    #[inline]
+    pub const fn try_from_millis_i128(millis: i128) -> Option<SignedDuration> {
+        const MILLIS_PER_SEC: i128 = self::MILLIS_PER_SEC as i128;
+        // OK because MILLIS_PER_SEC!={-1,0}.
+        let secs = millis / MILLIS_PER_SEC;
+        // RUST: Use `i64::try_from` when available in `const`.
+        if !(i64::MIN as i128 <= secs && secs <= i64::MAX as i128) {
+            return None;
+        }
+        let secs64 = secs as i64;
+        // OK because NANOS_PER_SEC!={-1,0} and because
+        // micros % MILLIS_PER_SEC can be at most 999, and 999 * 1_000_000
+        // never overflows i32.
+        let nanos = (millis % MILLIS_PER_SEC) as i32 * NANOS_PER_MILLI;
+        Some(SignedDuration::new_unchecked(secs64, nanos))
+    }
+
+    /// Fallibly creates a new `SignedDuration` from a 128-bit integer number
+    /// of microseconds.
+    ///
+    /// If the number of microseconds is less than [`SignedDuration::MIN`] or
+    /// more than [`SignedDuration::MAX`], then this returns `None`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::SignedDuration;
+    ///
+    /// assert_eq!(SignedDuration::try_from_micros_i128(i128::MAX), None);
+    /// ```
+    #[inline]
+    pub const fn try_from_micros_i128(micros: i128) -> Option<SignedDuration> {
+        const MICROS_PER_SEC: i128 = self::MICROS_PER_SEC as i128;
+        // OK because MICROS_PER_SEC!={-1,0}.
+        let secs = micros / MICROS_PER_SEC;
+        // RUST: Use `i64::try_from` when available in `const`.
+        if !(i64::MIN as i128 <= secs && secs <= i64::MAX as i128) {
+            return None;
+        }
+        let secs64 = secs as i64;
+        // OK because NANOS_PER_SEC!={-1,0} and because
+        // micros % MICROS_PER_SEC can be at most 999_999, and 999_999 * 1_000
+        // never overflows i32.
+        let nanos = (micros % MICROS_PER_SEC) as i32 * NANOS_PER_MICRO;
+        Some(SignedDuration::new_unchecked(secs64, nanos))
+    }
+
+    /// Fallibly creates a new `SignedDuration` from a 128-bit integer number
+    /// of nanoseconds.
+    ///
+    /// If the number of nanoseconds is less than [`SignedDuration::MIN`] or
+    /// more than [`SignedDuration::MAX`], then this returns `None`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::SignedDuration;
+    ///
+    /// assert_eq!(SignedDuration::try_from_nanos_i128(i128::MAX), None);
+    /// ```
+    #[inline]
+    pub const fn try_from_nanos_i128(nanos: i128) -> Option<SignedDuration> {
+        const NANOS_PER_SEC: i128 = self::NANOS_PER_SEC as i128;
+        // OK because NANOS_PER_SEC!={-1,0}.
+        let secs = nanos / NANOS_PER_SEC;
+        // RUST: Use `i64::try_from` when available in `const`.
+        if !(i64::MIN as i128 <= secs && secs <= i64::MAX as i128) {
+            return None;
+        }
+        let secs64 = secs as i64;
+        // OK because NANOS_PER_SEC!={-1,0}.
+        let nanos = (nanos % NANOS_PER_SEC) as i32;
+        Some(SignedDuration::new_unchecked(secs64, nanos))
+    }
+
     /// Returns the number of whole hours in this duration.
     ///
     /// The value returned is negative when the duration is negative.
@@ -2144,121 +2284,6 @@ impl SignedDuration {
     ) -> Result<SignedDuration, Error> {
         let options: SignedDurationRound = options.into();
         options.round(self)
-    }
-}
-
-/// Fallible constructors.
-///
-/// Ideally these would be public. And in `std`. But I'm hesitant to export
-/// them before they're in `std` to avoid having a potential API inconsistency.
-/// I think the main question here is whether these should return an `Option`
-/// or a `Result`. For now, these return an `Option` so that they are `const`
-/// and can aide code reuse. But I suspect these ought to be a `Result`.
-impl SignedDuration {
-    /// Fallibly creates a new `SignedDuration` from a 64-bit integer number
-    /// of hours.
-    ///
-    /// If the number of hours is less than [`SignedDuration::MIN`] or
-    /// more than [`SignedDuration::MAX`], then this returns `None`.
-    #[inline]
-    pub const fn try_from_hours(hours: i64) -> Option<SignedDuration> {
-        // OK because (SECS_PER_MINUTE*MINS_PER_HOUR)!={-1,0}.
-        const MIN_HOUR: i64 = i64::MIN / (SECS_PER_MINUTE * MINS_PER_HOUR);
-        // OK because (SECS_PER_MINUTE*MINS_PER_HOUR)!={-1,0}.
-        const MAX_HOUR: i64 = i64::MAX / (SECS_PER_MINUTE * MINS_PER_HOUR);
-        if !(MIN_HOUR <= hours && hours <= MAX_HOUR) {
-            return None;
-        }
-        Some(SignedDuration::from_secs(
-            hours * MINS_PER_HOUR * SECS_PER_MINUTE,
-        ))
-    }
-
-    /// Fallibly creates a new `SignedDuration` from a 64-bit integer number
-    /// of minutes.
-    ///
-    /// If the number of minutes is less than [`SignedDuration::MIN`] or
-    /// more than [`SignedDuration::MAX`], then this returns `None`.
-    #[inline]
-    pub const fn try_from_mins(mins: i64) -> Option<SignedDuration> {
-        // OK because SECS_PER_MINUTE!={-1,0}.
-        const MIN_MINUTE: i64 = i64::MIN / SECS_PER_MINUTE;
-        // OK because SECS_PER_MINUTE!={-1,0}.
-        const MAX_MINUTE: i64 = i64::MAX / SECS_PER_MINUTE;
-        if !(MIN_MINUTE <= mins && mins <= MAX_MINUTE) {
-            return None;
-        }
-        Some(SignedDuration::from_secs(mins * SECS_PER_MINUTE))
-    }
-
-    /// Fallibly creates a new `SignedDuration` from a 128-bit integer number
-    /// of milliseconds.
-    ///
-    /// If the number of milliseconds is less than [`SignedDuration::MIN`] or
-    /// more than [`SignedDuration::MAX`], then this returns `None`.
-    #[inline]
-    pub(crate) const fn try_from_millis_i128(
-        millis: i128,
-    ) -> Option<SignedDuration> {
-        const MILLIS_PER_SEC: i128 = self::MILLIS_PER_SEC as i128;
-        // OK because MILLIS_PER_SEC!={-1,0}.
-        let secs = millis / MILLIS_PER_SEC;
-        // RUST: Use `i64::try_from` when available in `const`.
-        if !(i64::MIN as i128 <= secs && secs <= i64::MAX as i128) {
-            return None;
-        }
-        let secs64 = secs as i64;
-        // OK because NANOS_PER_SEC!={-1,0} and because
-        // micros % MILLIS_PER_SEC can be at most 999, and 999 * 1_000_000
-        // never overflows i32.
-        let nanos = (millis % MILLIS_PER_SEC) as i32 * NANOS_PER_MILLI;
-        Some(SignedDuration::new_unchecked(secs64, nanos))
-    }
-
-    /// Fallibly creates a new `SignedDuration` from a 128-bit integer number
-    /// of microseconds.
-    ///
-    /// If the number of microseconds is less than [`SignedDuration::MIN`] or
-    /// more than [`SignedDuration::MAX`], then this returns `None`.
-    #[inline]
-    pub(crate) const fn try_from_micros_i128(
-        micros: i128,
-    ) -> Option<SignedDuration> {
-        const MICROS_PER_SEC: i128 = self::MICROS_PER_SEC as i128;
-        // OK because MICROS_PER_SEC!={-1,0}.
-        let secs = micros / MICROS_PER_SEC;
-        // RUST: Use `i64::try_from` when available in `const`.
-        if !(i64::MIN as i128 <= secs && secs <= i64::MAX as i128) {
-            return None;
-        }
-        let secs64 = secs as i64;
-        // OK because NANOS_PER_SEC!={-1,0} and because
-        // micros % MICROS_PER_SEC can be at most 999_999, and 999_999 * 1_000
-        // never overflows i32.
-        let nanos = (micros % MICROS_PER_SEC) as i32 * NANOS_PER_MICRO;
-        Some(SignedDuration::new_unchecked(secs64, nanos))
-    }
-
-    /// Fallibly creates a new `SignedDuration` from a 128-bit integer number
-    /// of nanoseconds.
-    ///
-    /// If the number of nanoseconds is less than [`SignedDuration::MIN`] or
-    /// more than [`SignedDuration::MAX`], then this returns `None`.
-    #[inline]
-    pub(crate) const fn try_from_nanos_i128(
-        nanos: i128,
-    ) -> Option<SignedDuration> {
-        const NANOS_PER_SEC: i128 = self::NANOS_PER_SEC as i128;
-        // OK because NANOS_PER_SEC!={-1,0}.
-        let secs = nanos / NANOS_PER_SEC;
-        // RUST: Use `i64::try_from` when available in `const`.
-        if !(i64::MIN as i128 <= secs && secs <= i64::MAX as i128) {
-            return None;
-        }
-        let secs64 = secs as i64;
-        // OK because NANOS_PER_SEC!={-1,0}.
-        let nanos = (nanos % NANOS_PER_SEC) as i32;
-        Some(SignedDuration::new_unchecked(secs64, nanos))
     }
 }
 

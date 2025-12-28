@@ -10,6 +10,8 @@ Enhancements:
 Improve runtime performance and binary size of RFC 2822 printer.
 * [#461](https://github.com/BurntSushi/jiff/pull/461):
 Tweak behavior of printing min/max offsets in RFC 2822 and Temporal printers.
+* [#462](https://github.com/BurntSushi/jiff/pull/462):
+Export fallible constructors for `jiff::SignedDuration`.
 
 
 0.2.17 (2025-12-24)
