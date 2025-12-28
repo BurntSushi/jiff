@@ -217,15 +217,19 @@ impl<'data> BorrowedBuffer<'data> {
         // a pain.
         let digits = if n == 0 { 1 } else { n.ilog10() as u8 + 1 };
         let available = self.available();
+        let mut remaining_digits = usize::from(digits);
         assert!(
-            available.len() >= usize::from(digits),
+            available.len() >= remaining_digits,
             "u8 integer digits exceeds available buffer space"
         );
-        let mut remaining_digits = usize::from(digits);
         while remaining_digits > 0 {
             remaining_digits -= 1;
-            available[remaining_digits] =
-                MaybeUninit::new(b'0' + ((n % 10) as u8));
+            // SAFETY: The assert above guarantees that `remaining_digits` is
+            // always in bounds.
+            unsafe {
+                *available.get_unchecked_mut(remaining_digits) =
+                    MaybeUninit::new(b'0' + ((n % 10) as u8));
+            }
             n /= 10;
         }
         self.filled += digits;
@@ -253,9 +257,16 @@ impl<'data> BorrowedBuffer<'data> {
             .available()
             .get_mut(..2)
             .expect("padded 2 digit integer exceeds available buffer space");
-        dst[1] = MaybeUninit::new(b'0' + ((n % 10) as u8));
+        // SAFETY: Valid because of the assertion above.
+        unsafe {
+            *dst.get_unchecked_mut(1) =
+                MaybeUninit::new(b'0' + ((n % 10) as u8));
+        }
         n /= 10;
-        dst[0] = MaybeUninit::new(b'0' + (n as u8));
+        // SAFETY: Valid because of the assertion above.
+        unsafe {
+            *dst.get_unchecked_mut(0) = MaybeUninit::new(b'0' + (n as u8));
+        }
         self.filled += 2;
     }
 
@@ -281,13 +292,28 @@ impl<'data> BorrowedBuffer<'data> {
             .available()
             .get_mut(..4)
             .expect("padded 4 digit integer exceeds available buffer space");
-        dst[3] = MaybeUninit::new(b'0' + ((n % 10) as u8));
+        // SAFETY: Valid because of the assertion above.
+        unsafe {
+            *dst.get_unchecked_mut(3) =
+                MaybeUninit::new(b'0' + ((n % 10) as u8));
+        }
         n /= 10;
-        dst[2] = MaybeUninit::new(b'0' + ((n % 10) as u8));
+        // SAFETY: Valid because of the assertion above.
+        unsafe {
+            *dst.get_unchecked_mut(2) =
+                MaybeUninit::new(b'0' + ((n % 10) as u8));
+        }
         n /= 10;
-        dst[1] = MaybeUninit::new(b'0' + ((n % 10) as u8));
+        // SAFETY: Valid because of the assertion above.
+        unsafe {
+            *dst.get_unchecked_mut(1) =
+                MaybeUninit::new(b'0' + ((n % 10) as u8));
+        }
         n /= 10;
-        dst[0] = MaybeUninit::new(b'0' + (n as u8));
+        // SAFETY: Valid because of the assertion above.
+        unsafe {
+            *dst.get_unchecked_mut(0) = MaybeUninit::new(b'0' + (n as u8));
+        }
         self.filled += 4;
     }
 
