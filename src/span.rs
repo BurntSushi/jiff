@@ -2694,6 +2694,56 @@ impl Span {
     }
 
     #[inline]
+    pub(crate) fn get_years_unsigned(&self) -> t::SpanYears {
+        self.years
+    }
+
+    #[inline]
+    pub(crate) fn get_months_unsigned(&self) -> t::SpanMonths {
+        self.months
+    }
+
+    #[inline]
+    pub(crate) fn get_weeks_unsigned(&self) -> t::SpanWeeks {
+        self.weeks
+    }
+
+    #[inline]
+    pub(crate) fn get_days_unsigned(&self) -> t::SpanDays {
+        self.days
+    }
+
+    #[inline]
+    pub(crate) fn get_hours_unsigned(&self) -> t::SpanHours {
+        self.hours
+    }
+
+    #[inline]
+    pub(crate) fn get_minutes_unsigned(&self) -> t::SpanMinutes {
+        self.minutes
+    }
+
+    #[inline]
+    pub(crate) fn get_seconds_unsigned(&self) -> t::SpanSeconds {
+        self.seconds
+    }
+
+    #[inline]
+    pub(crate) fn get_milliseconds_unsigned(&self) -> t::SpanMilliseconds {
+        self.milliseconds
+    }
+
+    #[inline]
+    pub(crate) fn get_microseconds_unsigned(&self) -> t::SpanMicroseconds {
+        self.microseconds
+    }
+
+    #[inline]
+    pub(crate) fn get_nanoseconds_unsigned(&self) -> t::SpanNanoseconds {
+        self.nanoseconds
+    }
+
+    #[inline]
     fn get_sign_ranged(&self) -> ri8<-1, 1> {
         self.sign
     }
@@ -5860,6 +5910,13 @@ impl UnitSet {
     #[inline]
     pub(crate) fn is_empty(&self) -> bool {
         self.0 == 0
+    }
+
+    /// Returns true when this `Span` contains a non-zero value for the given
+    /// unit.
+    #[inline]
+    pub(crate) fn contains(self, unit: Unit) -> bool {
+        (self.0 & (1 << unit as usize)) != 0
     }
 
     /// Returns true if and only if this `Span` contains precisely one
