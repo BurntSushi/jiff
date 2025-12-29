@@ -3,10 +3,14 @@ use core::mem::MaybeUninit;
 use crate::{fmt::Write, Error};
 
 const MAX_CAPACITY: usize = u8::MAX as usize;
+// From `u64::MAX.to_string().len()`.
+const MAX_INTEGER_LEN: u8 = 20;
+const MAX_PRECISION: usize = 9;
 
 /// An uninitialized slice of bytes of fixed size.
 ///
 /// This is typically used with `BorrowedBuffer`.
+#[derive(Clone, Copy)]
 pub(crate) struct ArrayBuffer<const N: usize> {
     data: [MaybeUninit<u8>; N],
 }
@@ -16,6 +20,20 @@ impl<const N: usize> ArrayBuffer<N> {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn as_borrowed<'data>(&mut self) -> BorrowedBuffer<'_> {
         BorrowedBuffer::from(&mut self.data)
+    }
+
+    /// Assume this entire buffer is initialized and return it as an array.
+    ///
+    /// # Safety
+    ///
+    /// Callers must ensure the entire buffer is initialized.
+    unsafe fn assume_init(self) -> [u8; N] {
+        // SAFETY: Callers are responsible for ensuring that `self.data`
+        // is initialized. Otherwise, `MaybeUninit<u8>` and `u8` have the
+        // same representation.
+        unsafe {
+            *(&self.data as *const [MaybeUninit<u8>; N] as *const [u8; N])
+        }
     }
 }
 
@@ -235,6 +253,60 @@ impl<'data> BorrowedBuffer<'data> {
         self.filled += digits;
     }
 
+    /// Writes the given `u8` integer to this buffer using the given padding.
+    ///
+    /// The maximum allowed padding is `20`. Any values bigger than that are
+    /// silently clamped to `20`.
+    ///
+    /// # Panics
+    ///
+    /// When the available space is insufficient to encode the number of
+    /// digits in the decimal representation of `n`.
+    ///
+    /// This also panics when `pad_byte` is not ASCII.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_int_pad(
+        &mut self,
+        mut n: u64,
+        pad_byte: u8,
+        pad_len: u8,
+    ) {
+        assert!(pad_byte.is_ascii(), "padding byte must be ASCII");
+
+        let pad_len = pad_len.min(MAX_INTEGER_LEN);
+        let digits =
+            pad_len.max(if n == 0 { 1 } else { n.ilog10() as u8 + 1 });
+        let available = self.available();
+        let mut remaining_digits = usize::from(digits);
+        assert!(
+            available.len() >= remaining_digits,
+            "u8 integer digits exceeds available buffer space"
+        );
+        while remaining_digits > 0 {
+            remaining_digits -= 1;
+            // SAFETY: The assert above guarantees that `remaining_digits` is
+            // always in bounds.
+            unsafe {
+                *available.get_unchecked_mut(remaining_digits) =
+                    MaybeUninit::new(b'0' + ((n % 10) as u8));
+            }
+            n /= 10;
+            if n == 0 {
+                break;
+            }
+        }
+        while remaining_digits > 0 {
+            remaining_digits -= 1;
+            // SAFETY: The assert above guarantees that `remaining_digits` is
+            // always in bounds.
+            unsafe {
+                *available.get_unchecked_mut(remaining_digits) =
+                    MaybeUninit::new(pad_byte);
+            }
+        }
+        self.filled += digits;
+    }
+
     /// Writes the given integer as a 2-digit zero padded integer to this
     /// buffer.
     ///
@@ -243,7 +315,7 @@ impl<'data> BorrowedBuffer<'data> {
     /// When the available space is shorter than 2 or if `n > 99`.
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_int_pad2(&mut self, mut n: u64) {
-        // This is required for correctness. Whe `n > 9999`, then the
+        // This is required for correctness. When `n > 9999`, then the
         // last `n as u8` below could result in writing an invalid UTF-8
         // byte. We don't mind incorrect results, but writing invalid
         // UTF-8 can lead to undefined behavior, and we want this API
@@ -278,7 +350,7 @@ impl<'data> BorrowedBuffer<'data> {
     /// When the available space is shorter than 4 or if `n > 9999`.
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_int_pad4(&mut self, mut n: u64) {
-        // This is required for correctness. Whe `n > 9999`, then the
+        // This is required for correctness. When `n > 9999`, then the
         // last `n as u8` below could result in writing an invalid UTF-8
         // byte. We don't mind incorrect results, but writing invalid
         // UTF-8 can lead to undefined behavior, and we want this API
@@ -315,6 +387,113 @@ impl<'data> BorrowedBuffer<'data> {
             *dst.get_unchecked_mut(0) = MaybeUninit::new(b'0' + (n as u8));
         }
         self.filled += 4;
+    }
+
+    /// Writes the given integer as a 6-digit zero padded integer to this
+    /// buffer.
+    ///
+    /// # Panics
+    ///
+    /// When the available space is shorter than 6 or if `n > 999999`.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_int_pad6(&mut self, mut n: u64) {
+        // This is required for correctness. When `n > 999999`, then the
+        // last `n as u8` below could result in writing an invalid UTF-8
+        // byte. We don't mind incorrect results, but writing invalid
+        // UTF-8 can lead to undefined behavior, and we want this API
+        // to be sound.
+        //
+        // We omit the final `% 10` because it makes micro-benchmark results
+        // worse. This panicking check has a more modest impact.
+        assert!(n <= 999999);
+
+        let dst = self
+            .available()
+            .get_mut(..6)
+            .expect("padded 6 digit integer exceeds available buffer space");
+        // SAFETY: Valid because of the assertion above.
+        unsafe {
+            *dst.get_unchecked_mut(5) =
+                MaybeUninit::new(b'0' + ((n % 10) as u8));
+        }
+        n /= 10;
+        // SAFETY: Valid because of the assertion above.
+        unsafe {
+            *dst.get_unchecked_mut(4) =
+                MaybeUninit::new(b'0' + ((n % 10) as u8));
+        }
+        n /= 10;
+        // SAFETY: Valid because of the assertion above.
+        unsafe {
+            *dst.get_unchecked_mut(3) =
+                MaybeUninit::new(b'0' + ((n % 10) as u8));
+        }
+        n /= 10;
+        // SAFETY: Valid because of the assertion above.
+        unsafe {
+            *dst.get_unchecked_mut(2) =
+                MaybeUninit::new(b'0' + ((n % 10) as u8));
+        }
+        n /= 10;
+        // SAFETY: Valid because of the assertion above.
+        unsafe {
+            *dst.get_unchecked_mut(1) =
+                MaybeUninit::new(b'0' + ((n % 10) as u8));
+        }
+        n /= 10;
+        // SAFETY: Valid because of the assertion above.
+        unsafe {
+            *dst.get_unchecked_mut(0) = MaybeUninit::new(b'0' + (n as u8));
+        }
+        self.filled += 6;
+    }
+
+    /// Writes `n` as a fractional component to the given `precision`.
+    ///
+    /// When `precision` is absent, then it is automatically detected based
+    /// on the value of `n`.
+    ///
+    /// When `precision` is bigger than `9`, then it is clamped to `9`.
+    ///
+    /// # Panics
+    ///
+    /// When the available space is shorter than the number of digits required
+    /// to write `n` as a fractional value.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_fraction(
+        &mut self,
+        precision: Option<u8>,
+        mut n: u32,
+    ) {
+        assert!(n <= 999_999_999);
+        let mut buf = ArrayBuffer::<MAX_PRECISION>::default();
+        for i in (0..MAX_PRECISION).rev() {
+            unsafe {
+                *buf.data.get_unchecked_mut(i) =
+                    MaybeUninit::new(b'0' + ((n % 10) as u8));
+            }
+            n /= 10;
+        }
+
+        let end = precision
+            .map(|p| p.min(MAX_PRECISION as u8))
+            .unwrap_or_else(|| {
+                // SAFETY: The loop above is guaranteed to initialize `buf` in
+                // its entirety.
+                let buf = unsafe { buf.assume_init() };
+                let mut end = MAX_PRECISION as u8;
+                while end > 0 && buf[usize::from(end) - 1] == b'0' {
+                    end -= 1;
+                }
+                end
+            });
+
+        let buf = &buf.data[..usize::from(end)];
+        self.available()
+            .get_mut(..buf.len())
+            .expect("fraction exceeds available buffer space")
+            .copy_from_slice(buf);
+        self.filled += end;
     }
 
     /// Clears this buffer so that there are no filled bytes.
@@ -620,5 +799,395 @@ mod tests {
         // technically unspecified behavior,
         // but should not result in undefined behavior.
         bbuf.write_int_pad4(u64::MAX);
+    }
+
+    #[test]
+    fn write_int_pad6() {
+        let mut buf = ArrayBuffer::<100>::default();
+        let mut bbuf = buf.as_borrowed();
+
+        bbuf.write_int_pad6(0);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "000000");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad6(1);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "000001");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad6(10);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "000010");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad6(99);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "000099");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad6(999);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "000999");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad6(9999);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "009999");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad6(999999);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "999999");
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn write_int_pad6_panic() {
+        let mut buf = ArrayBuffer::<100>::default();
+        let mut bbuf = buf.as_borrowed();
+        // technically unspecified behavior,
+        // but should not result in undefined behavior.
+        bbuf.write_int_pad6(u64::MAX);
+    }
+
+    #[test]
+    fn write_int_pad_zero() {
+        let mut buf = ArrayBuffer::<100>::default();
+        let mut bbuf = buf.as_borrowed();
+
+        bbuf.write_int_pad(0, b'0', 0);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "0");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad(0, b'0', 1);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "0");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad(0, b'0', 2);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "00");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad(0, b'0', 20);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "00000000000000000000");
+        }
+
+        bbuf.clear();
+        // clamped to 20
+        bbuf.write_int_pad(0, b'0', 21);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "00000000000000000000");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad(0, b' ', 2);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, " 0");
+        }
+    }
+
+    #[test]
+    fn write_int_pad_one() {
+        let mut buf = ArrayBuffer::<100>::default();
+        let mut bbuf = buf.as_borrowed();
+
+        bbuf.write_int_pad(1, b'0', 0);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "1");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad(1, b'0', 1);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "1");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad(1, b'0', 2);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "01");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad(1, b'0', 20);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "00000000000000000001");
+        }
+
+        bbuf.clear();
+        // clamped to 20
+        bbuf.write_int_pad(1, b'0', 21);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "00000000000000000001");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad(1, b' ', 2);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, " 1");
+        }
+    }
+
+    #[test]
+    fn write_int_pad_max() {
+        let mut buf = ArrayBuffer::<100>::default();
+        let mut bbuf = buf.as_borrowed();
+
+        bbuf.write_int_pad(u64::MAX, b'0', 0);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "18446744073709551615");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad(u64::MAX, b'0', 1);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "18446744073709551615");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad(u64::MAX, b'0', 2);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "18446744073709551615");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad(u64::MAX, b'0', 20);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "18446744073709551615");
+        }
+
+        bbuf.clear();
+        // clamped to 20
+        bbuf.write_int_pad(u64::MAX, b'0', 21);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "18446744073709551615");
+        }
+
+        bbuf.clear();
+        bbuf.write_int_pad(u64::MAX, b' ', 2);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "18446744073709551615");
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn write_int_pad_non_ascii_panic() {
+        let mut buf = ArrayBuffer::<100>::default();
+        let mut bbuf = buf.as_borrowed();
+        bbuf.write_int_pad(0, 0xFF, 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn write_int_pad_insufficient_capacity_panic() {
+        let mut buf = ArrayBuffer::<19>::default();
+        let mut bbuf = buf.as_borrowed();
+        bbuf.write_int_pad(0, b'0', 20);
+    }
+
+    #[test]
+    fn write_fraction_no_precision() {
+        let mut buf = ArrayBuffer::<100>::default();
+        let mut bbuf = buf.as_borrowed();
+
+        bbuf.write_fraction(None, 0);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(None, 1);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "000000001");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(None, 123_000_000);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "123");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(None, 999_999_999);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "999999999");
+        }
+    }
+
+    #[test]
+    fn write_fraction_precision() {
+        let mut buf = ArrayBuffer::<100>::default();
+        let mut bbuf = buf.as_borrowed();
+
+        bbuf.write_fraction(Some(0), 0);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(Some(1), 0);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "0");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(Some(9), 0);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "000000000");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(Some(0), 1);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(Some(9), 1);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "000000001");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(Some(0), 123_000_000);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(Some(1), 123_000_000);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "1");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(Some(2), 123_000_000);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "12");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(Some(3), 123_000_000);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "123");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(Some(6), 123_000_000);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "123000");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(Some(9), 123_000_000);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "123000000");
+        }
+
+        bbuf.clear();
+        // clamps to 9
+        bbuf.write_fraction(Some(10), 123_000_000);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "123000000");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(Some(0), 999_999_999);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(Some(1), 999_999_999);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "9");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(Some(3), 999_999_999);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "999");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(Some(6), 999_999_999);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "999999");
+        }
+
+        bbuf.clear();
+        bbuf.write_fraction(Some(9), 999_999_999);
+        {
+            let buf = bbuf.into_filled();
+            assert_eq!(buf, "999999999");
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn write_fraction_too_big_panic() {
+        let mut buf = ArrayBuffer::<100>::default();
+        let mut bbuf = buf.as_borrowed();
+        bbuf.write_fraction(None, 1_000_000_000);
     }
 }
