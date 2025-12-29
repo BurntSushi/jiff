@@ -2,7 +2,7 @@ use core::mem::MaybeUninit;
 
 use crate::{fmt::Write, Error};
 
-const MAX_CAPACITY: usize = u8::MAX as usize;
+const MAX_CAPACITY: usize = u16::MAX as usize;
 // From `u64::MAX.to_string().len()`.
 const MAX_INTEGER_LEN: u8 = 20;
 const MAX_PRECISION: usize = 9;
@@ -71,7 +71,7 @@ impl<const N: usize> Default for ArrayBuffer<N> {
 #[derive(Debug)]
 pub(crate) struct BorrowedBuffer<'data> {
     data: &'data mut [MaybeUninit<u8>],
-    filled: u8,
+    filled: u16,
 }
 
 impl<'data> BorrowedBuffer<'data> {
@@ -211,11 +211,22 @@ impl<'data> BorrowedBuffer<'data> {
             .expect("string data exceeds available buffer space")
             .copy_from_slice(data);
         // Cast here will never truncate because `BorrowedBuffer` is limited
-        // to `u8::MAX` in total capacity. Above will panic if `string.len()`
+        // to `u16::MAX` in total capacity. Above will panic if `string.len()`
         // exceeds available capacity, which can never be above total capacity.
-        // Thus, if we're here, `string.len() <= u8::MAX` is guaranteed to
+        // Thus, if we're here, `string.len() <= u16::MAX` is guaranteed to
         // hold.
-        self.filled += string.len() as u8;
+        self.filled += string.len() as u16;
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_ascii_char(&mut self, byte: u8) {
+        assert!(byte.is_ascii());
+        *self
+            .available()
+            .get_mut(0)
+            .expect("insufficient buffer space to write one byte") =
+            MaybeUninit::new(byte);
+        self.filled += 1;
     }
 
     /// Writes the given `u8` integer to this buffer. No padding is performed.
@@ -226,20 +237,12 @@ impl<'data> BorrowedBuffer<'data> {
     /// digits in the decimal representation of `n`.
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_int(&mut self, mut n: u64) {
-        // This calculation to figure out the number of digits to write in `n`
-        // is the expense we incur by having our printers write forwards. If
-        // we instead wrote backwards, then we could omit this check. I ended
-        // up choose this design because 1) most integer writes in datetime
-        // (not span) printing are fixed 2 or 4 digits, and don't require this
-        // extra computation and 2) writing backwards just overall seems like
-        // a pain.
-        let digits = if n == 0 { 1 } else { n.ilog10() as u8 + 1 };
-        let available = self.available();
+        let digits = digits(n);
         let mut remaining_digits = usize::from(digits);
-        assert!(
-            available.len() >= remaining_digits,
-            "u8 integer digits exceeds available buffer space"
-        );
+        let available = self
+            .available()
+            .get_mut(..remaining_digits)
+            .expect("u8 integer digits exceeds available buffer space");
         while remaining_digits > 0 {
             remaining_digits -= 1;
             // SAFETY: The assert above guarantees that `remaining_digits` is
@@ -250,7 +253,42 @@ impl<'data> BorrowedBuffer<'data> {
             }
             n /= 10;
         }
-        self.filled += digits;
+        self.filled += u16::from(digits);
+    }
+
+    /// Writes the given `u8` integer to this buffer using the given padding.
+    ///
+    /// The maximum allowed padding is `20`. Any values bigger than that are
+    /// silently clamped to `20`.
+    ///
+    /// This always pads with zeroes.
+    ///
+    /// # Panics
+    ///
+    /// When the available space is insufficient to encode the number of
+    /// digits in the decimal representation of `n`.
+    ///
+    /// This also panics when `pad_byte` is not ASCII.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_int_pad0(&mut self, mut n: u64, pad_len: u8) {
+        let pad_len = pad_len.min(MAX_INTEGER_LEN);
+        let digits = pad_len.max(digits(n));
+        let mut remaining_digits = usize::from(digits);
+        let available = self
+            .available()
+            .get_mut(..remaining_digits)
+            .expect("u8 integer digits exceeds available buffer space");
+        while remaining_digits > 0 {
+            remaining_digits -= 1;
+            // SAFETY: The assert above guarantees that `remaining_digits` is
+            // always in bounds.
+            unsafe {
+                *available.get_unchecked_mut(remaining_digits) =
+                    MaybeUninit::new(b'0' + ((n % 10) as u8));
+            }
+            n /= 10;
+        }
+        self.filled += u16::from(digits);
     }
 
     /// Writes the given `u8` integer to this buffer using the given padding.
@@ -264,6 +302,7 @@ impl<'data> BorrowedBuffer<'data> {
     /// digits in the decimal representation of `n`.
     ///
     /// This also panics when `pad_byte` is not ASCII.
+    #[allow(dead_code)]
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_int_pad(
         &mut self,
@@ -274,14 +313,12 @@ impl<'data> BorrowedBuffer<'data> {
         assert!(pad_byte.is_ascii(), "padding byte must be ASCII");
 
         let pad_len = pad_len.min(MAX_INTEGER_LEN);
-        let digits =
-            pad_len.max(if n == 0 { 1 } else { n.ilog10() as u8 + 1 });
-        let available = self.available();
+        let digits = pad_len.max(digits(n));
         let mut remaining_digits = usize::from(digits);
-        assert!(
-            available.len() >= remaining_digits,
-            "u8 integer digits exceeds available buffer space"
-        );
+        let available = self
+            .available()
+            .get_mut(..remaining_digits)
+            .expect("u8 integer digits exceeds available buffer space");
         while remaining_digits > 0 {
             remaining_digits -= 1;
             // SAFETY: The assert above guarantees that `remaining_digits` is
@@ -304,7 +341,7 @@ impl<'data> BorrowedBuffer<'data> {
                     MaybeUninit::new(pad_byte);
             }
         }
-        self.filled += digits;
+        self.filled += u16::from(digits);
     }
 
     /// Writes the given integer as a 2-digit zero padded integer to this
@@ -395,6 +432,7 @@ impl<'data> BorrowedBuffer<'data> {
     /// # Panics
     ///
     /// When the available space is shorter than 6 or if `n > 999999`.
+    #[allow(dead_code)]
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_int_pad6(&mut self, mut n: u64) {
         // This is required for correctness. When `n > 999999`, then the
@@ -493,7 +531,7 @@ impl<'data> BorrowedBuffer<'data> {
             .get_mut(..buf.len())
             .expect("fraction exceeds available buffer space")
             .copy_from_slice(buf);
-        self.filled += end;
+        self.filled += u16::from(end);
     }
 
     /// Clears this buffer so that there are no filled bytes.
@@ -634,6 +672,28 @@ impl<'data, const N: usize> From<&'data mut [MaybeUninit<u8>; N]>
     #[cfg_attr(feature = "perf-inline", inline(always))]
     fn from(data: &'data mut [MaybeUninit<u8>; N]) -> BorrowedBuffer<'data> {
         BorrowedBuffer::from(&mut data[..])
+    }
+}
+
+/// Returns the number of digits in the decimal representation of `n`.
+///
+/// This calculation to figure out the number of digits to write in `n` is
+/// the expense we incur by having our printers write forwards. If we instead
+/// wrote backwards, then we could omit this calculation. I ended up choosing
+/// this design because 1) most integer writes in datetime (not span) printing
+/// are fixed 2 or 4 digits, and don't require this extra computation and 2)
+/// writing backwards just overall seems like a pain.
+#[cfg_attr(feature = "perf-inline", inline(always))]
+fn digits(n: u64) -> u8 {
+    // It's faster by about 1-5% (on microbenchmarks) to make this more
+    // branch-y and specialize the smaller and more common integers in lieu
+    // of calling `ilog10`.
+    match n {
+        0..=9 => 1,
+        10..=99 => 2,
+        100..=999 => 3,
+        1000..=9999 => 4,
+        _ => n.ilog10() as u8 + 1,
     }
 }
 

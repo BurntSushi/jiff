@@ -203,31 +203,6 @@ impl FractionalFormatter {
         };
         FractionalFormatter { precision, ..self }
     }
-
-    /// Returns true if and only if at least one digit will be written for the
-    /// given value.
-    ///
-    /// This is useful for callers that need to know whether to write
-    /// a decimal separator, e.g., `.`, before the digits.
-    pub(crate) fn will_write_digits(self, value: u32) -> bool {
-        self.precision.map_or_else(|| value != 0, |p| p > 0)
-    }
-
-    /// Returns true if and only if this formatter has an explicit non-zero
-    /// precision setting.
-    ///
-    /// This is useful for determining whether something like `0.000` needs to
-    /// be written in the case of a `precision=Some(3)` setting and a zero
-    /// value.
-    pub(crate) fn has_non_zero_fixed_precision(self) -> bool {
-        self.precision.map_or(false, |p| p > 0)
-    }
-
-    /// Returns true if and only if this formatter has fixed zero precision.
-    /// That is, no matter what is given as input, a fraction is never written.
-    pub(crate) fn has_zero_fixed_precision(self) -> bool {
-        self.precision.map_or(false, |p| p == 0)
-    }
 }
 
 /// A formatted fractional number that can be converted to a sequence of bytes.
