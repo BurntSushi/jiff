@@ -251,7 +251,7 @@ impl Fractional {
     /// empty.
     ///
     /// This panics if the value given isn't in the range `0..=999_999_999`.
-    pub(crate) const fn new(
+    const fn new(
         formatter: &FractionalFormatter,
         mut value: u32,
     ) -> Fractional {
