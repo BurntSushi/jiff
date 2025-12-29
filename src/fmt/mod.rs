@@ -507,7 +507,7 @@ trait WriteExt: Write {
         formatter: &FractionalFormatter,
         n: impl Into<u32>,
     ) -> Result<(), Error> {
-        self.write_fractional(&Fractional::new(formatter, n.into()))
+        self.write_fractional(&formatter.format(n.into()))
     }
 
     /// Write the given decimal number to this buffer.
