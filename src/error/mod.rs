@@ -725,11 +725,11 @@ impl core::fmt::Display for IOError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         #[cfg(feature = "std")]
         {
-            write!(f, "{}", self.err)
+            self.err.fmt(f)
         }
         #[cfg(not(feature = "std"))]
         {
-            write!(f, "<BUG: SHOULD NOT EXIST>")
+            f.write_str("<BUG: SHOULD NOT EXIST>")
         }
     }
 }
@@ -742,7 +742,7 @@ impl core::fmt::Debug for IOError {
         }
         #[cfg(not(feature = "std"))]
         {
-            write!(f, "<BUG: SHOULD NOT EXIST>")
+            f.write_str("<BUG: SHOULD NOT EXIST>")
         }
     }
 }
@@ -767,11 +767,11 @@ impl core::fmt::Display for FilePathError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         #[cfg(feature = "std")]
         {
-            write!(f, "{}", self.path.display())
+            self.path.display().fmt(f)
         }
         #[cfg(not(feature = "std"))]
         {
-            write!(f, "<BUG: SHOULD NOT EXIST>")
+            f.write_str("<BUG: SHOULD NOT EXIST>")
         }
     }
 }
@@ -784,7 +784,7 @@ impl core::fmt::Debug for FilePathError {
         }
         #[cfg(not(feature = "std"))]
         {
-            write!(f, "<BUG: SHOULD NOT EXIST>")
+            f.write_str("<BUG: SHOULD NOT EXIST>")
         }
     }
 }
