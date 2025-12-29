@@ -1316,18 +1316,22 @@ impl SpanPrinter {
             }
         }
 
-        let fmtint =
-            IntegerFormatter::new().padding(self.padding.unwrap_or(2));
-        let fmtfraction = FractionalFormatter::new().precision(self.precision);
-        wtr.wtr.write_int(&fmtint, span.get_hours_ranged().get())?;
+        let padding = self.padding.unwrap_or(2);
+        wtr.wtr.write_int(
+            &IntegerFormatter::new().padding(padding),
+            span.get_hours_ranged().get(),
+        )?;
         wtr.wtr.write_str(":")?;
-        wtr.wtr.write_int(&fmtint, span.get_minutes_ranged().get())?;
+        wtr.wtr.write_int(
+            &IntegerFormatter::new().padding(padding),
+            span.get_minutes_ranged().get(),
+        )?;
         wtr.wtr.write_str(":")?;
         let fp = FractionalPrinter::from_span(
             &span.only_lower(Unit::Minute),
             FractionalUnit::Second,
-            fmtint,
-            fmtfraction,
+            padding,
+            self.precision,
         );
         fp.print(&mut wtr.wtr)?;
         wtr.maybe_write_suffix_sign()?;
@@ -1494,9 +1498,7 @@ impl SpanPrinter {
         // range of a `SignedDuration` (and `core::time::Duration`) is much
         // bigger.
 
-        let fmtint =
-            IntegerFormatter::new().padding(self.padding.unwrap_or(2));
-        let fmtfraction = FractionalFormatter::new().precision(self.precision);
+        let padding = self.padding.unwrap_or(2);
 
         let mut secs = udur.as_secs();
         // OK because guaranteed to be bigger than i64::MIN.
@@ -1507,16 +1509,16 @@ impl SpanPrinter {
         // OK because guaranteed to be bigger than i64::MIN.
         secs = secs % SECS_PER_MIN;
 
-        wtr.write_uint(&fmtint, hours)?;
+        wtr.write_uint(&IntegerFormatter::new().padding(padding), hours)?;
         wtr.write_str(":")?;
-        wtr.write_uint(&fmtint, minutes)?;
+        wtr.write_uint(&IntegerFormatter::new().padding(padding), minutes)?;
         wtr.write_str(":")?;
         let fp = FractionalPrinter::from_duration(
             // OK because -999_999_999 <= nanos <= 999_999_999 and secs < 60.
             &core::time::Duration::new(secs, udur.subsec_nanos()),
             FractionalUnit::Second,
-            fmtint,
-            fmtfraction,
+            padding,
+            self.precision,
         );
         fp.print(&mut wtr)?;
 
@@ -1625,8 +1627,8 @@ struct DesignatorWriter<'p, 'w, W> {
     wtr: &'w mut W,
     desig: Designators,
     sign: Option<DirectionSign>,
-    fmtint: IntegerFormatter,
-    fmtfraction: FractionalFormatter,
+    padding: u8,
+    precision: Option<u8>,
     written_non_zero_unit: bool,
 }
 
@@ -1639,17 +1641,13 @@ impl<'p, 'w, W: Write> DesignatorWriter<'p, 'w, W> {
     ) -> DesignatorWriter<'p, 'w, W> {
         let desig = Designators::new(printer.designator);
         let sign = printer.direction.sign(printer, has_calendar, signum);
-        let fmtint =
-            IntegerFormatter::new().padding(printer.padding.unwrap_or(0));
-        let fmtfraction =
-            FractionalFormatter::new().precision(printer.precision);
         DesignatorWriter {
             printer,
             wtr,
             desig,
             sign,
-            fmtint,
-            fmtfraction,
+            padding: printer.padding.unwrap_or(0),
+            precision: printer.precision,
             written_non_zero_unit: false,
         }
     }
@@ -1679,7 +1677,10 @@ impl<'p, 'w, W: Write> DesignatorWriter<'p, 'w, W> {
             .fractional
             .map(Unit::from)
             .unwrap_or(self.printer.zero_unit);
-        self.wtr.write_uint(&self.fmtint, 0u32)?;
+        self.wtr.write_uint(
+            &IntegerFormatter::new().padding(self.padding),
+            0u32,
+        )?;
         self.wtr
             .write_str(self.printer.spacing.between_units_and_designators())?;
         self.wtr.write_str(self.desig.designator(unit, true))?;
@@ -1692,7 +1693,10 @@ impl<'p, 'w, W: Write> DesignatorWriter<'p, 'w, W> {
         }
         self.finish_preceding()?;
         self.written_non_zero_unit = true;
-        self.wtr.write_uint(&self.fmtint, value)?;
+        self.wtr.write_uint(
+            &IntegerFormatter::new().padding(self.padding),
+            value,
+        )?;
         self.wtr
             .write_str(self.printer.spacing.between_units_and_designators())?;
         self.wtr.write_str(self.desig.designator(unit, value != 1))?;
@@ -1707,8 +1711,8 @@ impl<'p, 'w, W: Write> DesignatorWriter<'p, 'w, W> {
         let fp = FractionalPrinter::from_duration(
             duration,
             unit,
-            self.fmtint,
-            self.fmtfraction,
+            self.padding,
+            self.precision,
         );
         if !fp.must_write_digits() {
             return Ok(());
@@ -1740,8 +1744,8 @@ impl<'p, 'w, W: Write> DesignatorWriter<'p, 'w, W> {
 struct FractionalPrinter {
     integer: u64,
     fraction: u32,
-    fmtint: IntegerFormatter,
-    fmtfraction: FractionalFormatter,
+    padding: u8,
+    precision: Option<u8>,
 }
 
 impl FractionalPrinter {
@@ -1757,20 +1761,20 @@ impl FractionalPrinter {
     fn from_span(
         span: &Span,
         unit: FractionalUnit,
-        fmtint: IntegerFormatter,
-        fmtfraction: FractionalFormatter,
+        padding: u8,
+        precision: Option<u8>,
     ) -> FractionalPrinter {
         debug_assert!(span.largest_unit() <= Unit::from(unit));
         let dur = span.to_duration_invariant().unsigned_abs();
-        FractionalPrinter::from_duration(&dur, unit, fmtint, fmtfraction)
+        FractionalPrinter::from_duration(&dur, unit, padding, precision)
     }
 
     /// Like `from_span`, but for `SignedDuration`.
     fn from_duration(
         dur: &core::time::Duration,
         unit: FractionalUnit,
-        fmtint: IntegerFormatter,
-        fmtfraction: FractionalFormatter,
+        padding: u8,
+        precision: Option<u8>,
     ) -> FractionalPrinter {
         match unit {
             FractionalUnit::Hour => {
@@ -1780,7 +1784,7 @@ impl FractionalPrinter {
                 fraction /= u128::from(SECS_PER_HOUR);
                 // OK because NANOS_PER_HOUR / SECS_PER_HOUR fits in a u32.
                 let fraction = u32::try_from(fraction).unwrap();
-                FractionalPrinter { integer, fraction, fmtint, fmtfraction }
+                FractionalPrinter { integer, fraction, padding, precision }
             }
             FractionalUnit::Minute => {
                 let integer = dur.as_secs() / SECS_PER_MIN;
@@ -1789,12 +1793,12 @@ impl FractionalPrinter {
                 fraction /= u128::from(SECS_PER_MIN);
                 // OK because NANOS_PER_MIN fits in an u32.
                 let fraction = u32::try_from(fraction).unwrap();
-                FractionalPrinter { integer, fraction, fmtint, fmtfraction }
+                FractionalPrinter { integer, fraction, padding, precision }
             }
             FractionalUnit::Second => {
                 let integer = dur.as_secs();
                 let fraction = u32::from(dur.subsec_nanos());
-                FractionalPrinter { integer, fraction, fmtint, fmtfraction }
+                FractionalPrinter { integer, fraction, padding, precision }
             }
             FractionalUnit::Millisecond => {
                 // Unwrap is OK, but this is subtle. For printing a
@@ -1808,7 +1812,7 @@ impl FractionalPrinter {
                 let integer = u64::try_from(dur.as_millis()).unwrap();
                 let fraction =
                     u32::from((dur.subsec_nanos() % NANOS_PER_MILLI) * 1_000);
-                FractionalPrinter { integer, fraction, fmtint, fmtfraction }
+                FractionalPrinter { integer, fraction, padding, precision }
             }
             FractionalUnit::Microsecond => {
                 // Unwrap is OK, but this is subtle. For printing a
@@ -1823,7 +1827,7 @@ impl FractionalPrinter {
                 let fraction = u32::from(
                     (dur.subsec_nanos() % NANOS_PER_MICRO) * 1_000_000,
                 );
-                FractionalPrinter { integer, fraction, fmtint, fmtfraction }
+                FractionalPrinter { integer, fraction, padding, precision }
             }
         }
     }
@@ -1837,8 +1841,7 @@ impl FractionalPrinter {
     /// when choosing what designator to use.
     fn is_plural(&self) -> bool {
         self.integer != 1
-            || (self.fraction != 0
-                && !self.fmtfraction.has_zero_fixed_precision())
+            || (self.fraction != 0 && !self.has_zero_fixed_precision())
     }
 
     /// Returns true if and only if this printer must write some kind of number
@@ -1848,7 +1851,32 @@ impl FractionalPrinter {
     /// fractional component are zero *and* the precision is fixed to a number
     /// greater than zero.
     fn must_write_digits(&self) -> bool {
-        !self.is_zero() || self.fmtfraction.has_non_zero_fixed_precision()
+        !self.is_zero() || self.has_non_zero_fixed_precision()
+    }
+
+    /// Returns true if and only if at least one digit will be written for the
+    /// given value.
+    ///
+    /// This is useful for callers that need to know whether to write
+    /// a decimal separator, e.g., `.`, before the digits.
+    fn will_write_digits(&self) -> bool {
+        self.precision.map_or_else(|| self.fraction != 0, |p| p > 0)
+    }
+
+    /// Returns true if and only if this formatter has an explicit non-zero
+    /// precision setting.
+    ///
+    /// This is useful for determining whether something like `0.000` needs to
+    /// be written in the case of a `precision=Some(3)` setting and a zero
+    /// value.
+    fn has_non_zero_fixed_precision(&self) -> bool {
+        self.precision.map_or(false, |p| p > 0)
+    }
+
+    /// Returns true if and only if this formatter has fixed zero precision.
+    /// That is, no matter what is given as input, a fraction is never written.
+    fn has_zero_fixed_precision(&self) -> bool {
+        self.precision.map_or(false, |p| p == 0)
     }
 
     /// Prints the integer and optional fractional component.
@@ -1857,10 +1885,16 @@ impl FractionalPrinter {
     /// the caller wants to omit printing zero, the caller should do their own
     /// conditional logic.
     fn print<W: Write>(&self, mut wtr: W) -> Result<(), Error> {
-        wtr.write_uint(&self.fmtint, self.integer)?;
-        if self.fmtfraction.will_write_digits(self.fraction) {
+        wtr.write_uint(
+            &IntegerFormatter::new().padding(self.padding),
+            self.integer,
+        )?;
+        if self.will_write_digits() {
             wtr.write_str(".")?;
-            wtr.write_fraction(&self.fmtfraction, self.fraction)?;
+            wtr.write_fraction(
+                &FractionalFormatter::new().precision(self.precision),
+                self.fraction,
+            )?;
         }
         Ok(())
     }
