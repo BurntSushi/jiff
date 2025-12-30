@@ -2453,19 +2453,9 @@ impl Span {
             self.largest_unit() <= Unit::Week,
             "units must be weeks or lower"
         );
-
-        let seconds = nanos / t::NANOS_PER_SECOND;
-        let seconds = i64::from(seconds);
-        let subsec_nanos = nanos % t::NANOS_PER_SECOND;
-        // OK because % 1_000_000_000 above guarantees that the result fits
-        // in a i32.
-        let subsec_nanos = i32::try_from(subsec_nanos).unwrap();
-
-        // SignedDuration::new can panic if |subsec_nanos| >= 1_000_000_000
-        // and seconds == {i64::MIN,i64::MAX}. But this can never happen
-        // because we guaranteed by construction above that |subsec_nanos| <
-        // 1_000_000_000.
-        SignedDuration::new(seconds, subsec_nanos)
+        // OK because we have a compile time assert above that ensures our
+        // nanoseconds are in the valid range of a `SignedDuration`.
+        SignedDuration::from_nanos_i128(nanos.get())
     }
 }
 
