@@ -22,7 +22,8 @@ use crate::{Date, DateTime, Span, Time, Timestamp, ToSqlx};
 static POSTGRES_EPOCH_DATE: civil::Date = civil::date(2000, 1, 1);
 static POSTGRES_EPOCH_DATETIME: civil::DateTime =
     civil::date(2000, 1, 1).at(0, 0, 0, 0);
-static POSTGRES_EPOCH_TIMESTAMP: i64 = 946684800;
+static POSTGRES_EPOCH_TIMESTAMP: jiff::Timestamp =
+    jiff::Timestamp::constant(946684800, 0);
 static MIDNIGHT: civil::Time = civil::Time::midnight();
 static UTC: tz::TimeZone = tz::TimeZone::UTC;
 
@@ -99,11 +100,7 @@ impl<'r> Decode<'r, Postgres> for Timestamp {
                 // POSTGRES_EPOCH_DATETIME.
                 let micros: i64 = Decode::<Postgres>::decode(value)?;
                 let micros = jiff::SignedDuration::from_micros(micros);
-                // OK because the timestamp is known to be valid and in range.
-                let epoch =
-                    jiff::Timestamp::from_second(POSTGRES_EPOCH_TIMESTAMP)
-                        .unwrap();
-                Ok(epoch.checked_add(micros)?.to_sqlx())
+                Ok(POSTGRES_EPOCH_TIMESTAMP.checked_add(micros)?.to_sqlx())
             }
             PgValueFormat::Text => {
                 // The encoding is just ISO 8601 I think? Close to RFC 3339,
