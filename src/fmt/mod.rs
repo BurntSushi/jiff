@@ -488,17 +488,6 @@ trait WriteExt: Write {
         self.write_decimal(&formatter.format_signed(n.into()))
     }
 
-    /// Write the given number as an unsigned decimal using ASCII digits to
-    /// this buffer. The given formatter controls how the decimal is formatted.
-    #[inline]
-    fn write_uint(
-        &mut self,
-        formatter: &IntegerFormatter,
-        n: impl Into<u64>,
-    ) -> Result<(), Error> {
-        self.write_decimal(&formatter.format_unsigned(n.into()))
-    }
-
     /// Write the given fractional number using ASCII digits to this buffer.
     /// The given formatter controls how the fractional number is formatted.
     #[inline]

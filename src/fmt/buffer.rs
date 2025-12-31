@@ -345,6 +345,23 @@ impl<'data> BorrowedBuffer<'data> {
         self.filled += u16::from(digits);
     }
 
+    /// Writes the given integer as a 1-digit integer.
+    /// buffer.
+    ///
+    /// # Panics
+    ///
+    /// When the available space is shorter than 1 or if `n > 9`.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_int1(&mut self, n: u64) {
+        // This is required for correctness. When `n > 9`, then the
+        // `n as u8` below could result in writing an invalid UTF-8
+        // byte. We don't mind incorrect results, but writing invalid
+        // UTF-8 can lead to undefined behavior, and we want this API
+        // to be sound.
+        assert!(n <= 9);
+        self.write_ascii_char(b'0' + (n as u8));
+    }
+
     /// Writes the given integer as a 2-digit zero padded integer to this
     /// buffer.
     ///
@@ -353,7 +370,7 @@ impl<'data> BorrowedBuffer<'data> {
     /// When the available space is shorter than 2 or if `n > 99`.
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_int_pad2(&mut self, mut n: u64) {
-        // This is required for correctness. When `n > 9999`, then the
+        // This is required for correctness. When `n > 99`, then the
         // last `n as u8` below could result in writing an invalid UTF-8
         // byte. We don't mind incorrect results, but writing invalid
         // UTF-8 can lead to undefined behavior, and we want this API
@@ -433,7 +450,6 @@ impl<'data> BorrowedBuffer<'data> {
     /// # Panics
     ///
     /// When the available space is shorter than 6 or if `n > 999999`.
-    #[allow(dead_code)]
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_int_pad6(&mut self, mut n: u64) {
         // This is required for correctness. When `n > 999999`, then the
@@ -570,7 +586,7 @@ impl<'data> BorrowedBuffer<'data> {
     /// to the original borrow.
     #[cfg_attr(feature = "perf-inline", inline(always))]
     #[allow(dead_code)]
-    pub(crate) fn into_filled(&self) -> &'data str {
+    pub(crate) fn into_filled(self) -> &'data str {
         // SAFETY: It is guaranteed that `..self.len()` is always a valid
         // range into `self.data` since `self.filled` is only increased upon
         // a valid write.
@@ -729,35 +745,35 @@ mod tests {
 
         bbuf.write_int(0);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "0");
         }
 
         bbuf.clear();
         bbuf.write_int(1);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "1");
         }
 
         bbuf.clear();
         bbuf.write_int(10);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "10");
         }
 
         bbuf.clear();
         bbuf.write_int(100);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "100");
         }
 
         bbuf.clear();
         bbuf.write_int(u64::MAX);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "18446744073709551615");
         }
     }
@@ -769,28 +785,28 @@ mod tests {
 
         bbuf.write_int_pad2(0);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "00");
         }
 
         bbuf.clear();
         bbuf.write_int_pad2(1);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "01");
         }
 
         bbuf.clear();
         bbuf.write_int_pad2(10);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "10");
         }
 
         bbuf.clear();
         bbuf.write_int_pad2(99);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "99");
         }
     }
@@ -812,42 +828,42 @@ mod tests {
 
         bbuf.write_int_pad4(0);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "0000");
         }
 
         bbuf.clear();
         bbuf.write_int_pad4(1);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "0001");
         }
 
         bbuf.clear();
         bbuf.write_int_pad4(10);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "0010");
         }
 
         bbuf.clear();
         bbuf.write_int_pad4(99);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "0099");
         }
 
         bbuf.clear();
         bbuf.write_int_pad4(999);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "0999");
         }
 
         bbuf.clear();
         bbuf.write_int_pad4(9999);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "9999");
         }
     }
@@ -869,49 +885,49 @@ mod tests {
 
         bbuf.write_int_pad6(0);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "000000");
         }
 
         bbuf.clear();
         bbuf.write_int_pad6(1);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "000001");
         }
 
         bbuf.clear();
         bbuf.write_int_pad6(10);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "000010");
         }
 
         bbuf.clear();
         bbuf.write_int_pad6(99);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "000099");
         }
 
         bbuf.clear();
         bbuf.write_int_pad6(999);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "000999");
         }
 
         bbuf.clear();
         bbuf.write_int_pad6(9999);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "009999");
         }
 
         bbuf.clear();
         bbuf.write_int_pad6(999999);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "999999");
         }
     }
@@ -933,28 +949,28 @@ mod tests {
 
         bbuf.write_int_pad(0, b'0', 0);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "0");
         }
 
         bbuf.clear();
         bbuf.write_int_pad(0, b'0', 1);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "0");
         }
 
         bbuf.clear();
         bbuf.write_int_pad(0, b'0', 2);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "00");
         }
 
         bbuf.clear();
         bbuf.write_int_pad(0, b'0', 20);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "00000000000000000000");
         }
 
@@ -962,14 +978,14 @@ mod tests {
         // clamped to 20
         bbuf.write_int_pad(0, b'0', 21);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "00000000000000000000");
         }
 
         bbuf.clear();
         bbuf.write_int_pad(0, b' ', 2);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, " 0");
         }
     }
@@ -981,28 +997,28 @@ mod tests {
 
         bbuf.write_int_pad(1, b'0', 0);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "1");
         }
 
         bbuf.clear();
         bbuf.write_int_pad(1, b'0', 1);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "1");
         }
 
         bbuf.clear();
         bbuf.write_int_pad(1, b'0', 2);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "01");
         }
 
         bbuf.clear();
         bbuf.write_int_pad(1, b'0', 20);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "00000000000000000001");
         }
 
@@ -1010,14 +1026,14 @@ mod tests {
         // clamped to 20
         bbuf.write_int_pad(1, b'0', 21);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "00000000000000000001");
         }
 
         bbuf.clear();
         bbuf.write_int_pad(1, b' ', 2);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, " 1");
         }
     }
@@ -1029,28 +1045,28 @@ mod tests {
 
         bbuf.write_int_pad(u64::MAX, b'0', 0);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "18446744073709551615");
         }
 
         bbuf.clear();
         bbuf.write_int_pad(u64::MAX, b'0', 1);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "18446744073709551615");
         }
 
         bbuf.clear();
         bbuf.write_int_pad(u64::MAX, b'0', 2);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "18446744073709551615");
         }
 
         bbuf.clear();
         bbuf.write_int_pad(u64::MAX, b'0', 20);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "18446744073709551615");
         }
 
@@ -1058,14 +1074,14 @@ mod tests {
         // clamped to 20
         bbuf.write_int_pad(u64::MAX, b'0', 21);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "18446744073709551615");
         }
 
         bbuf.clear();
         bbuf.write_int_pad(u64::MAX, b' ', 2);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "18446744073709551615");
         }
     }
@@ -1093,28 +1109,28 @@ mod tests {
 
         bbuf.write_fraction(None, 0);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "");
         }
 
         bbuf.clear();
         bbuf.write_fraction(None, 1);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "000000001");
         }
 
         bbuf.clear();
         bbuf.write_fraction(None, 123_000_000);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "123");
         }
 
         bbuf.clear();
         bbuf.write_fraction(None, 999_999_999);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "999999999");
         }
     }
@@ -1126,77 +1142,77 @@ mod tests {
 
         bbuf.write_fraction(Some(0), 0);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "");
         }
 
         bbuf.clear();
         bbuf.write_fraction(Some(1), 0);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "0");
         }
 
         bbuf.clear();
         bbuf.write_fraction(Some(9), 0);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "000000000");
         }
 
         bbuf.clear();
         bbuf.write_fraction(Some(0), 1);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "");
         }
 
         bbuf.clear();
         bbuf.write_fraction(Some(9), 1);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "000000001");
         }
 
         bbuf.clear();
         bbuf.write_fraction(Some(0), 123_000_000);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "");
         }
 
         bbuf.clear();
         bbuf.write_fraction(Some(1), 123_000_000);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "1");
         }
 
         bbuf.clear();
         bbuf.write_fraction(Some(2), 123_000_000);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "12");
         }
 
         bbuf.clear();
         bbuf.write_fraction(Some(3), 123_000_000);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "123");
         }
 
         bbuf.clear();
         bbuf.write_fraction(Some(6), 123_000_000);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "123000");
         }
 
         bbuf.clear();
         bbuf.write_fraction(Some(9), 123_000_000);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "123000000");
         }
 
@@ -1204,42 +1220,42 @@ mod tests {
         // clamps to 9
         bbuf.write_fraction(Some(10), 123_000_000);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "123000000");
         }
 
         bbuf.clear();
         bbuf.write_fraction(Some(0), 999_999_999);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "");
         }
 
         bbuf.clear();
         bbuf.write_fraction(Some(1), 999_999_999);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "9");
         }
 
         bbuf.clear();
         bbuf.write_fraction(Some(3), 999_999_999);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "999");
         }
 
         bbuf.clear();
         bbuf.write_fraction(Some(6), 999_999_999);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "999999");
         }
 
         bbuf.clear();
         bbuf.write_fraction(Some(9), 999_999_999);
         {
-            let buf = bbuf.into_filled();
+            let buf = bbuf.filled();
             assert_eq!(buf, "999999999");
         }
     }
