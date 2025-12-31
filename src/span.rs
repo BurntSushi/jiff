@@ -5878,7 +5878,7 @@ pub(crate) struct UnitSet(u16);
 impl UnitSet {
     /// Return a bit set representing all units as zero.
     #[inline]
-    fn empty() -> UnitSet {
+    const fn empty() -> UnitSet {
         UnitSet(0)
     }
 
@@ -5887,13 +5887,25 @@ impl UnitSet {
     /// When `is_zero` is false, the unit is added to this set. Otherwise,
     /// the unit is removed from this set.
     #[inline]
-    fn set(self, unit: Unit, is_zero: bool) -> UnitSet {
+    const fn set(self, unit: Unit, is_zero: bool) -> UnitSet {
         let bit = 1 << unit as usize;
         if is_zero {
             UnitSet(self.0 & !bit)
         } else {
             UnitSet(self.0 | bit)
         }
+    }
+
+    /// Returns the set constructed from the given slice of units.
+    #[inline]
+    pub(crate) const fn from_slice(units: &[Unit]) -> UnitSet {
+        let mut set = UnitSet::empty();
+        let mut i = 0;
+        while i < units.len() {
+            set = set.set(units[i], false);
+            i += 1;
+        }
+        set
     }
 
     /// Returns true if and only if no units are in this set.
@@ -5926,6 +5938,12 @@ impl UnitSet {
     #[inline]
     pub(crate) fn only_time(self) -> UnitSet {
         UnitSet(self.0 & 0b0000_0000_0011_1111)
+    }
+
+    /// Returns the intersection of this set and the one given.
+    #[inline]
+    pub(crate) fn intersection(self, other: UnitSet) -> UnitSet {
+        UnitSet(self.0 & other.0)
     }
 
     /// Returns the largest unit in this set, or `None` if none are present.

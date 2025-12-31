@@ -338,51 +338,6 @@ pub(crate) type FractionalNanosecond = ri32<
     { NANOS_PER_SECOND.bound() - 1 },
 >;
 
-/// The range of allowable seconds and lower in a span, in units of seconds.
-///
-/// This corresponds to when the min/max of seconds, milliseconds, microseconds
-/// and nanoseconds are added together in a span. This is useful for describing
-/// the limit on the total number of possible seconds when all of these units
-/// are combined. This is necessary as part of printing/parsing spans because
-/// the ISO 8601 duration format doesn't support individual millisecond,
-/// microsecond and nanosecond components. So they all need to be smushed into
-/// seconds and a possible fractional part.
-pub(crate) type SpanSecondsOrLower = ri64<
-    {
-        SpanSeconds::MIN
-            + (SpanMilliseconds::MIN / MILLIS_PER_SECOND.bound())
-            + (SpanMicroseconds::MIN / MICROS_PER_SECOND.bound())
-            + (SpanNanoseconds::MIN / NANOS_PER_SECOND.bound())
-    },
-    {
-        SpanSeconds::MAX
-            + (SpanMilliseconds::MAX / MILLIS_PER_SECOND.bound())
-            + (SpanMicroseconds::MAX / MICROS_PER_SECOND.bound())
-            + (SpanNanoseconds::MAX / NANOS_PER_SECOND.bound())
-    },
->;
-
-/// The range of allowable seconds and lower in a span, in units of
-/// nanoseconds.
-///
-/// See `SpanSecondsOrLower`. This exists for the same reason. Namely, when
-/// serializing a `Span` to an ISO 8601 duration string, we need to combine
-/// seconds and lower into a single fractional seconds value.
-pub(crate) type SpanSecondsOrLowerNanoseconds = ri128<
-    {
-        (SpanSeconds::MIN * NANOS_PER_SECOND.bound())
-            + (SpanMilliseconds::MIN * NANOS_PER_MILLI.bound())
-            + (SpanMicroseconds::MIN * NANOS_PER_MICRO.bound())
-            + SpanNanoseconds::MIN
-    },
-    {
-        (SpanSeconds::MAX * NANOS_PER_SECOND.bound())
-            + (SpanMilliseconds::MAX * NANOS_PER_MILLI.bound())
-            + (SpanMicroseconds::MAX * NANOS_PER_MICRO.bound())
-            + SpanNanoseconds::MAX
-    },
->;
-
 /// The span of seconds permitted for expressing the offset of a time zone.
 pub(crate) type SpanZoneOffset =
     ri32<{ -SPAN_ZONE_OFFSET_TOTAL_SECONDS }, SPAN_ZONE_OFFSET_TOTAL_SECONDS>;

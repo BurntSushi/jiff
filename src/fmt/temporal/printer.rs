@@ -1,19 +1,34 @@
+use core::time::Duration;
+
 use crate::{
     civil::{Date, DateTime, ISOWeekDate, Time},
     error::{fmt::temporal::Error as E, Error},
     fmt::{
+        buffer::{ArrayBuffer, BorrowedBuffer},
         temporal::{Pieces, PiecesOffset, TimeZoneAnnotationKind},
         util::{FractionalFormatter, IntegerFormatter},
         Write, WriteExt,
     },
-    span::Span,
+    span::{Span, UnitSet},
     tz::{Offset, TimeZone},
-    util::{
-        rangeint::RFrom,
-        t::{self, C},
-    },
-    SignedDuration, Timestamp, Zoned,
+    SignedDuration, Timestamp, Unit, Zoned,
 };
+
+/// Defines the maximum possible length (in bytes) of a `Span` printed in the
+/// Temporal ISO 8601 format.
+///
+/// The way I computed this length was by using the default printer (since
+/// there's only one knob and it doesn't impact the length of the string)
+/// and using a negative `Span` with each unit set to
+/// its minimum value.
+const MAX_SPAN_LEN: usize = 78;
+
+/// Defines the maximum possible length (in bytes) of a duration printed in the
+/// Temporal ISO 8601 format.
+///
+/// This applies to both signed and unsigned durations. Unsigned durations have
+/// one more digit, but signed durations can have a negative sign.
+const MAX_DURATION_LEN: usize = 35;
 
 #[derive(Clone, Debug)]
 pub(super) struct DateTimePrinter {
@@ -387,21 +402,27 @@ impl Default for DateTimePrinter {
 /// Note that in Temporal, a "span" is called a "duration."
 #[derive(Debug)]
 pub(super) struct SpanPrinter {
-    /// Whether to use lowercase unit designators.
-    lowercase: bool,
+    /// The designators to use.
+    designators: &'static Designators,
 }
 
 impl SpanPrinter {
     /// Create a new Temporal span printer with the default configuration.
     pub(super) const fn new() -> SpanPrinter {
-        SpanPrinter { lowercase: false }
+        SpanPrinter { designators: DESIGNATORS_UPPERCASE }
     }
 
     /// Use lowercase for unit designator labels.
     ///
     /// By default, unit designator labels are written in uppercase.
     pub(super) const fn lowercase(self, yes: bool) -> SpanPrinter {
-        SpanPrinter { lowercase: yes }
+        SpanPrinter {
+            designators: if yes {
+                DESIGNATORS_LOWERCASE
+            } else {
+                DESIGNATORS_UPPERCASE
+            },
+        }
     }
 
     /// Print the given span to the writer given.
@@ -412,110 +433,116 @@ impl SpanPrinter {
         span: &Span,
         mut wtr: W,
     ) -> Result<(), Error> {
-        static FMT_INT: IntegerFormatter = IntegerFormatter::new();
-        static FMT_FRACTION: FractionalFormatter = FractionalFormatter::new();
+        let mut buf = ArrayBuffer::<MAX_SPAN_LEN>::default();
+        let mut bbuf = buf.as_borrowed();
+        self.print_span_impl(span, &mut bbuf);
+        wtr.write_str(bbuf.filled())
+    }
+
+    fn print_span_impl(&self, span: &Span, bbuf: &mut BorrowedBuffer<'_>) {
+        static SUBSECOND: UnitSet = UnitSet::from_slice(&[
+            Unit::Millisecond,
+            Unit::Microsecond,
+            Unit::Nanosecond,
+        ]);
 
         if span.is_negative() {
-            wtr.write_str("-")?;
+            bbuf.write_ascii_char(b'-');
         }
-        wtr.write_str("P")?;
+        bbuf.write_ascii_char(b'P');
 
-        let mut non_zero_greater_than_second = false;
-        if span.get_years_ranged() != C(0) {
-            wtr.write_int(&FMT_INT, span.get_years_ranged().get().abs())?;
-            wtr.write_char(self.label('Y'))?;
-            non_zero_greater_than_second = true;
+        let units = span.units();
+        if units.contains(Unit::Year) {
+            bbuf.write_int(
+                span.get_years_unsigned().get().unsigned_abs().into(),
+            );
+            bbuf.write_ascii_char(self.label(Unit::Year));
         }
-        if span.get_months_ranged() != C(0) {
-            wtr.write_int(&FMT_INT, span.get_months_ranged().get().abs())?;
-            wtr.write_char(self.label('M'))?;
-            non_zero_greater_than_second = true;
+        if units.contains(Unit::Month) {
+            bbuf.write_int(
+                span.get_months_unsigned().get().unsigned_abs().into(),
+            );
+            bbuf.write_ascii_char(self.label(Unit::Month));
         }
-        if span.get_weeks_ranged() != C(0) {
-            wtr.write_int(&FMT_INT, span.get_weeks_ranged().get().abs())?;
-            wtr.write_char(self.label('W'))?;
-            non_zero_greater_than_second = true;
+        if units.contains(Unit::Week) {
+            bbuf.write_int(
+                span.get_weeks_unsigned().get().unsigned_abs().into(),
+            );
+            bbuf.write_ascii_char(self.label(Unit::Week));
         }
-        if span.get_days_ranged() != C(0) {
-            wtr.write_int(&FMT_INT, span.get_days_ranged().get().abs())?;
-            wtr.write_char(self.label('D'))?;
-            non_zero_greater_than_second = true;
+        if units.contains(Unit::Day) {
+            bbuf.write_int(
+                span.get_days_unsigned().get().unsigned_abs().into(),
+            );
+            bbuf.write_ascii_char(self.label(Unit::Day));
         }
 
-        let mut printed_time_prefix = false;
-        if span.get_hours_ranged() != C(0) {
-            if !printed_time_prefix {
-                wtr.write_str("T")?;
-                printed_time_prefix = true;
+        if units.only_time().is_empty() {
+            if units.only_calendar().is_empty() {
+                bbuf.write_ascii_char(b'T');
+                bbuf.write_ascii_char(b'0');
+                bbuf.write_ascii_char(self.label(Unit::Second));
             }
-            wtr.write_int(&FMT_INT, span.get_hours_ranged().get().abs())?;
-            wtr.write_char(self.label('H'))?;
-            non_zero_greater_than_second = true;
+            return;
         }
-        if span.get_minutes_ranged() != C(0) {
-            if !printed_time_prefix {
-                wtr.write_str("T")?;
-                printed_time_prefix = true;
-            }
-            wtr.write_int(&FMT_INT, span.get_minutes_ranged().get().abs())?;
-            wtr.write_char(self.label('M'))?;
-            non_zero_greater_than_second = true;
+
+        bbuf.write_ascii_char(b'T');
+
+        if units.contains(Unit::Hour) {
+            bbuf.write_int(
+                span.get_hours_unsigned().get().unsigned_abs().into(),
+            );
+            bbuf.write_ascii_char(self.label(Unit::Hour));
+        }
+        if units.contains(Unit::Minute) {
+            bbuf.write_int(
+                span.get_minutes_unsigned().get().unsigned_abs().into(),
+            );
+            bbuf.write_ascii_char(self.label(Unit::Minute));
         }
 
         // ISO 8601 (and Temporal) don't support writing out milliseconds,
         // microseconds or nanoseconds as separate components like for all
         // the other units. Instead, they must be incorporated as fractional
         // seconds. But we only want to do that work if we need to.
-        let (seconds, millis, micros, nanos) = (
-            span.get_seconds_ranged().abs(),
-            span.get_milliseconds_ranged().abs(),
-            span.get_microseconds_ranged().abs(),
-            span.get_nanoseconds_ranged().abs(),
-        );
-        if (seconds != C(0) || !non_zero_greater_than_second)
-            && millis == C(0)
-            && micros == C(0)
-            && nanos == C(0)
-        {
-            if !printed_time_prefix {
-                wtr.write_str("T")?;
-            }
-            wtr.write_int(&FMT_INT, seconds.get())?;
-            wtr.write_char(self.label('S'))?;
-        } else if millis != C(0) || micros != C(0) || nanos != C(0) {
-            if !printed_time_prefix {
-                wtr.write_str("T")?;
-            }
+        let has_subsecond = !units.intersection(SUBSECOND).is_empty();
+        if units.contains(Unit::Second) && !has_subsecond {
+            bbuf.write_int(
+                span.get_seconds_unsigned().get().unsigned_abs().into(),
+            );
+            bbuf.write_ascii_char(self.label(Unit::Second));
+        } else if has_subsecond {
             // We want to combine our seconds, milliseconds, microseconds and
             // nanoseconds into one single value in terms of nanoseconds. Then
             // we can "balance" that out so that we have a number of seconds
             // and a number of nanoseconds not greater than 1 second. (Which is
             // our fraction.)
-            let combined_as_nanos =
-                t::SpanSecondsOrLowerNanoseconds::rfrom(nanos)
-                    + (t::SpanSecondsOrLowerNanoseconds::rfrom(micros)
-                        * t::NANOS_PER_MICRO)
-                    + (t::SpanSecondsOrLowerNanoseconds::rfrom(millis)
-                        * t::NANOS_PER_MILLI)
-                    + (t::SpanSecondsOrLowerNanoseconds::rfrom(seconds)
-                        * t::NANOS_PER_SECOND);
-            let fraction_second = t::SpanSecondsOrLower::rfrom(
-                combined_as_nanos / t::NANOS_PER_SECOND,
+            let (seconds, millis, micros, nanos) = (
+                Duration::from_secs(
+                    span.get_seconds_unsigned().get().unsigned_abs(),
+                ),
+                Duration::from_millis(
+                    span.get_milliseconds_unsigned().get().unsigned_abs(),
+                ),
+                Duration::from_micros(
+                    span.get_microseconds_unsigned().get().unsigned_abs(),
+                ),
+                Duration::from_nanos(
+                    span.get_nanoseconds_unsigned().get().unsigned_abs(),
+                ),
             );
-            let fraction_nano = t::SubsecNanosecond::rfrom(
-                combined_as_nanos % t::NANOS_PER_SECOND,
-            );
-            wtr.write_int(&FMT_INT, fraction_second.get())?;
-            if fraction_nano != C(0) {
-                wtr.write_str(".")?;
-                wtr.write_fraction(
-                    &FMT_FRACTION,
-                    i32::from(fraction_nano).unsigned_abs(),
-                )?;
+            // OK because the maximums for a span's seconds, millis, micros
+            // and nanos combined all fit into a 96-bit integer. (This is
+            // guaranteed by `Span::to_duration_invariant`.)
+            let total = seconds + millis + micros + nanos;
+            let (secs, subsecs) = (total.as_secs(), total.subsec_nanos());
+            bbuf.write_int(secs);
+            if subsecs != 0 {
+                bbuf.write_ascii_char(b'.');
+                bbuf.write_fraction(None, subsecs);
             }
-            wtr.write_char(self.label('S'))?;
+            bbuf.write_ascii_char(self.label(Unit::Second));
         }
-        Ok(())
     }
 
     /// Print the given signed duration to the writer given.
@@ -526,45 +553,13 @@ impl SpanPrinter {
         dur: &SignedDuration,
         mut wtr: W,
     ) -> Result<(), Error> {
-        static FMT_INT: IntegerFormatter = IntegerFormatter::new();
-        static FMT_FRACTION: FractionalFormatter = FractionalFormatter::new();
-
-        let mut non_zero_greater_than_second = false;
+        let mut buf = ArrayBuffer::<MAX_DURATION_LEN>::default();
+        let mut bbuf = buf.as_borrowed();
         if dur.is_negative() {
-            wtr.write_str("-")?;
+            bbuf.write_ascii_char(b'-');
         }
-        wtr.write_str("PT")?;
-
-        let mut secs = dur.as_secs();
-        // OK because subsec_nanos -999_999_999<=nanos<=999_999_999.
-        let nanos = dur.subsec_nanos().abs();
-        // OK because guaranteed to be bigger than i64::MIN.
-        let hours = (secs / (60 * 60)).abs();
-        secs %= 60 * 60;
-        // OK because guaranteed to be bigger than i64::MIN.
-        let minutes = (secs / 60).abs();
-        // OK because guaranteed to be bigger than i64::MIN.
-        secs = (secs % 60).abs();
-        if hours != 0 {
-            wtr.write_int(&FMT_INT, hours)?;
-            wtr.write_char(self.label('H'))?;
-            non_zero_greater_than_second = true;
-        }
-        if minutes != 0 {
-            wtr.write_int(&FMT_INT, minutes)?;
-            wtr.write_char(self.label('M'))?;
-            non_zero_greater_than_second = true;
-        }
-        if (secs != 0 || !non_zero_greater_than_second) && nanos == 0 {
-            wtr.write_int(&FMT_INT, secs)?;
-            wtr.write_char(self.label('S'))?;
-        } else if nanos != 0 {
-            wtr.write_int(&FMT_INT, secs)?;
-            wtr.write_str(".")?;
-            wtr.write_fraction(&FMT_FRACTION, nanos.unsigned_abs())?;
-            wtr.write_char(self.label('S'))?;
-        }
-        Ok(())
+        self.print_unsigned_duration_impl(&dur.unsigned_abs(), &mut bbuf);
+        wtr.write_str(bbuf.filled())
     }
 
     /// Print the given unsigned duration to the writer given.
@@ -572,53 +567,79 @@ impl SpanPrinter {
     /// This only returns an error when the given writer returns an error.
     pub(super) fn print_unsigned_duration<W: Write>(
         &self,
-        dur: &core::time::Duration,
+        dur: &Duration,
         mut wtr: W,
     ) -> Result<(), Error> {
-        static FMT_INT: IntegerFormatter = IntegerFormatter::new();
-        static FMT_FRACTION: FractionalFormatter = FractionalFormatter::new();
-
-        let mut non_zero_greater_than_second = false;
-        wtr.write_str("PT")?;
-
-        let mut secs = dur.as_secs();
-        let nanos = dur.subsec_nanos();
-        let hours = secs / (60 * 60);
-        secs %= 60 * 60;
-        let minutes = secs / 60;
-        secs = secs % 60;
-        if hours != 0 {
-            wtr.write_uint(&FMT_INT, hours)?;
-            wtr.write_char(self.label('H'))?;
-            non_zero_greater_than_second = true;
-        }
-        if minutes != 0 {
-            wtr.write_uint(&FMT_INT, minutes)?;
-            wtr.write_char(self.label('M'))?;
-            non_zero_greater_than_second = true;
-        }
-        if (secs != 0 || !non_zero_greater_than_second) && nanos == 0 {
-            wtr.write_uint(&FMT_INT, secs)?;
-            wtr.write_char(self.label('S'))?;
-        } else if nanos != 0 {
-            wtr.write_uint(&FMT_INT, secs)?;
-            wtr.write_str(".")?;
-            wtr.write_fraction(&FMT_FRACTION, nanos)?;
-            wtr.write_char(self.label('S'))?;
-        }
-        Ok(())
+        let mut buf = ArrayBuffer::<MAX_DURATION_LEN>::default();
+        let mut bbuf = buf.as_borrowed();
+        self.print_unsigned_duration_impl(dur, &mut bbuf);
+        wtr.write_str(bbuf.filled())
     }
 
-    /// Converts the uppercase unit designator label to lowercase if this
+    fn print_unsigned_duration_impl(
+        &self,
+        dur: &Duration,
+        bbuf: &mut BorrowedBuffer<'_>,
+    ) {
+        bbuf.write_ascii_char(b'P');
+        bbuf.write_ascii_char(b'T');
+
+        let (mut secs, nanos) = (dur.as_secs(), dur.subsec_nanos());
+        let non_zero_greater_than_second = secs >= 60;
+        if non_zero_greater_than_second {
+            let hours = secs / (60 * 60);
+            secs %= 60 * 60;
+            let minutes = secs / 60;
+            secs = secs % 60;
+            if hours != 0 {
+                bbuf.write_int(hours);
+                bbuf.write_ascii_char(self.label(Unit::Hour));
+            }
+            if minutes != 0 {
+                bbuf.write_int(minutes);
+                bbuf.write_ascii_char(self.label(Unit::Minute));
+            }
+        }
+        if !non_zero_greater_than_second || secs != 0 || nanos != 0 {
+            bbuf.write_int(secs);
+            if nanos != 0 {
+                bbuf.write_ascii_char(b'.');
+                bbuf.write_fraction(None, nanos);
+            }
+            bbuf.write_ascii_char(self.label(Unit::Second));
+        }
+    }
+
+    /// Converts the ASCII uppercase unit designator label to lowercase if this
     /// printer is configured to use lowercase. Otherwise the label is returned
     /// unchanged.
-    fn label(&self, upper: char) -> char {
-        debug_assert!(upper.is_ascii());
-        if self.lowercase {
-            upper.to_ascii_lowercase()
-        } else {
-            upper
-        }
+    fn label(&self, unit: Unit) -> u8 {
+        self.designators.designator(unit)
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Designators {
+    // Indexed by `Unit as usize`
+    map: [u8; 10],
+}
+
+const DESIGNATORS_UPPERCASE: &'static Designators = &Designators {
+    // N.B. ISO 8601 duration format doesn't have unit
+    // designators for sub-second units.
+    map: [0, 0, 0, b'S', b'M', b'H', b'D', b'W', b'M', b'Y'],
+};
+
+const DESIGNATORS_LOWERCASE: &'static Designators = &Designators {
+    // N.B. ISO 8601 duration format doesn't have unit
+    // designators for sub-second units.
+    map: [0, 0, 0, b's', b'm', b'h', b'd', b'w', b'm', b'y'],
+};
+
+impl Designators {
+    /// Returns the designator for the given unit.
+    fn designator(&self, unit: Unit) -> u8 {
+        self.map[unit as usize]
     }
 }
 
@@ -630,6 +651,7 @@ mod tests {
     use crate::{
         civil::{date, Weekday},
         span::ToSpan,
+        util::t,
     };
 
     use super::*;
@@ -917,7 +939,7 @@ mod tests {
     #[test]
     fn print_unsigned_duration() {
         let p = |secs, nanos| -> String {
-            let dur = core::time::Duration::new(secs, nanos);
+            let dur = Duration::new(secs, nanos);
             let mut buf = String::new();
             SpanPrinter::new()
                 .print_unsigned_duration(&dur, &mut buf)
