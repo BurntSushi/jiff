@@ -34,18 +34,12 @@ const MAX_DURATION_LEN: usize = 35;
 pub(super) struct DateTimePrinter {
     lowercase: bool,
     separator: u8,
-    rfc9557: bool,
     precision: Option<u8>,
 }
 
 impl DateTimePrinter {
     pub(super) const fn new() -> DateTimePrinter {
-        DateTimePrinter {
-            lowercase: false,
-            separator: b'T',
-            rfc9557: true,
-            precision: None,
-        }
+        DateTimePrinter { lowercase: false, separator: b'T', precision: None }
     }
 
     pub(super) const fn lowercase(self, yes: bool) -> DateTimePrinter {
@@ -244,9 +238,6 @@ impl DateTimePrinter {
         // `TimeZone`. So we hand-roll our own formatter directly from the
         // annotation.
         if let Some(ann) = pieces.time_zone_annotation() {
-            // Note that we explicitly ignore `self.rfc9557` here, since with
-            // `Pieces`, the annotation has been explicitly provided. Also,
-            // at time of writing, `self.rfc9557` is always enabled anyway.
             wtr.write_str("[")?;
             if ann.is_critical() {
                 wtr.write_str("!")?;
@@ -366,20 +357,16 @@ impl DateTimePrinter {
     /// Formats the given time zone name into the writer given as an RFC 9557
     /// time zone annotation.
     ///
-    /// This is a no-op when RFC 9557 support isn't enabled. And when the given
-    /// time zone is not an IANA time zone name, then the offset is printed
-    /// instead. (This means the offset will be printed twice, which is indeed
-    /// an intended behavior of RFC 9557 for cases where a time zone name is
-    /// not used or unavailable.)
+    /// When the given time zone is not an IANA time zone name, then the offset
+    /// is printed instead. (This means the offset will be printed twice, which
+    /// is indeed an intended behavior of RFC 9557 for cases where a time zone
+    /// name is not used or unavailable.)
     fn print_time_zone_annotation<W: Write>(
         &self,
         time_zone: &TimeZone,
         offset: &Offset,
         mut wtr: W,
     ) -> Result<(), Error> {
-        if !self.rfc9557 {
-            return Ok(());
-        }
         wtr.write_str("[")?;
         if let Some(iana_name) = time_zone.iana_name() {
             wtr.write_str(iana_name)?;
