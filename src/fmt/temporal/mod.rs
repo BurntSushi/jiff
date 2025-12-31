@@ -1350,7 +1350,7 @@ impl DateTimePrinter {
     /// ```
     #[cfg(feature = "alloc")]
     pub fn zoned_to_string(&self, zdt: &Zoned) -> alloc::string::String {
-        let mut buf = alloc::string::String::with_capacity(4);
+        let mut buf = alloc::string::String::new();
         // OK because writing to `String` never fails.
         self.print_zoned(zdt, &mut buf).unwrap();
         buf
@@ -1397,7 +1397,7 @@ impl DateTimePrinter {
         &self,
         timestamp: &Timestamp,
     ) -> alloc::string::String {
-        let mut buf = alloc::string::String::with_capacity(4);
+        let mut buf = alloc::string::String::new();
         // OK because writing to `String` never fails.
         self.print_timestamp(timestamp, &mut buf).unwrap();
         buf
@@ -1454,7 +1454,7 @@ impl DateTimePrinter {
         timestamp: &Timestamp,
         offset: Offset,
     ) -> alloc::string::String {
-        let mut buf = alloc::string::String::with_capacity(4);
+        let mut buf = alloc::string::String::new();
         // OK because writing to `String` never fails.
         self.print_timestamp_with_offset(timestamp, offset, &mut buf).unwrap();
         buf
@@ -1480,7 +1480,7 @@ impl DateTimePrinter {
         &self,
         dt: &civil::DateTime,
     ) -> alloc::string::String {
-        let mut buf = alloc::string::String::with_capacity(4);
+        let mut buf = alloc::string::String::new();
         // OK because writing to `String` never fails.
         self.print_datetime(dt, &mut buf).unwrap();
         buf
@@ -1503,7 +1503,7 @@ impl DateTimePrinter {
     /// ```
     #[cfg(feature = "alloc")]
     pub fn date_to_string(&self, date: &civil::Date) -> alloc::string::String {
-        let mut buf = alloc::string::String::with_capacity(4);
+        let mut buf = alloc::string::String::new();
         // OK because writing to `String` never fails.
         self.print_date(date, &mut buf).unwrap();
         buf
@@ -1526,7 +1526,7 @@ impl DateTimePrinter {
     /// ```
     #[cfg(feature = "alloc")]
     pub fn time_to_string(&self, time: &civil::Time) -> alloc::string::String {
-        let mut buf = alloc::string::String::with_capacity(4);
+        let mut buf = alloc::string::String::new();
         // OK because writing to `String` never fails.
         self.print_time(time, &mut buf).unwrap();
         buf
@@ -1563,7 +1563,7 @@ impl DateTimePrinter {
         &self,
         tz: &TimeZone,
     ) -> Result<alloc::string::String, Error> {
-        let mut buf = alloc::string::String::with_capacity(4);
+        let mut buf = alloc::string::String::new();
         // Writing to a `String` itself will never fail, but this could fail
         // as described above in the docs.
         self.print_time_zone(tz, &mut buf)?;
@@ -1608,7 +1608,7 @@ impl DateTimePrinter {
     /// ```
     #[cfg(feature = "alloc")]
     pub fn pieces_to_string(&self, pieces: &Pieces) -> alloc::string::String {
-        let mut buf = alloc::string::String::with_capacity(4);
+        let mut buf = alloc::string::String::new();
         // OK because writing to `String` never fails.
         self.print_pieces(pieces, &mut buf).unwrap();
         buf
@@ -1642,9 +1642,9 @@ impl DateTimePrinter {
     pub fn print_zoned<W: Write>(
         &self,
         zdt: &Zoned,
-        wtr: W,
+        mut wtr: W,
     ) -> Result<(), Error> {
-        self.p.print_zoned(zdt, wtr)
+        self.p.print_zoned(zdt, &mut wtr)
     }
 
     /// Print a `Timestamp` datetime to the given writer.
@@ -1693,9 +1693,9 @@ impl DateTimePrinter {
     pub fn print_timestamp<W: Write>(
         &self,
         timestamp: &Timestamp,
-        wtr: W,
+        mut wtr: W,
     ) -> Result<(), Error> {
-        self.p.print_timestamp(timestamp, None, wtr)
+        self.p.print_timestamp(timestamp, &mut wtr)
     }
 
     /// Print a `Timestamp` datetime to the given writer with the given offset.
@@ -1761,9 +1761,9 @@ impl DateTimePrinter {
         &self,
         timestamp: &Timestamp,
         offset: Offset,
-        wtr: W,
+        mut wtr: W,
     ) -> Result<(), Error> {
-        self.p.print_timestamp(timestamp, Some(offset), wtr)
+        self.p.print_timestamp_with_offset(timestamp, offset, &mut wtr)
     }
 
     /// Print a `civil::DateTime` to the given writer.
@@ -1794,9 +1794,9 @@ impl DateTimePrinter {
     pub fn print_datetime<W: Write>(
         &self,
         dt: &civil::DateTime,
-        wtr: W,
+        mut wtr: W,
     ) -> Result<(), Error> {
-        self.p.print_datetime(dt, wtr)
+        self.p.print_datetime(dt, &mut wtr)
     }
 
     /// Print a `civil::Date` to the given writer.
@@ -1827,9 +1827,9 @@ impl DateTimePrinter {
     pub fn print_date<W: Write>(
         &self,
         date: &civil::Date,
-        wtr: W,
+        mut wtr: W,
     ) -> Result<(), Error> {
-        self.p.print_date(date, wtr)
+        self.p.print_date(date, &mut wtr)
     }
 
     /// Print a `civil::Time` to the given writer.
@@ -1860,9 +1860,9 @@ impl DateTimePrinter {
     pub fn print_time<W: Write>(
         &self,
         time: &civil::Time,
-        wtr: W,
+        mut wtr: W,
     ) -> Result<(), Error> {
-        self.p.print_time(time, wtr)
+        self.p.print_time(time, &mut wtr)
     }
 
     /// Print a `TimeZone`.
@@ -1992,9 +1992,9 @@ impl DateTimePrinter {
     pub(crate) fn print_iso_week_date<W: Write>(
         &self,
         iso_week_date: &ISOWeekDate,
-        wtr: W,
+        mut wtr: W,
     ) -> Result<(), Error> {
-        self.p.print_iso_week_date(iso_week_date, wtr)
+        self.p.print_iso_week_date(iso_week_date, &mut wtr)
     }
 }
 
@@ -2267,7 +2267,7 @@ impl SpanPrinter {
     /// ```
     #[cfg(feature = "alloc")]
     pub fn span_to_string(&self, span: &Span) -> alloc::string::String {
-        let mut buf = alloc::string::String::with_capacity(4);
+        let mut buf = alloc::string::String::new();
         // OK because writing to `String` never fails.
         self.print_span(span, &mut buf).unwrap();
         buf
@@ -2299,7 +2299,7 @@ impl SpanPrinter {
         &self,
         duration: &SignedDuration,
     ) -> alloc::string::String {
-        let mut buf = alloc::string::String::with_capacity(4);
+        let mut buf = alloc::string::String::new();
         // OK because writing to `String` never fails.
         self.print_duration(duration, &mut buf).unwrap();
         buf
@@ -2335,7 +2335,7 @@ impl SpanPrinter {
         &self,
         duration: &core::time::Duration,
     ) -> alloc::string::String {
-        let mut buf = alloc::string::String::with_capacity(4);
+        let mut buf = alloc::string::String::new();
         // OK because writing to `String` never fails.
         self.print_unsigned_duration(duration, &mut buf).unwrap();
         buf

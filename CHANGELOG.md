@@ -17,6 +17,9 @@ Improve runtime performance and binary size of the "friendly" duration printer.
 * [#468](https://github.com/BurntSushi/jiff/pull/468):
 Improve runtime performance and binary size of the Temporal ISO 8601 duration
 printer.
+* [#470](https://github.com/BurntSushi/jiff/pull/470):
+Improve runtime performance and binary size of the Temporal ISO 8601 datetime
+printer.
 
 
 0.2.17 (2025-12-24)

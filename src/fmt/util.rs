@@ -34,13 +34,6 @@ impl IntegerFormatter {
         Integer::signed(self, value)
     }
 
-    /// Format the given value using this configuration as an unsigned integer
-    /// ASCII number.
-    #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) const fn format_unsigned(&self, value: u64) -> Integer {
-        Integer::unsigned(self, value)
-    }
-
     /// The minimum number of digits/padding that this number should be
     /// formatted with. If the number would have fewer digits than this, then
     /// it is padded out with the padding byte (which is zero by default) until
