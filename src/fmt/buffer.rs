@@ -84,6 +84,7 @@ impl<'data> BorrowedBuffer<'data> {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn with_writer<const N: usize>(
         wtr: &mut dyn Write,
+        runtime_allocation: usize,
         mut with: impl FnMut(&mut BorrowedBuffer<'_>) -> Result<(), Error>,
     ) -> Result<(), Error> {
         // Specialize for the common case of `W = String` or `W = Vec<u8>`.
@@ -98,7 +99,7 @@ impl<'data> BorrowedBuffer<'data> {
         // enforces this invariant.
         #[cfg(feature = "alloc")]
         if let Some(buf) = unsafe { wtr.as_mut_vec() } {
-            buf.reserve(N);
+            buf.reserve(runtime_allocation);
             return BorrowedBuffer::with_vec_spare_capacity(buf, with);
         }
         let mut buf = ArrayBuffer::<N>::default();

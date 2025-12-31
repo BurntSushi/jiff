@@ -1215,6 +1215,7 @@ impl DateTimePrinter {
     ) -> Result<(), Error> {
         BorrowedBuffer::with_writer::<PRINTER_MAX_BYTES_RFC2822>(
             &mut wtr,
+            PRINTER_MAX_BYTES_RFC2822,
             |bbuf| {
                 self.print_civil_with_offset(
                     zdt.datetime(),
@@ -1266,6 +1267,7 @@ impl DateTimePrinter {
         let dt = TimeZone::UTC.to_datetime(*timestamp);
         BorrowedBuffer::with_writer::<PRINTER_MAX_BYTES_RFC2822>(
             &mut wtr,
+            PRINTER_MAX_BYTES_RFC2822,
             |bbuf| self.print_civil_with_offset(dt, None, bbuf),
         )
     }
@@ -1315,6 +1317,7 @@ impl DateTimePrinter {
         let dt = TimeZone::UTC.to_datetime(*timestamp);
         BorrowedBuffer::with_writer::<PRINTER_MAX_BYTES_RFC9110>(
             &mut wtr,
+            PRINTER_MAX_BYTES_RFC9110,
             |bbuf| self.print_civil_always_utc(dt, bbuf),
         )
     }
