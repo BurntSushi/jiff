@@ -1,4 +1,4 @@
-use std::hint::black_box as bb;
+use std::{hint::black_box as bb, time::SystemTime};
 
 use criterion::Criterion;
 use jiff::{
@@ -644,6 +644,7 @@ fn print_rfc3339(c: &mut Criterion) {
     const NAME: &str = "print/rfc3339";
     const TZ: TimeZone = TimeZone::fixed(Offset::constant(-5));
     const EXPECTED: &str = "2025-12-27T19:46:02-05:00";
+    const EXPECTED_HUMANTIME: &str = "2025-12-28T00:46:02Z";
     const START: Timestamp = Timestamp::constant(1766882762, 0);
 
     let start = START.to_zoned(TZ.clone());
@@ -733,6 +734,30 @@ fn print_rfc3339(c: &mut Criterion) {
             b.iter(|| {
                 let got = dt.format(&format).unwrap();
                 assert_eq!(got, EXPECTED);
+            })
+        });
+    }
+
+    {
+        let ts = SystemTime::from(start.timestamp());
+        benchmark(c, format!("{NAME}/buffer/humantime"), |b| {
+            b.iter(|| {
+                use std::fmt::Write;
+
+                buf.clear();
+                let display = humantime::format_rfc3339(ts);
+                write!(buf, "{display}").unwrap();
+                assert_eq!(buf, EXPECTED_HUMANTIME);
+            })
+        });
+    }
+
+    {
+        let ts = SystemTime::from(start.timestamp());
+        benchmark(c, format!("{NAME}/to_string/humantime"), |b| {
+            b.iter(|| {
+                let got = humantime::format_rfc3339(ts).to_string();
+                assert_eq!(got, EXPECTED_HUMANTIME);
             })
         });
     }
