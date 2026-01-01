@@ -720,6 +720,7 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
     )),
     allow(dead_code, unused_imports)
 )]
+#![cfg_attr(miri, allow(dead_code, unused_imports))]
 // This adds Cargo feature annotations to items in the rustdoc output. Which is
 // sadly hugely beneficial for this crate due to the number of features.
 #![cfg_attr(docsrs_jiff, feature(doc_cfg))]

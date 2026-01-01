@@ -144,7 +144,7 @@ pub(crate) mod posix;
 #[cfg(feature = "tz-system")]
 mod system;
 #[cfg(all(test, feature = "alloc"))]
-mod testdata;
+pub(crate) mod testdata;
 mod timezone;
 pub(crate) mod tzif;
 // See module comment for WIP status. :-(
