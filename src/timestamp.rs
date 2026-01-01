@@ -2813,19 +2813,21 @@ impl<'a> From<&'a Zoned> for Timestamp {
 }
 
 #[cfg(feature = "std")]
-impl From<Timestamp> for std::time::SystemTime {
+impl TryFrom<Timestamp> for std::time::SystemTime {
+    type Error = Error;
+
     #[inline]
-    fn from(time: Timestamp) -> std::time::SystemTime {
+    fn try_from(time: Timestamp) -> Result<Self, Error> {
         let unix_epoch = std::time::SystemTime::UNIX_EPOCH;
         let sdur = time.as_duration();
         let dur = sdur.unsigned_abs();
-        // These are guaranteed to succeed because we assume that SystemTime
-        // uses at least 64 bits for the time, and our durations are capped via
-        // the range on UnixSeconds.
+        // These operations might fail as SystemTime is not guaranteed to use
+        // at least 64 bits for the time.
+        // See https://github.com/rust-lang/rust/issues/150505
         if sdur.is_negative() {
-            unix_epoch.checked_sub(dur).expect("duration too big (negative)")
+            unix_epoch.checked_sub(dur).ok_or(Error::slim_range("timestamp"))
         } else {
-            unix_epoch.checked_add(dur).expect("duration too big (positive)")
+            unix_epoch.checked_add(dur).ok_or(Error::slim_range("timestamp"))
         }
     }
 }

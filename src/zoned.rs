@@ -3487,18 +3487,22 @@ impl TryFrom<std::time::SystemTime> for Zoned {
 }
 
 #[cfg(feature = "std")]
-impl From<Zoned> for std::time::SystemTime {
+impl TryFrom<Zoned> for std::time::SystemTime {
+    type Error = Error;
+
     #[inline]
-    fn from(time: Zoned) -> std::time::SystemTime {
-        time.timestamp().into()
+    fn try_from(time: Zoned) -> Result<std::time::SystemTime, Error> {
+        time.timestamp().try_into()
     }
 }
 
 #[cfg(feature = "std")]
-impl<'a> From<&'a Zoned> for std::time::SystemTime {
+impl<'a> TryFrom<&'a Zoned> for std::time::SystemTime {
+    type Error = Error;
+
     #[inline]
-    fn from(time: &'a Zoned) -> std::time::SystemTime {
-        time.timestamp().into()
+    fn try_from(time: &'a Zoned) -> Result<std::time::SystemTime, Error> {
+        time.timestamp().try_into()
     }
 }
 
