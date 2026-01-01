@@ -4,7 +4,7 @@ use crate::{
     civil::{Date, DateTime, ISOWeekDate, Time},
     error::{fmt::temporal::Error as E, Error},
     fmt::{
-        buffer::{ArrayBuffer, BorrowedBuffer},
+        buffer::{ArrayBuffer, BorrowedBuffer, BorrowedWriter},
         temporal::{Pieces, PiecesOffset, TimeZoneAnnotationKind},
         Write,
     },
@@ -13,47 +13,55 @@ use crate::{
     SignedDuration, Timestamp, Unit, Zoned,
 };
 
-/// Defines the maximum possible length (in bytes) of an RFC 9557 zoned
+/// Defines the "maximum" possible length (in bytes) of an RFC 9557 zoned
 /// datetime.
 ///
-/// The actual maximal string possible is I believe
+/// In practice, the actual maximal string possible is I believe
 /// `-009999-03-14T17:30:00.999999999-04:23[America/Argentina/ComodRivadavia]`,
 /// which is 72 bytes. Obviously, the length of the IANA tzdb identifier
 /// matters and can be highly variable.
 ///
-/// So why is this bigger than 72? Well, as far as I can tell, there is no
-/// guaranteed maximum length for identifiers. Although, it does appear that
-/// there is some loose goal to keep them as succinct as possible.
+/// So why is this called "reasonable" and not "maximum"? Well, it's the
+/// IANA tzdb identifiers. They can be arbitrarily long. There also aren't
+/// any rules about how long they can be. So in theory, IANA could allocate
+/// a new identifier longer than `America/Argentina/ComodRivadavia`. With
+/// that said, they do generally try to keep them succinct.
 ///
-/// So... the current longest identifier is 32 bytes. Surely there will never
-/// be one longer than 50 bytes, right? Well, that's what we assume here.
-/// I don't feel great about this, because if there ever is a longer
-/// identifier, the printer will panic. We can't return an error (here)
-/// because the printer has to be infallible. There are two possible
-/// alternatives here:
+/// Separately from what IANA does, Jiff itself doesn't impose any restrictions
+/// on the length of identifiers. Callers can pass in arbitrarily long
+/// identifiers via `TimeZone::tzif` or by simply futzing with the names of
+/// files in `/usr/share/zoneinfo`. It's also possible to use an arbitrarily
+/// long identifier via the "pieces" `TimeZoneAnnotationName` API. Since we
+/// don't impose any restrictions, we really do want to at least try to handle
+/// arbitrarily long identifiers here.
 ///
-/// 1. We refuse to create any `TimeZone` with an IANA tzdb identifier longer
-/// than the limit we impose here. We can return an error at `TimeZone`
-/// construction (since Jiff already knows how to deal with that) and thus
-/// everyone downstream of `TimeZone`---including this printer---can make
-/// assumptions about the maximum length of identifiers.
+/// Thus, we define a "reasonable" upper bound. When the RFC 9557 string we
+/// want to serialize is known to be under this bound, then we'll use a "fast"
+/// path with a fixed size buffer on the stack (or perhaps even write directly
+/// into the spare capacity of a caller providd `String`). But when it's above
+/// this bound, then we fall back to a slower path that uses a buffering
+/// mechanism to permit arbitrarily long IANA tzdb identifiers.
 ///
-/// 2. Introduce a buffering mechanism that allows us to define a smaller
-/// buffer on the stack that is "flushed" to the caller's `Write` implementation
-/// whenever it fills up. We don't have this abstraction yet (as of 2025-12-31),
-/// but we'll need it for `strftime`.
+/// For the most part, doing this dance doesn't come with a runtime cost,
+/// primarily because we choose to sacrifice code size a bit by duplicating
+/// some functions. We could have our cake and eat it too if we enforce a
+/// maximum length on IANA tzdb identifiers. Then we could set a true
+/// `MAX_ZONED_LEN` and avoid the case where buffering is needed.
+const REASONABLE_ZONED_LEN: usize = 72;
+
+/// Defines the "maximum" possible length (in bytes) of an RFC 9557 zoned
+/// datetime via the "pieces" API.
 ///
-/// Perhaps even more pernicious is that this error category will only occur
-/// when writing to a `Write` that doesn't expose an underlying `Vec<u8>`
-/// or `String`. When we have a `String`, and since we can compute a reasonably
-/// tight upper bound on the total length cheaply, we'll always reserve a
-/// sufficient large capacity to write to.
+/// This generally should be identical to `REASONABLE_ZONED_LEN`, except its
+/// expected maximum is one byte longer. Namely, the pieces API currently
+/// lets the caller roundtrip the "criticality" of the timestamp. i.e.,
+/// the `!` in the time zone annotation. So it's one extra byte longer
+/// than zoned datetimes.
 ///
-/// FIXME: So I think we really do need to do either (1) or (2) above. I'm
-/// inclined to do (2) so that we'll handle all possible reasonable inputs.
-/// Although it might be a good idea to impose a maximum limit too. It's very
-/// useful to be able to assume maximum lengths of inputs.
-const MAX_ZONED_LEN: usize = 90;
+/// Note that all the same considerations from variable length IANA tzdb
+/// identifiers apply to the pieces printing just as it does to zoned datetime
+/// printing.
+const REASONABLE_PIECES_LEN: usize = 73;
 
 /// Defines the maximum possible length (in bytes) of an RFC 3339 timestamp
 /// that is always in Zulu time.
@@ -151,33 +159,82 @@ impl DateTimePrinter {
         /// The actual time zone annotation name, negative year and fractional
         /// second component are all optional and can vary quite a bit in
         /// length.
+        ///
+        /// We do this calculation to get a tighter bound on the spare capacity
+        /// needed when the caller provides a `&mut String` or a `&mut Vec<u8>`
+        /// to write into. That is, we want to try hard not to over-allocate.
+        ///
+        /// Note that memory safety does not depend on us getting this
+        /// calculation right. If we get it wrong, the printer will panic if
+        /// it tries to print a string that exceeds the calculated amount.
         const BASE: usize = 19 + 6 + 2;
 
+        // An IANA tzdb identifier is variable length data, so add its length
+        // to the `BASE` for runtime allocation size. When there is no IANA
+        // identifier, we could write a fixed offset (that's always 6 bytes) or
+        // `Etc/Unknown` (11 bytes) for when the offset from UTC is not known.
+        // In the non-IANA case, we just use an upper bound of 11, so we will
+        // over-allocate a little in the fixed offset case.
         let mut runtime_allocation = BASE
             + zdt.time_zone().iana_name().map(|name| name.len()).unwrap_or(11);
+        // A datetime before year 0 means we add a `-00` prefix. e.g.,
+        // `-001234-01-01`.
         if zdt.year() < 0 {
             runtime_allocation += 3;
         }
-        if zdt.subsec_nanosecond() != 0 {
+        // If we're printing fractional seconds, then we need more room for
+        // that. This potentially overallocates because we don't do the extra
+        // work required to find a tighter bound.
+        if zdt.subsec_nanosecond() != 0 || self.precision.is_some() {
             runtime_allocation += 10;
         }
 
-        BorrowedBuffer::with_writer::<MAX_ZONED_LEN>(
-            wtr,
-            runtime_allocation,
-            |bbuf| Ok(self.print_zoned_impl(zdt, bbuf)),
-        )
+        // The runtime allocation could be greater than what we assume is a
+        // "reasonable" upper bound on the length of an RFC 9557 string. This
+        // can only happen when an IANA tzdb identifier is very long. When
+        // we're under the limit, we use a fast path.
+        if runtime_allocation <= REASONABLE_ZONED_LEN {
+            return BorrowedBuffer::with_writer::<REASONABLE_ZONED_LEN>(
+                wtr,
+                runtime_allocation,
+                |bbuf| Ok(self.print_zoned_buf(zdt, bbuf)),
+            );
+        }
+
+        // ... otherwise, we use a path with a buffered writer that is slower
+        // but can deal with arbitrarily long IANA tzdb identifiers.
+        let mut buf = ArrayBuffer::<REASONABLE_ZONED_LEN>::default();
+        let mut bbuf = buf.as_borrowed();
+        let mut wtr = BorrowedWriter::new(&mut bbuf, wtr);
+        self.print_zoned_wtr(zdt, &mut wtr)?;
+        wtr.finish()
     }
 
-    fn print_zoned_impl(&self, zdt: &Zoned, bbuf: &mut BorrowedBuffer<'_>) {
-        self.print_datetime_impl(&zdt.datetime(), bbuf);
+    fn print_zoned_buf(&self, zdt: &Zoned, bbuf: &mut BorrowedBuffer<'_>) {
+        self.print_datetime_buf(&zdt.datetime(), bbuf);
         let tz = zdt.time_zone();
         if tz.is_unknown() {
             bbuf.write_str("Z[Etc/Unknown]");
         } else {
-            self.print_offset_rounded(&zdt.offset(), bbuf);
-            self.print_time_zone_annotation(&tz, &zdt.offset(), bbuf);
+            self.print_offset_rounded_buf(&zdt.offset(), bbuf);
+            self.print_time_zone_annotation_buf(&tz, &zdt.offset(), bbuf);
         }
+    }
+
+    fn print_zoned_wtr(
+        &self,
+        zdt: &Zoned,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        self.print_datetime_wtr(&zdt.datetime(), wtr)?;
+        let tz = zdt.time_zone();
+        if tz.is_unknown() {
+            wtr.write_str("Z[Etc/Unknown]")?;
+        } else {
+            self.print_offset_rounded_wtr(&zdt.offset(), wtr)?;
+            self.print_time_zone_annotation_wtr(&tz, &zdt.offset(), wtr)?;
+        }
+        Ok(())
     }
 
     pub(super) fn print_timestamp(
@@ -186,24 +243,25 @@ impl DateTimePrinter {
         wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         let mut runtime_allocation = MAX_TIMESTAMP_ZULU_LEN;
-        if timestamp.subsec_nanosecond() == 0 {
+        // Don't reserve room for fractional seconds if we don't use them.
+        if timestamp.subsec_nanosecond() == 0 && self.precision.is_none() {
             runtime_allocation -= 10;
         }
         BorrowedBuffer::with_writer::<MAX_TIMESTAMP_ZULU_LEN>(
             wtr,
             runtime_allocation,
-            |bbuf| Ok(self.print_timestamp_impl(timestamp, bbuf)),
+            |bbuf| Ok(self.print_timestamp_buf(timestamp, bbuf)),
         )
     }
 
-    fn print_timestamp_impl(
+    fn print_timestamp_buf(
         &self,
         timestamp: &Timestamp,
         bbuf: &mut BorrowedBuffer<'_>,
     ) {
         let dt = Offset::UTC.to_datetime(*timestamp);
-        self.print_datetime_impl(&dt, bbuf);
-        self.print_zulu(bbuf);
+        self.print_datetime_buf(&dt, bbuf);
+        self.print_zulu_buf(bbuf);
     }
 
     pub(super) fn print_timestamp_with_offset(
@@ -213,7 +271,8 @@ impl DateTimePrinter {
         wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         let mut runtime_allocation = MAX_TIMESTAMP_OFFSET_LEN;
-        if timestamp.subsec_nanosecond() == 0 {
+        // Don't reserve room for fractional seconds if we don't use them.
+        if timestamp.subsec_nanosecond() == 0 && self.precision.is_none() {
             runtime_allocation -= 10;
         }
         BorrowedBuffer::with_writer::<MAX_TIMESTAMP_OFFSET_LEN>(
@@ -221,20 +280,20 @@ impl DateTimePrinter {
             runtime_allocation,
             |bbuf| {
                 Ok(self
-                    .print_timestamp_with_offset_impl(timestamp, offset, bbuf))
+                    .print_timestamp_with_offset_buf(timestamp, offset, bbuf))
             },
         )
     }
 
-    fn print_timestamp_with_offset_impl(
+    fn print_timestamp_with_offset_buf(
         &self,
         timestamp: &Timestamp,
         offset: Offset,
         bbuf: &mut BorrowedBuffer<'_>,
     ) {
         let dt = offset.to_datetime(*timestamp);
-        self.print_datetime_impl(&dt, bbuf);
-        self.print_offset_rounded(&offset, bbuf);
+        self.print_datetime_buf(&dt, bbuf);
+        self.print_offset_rounded_buf(&offset, bbuf);
     }
 
     pub(super) fn print_datetime(
@@ -243,29 +302,44 @@ impl DateTimePrinter {
         wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         let mut runtime_allocation = MAX_DATETIME_LEN;
-        if dt.subsec_nanosecond() == 0 {
+        // Don't reserve room for fractional seconds if we don't use them.
+        if dt.subsec_nanosecond() == 0 && self.precision.is_none() {
             runtime_allocation -= 10;
         }
         BorrowedBuffer::with_writer::<MAX_DATETIME_LEN>(
             wtr,
             runtime_allocation,
-            |bbuf| Ok(self.print_datetime_impl(dt, bbuf)),
+            |bbuf| Ok(self.print_datetime_buf(dt, bbuf)),
         )
     }
 
-    /// Formats the given datetime into the writer given.
-    fn print_datetime_impl(
+    fn print_datetime_buf(
         &self,
         dt: &DateTime,
         bbuf: &mut BorrowedBuffer<'_>,
     ) {
-        self.print_date_impl(&dt.date(), bbuf);
+        self.print_date_buf(&dt.date(), bbuf);
         bbuf.write_ascii_char(if self.lowercase {
             self.separator.to_ascii_lowercase()
         } else {
             self.separator
         });
-        self.print_time_impl(&dt.time(), bbuf);
+        self.print_time_buf(&dt.time(), bbuf);
+    }
+
+    fn print_datetime_wtr(
+        &self,
+        dt: &DateTime,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        self.print_date_wtr(&dt.date(), wtr)?;
+        wtr.write_ascii_char(if self.lowercase {
+            self.separator.to_ascii_lowercase()
+        } else {
+            self.separator
+        })?;
+        self.print_time_wtr(&dt.time(), wtr)?;
+        Ok(())
     }
 
     pub(super) fn print_date(
@@ -276,43 +350,57 @@ impl DateTimePrinter {
         BorrowedBuffer::with_writer::<MAX_DATE_LEN>(
             wtr,
             MAX_DATE_LEN,
-            |bbuf| Ok(self.print_date_impl(date, bbuf)),
+            |bbuf| Ok(self.print_date_buf(date, bbuf)),
         )
     }
 
-    /// Formats the given date into the writer given.
-    fn print_date_impl(&self, date: &Date, bbuf: &mut BorrowedBuffer<'_>) {
+    fn print_date_buf(&self, date: &Date, bbuf: &mut BorrowedBuffer<'_>) {
         let year = date.year();
-        if year >= 0 {
-            bbuf.write_int_pad4(year.unsigned_abs().into());
-        } else {
-            bbuf.write_ascii_char(b'-');
-            bbuf.write_int_pad6(year.unsigned_abs().into());
+        if year < 0 {
+            bbuf.write_str("-00");
         }
+        bbuf.write_int_pad4(year.unsigned_abs().into());
         bbuf.write_ascii_char(b'-');
         bbuf.write_int_pad2(date.month().unsigned_abs().into());
         bbuf.write_ascii_char(b'-');
         bbuf.write_int_pad2(date.day().unsigned_abs().into());
     }
 
-    /// Formats the given time into the writer given.
+    fn print_date_wtr(
+        &self,
+        date: &Date,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        let year = date.year();
+        if year < 0 {
+            wtr.write_str("-00")?;
+        }
+        wtr.write_int_pad4(year.unsigned_abs().into())?;
+        wtr.write_ascii_char(b'-')?;
+        wtr.write_int_pad2(date.month().unsigned_abs().into())?;
+        wtr.write_ascii_char(b'-')?;
+        wtr.write_int_pad2(date.day().unsigned_abs().into())?;
+        Ok(())
+    }
+
     pub(super) fn print_time(
         &self,
         time: &Time,
         wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         let mut runtime_allocation = MAX_TIME_LEN;
-        if time.subsec_nanosecond() == 0 {
+        // Don't reserve room for fractional seconds if we don't use them.
+        if time.subsec_nanosecond() == 0 && self.precision.is_none() {
             runtime_allocation -= 10;
         }
         BorrowedBuffer::with_writer::<MAX_TIME_LEN>(
             wtr,
             runtime_allocation,
-            |bbuf| Ok(self.print_time_impl(time, bbuf)),
+            |bbuf| Ok(self.print_time_buf(time, bbuf)),
         )
     }
 
-    fn print_time_impl(&self, time: &Time, bbuf: &mut BorrowedBuffer<'_>) {
+    fn print_time_buf(&self, time: &Time, bbuf: &mut BorrowedBuffer<'_>) {
         bbuf.write_int_pad2(time.hour().unsigned_abs().into());
         bbuf.write_ascii_char(b':');
         bbuf.write_int_pad2(time.minute().unsigned_abs().into());
@@ -328,25 +416,45 @@ impl DateTimePrinter {
         }
     }
 
-    /// Formats the given time zone into the writer given.
+    fn print_time_wtr(
+        &self,
+        time: &Time,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        wtr.write_int_pad2(time.hour().unsigned_abs().into())?;
+        wtr.write_ascii_char(b':')?;
+        wtr.write_int_pad2(time.minute().unsigned_abs().into())?;
+        wtr.write_ascii_char(b':')?;
+        wtr.write_int_pad2(time.second().unsigned_abs().into())?;
+        let fractional_nanosecond = time.subsec_nanosecond();
+        if self.precision.map_or(fractional_nanosecond != 0, |p| p > 0) {
+            wtr.write_ascii_char(b'.')?;
+            wtr.write_fraction(
+                self.precision,
+                fractional_nanosecond.unsigned_abs(),
+            )?;
+        }
+        Ok(())
+    }
+
     pub(super) fn print_time_zone<W: Write>(
         &self,
         tz: &TimeZone,
         mut wtr: W,
     ) -> Result<(), Error> {
-        // N.B. We use a `&mut dyn Write` here instead of a
-        // `&mut BorrowedBuffer` (as in the other routines for this printer)
-        // because this can emit a POSIX time zone string. We don't really have
-        // strong guarantees about how long this string can be (although all
-        // sensible values are pretty short). Since this API is not expected to
-        // be used much, we don't spend the time to try and optimize this.
+        // N.B. We use a `&mut dyn Write` here instead of an uninitialized
+        // buffer (as in the other routines for this printer) because this
+        // can emit a POSIX time zone string. We don't really have strong
+        // guarantees about how long this string can be (although all sensible
+        // values are pretty short). Since this API is not expected to be used
+        // much, we don't spend the time to try and optimize this.
         //
         // If and when we get a borrowed buffer writer abstraction (for truly
         // variable length output), then we might consider using that here.
-        self.print_time_zone_impl(tz, &mut wtr)
+        self.print_time_zone_wtr(tz, &mut wtr)
     }
 
-    fn print_time_zone_impl(
+    fn print_time_zone_wtr(
         &self,
         tz: &TimeZone,
         wtr: &mut dyn Write,
@@ -365,27 +473,18 @@ impl DateTimePrinter {
             self.print_offset_full_precision(&offset, &mut bbuf);
             return wtr.write_str(bbuf.filled());
         }
-        // We get this on `alloc` because we format the POSIX time zone into a
-        // `String` first. See the note below.
-        //
-        // This is generally okay because there is no current (2025-02-28) way
-        // to create a `TimeZone` that is *only* a POSIX time zone in core-only
-        // environments. (All you can do is create a TZif time zone, which may
-        // contain a POSIX time zone, but `tz.posix_tz()` would still return
-        // `None` in that case.)
-        #[cfg(feature = "alloc")]
-        {
-            if let Some(posix_tz) = tz.posix_tz() {
-                // This is pretty unfortunate, but at time of writing, I
-                // didn't see an easy way to make the `Display` impl for
-                // `PosixTimeZone` automatically work with
-                // `jiff::fmt::Write` without allocating a new string. As
-                // far as I can see, I either have to duplicate the code or
-                // make it generic in some way. I judged neither to be worth
-                // doing for such a rare case. ---AG
-                let s = alloc::string::ToString::to_string(posix_tz);
-                return wtr.write_str(&s);
-            }
+        if let Some(posix_tz) = tz.posix_tz() {
+            use core::fmt::Write as _;
+
+            // This is rather circuitous, but I'm not sure how else to do it
+            // without allocating an intermediate string. Or writing another
+            // printing API for `PosixTimeZone`. (Which might actually not be
+            // a bad idea. Perhaps using uninit buffers. But... who gives a
+            // fuck about printing POSIX time zone strings?)
+            return write!(crate::fmt::StdFmtWrite(wtr), "{posix_tz}")
+                .map_err(|_| {
+                    Error::from(crate::error::fmt::Error::StdFmtWriteAdapter)
+                });
         }
         // Ideally this never actually happens, but it can, and there
         // are likely system configurations out there in which it does.
@@ -410,59 +509,57 @@ impl DateTimePrinter {
         // Plus, I don't think this API is commonly used, so it's not clear
         // that it's worth optimizing. But I'm open to a PR with benchmarks
         // if there's a good use case. ---AG
-        let mut buf = ArrayBuffer::<MAX_ZONED_LEN>::default();
+        let mut buf = ArrayBuffer::<REASONABLE_PIECES_LEN>::default();
         let mut bbuf = buf.as_borrowed();
-        // FIXME: This should really use a buffer abstraction. Namely,
-        // the `Pieces` API specifically permits arbitrary length strings
-        // as time zone name annotations. But as written here, this will
-        // panic on overly long strings. Sigh.
-        self.print_pieces_impl(pieces, &mut bbuf);
-        wtr.write_str(bbuf.filled())
+        let mut wtr = BorrowedWriter::new(&mut bbuf, &mut wtr);
+        self.print_pieces_wtr(pieces, &mut wtr)?;
+        wtr.finish()
     }
 
-    fn print_pieces_impl(
+    fn print_pieces_wtr(
         &self,
         pieces: &Pieces,
-        bbuf: &mut BorrowedBuffer<'_>,
-    ) {
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
         if let Some(time) = pieces.time() {
             let dt = DateTime::from_parts(pieces.date(), time);
-            self.print_datetime_impl(&dt, bbuf);
+            self.print_datetime_wtr(&dt, wtr)?;
             if let Some(poffset) = pieces.offset() {
-                self.print_pieces_offset(&poffset, bbuf);
+                self.print_pieces_offset(&poffset, wtr)?;
             }
         } else if let Some(poffset) = pieces.offset() {
             // In this case, we have an offset but no time component. Since
             // `2025-01-02-05:00` isn't valid, we forcefully write out the
             // default time (which is what would be assumed anyway).
             let dt = DateTime::from_parts(pieces.date(), Time::midnight());
-            self.print_datetime_impl(&dt, bbuf);
-            self.print_pieces_offset(&poffset, bbuf);
+            self.print_datetime_wtr(&dt, wtr)?;
+            self.print_pieces_offset(&poffset, wtr)?;
         } else {
             // We have no time and no offset, so we can just write the date.
             // It's okay to write this followed by an annotation, e.g.,
             // `2025-01-02[America/New_York]` or even `2025-01-02[-05:00]`.
-            self.print_date_impl(&pieces.date(), bbuf);
+            self.print_date_wtr(&pieces.date(), wtr)?;
         }
         // For the time zone annotation, a `Pieces` gives us the annotation
         // name or offset directly, where as with `Zoned`, we have a
         // `TimeZone`. So we hand-roll our own formatter directly from the
         // annotation.
         if let Some(ann) = pieces.time_zone_annotation() {
-            bbuf.write_ascii_char(b'[');
+            wtr.write_ascii_char(b'[')?;
             if ann.is_critical() {
-                bbuf.write_ascii_char(b'!');
+                wtr.write_ascii_char(b'!')?;
             }
             match *ann.kind() {
                 TimeZoneAnnotationKind::Named(ref name) => {
-                    bbuf.write_str(name.as_str());
+                    wtr.write_str(name.as_str())?;
                 }
                 TimeZoneAnnotationKind::Offset(offset) => {
-                    self.print_offset_rounded(&offset, bbuf);
+                    self.print_offset_rounded_wtr(&offset, wtr)?;
                 }
             }
-            bbuf.write_ascii_char(b']');
+            wtr.write_ascii_char(b']')?;
         }
+        Ok(())
     }
 
     pub(super) fn print_iso_week_date(
@@ -473,22 +570,20 @@ impl DateTimePrinter {
         BorrowedBuffer::with_writer::<MAX_ISO_WEEK_DATE_LEN>(
             wtr,
             MAX_ISO_WEEK_DATE_LEN,
-            |bbuf| Ok(self.print_iso_week_date_impl(iso_week_date, bbuf)),
+            |bbuf| Ok(self.print_iso_week_date_buf(iso_week_date, bbuf)),
         )
     }
 
-    fn print_iso_week_date_impl(
+    fn print_iso_week_date_buf(
         &self,
         iso_week_date: &ISOWeekDate,
         bbuf: &mut BorrowedBuffer<'_>,
     ) {
         let year = iso_week_date.year();
-        if year >= 0 {
-            bbuf.write_int_pad4(year.unsigned_abs().into());
-        } else {
-            bbuf.write_ascii_char(b'-');
-            bbuf.write_int_pad6(year.unsigned_abs().into());
+        if year < 0 {
+            bbuf.write_str("-00");
         }
+        bbuf.write_int_pad4(year.unsigned_abs().into());
         bbuf.write_ascii_char(b'-');
         bbuf.write_ascii_char(if self.lowercase { b'w' } else { b'W' });
         bbuf.write_int_pad2(iso_week_date.week().unsigned_abs().into());
@@ -502,19 +597,18 @@ impl DateTimePrinter {
         );
     }
 
-    /// Formats the given "pieces" offset into the writer given.
     fn print_pieces_offset(
         &self,
         poffset: &PiecesOffset,
-        bbuf: &mut BorrowedBuffer<'_>,
-    ) {
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
         match *poffset {
-            PiecesOffset::Zulu => self.print_zulu(bbuf),
+            PiecesOffset::Zulu => self.print_zulu_wtr(wtr),
             PiecesOffset::Numeric(ref noffset) => {
                 if noffset.offset().is_zero() && noffset.is_negative() {
-                    bbuf.write_str("-00:00");
+                    wtr.write_str("-00:00")
                 } else {
-                    self.print_offset_rounded(&noffset.offset(), bbuf);
+                    self.print_offset_rounded_wtr(&noffset.offset(), wtr)
                 }
             }
         }
@@ -524,7 +618,7 @@ impl DateTimePrinter {
     ///
     /// If the given offset has non-zero seconds, then they are rounded to
     /// the nearest minute.
-    fn print_offset_rounded(
+    fn print_offset_rounded_buf(
         &self,
         offset: &Offset,
         bbuf: &mut BorrowedBuffer<'_>,
@@ -534,6 +628,23 @@ impl DateTimePrinter {
         bbuf.write_int_pad2(offset_hours.into());
         bbuf.write_ascii_char(b':');
         bbuf.write_int_pad2(offset_minutes.into());
+    }
+
+    /// Formats the given offset into the writer given.
+    ///
+    /// If the given offset has non-zero seconds, then they are rounded to
+    /// the nearest minute.
+    fn print_offset_rounded_wtr(
+        &self,
+        offset: &Offset,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        wtr.write_ascii_char(if offset.is_negative() { b'-' } else { b'+' })?;
+        let (offset_hours, offset_minutes) = offset.round_to_nearest_minute();
+        wtr.write_int_pad2(offset_hours.into())?;
+        wtr.write_ascii_char(b':')?;
+        wtr.write_int_pad2(offset_minutes.into())?;
+        Ok(())
     }
 
     /// Formats the given offset into the writer given.
@@ -563,8 +674,19 @@ impl DateTimePrinter {
     ///
     /// This should only be used when the offset is not known. For example,
     /// when printing a `Timestamp`.
-    fn print_zulu(&self, bbuf: &mut BorrowedBuffer<'_>) {
+    fn print_zulu_buf(&self, bbuf: &mut BorrowedBuffer<'_>) {
         bbuf.write_ascii_char(if self.lowercase { b'z' } else { b'Z' });
+    }
+
+    /// Prints the "zulu" indicator.
+    ///
+    /// This should only be used when the offset is not known. For example,
+    /// when printing a `Timestamp`.
+    fn print_zulu_wtr(
+        &self,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        wtr.write_ascii_char(if self.lowercase { b'z' } else { b'Z' })
     }
 
     /// Formats the given time zone name into the writer given as an RFC 9557
@@ -574,7 +696,7 @@ impl DateTimePrinter {
     /// is printed instead. (This means the offset will be printed twice, which
     /// is indeed an intended behavior of RFC 9557 for cases where a time zone
     /// name is not used or unavailable.)
-    fn print_time_zone_annotation(
+    fn print_time_zone_annotation_buf(
         &self,
         time_zone: &TimeZone,
         offset: &Offset,
@@ -584,9 +706,32 @@ impl DateTimePrinter {
         if let Some(iana_name) = time_zone.iana_name() {
             bbuf.write_str(iana_name);
         } else {
-            self.print_offset_rounded(offset, bbuf);
+            self.print_offset_rounded_buf(offset, bbuf);
         }
         bbuf.write_ascii_char(b']');
+    }
+
+    /// Formats the given time zone name into the writer given as an RFC 9557
+    /// time zone annotation.
+    ///
+    /// When the given time zone is not an IANA time zone name, then the offset
+    /// is printed instead. (This means the offset will be printed twice, which
+    /// is indeed an intended behavior of RFC 9557 for cases where a time zone
+    /// name is not used or unavailable.)
+    fn print_time_zone_annotation_wtr(
+        &self,
+        time_zone: &TimeZone,
+        offset: &Offset,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        wtr.write_ascii_char(b'[')?;
+        if let Some(iana_name) = time_zone.iana_name() {
+            wtr.write_str(iana_name)?;
+        } else {
+            self.print_offset_rounded_wtr(offset, wtr)?;
+        }
+        wtr.write_ascii_char(b']')?;
+        Ok(())
     }
 }
 
@@ -845,10 +990,11 @@ impl Designators {
 #[cfg(feature = "alloc")]
 #[cfg(test)]
 mod tests {
-    use alloc::string::String;
+    use alloc::string::{String, ToString};
 
     use crate::{
-        civil::{date, Weekday},
+        civil::{date, time, Weekday},
+        fmt::StdFmtWrite,
         span::ToSpan,
         util::t,
     };
@@ -861,86 +1007,523 @@ mod tests {
             return;
         }
 
-        let dt = date(2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.in_tz("America/New_York").unwrap();
-        let mut buf = String::new();
-        DateTimePrinter::new().print_zoned(&zoned, &mut buf).unwrap();
-        assert_eq!(buf, "2024-03-10T05:34:45-04:00[America/New_York]");
+        let p = || DateTimePrinter::new();
+        let via_io = |dtp: DateTimePrinter, zdt| {
+            let mut buf = String::new();
+            dtp.print_zoned(&zdt, &mut StdFmtWrite(&mut buf)).unwrap();
+            buf
+        };
+        let to_string = |dtp: DateTimePrinter, zdt| {
+            let mut buf = String::new();
+            dtp.print_zoned(&zdt, &mut buf).unwrap();
+            let got_via_io = via_io(dtp, zdt);
+            assert_eq!(
+                buf, got_via_io,
+                "expected writes to `&mut String` to match `&mut StdFmtWrite`"
+            );
+            buf
+        };
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.in_tz("America/New_York").unwrap();
-        let zoned = zoned.with_time_zone(TimeZone::UTC);
-        let mut buf = String::new();
-        DateTimePrinter::new().print_zoned(&zoned, &mut buf).unwrap();
-        assert_eq!(buf, "2024-03-10T09:34:45+00:00[UTC]");
+        let zdt = dt.in_tz("America/New_York").unwrap();
+        let got = to_string(p(), zdt);
+        assert_eq!(got, "2024-03-10T05:34:45-04:00[America/New_York]");
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.to_zoned(TimeZone::fixed(Offset::MIN)).unwrap();
-        let mut buf = String::new();
-        DateTimePrinter::new().print_zoned(&zoned, &mut buf).unwrap();
-        assert_eq!(buf, "2024-03-10T05:34:45-25:59[-25:59]");
+        let zdt = dt.in_tz("America/New_York").unwrap();
+        let zdt = zdt.with_time_zone(TimeZone::UTC);
+        let got = to_string(p(), zdt);
+        assert_eq!(got, "2024-03-10T09:34:45+00:00[UTC]");
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.to_zoned(TimeZone::fixed(Offset::MAX)).unwrap();
-        let mut buf = String::new();
-        DateTimePrinter::new().print_zoned(&zoned, &mut buf).unwrap();
-        assert_eq!(buf, "2024-03-10T05:34:45+25:59[+25:59]");
+        let zdt = dt.to_zoned(TimeZone::fixed(Offset::MIN)).unwrap();
+        let got = to_string(p(), zdt);
+        assert_eq!(got, "2024-03-10T05:34:45-25:59[-25:59]");
+
+        let dt = date(2024, 3, 10).at(5, 34, 45, 0);
+        let zdt = dt.to_zoned(TimeZone::fixed(Offset::MAX)).unwrap();
+        let got = to_string(p(), zdt);
+        assert_eq!(got, "2024-03-10T05:34:45+25:59[+25:59]");
+
+        let dt = date(2024, 3, 10).at(5, 34, 45, 123_456_789);
+        let zdt = dt.in_tz("America/New_York").unwrap();
+        let got = to_string(p(), zdt);
+        assert_eq!(
+            got,
+            "2024-03-10T05:34:45.123456789-04:00[America/New_York]"
+        );
+
+        let dt = date(2024, 3, 10).at(5, 34, 45, 0);
+        let zdt = dt.in_tz("America/New_York").unwrap();
+        let got = to_string(p().precision(Some(9)), zdt);
+        assert_eq!(
+            got,
+            "2024-03-10T05:34:45.000000000-04:00[America/New_York]"
+        );
+
+        let dt = date(-9999, 3, 1).at(23, 59, 59, 999_999_999);
+        let zdt = dt.in_tz("America/Argentina/ComodRivadavia").unwrap();
+        let got = to_string(p().precision(Some(9)), zdt);
+        assert_eq!(
+            got,
+            "-009999-03-01T23:59:59.999999999-04:23[America/Argentina/ComodRivadavia]",
+        );
+
+        // Inject a very long IANA tzdb identifier to ensure it's handled
+        // properly.
+        let tz = TimeZone::tzif(
+            "Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz/Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz/Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz",
+            crate::tz::testdata::TzifTestFile::get("America/New_York").data,
+        ).unwrap();
+        let dt = date(-9999, 3, 1).at(23, 59, 59, 999_999_999);
+        let zdt = dt.to_zoned(tz).unwrap();
+        let got = to_string(p().precision(Some(9)), zdt);
+        assert_eq!(
+            got,
+            "-009999-03-01T23:59:59.999999999-04:56[Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz/Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz/Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz]",
+        );
     }
 
     #[test]
-    fn print_timestamp() {
-        if crate::tz::db().is_definitively_empty() {
-            return;
-        }
+    fn print_timestamp_zulu() {
+        let p = || DateTimePrinter::new();
+        let via_io = |dtp: DateTimePrinter, ts| {
+            let mut buf = String::new();
+            dtp.print_timestamp(&ts, &mut StdFmtWrite(&mut buf)).unwrap();
+            buf
+        };
+        let to_string = |dtp: DateTimePrinter, ts| {
+            let mut buf = String::new();
+            dtp.print_timestamp(&ts, &mut buf).unwrap();
+            let got_via_io = via_io(dtp, ts);
+            assert_eq!(
+                buf, got_via_io,
+                "expected writes to `&mut String` to match `&mut StdFmtWrite`"
+            );
+            buf
+        };
+
+        let tz = TimeZone::fixed(-Offset::constant(4));
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.in_tz("America/New_York").unwrap();
-        let mut buf = String::new();
-        DateTimePrinter::new()
-            .print_timestamp(&zoned.timestamp(), &mut buf)
-            .unwrap();
-        assert_eq!(buf, "2024-03-10T09:34:45Z");
+        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let got = to_string(p(), zoned.timestamp());
+        assert_eq!(got, "2024-03-10T09:34:45Z");
 
         let dt = date(-2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.in_tz("America/New_York").unwrap();
-        let mut buf = String::new();
-        DateTimePrinter::new()
-            .print_timestamp(&zoned.timestamp(), &mut buf)
-            .unwrap();
-        assert_eq!(buf, "-002024-03-10T10:30:47Z");
+        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let got = to_string(p(), zoned.timestamp());
+        assert_eq!(got, "-002024-03-10T09:34:45Z");
+
+        let dt = date(2024, 3, 10).at(5, 34, 45, 123_456_789);
+        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let got = to_string(p(), zoned.timestamp());
+        assert_eq!(got, "2024-03-10T09:34:45.123456789Z");
+
+        let dt = date(2024, 3, 10).at(5, 34, 45, 0);
+        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let got = to_string(p().precision(Some(9)), zoned.timestamp());
+        assert_eq!(got, "2024-03-10T09:34:45.000000000Z");
     }
 
     #[test]
     fn print_timestamp_with_offset() {
-        if crate::tz::db().is_definitively_empty() {
-            return;
-        }
+        let p = || DateTimePrinter::new();
+        let via_io = |dtp: DateTimePrinter, ts, offset| {
+            let mut buf = String::new();
+            dtp.print_timestamp_with_offset(
+                &ts,
+                offset,
+                &mut StdFmtWrite(&mut buf),
+            )
+            .unwrap();
+            buf
+        };
+        let to_string = |dtp: DateTimePrinter, ts, offset| {
+            let mut buf = String::new();
+            dtp.print_timestamp_with_offset(&ts, offset, &mut buf).unwrap();
+            let got_via_io = via_io(dtp, ts, offset);
+            assert_eq!(
+                buf, got_via_io,
+                "expected writes to `&mut String` to match `&mut StdFmtWrite`"
+            );
+            buf
+        };
+
+        let tz = TimeZone::fixed(-Offset::constant(4));
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.in_tz("America/New_York").unwrap();
-        let mut buf = String::new();
-        DateTimePrinter::new()
-            .print_timestamp_with_offset(
-                &zoned.timestamp(),
-                zoned.offset(),
-                &mut buf,
-            )
-            .unwrap();
-        assert_eq!(buf, "2024-03-10T05:34:45-04:00");
+        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let got = to_string(p(), zoned.timestamp(), zoned.offset());
+        assert_eq!(got, "2024-03-10T05:34:45-04:00");
 
         let dt = date(-2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.in_tz("America/New_York").unwrap();
-        let mut buf = String::new();
-        DateTimePrinter::new()
-            .print_timestamp_with_offset(
-                &zoned.timestamp(),
-                zoned.offset(),
-                &mut buf,
-            )
-            .unwrap();
-        assert_eq!(buf, "-002024-03-10T05:34:45-04:56");
+        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let got = to_string(p(), zoned.timestamp(), zoned.offset());
+        assert_eq!(got, "-002024-03-10T05:34:45-04:00");
+
+        let dt = date(2024, 3, 10).at(5, 34, 45, 123_456_789);
+        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let got = to_string(p(), zoned.timestamp(), zoned.offset());
+        assert_eq!(got, "2024-03-10T05:34:45.123456789-04:00");
+
+        let dt = date(2024, 3, 10).at(5, 34, 45, 0);
+        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let got = to_string(
+            p().precision(Some(9)),
+            zoned.timestamp(),
+            zoned.offset(),
+        );
+        assert_eq!(got, "2024-03-10T05:34:45.000000000-04:00");
+
+        let dt = DateTime::MIN;
+        let zoned: Zoned = dt.to_zoned(TimeZone::fixed(Offset::MIN)).unwrap();
+        let got = to_string(
+            p().precision(Some(9)),
+            zoned.timestamp(),
+            zoned.offset(),
+        );
+        assert_eq!(got, "-009999-01-01T00:00:00.000000000-25:59");
     }
 
+    #[test]
+    fn print_datetime() {
+        let p = || DateTimePrinter::new();
+        let via_io = |dtp: DateTimePrinter, dt| {
+            let mut buf = String::new();
+            dtp.print_datetime(&dt, &mut StdFmtWrite(&mut buf)).unwrap();
+            buf
+        };
+        let to_string = |dtp: DateTimePrinter, dt| {
+            let mut buf = String::new();
+            dtp.print_datetime(&dt, &mut buf).unwrap();
+            let got_via_io = via_io(dtp, dt);
+            assert_eq!(
+                buf, got_via_io,
+                "expected writes to `&mut String` to match `&mut StdFmtWrite`"
+            );
+            buf
+        };
+
+        let dt = date(2024, 3, 10).at(5, 34, 45, 0);
+        let got = to_string(p(), dt);
+        assert_eq!(got, "2024-03-10T05:34:45");
+
+        let dt = date(-2024, 3, 10).at(5, 34, 45, 0);
+        let got = to_string(p(), dt);
+        assert_eq!(got, "-002024-03-10T05:34:45");
+
+        let dt = date(2024, 3, 10).at(5, 34, 45, 123_456_789);
+        let got = to_string(p(), dt);
+        assert_eq!(got, "2024-03-10T05:34:45.123456789");
+
+        let dt = date(2024, 3, 10).at(5, 34, 45, 0);
+        let got = to_string(p().precision(Some(9)), dt);
+        assert_eq!(got, "2024-03-10T05:34:45.000000000");
+
+        let dt = DateTime::MIN;
+        let got = to_string(p().precision(Some(9)), dt);
+        assert_eq!(got, "-009999-01-01T00:00:00.000000000");
+    }
+
+    #[test]
+    fn print_date() {
+        let p = || DateTimePrinter::new();
+        let via_io = |dtp: DateTimePrinter, date| {
+            let mut buf = String::new();
+            dtp.print_date(&date, &mut StdFmtWrite(&mut buf)).unwrap();
+            buf
+        };
+        let to_string = |dtp: DateTimePrinter, date| {
+            let mut buf = String::new();
+            dtp.print_date(&date, &mut buf).unwrap();
+            let got_via_io = via_io(dtp, date);
+            assert_eq!(
+                buf, got_via_io,
+                "expected writes to `&mut String` to match `&mut StdFmtWrite`"
+            );
+            buf
+        };
+
+        let d = date(2024, 3, 10);
+        let got = to_string(p(), d);
+        assert_eq!(got, "2024-03-10");
+
+        let d = date(-2024, 3, 10);
+        let got = to_string(p(), d);
+        assert_eq!(got, "-002024-03-10");
+
+        let d = date(2024, 3, 10);
+        let got = to_string(p(), d);
+        assert_eq!(got, "2024-03-10");
+
+        let d = Date::MIN;
+        let got = to_string(p().precision(Some(9)), d);
+        assert_eq!(got, "-009999-01-01");
+    }
+
+    #[test]
+    fn print_time() {
+        let p = || DateTimePrinter::new();
+        let via_io = |dtp: DateTimePrinter, time| {
+            let mut buf = String::new();
+            dtp.print_time(&time, &mut StdFmtWrite(&mut buf)).unwrap();
+            buf
+        };
+        let to_string = |dtp: DateTimePrinter, time| {
+            let mut buf = String::new();
+            dtp.print_time(&time, &mut buf).unwrap();
+            let got_via_io = via_io(dtp, time);
+            assert_eq!(
+                buf, got_via_io,
+                "expected writes to `&mut String` to match `&mut StdFmtWrite`"
+            );
+            buf
+        };
+
+        let t = time(5, 34, 45, 0);
+        let got = to_string(p(), t);
+        assert_eq!(got, "05:34:45");
+
+        let t = time(5, 34, 45, 0);
+        let got = to_string(p(), t);
+        assert_eq!(got, "05:34:45");
+
+        let t = time(5, 34, 45, 123_456_789);
+        let got = to_string(p(), t);
+        assert_eq!(got, "05:34:45.123456789");
+
+        let t = time(5, 34, 45, 0);
+        let got = to_string(p().precision(Some(9)), t);
+        assert_eq!(got, "05:34:45.000000000");
+
+        let t = Time::MIN;
+        let got = to_string(p().precision(Some(9)), t);
+        assert_eq!(got, "00:00:00.000000000");
+
+        let t = Time::MAX;
+        let got = to_string(p().precision(Some(9)), t);
+        assert_eq!(got, "23:59:59.999999999");
+    }
+
+    #[test]
+    fn print_iso_week_date() {
+        let p = || DateTimePrinter::new();
+        let via_io = |dtp: DateTimePrinter, date| {
+            let mut buf = String::new();
+            dtp.print_iso_week_date(&date, &mut StdFmtWrite(&mut buf))
+                .unwrap();
+            buf
+        };
+        let to_string = |dtp: DateTimePrinter, date| {
+            let mut buf = String::new();
+            dtp.print_iso_week_date(&date, &mut buf).unwrap();
+            let got_via_io = via_io(dtp, date);
+            assert_eq!(
+                buf, got_via_io,
+                "expected writes to `&mut String` to match `&mut StdFmtWrite`"
+            );
+            buf
+        };
+
+        let d = ISOWeekDate::new(2024, 52, Weekday::Monday).unwrap();
+        let got = to_string(p(), d);
+        assert_eq!(got, "2024-W52-1");
+
+        let d = ISOWeekDate::new(2004, 1, Weekday::Sunday).unwrap();
+        let got = to_string(p(), d);
+        assert_eq!(got, "2004-W01-7");
+
+        let d = ISOWeekDate::MIN;
+        let got = to_string(p(), d);
+        assert_eq!(got, "-009999-W01-1");
+
+        let d = ISOWeekDate::MAX;
+        let got = to_string(p(), d);
+        assert_eq!(got, "9999-W52-5");
+    }
+
+    #[test]
+    fn print_pieces() {
+        let p = || DateTimePrinter::new();
+        let via_io = |dtp: DateTimePrinter, pieces| {
+            let mut buf = String::new();
+            dtp.print_pieces(&pieces, &mut StdFmtWrite(&mut buf)).unwrap();
+            buf
+        };
+        let to_string = |dtp: DateTimePrinter, pieces| {
+            let mut buf = String::new();
+            dtp.print_pieces(&pieces, &mut buf).unwrap();
+            let got_via_io = via_io(dtp, pieces);
+            assert_eq!(
+                buf, got_via_io,
+                "expected writes to `&mut String` to match `&mut StdFmtWrite`"
+            );
+            buf
+        };
+
+        let pieces = Pieces::from(date(2024, 3, 10).at(5, 34, 45, 0))
+            .with_offset(Offset::constant(-4))
+            .with_time_zone_name("America/New_York");
+        let got = to_string(p(), pieces);
+        assert_eq!(got, "2024-03-10T05:34:45-04:00[America/New_York]");
+
+        let pieces = Pieces::from(date(2024, 3, 10).at(5, 34, 45, 0))
+            .with_offset(Offset::UTC)
+            .with_time_zone_name("UTC");
+        let got = to_string(p(), pieces);
+        assert_eq!(got, "2024-03-10T05:34:45+00:00[UTC]");
+
+        let pieces = Pieces::from(date(2024, 3, 10).at(5, 34, 45, 0))
+            .with_offset(Offset::MIN)
+            .with_time_zone_offset(Offset::MIN);
+        let got = to_string(p(), pieces);
+        assert_eq!(got, "2024-03-10T05:34:45-25:59[-25:59]");
+
+        let pieces = Pieces::from(date(2024, 3, 10).at(5, 34, 45, 0))
+            .with_offset(Offset::MAX)
+            .with_time_zone_offset(Offset::MAX);
+        let got = to_string(p(), pieces);
+        assert_eq!(got, "2024-03-10T05:34:45+25:59[+25:59]");
+
+        let pieces =
+            Pieces::from(date(2024, 3, 10).at(5, 34, 45, 123_456_789))
+                .with_offset(Offset::constant(-4))
+                .with_time_zone_name("America/New_York");
+        let got = to_string(p(), pieces);
+        assert_eq!(
+            got,
+            "2024-03-10T05:34:45.123456789-04:00[America/New_York]"
+        );
+
+        let pieces = Pieces::from(date(2024, 3, 10).at(5, 34, 45, 0))
+            .with_offset(Offset::constant(-4))
+            .with_time_zone_name("America/New_York");
+        let got = to_string(p().precision(Some(9)), pieces);
+        assert_eq!(
+            got,
+            "2024-03-10T05:34:45.000000000-04:00[America/New_York]"
+        );
+
+        let pieces =
+            Pieces::from(date(-9999, 3, 1).at(23, 59, 59, 999_999_999))
+                .with_offset(Offset::constant(-4))
+                .with_time_zone_name("America/Argentina/ComodRivadavia");
+        let got = to_string(p().precision(Some(9)), pieces);
+        assert_eq!(
+            got,
+            "-009999-03-01T23:59:59.999999999-04:00[America/Argentina/ComodRivadavia]",
+        );
+
+        let pieces =
+            Pieces::parse(
+                "-009999-03-01T23:59:59.999999999-04:00[!America/Argentina/ComodRivadavia]",
+            ).unwrap();
+        let got = to_string(p().precision(Some(9)), pieces);
+        assert_eq!(
+            got,
+            "-009999-03-01T23:59:59.999999999-04:00[!America/Argentina/ComodRivadavia]",
+        );
+
+        // Inject a very long IANA tzdb identifier to ensure it's handled
+        let name = "Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz/Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz/Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz";
+        let pieces =
+            Pieces::from(date(-9999, 3, 1).at(23, 59, 59, 999_999_999))
+                .with_offset(Offset::constant(-4))
+                .with_time_zone_name(name);
+        let got = to_string(p().precision(Some(9)), pieces);
+        assert_eq!(
+            got,
+            "-009999-03-01T23:59:59.999999999-04:00[Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz/Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz/Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz]",
+        );
+    }
+
+    #[test]
+    fn print_time_zone() {
+        let p = || DateTimePrinter::new();
+        let via_io = |dtp: DateTimePrinter, tz| {
+            let mut buf = String::new();
+            dtp.print_time_zone(&tz, &mut StdFmtWrite(&mut buf)).unwrap();
+            buf
+        };
+        let to_string = |dtp: DateTimePrinter, tz| {
+            let mut buf = String::new();
+            dtp.print_time_zone(&tz, &mut buf).unwrap();
+            let got_via_io = via_io(dtp, tz);
+            assert_eq!(
+                buf, got_via_io,
+                "expected writes to `&mut String` to match `&mut StdFmtWrite`"
+            );
+            buf
+        };
+
+        let tztest =
+            crate::tz::testdata::TzifTestFile::get("America/New_York");
+        let tz = TimeZone::tzif(tztest.name, tztest.data).unwrap();
+        let got = to_string(p(), tz);
+        assert_eq!(got, "America/New_York");
+
+        // Inject a very long IANA tzdb identifier to ensure it's handled
+        // properly.
+        let tz = TimeZone::tzif(
+            "Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz/Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz/Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz",
+            tztest.data,
+        ).unwrap();
+        let got = to_string(p(), tz);
+        assert_eq!(
+            got,
+            "Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz/Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz/Abc/Def/Ghi/Jkl/Mno/Pqr/Stu/Vwx/Yzz",
+        );
+
+        let tz = TimeZone::UTC;
+        let got = to_string(p(), tz);
+        assert_eq!(got, "UTC");
+
+        let tz = TimeZone::unknown();
+        let got = to_string(p(), tz);
+        assert_eq!(got, "Etc/Unknown");
+
+        let tz = TimeZone::fixed(Offset::MIN);
+        let got = to_string(p(), tz);
+        assert_eq!(got, "-25:59:59");
+
+        let tz = TimeZone::fixed(Offset::MAX);
+        let got = to_string(p(), tz);
+        assert_eq!(got, "+25:59:59");
+
+        let tz = TimeZone::posix("EST5EDT,M3.2.0,M11.1.0").unwrap();
+        let got = to_string(p(), tz);
+        assert_eq!(got, "EST5EDT,M3.2.0,M11.1.0");
+
+        let tz = TimeZone::posix(
+            "ABCDEFGHIJKLMNOPQRSTUVWXY5ABCDEFGHIJKLMNOPQRSTUVWXYT,M3.2.0,M11.1.0",
+        ).unwrap();
+        let got = to_string(p(), tz);
+        assert_eq!(
+            got,
+            "ABCDEFGHIJKLMNOPQRSTUVWXY5ABCDEFGHIJKLMNOPQRSTUVWXYT,M3.2.0,M11.1.0",
+        );
+
+        // This isn't a public API, but this lets us test the error
+        // case: a valid time zone but without a succinct name.
+        #[cfg(feature = "tz-system")]
+        {
+            let tz = TimeZone::tzif_system(tztest.data).unwrap();
+            let mut buf = String::new();
+            let err = p().print_time_zone(&tz, &mut buf).unwrap_err();
+            assert_eq!(
+                err.to_string(),
+                "time zones without IANA identifiers that aren't \
+                 either fixed offsets or a POSIX time zone can't be \
+                 serialized (this typically occurs when this is a \
+                 system time zone derived from `/etc/localtime` on \
+                 Unix systems that isn't symlinked to an entry in \
+                 `/usr/share/zoneinfo`)",
+            );
+        }
+    }
+
+    #[cfg(not(miri))]
     #[test]
     fn print_span_basic() {
         let p = |span: Span| -> String {
@@ -970,6 +1553,7 @@ mod tests {
         ), @"-P1Y1M1W1DT1H1M1.001001001S");
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn print_span_subsecond_positive() {
         let p = |span: Span| -> String {
@@ -1045,6 +1629,7 @@ mod tests {
         ), @"PT1902545624836.854775807S");
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn print_span_subsecond_negative() {
         let p = |span: Span| -> String {
@@ -1120,6 +1705,7 @@ mod tests {
         ), @"-PT1902545624836.854775807S");
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn print_signed_duration() {
         let p = |secs, nanos| -> String {
@@ -1166,6 +1752,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn print_unsigned_duration() {
         let p = |secs, nanos| -> String {
@@ -1194,24 +1781,6 @@ mod tests {
         insta::assert_snapshot!(
             p(u64::MAX, 999_999_999),
             @"PT5124095576030431H15.999999999S",
-        );
-    }
-
-    #[test]
-    fn print_iso_week_date() {
-        let p = |d: ISOWeekDate| -> String {
-            let mut buf = String::new();
-            DateTimePrinter::new().print_iso_week_date(&d, &mut buf).unwrap();
-            buf
-        };
-
-        insta::assert_snapshot!(
-            p(ISOWeekDate::new(2024, 52, Weekday::Monday).unwrap()),
-            @"2024-W52-1",
-        );
-        insta::assert_snapshot!(
-            p(ISOWeekDate::new(2004, 1, Weekday::Sunday).unwrap()),
-            @"2004-W01-7",
         );
     }
 }

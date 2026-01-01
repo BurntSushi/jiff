@@ -224,7 +224,8 @@ spaces. The exceptions are the locale (`%c`, `%r`, `%X`, `%x`), and time zone
 Moreover, any number of decimal digits can be inserted after the (possibly
 absent) flag and before the directive, so long as the parsed number is less
 than 256. The number formed by these digits will correspond to the minimum
-amount of padding (to the left).
+amount of padding (to the left). Note that padding is clamped to a maximum of
+`20`.
 
 The flags and padding amount above may be used when parsing as well. Most
 settings are ignored during parsing except for padding. For example, if one

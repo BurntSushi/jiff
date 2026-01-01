@@ -7,6 +7,12 @@ const MAX_CAPACITY: usize = u16::MAX as usize;
 const MAX_INTEGER_LEN: u8 = 20;
 const MAX_PRECISION: usize = 9;
 
+/// The minimum buffer length required for *any* of `BorrowedBuffer`'s
+/// integer formatting APIs to work.
+///
+/// This relies on the fact that the maximum padding is clamped to `20`.
+const BROAD_MINIMUM_BUFFER_LEN: usize = 20;
+
 /// An uninitialized slice of bytes of fixed size.
 ///
 /// This is typically used with `BorrowedBuffer`.
@@ -84,7 +90,7 @@ impl<'data> BorrowedBuffer<'data> {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn with_writer<const N: usize>(
         wtr: &mut dyn Write,
-        runtime_allocation: usize,
+        _runtime_allocation: usize,
         mut with: impl FnMut(&mut BorrowedBuffer<'_>) -> Result<(), Error>,
     ) -> Result<(), Error> {
         // Specialize for the common case of `W = String` or `W = Vec<u8>`.
@@ -99,7 +105,7 @@ impl<'data> BorrowedBuffer<'data> {
         // enforces this invariant.
         #[cfg(feature = "alloc")]
         if let Some(buf) = unsafe { wtr.as_mut_vec() } {
-            buf.reserve(runtime_allocation);
+            buf.reserve(_runtime_allocation);
             return BorrowedBuffer::with_vec_spare_capacity(buf, with);
         }
         let mut buf = ArrayBuffer::<N>::default();
@@ -107,30 +113,6 @@ impl<'data> BorrowedBuffer<'data> {
         with(&mut bbuf)?;
         wtr.write_str(bbuf.filled())?;
         Ok(())
-    }
-
-    /// Provides a borrowed buffer into the first 255 bytes of the spare
-    /// capacity in the given `String` and updates the length on `String` after
-    /// the closure completes to account for any new data written.
-    ///
-    /// In effect, this safely encapsulates writing into the uninitialized
-    /// portion of a `String`.
-    ///
-    /// If the provided closure panics, then there is no guarantee that the
-    /// `string`'s length will be updated to reflect what has been written.
-    /// However, it is guaranteed that the length setting will not lead to
-    /// undefined behavior.
-    #[cfg(feature = "alloc")]
-    #[cfg_attr(feature = "perf-inline", inline(always))]
-    #[allow(dead_code)]
-    pub(crate) fn with_string_spare_capacity<T>(
-        string: &'data mut alloc::string::String,
-        with: impl FnMut(&mut BorrowedBuffer<'_>) -> T,
-    ) -> T {
-        // SAFETY: A `BorrowedBuffer` guarantees that we only ever write valid
-        // UTF-8.
-        let buf = unsafe { string.as_mut_vec() };
-        BorrowedBuffer::with_vec_spare_capacity(buf, with)
     }
 
     /// Provides a borrowed buffer into the first 255 bytes of the spare
@@ -160,21 +142,6 @@ impl<'data> BorrowedBuffer<'data> {
             buf.set_len(new_len);
         }
         returned
-    }
-
-    /// Build a borrowed buffer for writing into the spare capacity of a
-    /// `String` allocation.
-    ///
-    /// This is limited only to the first `255` bytes of the spare capacity.
-    #[cfg(feature = "alloc")]
-    #[cfg_attr(feature = "perf-inline", inline(always))]
-    #[allow(dead_code)]
-    pub(crate) fn from_string_spare_capacity(
-        string: &'data mut alloc::string::String,
-    ) -> BorrowedBuffer<'data> {
-        // SAFETY: A `BorrowedBuffer` never writes anything other than valid
-        // UTF-8. And specifically, callers are prevented from doing so.
-        unsafe { BorrowedBuffer::from_vec_spare_capacity(string.as_mut_vec()) }
     }
 
     /// Build a borrowed buffer for writing into the spare capacity of a
@@ -346,7 +313,6 @@ impl<'data> BorrowedBuffer<'data> {
     }
 
     /// Writes the given integer as a 1-digit integer.
-    /// buffer.
     ///
     /// # Panics
     ///
@@ -444,65 +410,6 @@ impl<'data> BorrowedBuffer<'data> {
         self.filled += 4;
     }
 
-    /// Writes the given integer as a 6-digit zero padded integer to this
-    /// buffer.
-    ///
-    /// # Panics
-    ///
-    /// When the available space is shorter than 6 or if `n > 999999`.
-    #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn write_int_pad6(&mut self, mut n: u64) {
-        // This is required for correctness. When `n > 999999`, then the
-        // last `n as u8` below could result in writing an invalid UTF-8
-        // byte. We don't mind incorrect results, but writing invalid
-        // UTF-8 can lead to undefined behavior, and we want this API
-        // to be sound.
-        //
-        // We omit the final `% 10` because it makes micro-benchmark results
-        // worse. This panicking check has a more modest impact.
-        assert!(n <= 999999);
-
-        let dst = self
-            .available()
-            .get_mut(..6)
-            .expect("padded 6 digit integer exceeds available buffer space");
-        // SAFETY: Valid because of the assertion above.
-        unsafe {
-            *dst.get_unchecked_mut(5) =
-                MaybeUninit::new(b'0' + ((n % 10) as u8));
-        }
-        n /= 10;
-        // SAFETY: Valid because of the assertion above.
-        unsafe {
-            *dst.get_unchecked_mut(4) =
-                MaybeUninit::new(b'0' + ((n % 10) as u8));
-        }
-        n /= 10;
-        // SAFETY: Valid because of the assertion above.
-        unsafe {
-            *dst.get_unchecked_mut(3) =
-                MaybeUninit::new(b'0' + ((n % 10) as u8));
-        }
-        n /= 10;
-        // SAFETY: Valid because of the assertion above.
-        unsafe {
-            *dst.get_unchecked_mut(2) =
-                MaybeUninit::new(b'0' + ((n % 10) as u8));
-        }
-        n /= 10;
-        // SAFETY: Valid because of the assertion above.
-        unsafe {
-            *dst.get_unchecked_mut(1) =
-                MaybeUninit::new(b'0' + ((n % 10) as u8));
-        }
-        n /= 10;
-        // SAFETY: Valid because of the assertion above.
-        unsafe {
-            *dst.get_unchecked_mut(0) = MaybeUninit::new(b'0' + (n as u8));
-        }
-        self.filled += 6;
-    }
-
     /// Writes `n` as a fractional component to the given `precision`.
     ///
     /// When `precision` is absent, then it is automatically detected based
@@ -557,7 +464,6 @@ impl<'data> BorrowedBuffer<'data> {
     /// track of data that has been initialized and data that hasn't been
     /// initialized.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    #[allow(dead_code)]
     pub(crate) fn clear(&mut self) {
         self.filled = 0;
     }
@@ -565,28 +471,6 @@ impl<'data> BorrowedBuffer<'data> {
     /// Returns the filled portion of this buffer.
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn filled(&self) -> &str {
-        // SAFETY: It is guaranteed that `..self.len()` is always a valid
-        // range into `self.data` since `self.filled` is only increased upon
-        // a valid write.
-        let filled = unsafe { self.data.get_unchecked(..self.len()) };
-        // SAFETY: Everything up to `self.filled` is guaranteed to be
-        // initialized. Also, since `MaybeUninit<u8>` and `u8` have the same
-        // representation, we can cast from `&[MaybeUninit<u8>]` to `&[u8]`.
-        // Finally, the `BorrowedBuffer` API specifically guarantees that
-        // all writes to `self.data` are valid UTF-8.
-        unsafe {
-            core::str::from_utf8_unchecked(core::slice::from_raw_parts(
-                filled.as_ptr().cast::<u8>(),
-                self.len(),
-            ))
-        }
-    }
-
-    /// Returns the filled portion of this buffer with a lifetime equivalent
-    /// to the original borrow.
-    #[cfg_attr(feature = "perf-inline", inline(always))]
-    #[allow(dead_code)]
-    pub(crate) fn into_filled(self) -> &'data str {
         // SAFETY: It is guaranteed that `..self.len()` is always a valid
         // range into `self.data` since `self.filled` is only increased upon
         // a valid write.
@@ -623,14 +507,12 @@ impl<'data> BorrowedBuffer<'data> {
 
     /// Return the total unused capacity available to this buffer.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    #[allow(dead_code)]
     fn available_capacity(&self) -> usize {
         self.capacity() - self.len()
     }
 
     /// Return the total capacity available to this buffer.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    #[allow(dead_code)]
     fn capacity(&self) -> usize {
         self.data.len()
     }
@@ -692,6 +574,193 @@ impl<'data, const N: usize> From<&'data mut [MaybeUninit<u8>; N]>
     }
 }
 
+/// A buffering abstraction on top of `BorrowedBuffer`.
+///
+/// This lets callers make use of a monomorphic uninitialized buffer while
+/// writing variable length data. For example, in use with `strftime`, where
+/// the length of the resulting string can be arbitrarily long.
+///
+/// Essentially, once the buffer is filled up, it is emptied by writing it
+/// to an underlying `jiff::fmt::Write` implementation.
+///
+/// # Design
+///
+/// We specifically do not expose the underlying `BorrowedBuffer` in this API.
+/// It is too error prone because it makes it ridiculously easy for the caller
+/// to try to write too much data to the buffer, thus causing a panic.
+///
+/// Also, we require that the total capacity of the `BorrowedBuffer` given
+/// is big enough such that any of the integer formatting routines will always
+/// fit. This means we don't need to break up integer formatting to support
+/// pathologically small buffer sizes, e.g., 0 or 1 bytes. This is fine because
+/// this is a Jiff-internal abstraction.
+///
+/// Callers must call `BorrowedWriter::finish` when done to ensure the internal
+/// buffer is properly flushed.
+///
+/// One somewhat unfortunate aspect of the design here is that the integer
+/// formatting routines need to know how much data is going to be written. This
+/// sometimes requires doing some work to figure out. And that work is usually
+/// repeated by `BorrowedBuffer`. My hope at time of writing (2026-01-02) is
+/// that compiler eliminates the duplication, but I haven't actually checked
+/// this yet.
+///
+/// `BorrowedWriter::write_str` is the only method where there is some
+/// awareness of the underlying `Write` implementation. This is because the
+/// string can be of arbitrary length, and thus, may exceed the size of
+/// the buffer. (In which case, we pass it through directly to the `Write`
+/// implementation.)
+pub(crate) struct BorrowedWriter<'buffer, 'data, 'write> {
+    bbuf: &'buffer mut BorrowedBuffer<'data>,
+    wtr: &'write mut dyn Write,
+}
+
+impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
+    /// Creates a new borrowed writer that buffers writes in `bbuf` and flushes
+    /// them to `wtr`.
+    ///
+    /// # Panics
+    ///
+    /// When `BorrowedBuffer` is too small to handle formatting a single
+    /// integer (including padding).
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn new(
+        bbuf: &'buffer mut BorrowedBuffer<'data>,
+        wtr: &'write mut dyn Write,
+    ) -> BorrowedWriter<'buffer, 'data, 'write> {
+        assert!(bbuf.capacity() >= BROAD_MINIMUM_BUFFER_LEN);
+        BorrowedWriter { bbuf, wtr }
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn finish(self) -> Result<(), Error> {
+        self.wtr.write_str(self.bbuf.filled())?;
+        self.bbuf.clear();
+        Ok(())
+    }
+
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn flush(&mut self) -> Result<(), Error> {
+        self.wtr.write_str(self.bbuf.filled())?;
+        self.bbuf.clear();
+        Ok(())
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn if_will_fill_then_flush(
+        &mut self,
+        additional: impl Into<usize>,
+    ) -> Result<(), Error> {
+        let n = additional.into();
+        if self.bbuf.len().saturating_add(n) > self.bbuf.capacity() {
+            self.flush()?;
+        }
+        Ok(())
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_str(&mut self, string: &str) -> Result<(), Error> {
+        if string.len() > self.bbuf.available_capacity() {
+            self.flush()?;
+            if string.len() > self.bbuf.available_capacity() {
+                return self.wtr.write_str(string);
+            }
+        }
+        self.bbuf.write_str(string);
+        Ok(())
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_ascii_char(&mut self, byte: u8) -> Result<(), Error> {
+        if self.bbuf.available_capacity() == 0 {
+            self.flush()?;
+        }
+        self.bbuf.write_ascii_char(byte);
+        Ok(())
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    #[allow(dead_code)]
+    pub(crate) fn write_int(&mut self, n: u64) -> Result<(), Error> {
+        self.if_will_fill_then_flush(digits(n))?;
+        self.bbuf.write_int(n);
+        Ok(())
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    #[allow(dead_code)]
+    pub(crate) fn write_int_pad0(
+        &mut self,
+        n: u64,
+        pad_len: u8,
+    ) -> Result<(), Error> {
+        let pad_len = pad_len.min(MAX_INTEGER_LEN);
+        let digits = pad_len.max(digits(n));
+        self.if_will_fill_then_flush(digits)?;
+        self.bbuf.write_int_pad0(n, pad_len);
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_int_pad(
+        &mut self,
+        n: u64,
+        pad_byte: u8,
+        pad_len: u8,
+    ) -> Result<(), Error> {
+        let pad_len = pad_len.min(MAX_INTEGER_LEN);
+        let digits = pad_len.max(digits(n));
+        self.if_will_fill_then_flush(digits)?;
+        self.bbuf.write_int_pad(n, pad_byte, pad_len);
+        Ok(())
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_int_pad2(&mut self, n: u64) -> Result<(), Error> {
+        self.if_will_fill_then_flush(2usize)?;
+        self.bbuf.write_int_pad2(n);
+        Ok(())
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_int_pad4(&mut self, n: u64) -> Result<(), Error> {
+        self.if_will_fill_then_flush(4usize)?;
+        self.bbuf.write_int_pad4(n);
+        Ok(())
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_fraction(
+        &mut self,
+        precision: Option<u8>,
+        n: u32,
+    ) -> Result<(), Error> {
+        // It's hard to know up front how many digits we're going to print
+        // without doing the work required to print the digits. So we just
+        // assume this will always write 9 digits when called. We could do
+        // a little better here when `precision` is not `None`, but I'm not
+        // clear if it's worth it or not. I think in practice, for common
+        // cases, our uninit buffer will be big enough anyway even when we're
+        // pessimistic about the number of digits we'll print.
+        self.if_will_fill_then_flush(9usize)?;
+        self.bbuf.write_fraction(precision, n);
+        Ok(())
+    }
+}
+
+/// We come full circle and make a `BorrowedWriter` implement
+/// `jiff::fmt::Write`.
+///
+/// This is concretely useful for `strftime` and passing a borrowed writer
+/// to methods on the `Custom` trait.
+impl<'buffer, 'data, 'write> Write for BorrowedWriter<'buffer, 'data, 'write> {
+    fn write_str(&mut self, string: &str) -> Result<(), Error> {
+        BorrowedWriter::write_str(self, string)
+    }
+}
+
 /// Returns the number of digits in the decimal representation of `n`.
 ///
 /// This calculation to figure out the number of digits to write in `n` is
@@ -724,17 +793,7 @@ mod tests {
         let mut bbuf = buf.as_borrowed();
         bbuf.write_str("Hello, world!");
         assert_eq!(bbuf.filled(), "Hello, world!");
-        let buf = bbuf.into_filled();
-        assert_eq!(buf, "Hello, world!");
-    }
-
-    #[cfg(feature = "alloc")]
-    #[test]
-    fn write_str_string() {
-        let mut buf = alloc::string::String::with_capacity(100);
-        BorrowedBuffer::with_string_spare_capacity(&mut buf, |bbuf| {
-            bbuf.write_str("Hello, world!");
-        });
+        let buf = bbuf.filled();
         assert_eq!(buf, "Hello, world!");
     }
 
@@ -876,70 +935,6 @@ mod tests {
         // technically unspecified behavior,
         // but should not result in undefined behavior.
         bbuf.write_int_pad4(u64::MAX);
-    }
-
-    #[test]
-    fn write_int_pad6() {
-        let mut buf = ArrayBuffer::<100>::default();
-        let mut bbuf = buf.as_borrowed();
-
-        bbuf.write_int_pad6(0);
-        {
-            let buf = bbuf.filled();
-            assert_eq!(buf, "000000");
-        }
-
-        bbuf.clear();
-        bbuf.write_int_pad6(1);
-        {
-            let buf = bbuf.filled();
-            assert_eq!(buf, "000001");
-        }
-
-        bbuf.clear();
-        bbuf.write_int_pad6(10);
-        {
-            let buf = bbuf.filled();
-            assert_eq!(buf, "000010");
-        }
-
-        bbuf.clear();
-        bbuf.write_int_pad6(99);
-        {
-            let buf = bbuf.filled();
-            assert_eq!(buf, "000099");
-        }
-
-        bbuf.clear();
-        bbuf.write_int_pad6(999);
-        {
-            let buf = bbuf.filled();
-            assert_eq!(buf, "000999");
-        }
-
-        bbuf.clear();
-        bbuf.write_int_pad6(9999);
-        {
-            let buf = bbuf.filled();
-            assert_eq!(buf, "009999");
-        }
-
-        bbuf.clear();
-        bbuf.write_int_pad6(999999);
-        {
-            let buf = bbuf.filled();
-            assert_eq!(buf, "999999");
-        }
-    }
-
-    #[test]
-    #[should_panic]
-    fn write_int_pad6_panic() {
-        let mut buf = ArrayBuffer::<100>::default();
-        let mut bbuf = buf.as_borrowed();
-        // technically unspecified behavior,
-        // but should not result in undefined behavior.
-        bbuf.write_int_pad6(u64::MAX);
     }
 
     #[test]

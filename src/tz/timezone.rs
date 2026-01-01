@@ -9,7 +9,6 @@ use crate::{
     Timestamp, Zoned,
 };
 
-#[cfg(feature = "alloc")]
 use crate::tz::posix::PosixTimeZoneOwned;
 
 use self::repr::Repr;
@@ -710,7 +709,6 @@ impl TimeZone {
     /// as POSIX time zones to POSIX time zones (e.g., fixed offset time
     /// zones). Instead, this only returns something when the actual
     /// representation of the time zone is a POSIX time zone.
-    #[cfg(feature = "alloc")]
     #[inline]
     pub(crate) fn posix_tz(&self) -> Option<&PosixTimeZoneOwned> {
         repr::each! {
