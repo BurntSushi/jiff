@@ -580,6 +580,21 @@ impl Time {
     /// A convenience function for constructing a [`DateTime`] from this time
     /// on the date given by its components.
     ///
+    /// # Panics
+    ///
+    /// This routine panics when [`Date::new`] with the given inputs would
+    /// return an error. That is, when the given year-month-day does not
+    /// correspond to a valid date. Namely, all of the following must be true:
+    ///
+    /// * The year must be in the range `-9999..=9999`.
+    /// * The month must be in the range `1..=12`.
+    /// * The day must be at least `1` and must be at most the number of days
+    /// in the corresponding month. So for example, `2024-02-29` is valid but
+    /// `2023-02-29` is not.
+    ///
+    /// Similarly, when used in a const context, invalid parameters will
+    /// prevent your Rust program from compiling.
+    ///
     /// # Example
     ///
     /// ```

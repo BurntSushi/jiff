@@ -1307,6 +1307,19 @@ impl Date {
     /// A convenience function for constructing a [`DateTime`] from this date
     /// at the time given by its components.
     ///
+    /// # Panics
+    ///
+    /// This panics if the provided values do not correspond to a valid `Time`.
+    /// All of the following conditions must be true:
+    ///
+    /// * `0 <= hour <= 23`
+    /// * `0 <= minute <= 59`
+    /// * `0 <= second <= 59`
+    /// * `0 <= subsec_nanosecond <= 999,999,999`
+    ///
+    /// Similarly, when used in a const context, invalid parameters will
+    /// prevent your Rust program from compiling.
+    ///
     /// # Example
     ///
     /// ```
