@@ -823,6 +823,9 @@ fn print_strftime(c: &mut Criterion) {
     // `strftime`-style APIs, but I decided to just copy this from the existing
     // `strptime` benchmark for now. (Which was written before `time` had a
     // `strptime`-style API.)
+    //
+    // NOTE: As of 2026-01-02, below now includes an `strftime`-style benchmark
+    // for `time`. We still benchmark `time`'s bespoke format as well though.
     const TIME_FMT: &[time::format_description::BorrowedFormatItem] = time::macros::format_description!(
         "[weekday repr:short case_sensitive:false] \
          [month repr:short case_sensitive:false] \
@@ -836,7 +839,7 @@ fn print_strftime(c: &mut Criterion) {
     let mut buf = String::with_capacity(1024);
 
     {
-        benchmark(c, format!("{NAME}/oneshot/jiff"), |b| {
+        benchmark(c, format!("{NAME}/oneshot/buffer/jiff"), |b| {
             b.iter(|| {
                 buf.clear();
                 let tm = jiff::fmt::strtime::BrokenDownTime::from(&zdt);
@@ -844,15 +847,34 @@ fn print_strftime(c: &mut Criterion) {
                 assert_eq!(buf, EXPECTED);
             })
         });
+        benchmark(c, format!("{NAME}/oneshot/to_string/jiff"), |b| {
+            b.iter(|| {
+                let tm = jiff::fmt::strtime::BrokenDownTime::from(&zdt);
+                let got = tm.to_string(bb(FMT)).unwrap();
+                assert_eq!(got, EXPECTED);
+            })
+        });
+        benchmark(c, format!("{NAME}/oneshot/zoned/jiff"), |b| {
+            b.iter(|| {
+                let got = zdt.strftime(bb(FMT)).to_string();
+                assert_eq!(got, EXPECTED);
+            })
+        });
     }
 
     {
         let dt = chrono::DateTime::convert_from(zdt.clone());
-        benchmark(c, format!("{NAME}/oneshot/chrono"), |b| {
+        benchmark(c, format!("{NAME}/oneshot/buffer/chrono"), |b| {
             b.iter(|| {
                 buf.clear();
                 bb(dt).format(bb(FMT)).write_to(&mut buf).unwrap();
                 assert_eq!(buf, EXPECTED);
+            })
+        });
+        benchmark(c, format!("{NAME}/oneshot/to_string/chrono"), |b| {
+            b.iter(|| {
+                let got = bb(dt).format(bb(FMT)).to_string();
+                assert_eq!(got, EXPECTED);
             })
         });
     }
@@ -861,7 +883,7 @@ fn print_strftime(c: &mut Criterion) {
         let dt = chrono::DateTime::convert_from(zdt.clone());
         let items =
             chrono::format::strftime::StrftimeItems::new(FMT).parse().unwrap();
-        benchmark(c, format!("{NAME}/prebuilt/chrono"), |b| {
+        benchmark(c, format!("{NAME}/prebuilt/buffer/chrono"), |b| {
             b.iter(|| {
                 buf.clear();
                 bb(dt)
@@ -871,17 +893,72 @@ fn print_strftime(c: &mut Criterion) {
                 assert_eq!(buf, EXPECTED);
             })
         });
+        benchmark(c, format!("{NAME}/prebuilt/to_string/chrono"), |b| {
+            b.iter(|| {
+                let got = bb(dt)
+                    .format_with_items(items.as_slice().iter())
+                    .to_string();
+                assert_eq!(got, EXPECTED);
+            })
+        });
     }
 
     {
         // `time` requires `std::io::Write`...
         let mut buf = Vec::with_capacity(1024);
         let odt = time::OffsetDateTime::convert_from(zdt.clone());
-        benchmark(c, format!("{NAME}/prebuilt/time"), |b| {
+
+        {
+            benchmark(c, format!("{NAME}/oneshot/buffer/time"), |b| {
+                b.iter(|| {
+                    buf.clear();
+                    let strftime_items =
+                        time::format_description::parse_strftime_borrowed(FMT)
+                            .unwrap();
+                    bb(odt).format_into(&mut buf, &strftime_items).unwrap();
+                    assert_eq!(buf, EXPECTED.as_bytes());
+                })
+            });
+            benchmark(c, format!("{NAME}/oneshot/to_string/time"), |b| {
+                b.iter(|| {
+                    let strftime_items =
+                        time::format_description::parse_strftime_borrowed(FMT)
+                            .unwrap();
+                    let got = bb(odt).format(&strftime_items).unwrap();
+                    assert_eq!(got, EXPECTED);
+                })
+            });
+        }
+
+        {
+            let strftime_items =
+                time::format_description::parse_strftime_owned(FMT).unwrap();
+            benchmark(c, format!("{NAME}/prebuilt/buffer/time"), |b| {
+                b.iter(|| {
+                    buf.clear();
+                    bb(odt).format_into(&mut buf, &strftime_items).unwrap();
+                    assert_eq!(buf, EXPECTED.as_bytes());
+                })
+            });
+            benchmark(c, format!("{NAME}/prebuilt/to_string/time"), |b| {
+                b.iter(|| {
+                    let got = bb(odt).format(&strftime_items).unwrap();
+                    assert_eq!(got, EXPECTED);
+                })
+            });
+        }
+
+        benchmark(c, format!("{NAME}/prebuilt/buffer/bespoke/time"), |b| {
             b.iter(|| {
                 buf.clear();
                 bb(odt).format_into(&mut buf, &TIME_FMT).unwrap();
                 assert_eq!(buf, EXPECTED.as_bytes());
+            })
+        });
+        benchmark(c, format!("{NAME}/prebuilt/to_string/bespoke/time"), |b| {
+            b.iter(|| {
+                let got = bb(odt).format(&TIME_FMT).unwrap();
+                assert_eq!(got, EXPECTED);
             })
         });
     }
