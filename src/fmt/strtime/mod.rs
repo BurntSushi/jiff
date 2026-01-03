@@ -278,6 +278,7 @@ use crate::{
     civil::{Date, DateTime, ISOWeekDate, Time, Weekday},
     error::{fmt::strtime::Error as E, ErrorContext},
     fmt::{
+        buffer::{ArrayBuffer, BorrowedWriter},
         strtime::{format::Formatter, parse::Parser},
         Write,
     },
@@ -1154,9 +1155,12 @@ impl BrokenDownTime {
         wtr: &mut W,
     ) -> Result<(), Error> {
         let fmt = format.as_ref();
-        let mut formatter = Formatter { config, fmt, tm: self, wtr };
+        let mut buf = ArrayBuffer::<100>::default();
+        let mut bbuf = buf.as_borrowed();
+        let mut wtr = BorrowedWriter::new(&mut bbuf, wtr);
+        let mut formatter = Formatter { config, fmt, tm: self, wtr: &mut wtr };
         formatter.format().context(E::FailedStrftime)?;
-        Ok(())
+        wtr.finish()
     }
 
     /// Format this broken down time using the format string given into a new

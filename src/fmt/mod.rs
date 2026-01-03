@@ -170,8 +170,6 @@ use crate::{
     util::escape,
 };
 
-use self::util::{Fractional, FractionalFormatter, Integer, IntegerFormatter};
-
 mod buffer;
 pub mod friendly;
 mod offset;
@@ -470,49 +468,3 @@ impl<W: Write> core::fmt::Write for StdFmtWrite<W> {
         self.0.write_str(string).map_err(|_| core::fmt::Error)
     }
 }
-
-/// An extension trait to `Write` that provides crate internal routines.
-///
-/// These routines aren't exposed because they make use of crate internal
-/// types. Those types could perhaps be exposed if there was strong demand,
-/// but I'm skeptical.
-trait WriteExt: Write {
-    /// Write the given number as a signed decimal using ASCII digits to this
-    /// buffer. The given formatter controls how the decimal is formatted.
-    #[inline]
-    fn write_int(
-        &mut self,
-        formatter: &IntegerFormatter,
-        n: impl Into<i64>,
-    ) -> Result<(), Error> {
-        self.write_decimal(&formatter.format_signed(n.into()))
-    }
-
-    /// Write the given fractional number using ASCII digits to this buffer.
-    /// The given formatter controls how the fractional number is formatted.
-    #[inline]
-    fn write_fraction(
-        &mut self,
-        formatter: &FractionalFormatter,
-        n: impl Into<u32>,
-    ) -> Result<(), Error> {
-        self.write_fractional(&formatter.format(n.into()))
-    }
-
-    /// Write the given decimal number to this buffer.
-    #[inline]
-    fn write_decimal(&mut self, decimal: &Integer) -> Result<(), Error> {
-        self.write_str(decimal.as_str())
-    }
-
-    /// Write the given fractional number to this buffer.
-    #[inline]
-    fn write_fractional(
-        &mut self,
-        fractional: &Fractional,
-    ) -> Result<(), Error> {
-        self.write_str(fractional.as_str())
-    }
-}
-
-impl<W: Write> WriteExt for W {}
