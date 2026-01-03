@@ -2285,12 +2285,7 @@ impl BrokenDownTime {
 
     #[inline]
     fn hour_ranged(&self) -> Option<t::Hour> {
-        let hour = self.hour?;
-        Some(match self.meridiem() {
-            None => hour,
-            Some(Meridiem::AM) => hour % C(12),
-            Some(Meridiem::PM) => (hour % C(12)) + C(12),
-        })
+        self.hour
     }
 
     /// Returns the parsed minute, if available.
@@ -2854,11 +2849,20 @@ impl BrokenDownTime {
     /// ```
     #[inline]
     pub fn set_hour(&mut self, hour: Option<i8>) -> Result<(), Error> {
-        self.hour = match hour {
+        self.set_hour_ranged(match hour {
             None => None,
             Some(hour) => Some(t::Hour::try_new("hour", hour)?),
-        };
+        });
         Ok(())
+    }
+
+    #[inline]
+    fn set_hour_ranged(&mut self, hour: Option<t::Hour>) {
+        if let Some(meridiem) = self.meridiem {
+            self.hour = hour.map(|hour| meridiem.adjust_hour(hour));
+        } else {
+            self.hour = hour;
+        }
     }
 
     /// Set the minute on this broken down time.
@@ -3184,6 +3188,9 @@ impl BrokenDownTime {
     /// ```
     #[inline]
     pub fn set_meridiem(&mut self, meridiem: Option<Meridiem>) {
+        if let Some(meridiem) = meridiem {
+            self.hour = self.hour.map(|hour| meridiem.adjust_hour(hour));
+        }
         self.meridiem = meridiem;
     }
 
@@ -3408,6 +3415,16 @@ pub enum Meridiem {
     PM,
 }
 
+impl Meridiem {
+    /// Adjusts 12-hour to 24-hour based on meridiem.
+    fn adjust_hour(self, hour: t::Hour) -> t::Hour {
+        match self {
+            Meridiem::AM => hour % C(12),
+            Meridiem::PM => (hour % C(12)) + C(12),
+        }
+    }
+}
+
 impl From<Time> for Meridiem {
     fn from(t: Time) -> Meridiem {
         if t.hour() < 12 {
@@ -3520,6 +3537,7 @@ enum Flag {
 }
 
 /// Returns the "full" weekday name.
+#[cfg_attr(feature = "perf-inline", inline(always))]
 fn weekday_name_full(wd: Weekday) -> &'static str {
     match wd {
         Weekday::Sunday => "Sunday",
@@ -3533,6 +3551,7 @@ fn weekday_name_full(wd: Weekday) -> &'static str {
 }
 
 /// Returns an abbreviated weekday name.
+#[cfg_attr(feature = "perf-inline", inline(always))]
 fn weekday_name_abbrev(wd: Weekday) -> &'static str {
     match wd {
         Weekday::Sunday => "Sun",
@@ -3546,6 +3565,7 @@ fn weekday_name_abbrev(wd: Weekday) -> &'static str {
 }
 
 /// Returns the "full" month name.
+#[cfg_attr(feature = "perf-inline", inline(always))]
 fn month_name_full(month: t::Month) -> &'static str {
     match month.get() {
         1 => "January",
@@ -3565,6 +3585,7 @@ fn month_name_full(month: t::Month) -> &'static str {
 }
 
 /// Returns the abbreviated month name.
+#[cfg_attr(feature = "perf-inline", inline(always))]
 fn month_name_abbrev(month: t::Month) -> &'static str {
     match month.get() {
         1 => "Jan",

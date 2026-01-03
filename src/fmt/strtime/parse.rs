@@ -265,12 +265,12 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         let (index, inp) = parse_ampm(self.inp)?;
         self.inp = inp;
 
-        self.tm.meridiem = Some(match index {
+        self.tm.set_meridiem(Some(match index {
             0 => Meridiem::AM,
             1 => Meridiem::PM,
             // OK because 0 <= index <= 1.
             _ => unreachable!("unknown AM/PM index"),
-        });
+        }));
         self.bump_fmt();
         Ok(())
     }
@@ -332,7 +332,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         self.inp = inp;
 
         let hour = t::Hour::try_new("hour", hour).context(PE::ParseHour)?;
-        self.tm.hour = Some(hour);
+        self.tm.set_hour_ranged(Some(hour));
         self.bump_fmt();
         Ok(())
     }
@@ -347,7 +347,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         self.inp = inp;
 
         let hour = Hour12::try_new("hour", hour).context(PE::ParseHour)?;
-        self.tm.hour = Some(t::Hour::rfrom(hour));
+        self.tm.set_hour_ranged(Some(t::Hour::rfrom(hour)));
         self.bump_fmt();
         Ok(())
     }

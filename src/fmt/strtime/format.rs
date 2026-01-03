@@ -8,13 +8,68 @@ use crate::{
         strtime::{
             month_name_abbrev, month_name_full, weekday_name_abbrev,
             weekday_name_full, BrokenDownTime, Config, Custom, Extension,
-            Flag,
+            Flag, Meridiem,
         },
     },
     tz::Offset,
     util::utf8,
     Error,
 };
+
+enum Item {
+    AlreadyFormatted,
+    Integer(ItemInteger),
+    Fraction(ItemFraction),
+    String(ItemString),
+    Offset(ItemOffset),
+}
+
+struct ItemInteger {
+    pad_byte: u8,
+    pad_width: u8,
+    number: i64,
+}
+
+impl ItemInteger {
+    fn new(pad_byte: u8, pad_width: u8, n: impl Into<i64>) -> ItemInteger {
+        ItemInteger { pad_byte, pad_width, number: n.into() }
+    }
+}
+
+struct ItemFraction {
+    width: Option<u8>,
+    dot: bool,
+    subsec: u32,
+}
+
+struct ItemString {
+    case: Case,
+    string: &'static str,
+}
+
+impl ItemString {
+    fn new(case: Case, string: &'static str) -> ItemString {
+        ItemString { case, string }
+    }
+}
+
+struct ItemOffset {
+    offset: Offset,
+    colon: bool,
+    minute: bool,
+    second: bool,
+}
+
+impl ItemOffset {
+    fn new(
+        offset: Offset,
+        colon: bool,
+        minute: bool,
+        second: bool,
+    ) -> ItemOffset {
+        ItemOffset { offset, colon, minute, second }
+    }
+}
 
 pub(super) struct Formatter<
     'config,
@@ -56,7 +111,9 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
                 return Err(E::UnexpectedEndAfterPercent.into());
             }
             let orig = self.fmt;
-            if let Err(err) = self.format_one() {
+            if let Err(err) =
+                self.parse_extension().and_then(|ext| self.format_one(&ext))
+            {
                 if !self.config.lenient {
                     return Err(err);
                 }
@@ -72,67 +129,70 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn format_one(&mut self) -> Result<(), Error> {
+    fn format_one(&mut self, ext: &Extension) -> Result<(), Error> {
+        let i = |item: ItemInteger| Item::Integer(item);
+        let s = |item: ItemString| Item::String(item);
+        let o = |item: ItemOffset| Item::Offset(item);
         let failc =
             |directive, colons| E::DirectiveFailure { directive, colons };
         let fail = |directive| failc(directive, 0);
 
         // Parse extensions like padding/case options and padding width.
-        let ext = self.parse_extension()?;
-        match self.f() {
-            b'%' => self.wtr.write_ascii_char(b'%').context(fail(b'%')),
-            b'A' => self.fmt_weekday_full(&ext).context(fail(b'A')),
-            b'a' => self.fmt_weekday_abbrev(&ext).context(fail(b'a')),
-            b'B' => self.fmt_month_full(&ext).context(fail(b'B')),
-            b'b' => self.fmt_month_abbrev(&ext).context(fail(b'b')),
-            b'C' => self.fmt_century(&ext).context(fail(b'C')),
-            b'c' => self.fmt_datetime(&ext).context(fail(b'c')),
-            b'D' => self.fmt_american_date(&ext).context(fail(b'D')),
-            b'd' => self.fmt_day_zero(&ext).context(fail(b'd')),
-            b'e' => self.fmt_day_space(&ext).context(fail(b'e')),
-            b'F' => self.fmt_iso_date(&ext).context(fail(b'F')),
-            b'f' => self.fmt_fractional(&ext).context(fail(b'f')),
-            b'G' => self.fmt_iso_week_year(&ext).context(fail(b'G')),
-            b'g' => self.fmt_iso_week_year2(&ext).context(fail(b'g')),
-            b'H' => self.fmt_hour24_zero(&ext).context(fail(b'H')),
-            b'h' => self.fmt_month_abbrev(&ext).context(fail(b'b')),
-            b'I' => self.fmt_hour12_zero(&ext).context(fail(b'H')),
-            b'j' => self.fmt_day_of_year(&ext).context(fail(b'j')),
-            b'k' => self.fmt_hour24_space(&ext).context(fail(b'k')),
-            b'l' => self.fmt_hour12_space(&ext).context(fail(b'l')),
-            b'M' => self.fmt_minute(&ext).context(fail(b'M')),
-            b'm' => self.fmt_month(&ext).context(fail(b'm')),
-            b'N' => self.fmt_nanoseconds(&ext).context(fail(b'N')),
-            b'n' => self.fmt_literal("\n").context(fail(b'n')),
-            b'P' => self.fmt_ampm_lower(&ext).context(fail(b'P')),
-            b'p' => self.fmt_ampm_upper(&ext).context(fail(b'p')),
+        let mut directive = self.f();
+        let item = match directive {
+            b'%' => self.fmt_literal("%").map(s).context(fail(b'%')),
+            b'A' => self.fmt_weekday_full().map(s).context(fail(b'A')),
+            b'a' => self.fmt_weekday_abbrev().map(s).context(fail(b'a')),
+            b'B' => self.fmt_month_full().map(s).context(fail(b'B')),
+            b'b' => self.fmt_month_abbrev().map(s).context(fail(b'b')),
+            b'C' => self.fmt_century().map(i).context(fail(b'C')),
+            b'c' => self.fmt_datetime(ext).context(fail(b'c')),
+            b'D' => self.fmt_american_date().context(fail(b'D')),
+            b'd' => self.fmt_day_zero().map(i).context(fail(b'd')),
+            b'e' => self.fmt_day_space().map(i).context(fail(b'e')),
+            b'F' => self.fmt_iso_date().context(fail(b'F')),
+            b'f' => self.fmt_fractional(ext).context(fail(b'f')),
+            b'G' => self.fmt_iso_week_year().map(i).context(fail(b'G')),
+            b'g' => self.fmt_iso_week_year2().map(i).context(fail(b'g')),
+            b'H' => self.fmt_hour24_zero().map(i).context(fail(b'H')),
+            b'h' => self.fmt_month_abbrev().map(s).context(fail(b'b')),
+            b'I' => self.fmt_hour12_zero().map(i).context(fail(b'H')),
+            b'j' => self.fmt_day_of_year().map(i).context(fail(b'j')),
+            b'k' => self.fmt_hour24_space().map(i).context(fail(b'k')),
+            b'l' => self.fmt_hour12_space().map(i).context(fail(b'l')),
+            b'M' => self.fmt_minute().map(i).context(fail(b'M')),
+            b'm' => self.fmt_month().map(i).context(fail(b'm')),
+            b'N' => self.fmt_nanoseconds(ext).context(fail(b'N')),
+            b'n' => self.fmt_literal("\n").map(s).context(fail(b'n')),
+            b'P' => self.fmt_ampm_lower().map(s).context(fail(b'P')),
+            b'p' => self.fmt_ampm_upper(ext).map(s).context(fail(b'p')),
             b'Q' => match ext.colons {
                 0 => self.fmt_iana_nocolon().context(fail(b'Q')),
                 1 => self.fmt_iana_colon().context(failc(b'Q', 1)),
                 _ => return Err(E::ColonCount { directive: b'Q' }.into()),
             },
-            b'q' => self.fmt_quarter(&ext).context(fail(b'q')),
-            b'R' => self.fmt_clock_nosecs(&ext).context(fail(b'R')),
-            b'r' => self.fmt_12hour_time(&ext).context(fail(b'r')),
-            b'S' => self.fmt_second(&ext).context(fail(b'S')),
-            b's' => self.fmt_timestamp(&ext).context(fail(b's')),
-            b'T' => self.fmt_clock_secs(&ext).context(fail(b'T')),
-            b't' => self.fmt_literal("\t").context(fail(b't')),
-            b'U' => self.fmt_week_sun(&ext).context(fail(b'U')),
-            b'u' => self.fmt_weekday_mon(&ext).context(fail(b'u')),
-            b'V' => self.fmt_week_iso(&ext).context(fail(b'V')),
-            b'W' => self.fmt_week_mon(&ext).context(fail(b'W')),
-            b'w' => self.fmt_weekday_sun(&ext).context(fail(b'w')),
-            b'X' => self.fmt_time(&ext).context(fail(b'X')),
-            b'x' => self.fmt_date(&ext).context(fail(b'x')),
-            b'Y' => self.fmt_year(&ext).context(fail(b'Y')),
-            b'y' => self.fmt_year2(&ext).context(fail(b'y')),
-            b'Z' => self.fmt_tzabbrev(&ext).context(fail(b'Z')),
+            b'q' => self.fmt_quarter().map(i).context(fail(b'q')),
+            b'R' => self.fmt_clock_nosecs().context(fail(b'R')),
+            b'r' => self.fmt_12hour_time(ext).context(fail(b'r')),
+            b'S' => self.fmt_second().map(i).context(fail(b'S')),
+            b's' => self.fmt_timestamp().map(i).context(fail(b's')),
+            b'T' => self.fmt_clock_secs().context(fail(b'T')),
+            b't' => self.fmt_literal("\t").map(s).context(fail(b't')),
+            b'U' => self.fmt_week_sun().map(i).context(fail(b'U')),
+            b'u' => self.fmt_weekday_mon().map(i).context(fail(b'u')),
+            b'V' => self.fmt_week_iso().map(i).context(fail(b'V')),
+            b'W' => self.fmt_week_mon().map(i).context(fail(b'W')),
+            b'w' => self.fmt_weekday_sun().map(i).context(fail(b'w')),
+            b'X' => self.fmt_time(ext).context(fail(b'X')),
+            b'x' => self.fmt_date(ext).context(fail(b'x')),
+            b'Y' => self.fmt_year().map(i).context(fail(b'Y')),
+            b'y' => self.fmt_year2().map(i).context(fail(b'y')),
+            b'Z' => self.fmt_tzabbrev(ext).context(fail(b'Z')),
             b'z' => match ext.colons {
-                0 => self.fmt_offset_nocolon().context(fail(b'z')),
-                1 => self.fmt_offset_colon().context(failc(b'z', 1)),
-                2 => self.fmt_offset_colon2().context(failc(b'z', 2)),
-                3 => self.fmt_offset_colon3().context(failc(b'z', 3)),
+                0 => self.fmt_offset_nocolon().map(o).context(fail(b'z')),
+                1 => self.fmt_offset_colon().map(o).context(failc(b'z', 1)),
+                2 => self.fmt_offset_colon2().map(o).context(failc(b'z', 2)),
+                3 => self.fmt_offset_colon3().map(o).context(failc(b'z', 3)),
                 _ => return Err(E::ColonCount { directive: b'z' }.into()),
             },
             b'.' => {
@@ -141,24 +201,23 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
                 }
                 // Parse precision settings after the `.`, effectively
                 // overriding any digits that came before it.
-                let ext = Extension { width: self.parse_width()?, ..ext };
-                match self.f() {
+                let ext =
+                    &Extension { width: self.parse_width()?, ..ext.clone() };
+                directive = self.f();
+                match directive {
                     b'f' => self
-                        .fmt_dot_fractional(&ext)
-                        .context(E::DirectiveFailureDot { directive: b'f' }),
-                    unk => {
+                        .fmt_dot_fractional(ext)
+                        .context(E::DirectiveFailureDot { directive }),
+                    _ => {
                         return Err(Error::from(
-                            E::UnknownDirectiveAfterDot { directive: unk },
+                            E::UnknownDirectiveAfterDot { directive },
                         ));
                     }
                 }
             }
-            unk => {
-                return Err(Error::from(E::UnknownDirective {
-                    directive: unk,
-                }))
-            }
+            _ => return Err(Error::from(E::UnknownDirective { directive })),
         }?;
+        self.write_item(ext, &item).context(fail(directive))?;
         self.bump_fmt();
         Ok(())
     }
@@ -223,6 +282,9 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     /// to the next byte. (If no next byte exists, then an error is returned.)
     #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_extension(&mut self) -> Result<Extension, Error> {
+        if self.f().is_ascii_alphabetic() {
+            return Ok(Extension { flag: None, width: None, colons: 0 });
+        }
         let flag = self.parse_flag()?;
         let width = self.parse_width()?;
         let colons = self.parse_colons()?;
@@ -263,246 +325,305 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
         Ok(colons)
     }
 
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    fn write_item(
+        &mut self,
+        ext: &Extension,
+        item: &Item,
+    ) -> Result<(), Error> {
+        match *item {
+            Item::AlreadyFormatted => Ok(()),
+            Item::Integer(ref item) => ext.write_int(
+                item.pad_byte,
+                item.pad_width,
+                item.number,
+                self.wtr,
+            ),
+            Item::Fraction(ItemFraction { width, dot, subsec }) => {
+                if dot {
+                    self.wtr.write_ascii_char(b'.')?;
+                }
+                self.wtr.write_fraction(width, subsec)
+            }
+            Item::String(ref item) => {
+                ext.write_str(item.case, item.string, self.wtr)
+            }
+            Item::Offset(ref item) => write_offset(
+                item.offset,
+                item.colon,
+                item.minute,
+                item.second,
+                self.wtr,
+            ),
+        }
+    }
+
     // These are the formatting functions. They are pretty much responsible
     // for getting what they need for the broken down time and reporting a
     // decent failure mode if what they need couldn't be found. And then,
     // of course, doing the actual formatting.
 
     /// %P
-    fn fmt_ampm_lower(&mut self, ext: &Extension) -> Result<(), Error> {
-        let hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
-        ext.write_str(
-            Case::AsIs,
-            if hour < 12 { "am" } else { "pm" },
-            self.wtr,
-        )
+    fn fmt_ampm_lower(&self) -> Result<ItemString, Error> {
+        let meridiem = match self.tm.meridiem() {
+            Some(meridiem) => meridiem,
+            None => {
+                let hour =
+                    self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
+                if hour < 12 {
+                    Meridiem::AM
+                } else {
+                    Meridiem::PM
+                }
+            }
+        };
+        let s = match meridiem {
+            Meridiem::AM => "am",
+            Meridiem::PM => "pm",
+        };
+        Ok(ItemString::new(Case::AsIs, s))
     }
 
     /// %p
-    fn fmt_ampm_upper(&mut self, ext: &Extension) -> Result<(), Error> {
-        let hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
-        // Manually specialize this case to avoid hitting `write_str_cold`.
-        let s = if matches!(ext.flag, Some(Flag::Swapcase)) {
-            if hour < 12 {
-                "am"
-            } else {
-                "pm"
-            }
-        } else {
-            if hour < 12 {
-                "AM"
-            } else {
-                "PM"
+    fn fmt_ampm_upper(&self, ext: &Extension) -> Result<ItemString, Error> {
+        let meridiem = match self.tm.meridiem() {
+            Some(meridiem) => meridiem,
+            None => {
+                let hour =
+                    self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
+                if hour < 12 {
+                    Meridiem::AM
+                } else {
+                    Meridiem::PM
+                }
             }
         };
-        self.wtr.write_str(s)
+        // Manually specialize this case to avoid hitting `write_str_cold`.
+        let s = if matches!(ext.flag, Some(Flag::Swapcase)) {
+            match meridiem {
+                Meridiem::AM => "am",
+                Meridiem::PM => "pm",
+            }
+        } else {
+            match meridiem {
+                Meridiem::AM => "AM",
+                Meridiem::PM => "PM",
+            }
+        };
+        Ok(ItemString::new(Case::AsIs, s))
     }
 
     /// %D
-    fn fmt_american_date(&mut self, ext: &Extension) -> Result<(), Error> {
-        self.fmt_month(ext)?;
-        self.wtr.write_char('/')?;
-        self.fmt_day_zero(ext)?;
-        self.wtr.write_char('/')?;
-        self.fmt_year2(ext)?;
-        Ok(())
+    fn fmt_american_date(&mut self) -> Result<Item, Error> {
+        let ItemInteger { number, .. } = self.fmt_month()?;
+        self.wtr.write_int_pad2(number.unsigned_abs())?;
+        self.wtr.write_ascii_char(b'/')?;
+        let ItemInteger { number, .. } = self.fmt_day_zero()?;
+        self.wtr.write_int_pad2(number.unsigned_abs())?;
+        self.wtr.write_ascii_char(b'/')?;
+        let ItemInteger { number, .. } = self.fmt_year2()?;
+        if number < 0 {
+            self.wtr.write_ascii_char(b'-')?;
+        }
+        self.wtr.write_int_pad2(number.unsigned_abs())?;
+        Ok(Item::AlreadyFormatted)
     }
 
     /// %R
-    fn fmt_clock_nosecs(&mut self, ext: &Extension) -> Result<(), Error> {
-        self.fmt_hour24_zero(ext)?;
-        self.wtr.write_char(':')?;
-        self.fmt_minute(ext)?;
-        Ok(())
+    fn fmt_clock_nosecs(&mut self) -> Result<Item, Error> {
+        let ItemInteger { number, .. } = self.fmt_hour24_zero()?;
+        self.wtr.write_int_pad2(number.unsigned_abs())?;
+        self.wtr.write_ascii_char(b':')?;
+        let ItemInteger { number, .. } = self.fmt_minute()?;
+        self.wtr.write_int_pad2(number.unsigned_abs())?;
+        Ok(Item::AlreadyFormatted)
     }
 
     /// %T
-    fn fmt_clock_secs(&mut self, ext: &Extension) -> Result<(), Error> {
-        self.fmt_hour24_zero(ext)?;
-        self.wtr.write_char(':')?;
-        self.fmt_minute(ext)?;
-        self.wtr.write_char(':')?;
-        self.fmt_second(ext)?;
-        Ok(())
-    }
-
-    /// %d
-    fn fmt_day_zero(&mut self, ext: &Extension) -> Result<(), Error> {
-        let day = self
-            .tm
-            .day
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.day_ranged()),
-            )
-            .ok_or(FE::RequiresDate)?
-            .get();
-        ext.write_int(b'0', Some(2), day, self.wtr)
-    }
-
-    /// %e
-    fn fmt_day_space(&mut self, ext: &Extension) -> Result<(), Error> {
-        let day = self
-            .tm
-            .day
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.day_ranged()),
-            )
-            .ok_or(FE::RequiresDate)?
-            .get();
-        ext.write_int(b' ', Some(2), day, self.wtr)
-    }
-
-    /// %I
-    fn fmt_hour12_zero(&mut self, ext: &Extension) -> Result<(), Error> {
-        let mut hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
-        if hour == 0 {
-            hour = 12;
-        } else if hour > 12 {
-            hour -= 12;
-        }
-        ext.write_int(b'0', Some(2), hour, self.wtr)
-    }
-
-    /// %H
-    fn fmt_hour24_zero(&mut self, ext: &Extension) -> Result<(), Error> {
-        let hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
-        ext.write_int(b'0', Some(2), hour, self.wtr)
-    }
-
-    /// %l
-    fn fmt_hour12_space(&mut self, ext: &Extension) -> Result<(), Error> {
-        let mut hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
-        if hour == 0 {
-            hour = 12;
-        } else if hour > 12 {
-            hour -= 12;
-        }
-        ext.write_int(b' ', Some(2), hour, self.wtr)
-    }
-
-    /// %k
-    fn fmt_hour24_space(&mut self, ext: &Extension) -> Result<(), Error> {
-        let hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
-        ext.write_int(b' ', Some(2), hour, self.wtr)
+    fn fmt_clock_secs(&mut self) -> Result<Item, Error> {
+        let ItemInteger { number, .. } = self.fmt_hour24_zero()?;
+        self.wtr.write_int_pad2(number.unsigned_abs())?;
+        self.wtr.write_ascii_char(b':')?;
+        let ItemInteger { number, .. } = self.fmt_minute()?;
+        self.wtr.write_int_pad2(number.unsigned_abs())?;
+        self.wtr.write_ascii_char(b':')?;
+        let ItemInteger { number, .. } = self.fmt_second()?;
+        self.wtr.write_int_pad2(number.unsigned_abs())?;
+        Ok(Item::AlreadyFormatted)
     }
 
     /// %F
-    fn fmt_iso_date(&mut self, ext: &Extension) -> Result<(), Error> {
-        self.fmt_year(ext)?;
-        self.wtr.write_char('-')?;
-        self.fmt_month(ext)?;
-        self.wtr.write_char('-')?;
-        self.fmt_day_zero(ext)?;
-        Ok(())
+    fn fmt_iso_date(&mut self) -> Result<Item, Error> {
+        let ItemInteger { number, .. } = self.fmt_year()?;
+        if number < 0 {
+            self.wtr.write_ascii_char(b'-')?;
+        }
+        self.wtr.write_int_pad4(number.unsigned_abs())?;
+        self.wtr.write_ascii_char(b'-')?;
+        let ItemInteger { number, .. } = self.fmt_month()?;
+        self.wtr.write_int_pad2(number.unsigned_abs())?;
+        self.wtr.write_ascii_char(b'-')?;
+        let ItemInteger { number, .. } = self.fmt_day_zero()?;
+        self.wtr.write_int_pad2(number.unsigned_abs())?;
+        Ok(Item::AlreadyFormatted)
+    }
+
+    /// %d
+    fn fmt_day_zero(&self) -> Result<ItemInteger, Error> {
+        let day = self
+            .tm
+            .day
+            .or_else(|| self.tm.to_date().ok().map(|d| d.day_ranged()))
+            .ok_or(FE::RequiresDate)?
+            .get();
+        Ok(ItemInteger::new(b'0', 2, day))
+    }
+
+    /// %e
+    fn fmt_day_space(&self) -> Result<ItemInteger, Error> {
+        let day = self
+            .tm
+            .day
+            .or_else(|| self.tm.to_date().ok().map(|d| d.day_ranged()))
+            .ok_or(FE::RequiresDate)?
+            .get();
+        Ok(ItemInteger::new(b' ', 2, day))
+    }
+
+    /// %I
+    fn fmt_hour12_zero(&self) -> Result<ItemInteger, Error> {
+        let mut hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
+        if hour == 0 {
+            hour = 12;
+        } else if hour > 12 {
+            hour -= 12;
+        }
+        Ok(ItemInteger::new(b'0', 2, hour))
+    }
+
+    /// %H
+    fn fmt_hour24_zero(&self) -> Result<ItemInteger, Error> {
+        let hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
+        Ok(ItemInteger::new(b'0', 2, hour))
+    }
+
+    /// %l
+    fn fmt_hour12_space(&self) -> Result<ItemInteger, Error> {
+        let mut hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
+        if hour == 0 {
+            hour = 12;
+        } else if hour > 12 {
+            hour -= 12;
+        }
+        Ok(ItemInteger::new(b' ', 2, hour))
+    }
+
+    /// %k
+    fn fmt_hour24_space(&self) -> Result<ItemInteger, Error> {
+        let hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
+        Ok(ItemInteger::new(b' ', 2, hour))
     }
 
     /// %M
-    fn fmt_minute(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_minute(&self) -> Result<ItemInteger, Error> {
         let minute = self.tm.minute.ok_or(FE::RequiresTime)?.get();
-        ext.write_int(b'0', Some(2), minute, self.wtr)
+        Ok(ItemInteger::new(b'0', 2, minute))
     }
 
     /// %m
-    fn fmt_month(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_month(&self) -> Result<ItemInteger, Error> {
         let month = self
             .tm
             .month
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.month_ranged()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
             .ok_or(FE::RequiresDate)?
             .get();
-        ext.write_int(b'0', Some(2), month, self.wtr)
+        Ok(ItemInteger::new(b'0', 2, month))
     }
 
     /// %B
-    fn fmt_month_full(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_month_full(&self) -> Result<ItemString, Error> {
         let month = self
             .tm
             .month
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.month_ranged()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
             .ok_or(FE::RequiresDate)?;
-        ext.write_str(Case::AsIs, month_name_full(month), self.wtr)
+        Ok(ItemString::new(Case::AsIs, month_name_full(month)))
     }
 
     /// %b, %h
-    fn fmt_month_abbrev(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_month_abbrev(&self) -> Result<ItemString, Error> {
         let month = self
             .tm
             .month
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.month_ranged()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
             .ok_or(FE::RequiresDate)?;
-        ext.write_str(Case::AsIs, month_name_abbrev(month), self.wtr)
+        Ok(ItemString::new(Case::AsIs, month_name_abbrev(month)))
     }
 
     /// %Q
-    fn fmt_iana_nocolon(&mut self) -> Result<(), Error> {
+    fn fmt_iana_nocolon(&mut self) -> Result<Item, Error> {
         let Some(iana) = self.tm.iana_time_zone() else {
             let offset = self.tm.offset.ok_or(FE::RequiresTimeZoneOrOffset)?;
-            return write_offset(offset, false, true, false, &mut self.wtr);
+            return Ok(Item::Offset(ItemOffset::new(
+                offset, false, true, false,
+            )));
         };
         self.wtr.write_str(iana)?;
-        Ok(())
+        Ok(Item::AlreadyFormatted)
     }
 
     /// %:Q
-    fn fmt_iana_colon(&mut self) -> Result<(), Error> {
+    fn fmt_iana_colon(&mut self) -> Result<Item, Error> {
         let Some(iana) = self.tm.iana_time_zone() else {
             let offset = self.tm.offset.ok_or(FE::RequiresTimeZoneOrOffset)?;
-            return write_offset(offset, true, true, false, &mut self.wtr);
+            return Ok(Item::Offset(ItemOffset::new(
+                offset, true, true, false,
+            )));
         };
         self.wtr.write_str(iana)?;
-        Ok(())
+        Ok(Item::AlreadyFormatted)
     }
 
     /// %z
-    fn fmt_offset_nocolon(&mut self) -> Result<(), Error> {
+    fn fmt_offset_nocolon(&self) -> Result<ItemOffset, Error> {
         let offset = self.tm.offset.ok_or(FE::RequiresOffset)?;
-        write_offset(offset, false, true, false, self.wtr)
+        Ok(ItemOffset::new(offset, false, true, false))
     }
 
     /// %:z
-    fn fmt_offset_colon(&mut self) -> Result<(), Error> {
+    fn fmt_offset_colon(&self) -> Result<ItemOffset, Error> {
         let offset = self.tm.offset.ok_or(FE::RequiresOffset)?;
-        write_offset(offset, true, true, false, self.wtr)
+        Ok(ItemOffset::new(offset, true, true, false))
     }
 
     /// %::z
-    fn fmt_offset_colon2(&mut self) -> Result<(), Error> {
+    fn fmt_offset_colon2(&self) -> Result<ItemOffset, Error> {
         let offset = self.tm.offset.ok_or(FE::RequiresOffset)?;
-        write_offset(offset, true, true, true, self.wtr)
+        Ok(ItemOffset::new(offset, true, true, true))
     }
 
     /// %:::z
-    fn fmt_offset_colon3(&mut self) -> Result<(), Error> {
+    fn fmt_offset_colon3(&self) -> Result<ItemOffset, Error> {
         let offset = self.tm.offset.ok_or(FE::RequiresOffset)?;
-        write_offset(offset, true, false, false, self.wtr)
+        Ok(ItemOffset::new(offset, true, false, false))
     }
 
     /// %S
-    fn fmt_second(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_second(&self) -> Result<ItemInteger, Error> {
         let second = self.tm.second.ok_or(FE::RequiresTime)?.get();
-        ext.write_int(b'0', Some(2), second, self.wtr)
+        Ok(ItemInteger::new(b'0', 2, second))
     }
 
     /// %s
-    fn fmt_timestamp(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_timestamp(&self) -> Result<ItemInteger, Error> {
         let timestamp =
             self.tm.to_timestamp().map_err(|_| FE::RequiresInstant)?;
-        ext.write_int(b' ', None, timestamp.as_second(), self.wtr)
+        Ok(ItemInteger::new(b' ', 0, timestamp.as_second()))
     }
 
     /// %f
-    fn fmt_fractional(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_fractional(&self, ext: &Extension) -> Result<Item, Error> {
         let subsec = self.tm.subsec.ok_or(FE::RequiresTime)?;
         let subsec = i32::from(subsec).unsigned_abs();
         // For %f, we always want to emit at least one digit. The only way we
@@ -515,27 +636,33 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
             return Err(Error::from(FE::ZeroPrecisionFloat));
         }
         if subsec == 0 && ext.width.is_none() {
-            self.wtr.write_ascii_char(b'0')?;
-            return Ok(());
+            return Ok(Item::String(ItemString::new(Case::AsIs, "0")));
         }
-        ext.write_fractional_seconds(subsec, self.wtr)?;
-        Ok(())
+        Ok(Item::Fraction(ItemFraction {
+            width: ext.width,
+            dot: false,
+            subsec,
+        }))
     }
 
     /// %.f
-    fn fmt_dot_fractional(&mut self, ext: &Extension) -> Result<(), Error> {
-        let Some(subsec) = self.tm.subsec else { return Ok(()) };
+    fn fmt_dot_fractional(&self, ext: &Extension) -> Result<Item, Error> {
+        let Some(subsec) = self.tm.subsec else {
+            return Ok(Item::AlreadyFormatted);
+        };
         let subsec = i32::from(subsec).unsigned_abs();
         if subsec == 0 && ext.width.is_none() || ext.width == Some(0) {
-            return Ok(());
+            return Ok(Item::AlreadyFormatted);
         }
-        ext.write_str(Case::AsIs, ".", self.wtr)?;
-        ext.write_fractional_seconds(subsec, self.wtr)?;
-        Ok(())
+        Ok(Item::Fraction(ItemFraction {
+            width: ext.width,
+            dot: true,
+            subsec,
+        }))
     }
 
     /// %N
-    fn fmt_nanoseconds(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_nanoseconds(&self, ext: &Extension) -> Result<Item, Error> {
         let subsec = self.tm.subsec.ok_or(FE::RequiresTime)?;
         if ext.width == Some(0) {
             return Err(Error::from(FE::ZeroPrecisionNano));
@@ -544,94 +671,84 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
         // Since `%N` is actually an alias for `%9f`, when the precision
         // is missing, we default to 9.
         if ext.width.is_none() {
-            return self.wtr.write_fraction(Some(9), subsec);
+            return Ok(Item::Fraction(ItemFraction {
+                width: Some(9),
+                dot: false,
+                subsec,
+            }));
         }
-        ext.write_fractional_seconds(subsec, self.wtr)?;
-        Ok(())
+        Ok(Item::Fraction(ItemFraction {
+            width: ext.width,
+            dot: false,
+            subsec,
+        }))
     }
 
     /// %Z
-    fn fmt_tzabbrev(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_tzabbrev(&mut self, ext: &Extension) -> Result<Item, Error> {
         let tz = self.tm.tz.as_ref().ok_or(FE::RequiresTimeZone)?;
         let ts = self.tm.to_timestamp().map_err(|_| FE::RequiresInstant)?;
         let oinfo = tz.to_offset_info(ts);
-        ext.write_str(Case::Upper, oinfo.abbreviation(), self.wtr)
+        ext.write_str(Case::Upper, oinfo.abbreviation(), self.wtr)?;
+        Ok(Item::AlreadyFormatted)
     }
 
     /// %A
-    fn fmt_weekday_full(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_weekday_full(&self) -> Result<ItemString, Error> {
         let weekday = self
             .tm
             .weekday
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.weekday()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.weekday()))
             .ok_or(FE::RequiresDate)?;
-        ext.write_str(Case::AsIs, weekday_name_full(weekday), self.wtr)
+        Ok(ItemString::new(Case::AsIs, weekday_name_full(weekday)))
     }
 
     /// %a
-    fn fmt_weekday_abbrev(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_weekday_abbrev(&self) -> Result<ItemString, Error> {
         let weekday = self
             .tm
             .weekday
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.weekday()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.weekday()))
             .ok_or(FE::RequiresDate)?;
-        ext.write_str(Case::AsIs, weekday_name_abbrev(weekday), self.wtr)
+        Ok(ItemString::new(Case::AsIs, weekday_name_abbrev(weekday)))
     }
 
     /// %u
-    fn fmt_weekday_mon(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_weekday_mon(&self) -> Result<ItemInteger, Error> {
         let weekday = self
             .tm
             .weekday
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.weekday()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.weekday()))
             .ok_or(FE::RequiresDate)?;
-        ext.write_int(b' ', None, weekday.to_monday_one_offset(), self.wtr)
+        Ok(ItemInteger::new(b' ', 0, weekday.to_monday_one_offset()))
     }
 
     /// %w
-    fn fmt_weekday_sun(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_weekday_sun(&self) -> Result<ItemInteger, Error> {
         let weekday = self
             .tm
             .weekday
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.weekday()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.weekday()))
             .ok_or(FE::RequiresDate)?;
-        ext.write_int(b' ', None, weekday.to_sunday_zero_offset(), self.wtr)
+        Ok(ItemInteger::new(b' ', 0, weekday.to_sunday_zero_offset()))
     }
 
     /// %U
-    fn fmt_week_sun(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_week_sun(&self) -> Result<ItemInteger, Error> {
         // Short circuit if the week number was explicitly set.
         if let Some(weeknum) = self.tm.week_sun {
-            return ext.write_int(b'0', Some(2), weeknum, self.wtr);
+            return Ok(ItemInteger::new(b'0', 2, weeknum));
         }
         let day = self
             .tm
             .day_of_year
             .map(|day| day.get())
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.day_of_year()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.day_of_year()))
             .ok_or(FE::RequiresDate)?;
         let weekday = self
             .tm
             .weekday
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.weekday()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.weekday()))
             .ok_or(FE::RequiresDate)?
             .to_sunday_zero_offset();
         // Example: 2025-01-05 is the first Sunday in 2025, and thus the start
@@ -640,49 +757,37 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
         // So for 2025-01-05, day=5 and weekday=0. Thus we get 11/7 = 1.
         // For 2025-01-04, day=4 and weekday=6. Thus we get 4/7 = 0.
         let weeknum = (day + 6 - i16::from(weekday)) / 7;
-        ext.write_int(b'0', Some(2), weeknum, self.wtr)
+        Ok(ItemInteger::new(b'0', 2, weeknum))
     }
 
     /// %V
-    fn fmt_week_iso(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_week_iso(&self) -> Result<ItemInteger, Error> {
         let weeknum = self
             .tm
             .iso_week
-            .or_else(
-                #[inline(never)]
-                || {
-                    self.tm
-                        .to_date()
-                        .ok()
-                        .map(|d| d.iso_week_date().week_ranged())
-                },
-            )
+            .or_else(|| {
+                self.tm.to_date().ok().map(|d| d.iso_week_date().week_ranged())
+            })
             .ok_or(FE::RequiresDate)?;
-        ext.write_int(b'0', Some(2), weeknum, self.wtr)
+        Ok(ItemInteger::new(b'0', 2, weeknum))
     }
 
     /// %W
-    fn fmt_week_mon(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_week_mon(&self) -> Result<ItemInteger, Error> {
         // Short circuit if the week number was explicitly set.
         if let Some(weeknum) = self.tm.week_mon {
-            return ext.write_int(b'0', Some(2), weeknum, self.wtr);
+            return Ok(ItemInteger::new(b'0', 2, weeknum));
         }
         let day = self
             .tm
             .day_of_year
             .map(|day| day.get())
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.day_of_year()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.day_of_year()))
             .ok_or(FE::RequiresDate)?;
         let weekday = self
             .tm
             .weekday
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.weekday()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.weekday()))
             .ok_or(FE::RequiresDate)?
             .to_sunday_zero_offset();
         // Example: 2025-01-06 is the first Monday in 2025, and thus the start
@@ -691,101 +796,77 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
         // So for 2025-01-06, day=6 and weekday=1. Thus we get 12/7 = 1.
         // For 2025-01-05, day=5 and weekday=7. Thus we get 5/7 = 0.
         let weeknum = (day + 6 - ((i16::from(weekday) + 6) % 7)) / 7;
-        ext.write_int(b'0', Some(2), weeknum, self.wtr)
+        Ok(ItemInteger::new(b'0', 2, weeknum))
     }
 
     /// %Y
-    fn fmt_year(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_year(&self) -> Result<ItemInteger, Error> {
         let year = self
             .tm
             .year
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.year_ranged()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.year_ranged()))
             .ok_or(FE::RequiresDate)?
             .get();
-        ext.write_int(b'0', Some(4), year, self.wtr)
+        Ok(ItemInteger::new(b'0', 4, year))
     }
 
     /// %y
-    fn fmt_year2(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_year2(&self) -> Result<ItemInteger, Error> {
         let year = self
             .tm
             .year
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.year_ranged()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.year_ranged()))
             .ok_or(FE::RequiresDate)?
             .get();
         let year = year % 100;
-        ext.write_int(b'0', Some(2), year, self.wtr)
+        Ok(ItemInteger::new(b'0', 2, year))
     }
 
     /// %C
-    fn fmt_century(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_century(&self) -> Result<ItemInteger, Error> {
         let year = self
             .tm
             .year
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.year_ranged()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.year_ranged()))
             .ok_or(FE::RequiresDate)?
             .get();
         let century = year / 100;
-        ext.write_int(b' ', None, century, self.wtr)
+        Ok(ItemInteger::new(b' ', 0, century))
     }
 
     /// %G
-    fn fmt_iso_week_year(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_iso_week_year(&self) -> Result<ItemInteger, Error> {
         let year = self
             .tm
             .iso_week_year
-            .or_else(
-                #[inline(never)]
-                || {
-                    self.tm
-                        .to_date()
-                        .ok()
-                        .map(|d| d.iso_week_date().year_ranged())
-                },
-            )
+            .or_else(|| {
+                self.tm.to_date().ok().map(|d| d.iso_week_date().year_ranged())
+            })
             .ok_or(FE::RequiresDate)?
             .get();
-        ext.write_int(b'0', Some(4), year, self.wtr)
+        Ok(ItemInteger::new(b'0', 4, year))
     }
 
     /// %g
-    fn fmt_iso_week_year2(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_iso_week_year2(&self) -> Result<ItemInteger, Error> {
         let year = self
             .tm
             .iso_week_year
-            .or_else(
-                #[inline(never)]
-                || {
-                    self.tm
-                        .to_date()
-                        .ok()
-                        .map(|d| d.iso_week_date().year_ranged())
-                },
-            )
+            .or_else(|| {
+                self.tm.to_date().ok().map(|d| d.iso_week_date().year_ranged())
+            })
             .ok_or(FE::RequiresDate)?
             .get();
         let year = year % 100;
-        ext.write_int(b'0', Some(2), year, self.wtr)
+        Ok(ItemInteger::new(b'0', 2, year))
     }
 
     /// %q
-    fn fmt_quarter(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_quarter(&self) -> Result<ItemInteger, Error> {
         let month = self
             .tm
             .month
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.month_ranged()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
             .ok_or(FE::RequiresDate)?
             .get();
         let quarter = match month {
@@ -795,51 +876,57 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
             10..=12 => 4,
             _ => unreachable!(),
         };
-        ext.write_int(b'0', None, quarter, self.wtr)
+        Ok(ItemInteger::new(b'0', 0, quarter))
     }
 
     /// %j
-    fn fmt_day_of_year(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_day_of_year(&self) -> Result<ItemInteger, Error> {
         let day = self
             .tm
             .day_of_year
             .map(|day| day.get())
-            .or_else(
-                #[inline(never)]
-                || self.tm.to_date().ok().map(|d| d.day_of_year()),
-            )
+            .or_else(|| self.tm.to_date().ok().map(|d| d.day_of_year()))
             .ok_or(FE::RequiresDate)?;
-        ext.write_int(b'0', Some(3), day, self.wtr)
+        Ok(ItemInteger::new(b'0', 3, day))
     }
 
     /// %n, %t
-    fn fmt_literal(&mut self, literal: &str) -> Result<(), Error> {
-        self.wtr.write_str(literal)
+    fn fmt_literal(&self, literal: &'static str) -> Result<ItemString, Error> {
+        Ok(ItemString::new(Case::AsIs, literal))
     }
 
     /// %c
-    fn fmt_datetime(&mut self, ext: &Extension) -> Result<(), Error> {
-        self.config.custom.format_datetime(self.config, ext, self.tm, self.wtr)
+    fn fmt_datetime(&mut self, ext: &Extension) -> Result<Item, Error> {
+        self.config.custom.format_datetime(
+            self.config,
+            ext,
+            self.tm,
+            self.wtr,
+        )?;
+        Ok(Item::AlreadyFormatted)
     }
 
     /// %x
-    fn fmt_date(&mut self, ext: &Extension) -> Result<(), Error> {
-        self.config.custom.format_date(self.config, ext, self.tm, self.wtr)
+    fn fmt_date(&mut self, ext: &Extension) -> Result<Item, Error> {
+        self.config.custom.format_date(self.config, ext, self.tm, self.wtr)?;
+        Ok(Item::AlreadyFormatted)
     }
 
     /// %X
-    fn fmt_time(&mut self, ext: &Extension) -> Result<(), Error> {
-        self.config.custom.format_time(self.config, ext, self.tm, self.wtr)
+    fn fmt_time(&mut self, ext: &Extension) -> Result<Item, Error> {
+        self.config.custom.format_time(self.config, ext, self.tm, self.wtr)?;
+        Ok(Item::AlreadyFormatted)
     }
 
     /// %r
-    fn fmt_12hour_time(&mut self, ext: &Extension) -> Result<(), Error> {
+    fn fmt_12hour_time(&mut self, ext: &Extension) -> Result<Item, Error> {
         self.config.custom.format_12hour_time(
             self.config,
             ext,
             self.tm,
             self.wtr,
-        )
+        )?;
+        Ok(Item::AlreadyFormatted)
     }
 }
 
@@ -936,7 +1023,7 @@ impl Extension {
     fn write_int(
         &self,
         pad_byte: u8,
-        pad_width: Option<u8>,
+        pad_width: u8,
         number: impl Into<i64>,
         wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
@@ -949,24 +1036,17 @@ impl Extension {
         let pad_width = if matches!(self.flag, Some(Flag::NoPad)) {
             0
         } else {
-            self.width.or(pad_width).unwrap_or(0)
+            self.width.unwrap_or(pad_width)
         };
         if number < 0 {
             wtr.write_ascii_char(b'-')?;
         }
-        wtr.write_int_pad(number.unsigned_abs(), pad_byte, pad_width)
-    }
-
-    /// Writes the given number of nanoseconds as a fractional component of
-    /// a second. This does not include the leading `.`.
-    ///
-    /// The `width` setting on `Extension` is treated as a precision setting.
-    fn write_fractional_seconds(
-        &self,
-        number: u32,
-        wtr: &mut BorrowedWriter<'_, '_, '_>,
-    ) -> Result<(), Error> {
-        wtr.write_fraction(self.width, number)
+        let number = number.unsigned_abs();
+        match (pad_byte, pad_width) {
+            (b'0', 2) => wtr.write_int_pad2(number),
+            (b'0', 4) => wtr.write_int_pad4(number),
+            _ => wtr.write_int_pad(number, pad_byte, pad_width),
+        }
     }
 }
 
@@ -1004,9 +1084,9 @@ mod tests {
         let f = |fmt: &str, date: Date| format(fmt, date).unwrap();
 
         insta::assert_snapshot!(f("%D", date(2024, 7, 9)), @"07/09/24");
-        insta::assert_snapshot!(f("%-D", date(2024, 7, 9)), @"7/9/24");
-        insta::assert_snapshot!(f("%3D", date(2024, 7, 9)), @"007/009/024");
-        insta::assert_snapshot!(f("%03D", date(2024, 7, 9)), @"007/009/024");
+        insta::assert_snapshot!(f("%-D", date(2024, 7, 9)), @"07/09/24");
+        insta::assert_snapshot!(f("%3D", date(2024, 7, 9)), @"07/09/24");
+        insta::assert_snapshot!(f("%03D", date(2024, 7, 9)), @"07/09/24");
     }
 
     #[test]
@@ -1054,9 +1134,9 @@ mod tests {
         let f = |fmt: &str, date: Date| format(fmt, date).unwrap();
 
         insta::assert_snapshot!(f("%F", date(2024, 7, 9)), @"2024-07-09");
-        insta::assert_snapshot!(f("%-F", date(2024, 7, 9)), @"2024-7-9");
-        insta::assert_snapshot!(f("%3F", date(2024, 7, 9)), @"2024-007-009");
-        insta::assert_snapshot!(f("%03F", date(2024, 7, 9)), @"2024-007-009");
+        insta::assert_snapshot!(f("%-F", date(2024, 7, 9)), @"2024-07-09");
+        insta::assert_snapshot!(f("%3F", date(2024, 7, 9)), @"2024-07-09");
+        insta::assert_snapshot!(f("%03F", date(2024, 7, 9)), @"2024-07-09");
     }
 
     #[test]
