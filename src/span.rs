@@ -6578,14 +6578,7 @@ impl Nudge {
         let mut rounded_time_nanos =
             mode.round_by_unit_in_nanoseconds(time_nanos, smallest, increment);
         let (relative0, relative1) = clamp_relative_span(
-            &match relative_start.zoned {
-                DumbCow::Borrowed(z) => Relative::Zoned(RelativeZoned {
-                    zoned: DumbCow::Borrowed(z),
-                }),
-                DumbCow::Owned(ref z) => Relative::Zoned(RelativeZoned {
-                    zoned: DumbCow::Borrowed(z),
-                }),
-            },
+            &Relative::Zoned(relative_start.borrowed()),
             balanced.without_lower(Unit::Day),
             Unit::Day,
             sign.rinto(),
