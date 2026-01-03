@@ -104,8 +104,9 @@ from [Temporal's hybrid grammar].
 use crate::{
     error::{fmt::offset::Error as E, Error, ErrorContext},
     fmt::{
+        buffer::ArrayBuffer,
         temporal::{PiecesNumericOffset, PiecesOffset},
-        util::{parse_temporal_fraction, FractionalFormatter},
+        util::parse_temporal_fraction,
         Parsed,
     },
     tz::Offset,
@@ -248,20 +249,35 @@ impl Numeric {
 // `Offset` fails.
 impl core::fmt::Display for Numeric {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.write_str(if self.sign == C(-1) { "-" } else { "+" })?;
-        write!(f, "{:02}", self.hours)?;
+        let mut buf = ArrayBuffer::<19>::default();
+        let mut bbuf = buf.as_borrowed();
+
+        bbuf.write_ascii_char(if self.sign == C(-1) { b'-' } else { b'+' });
+        bbuf.write_int_pad2(self.hours.get().unsigned_abs().into());
         if let Some(minutes) = self.minutes {
-            write!(f, ":{:02}", minutes)?;
+            bbuf.write_ascii_char(b':');
+            bbuf.write_int_pad2(minutes.get().unsigned_abs().into());
         }
         if let Some(seconds) = self.seconds {
-            write!(f, ":{:02}", seconds)?;
+            if self.minutes.is_none() {
+                bbuf.write_str(":00");
+            }
+            bbuf.write_ascii_char(b':');
+            bbuf.write_int_pad2(seconds.get().unsigned_abs().into());
         }
         if let Some(nanos) = self.nanoseconds {
-            static FMT: FractionalFormatter = FractionalFormatter::new();
-            f.write_str(".")?;
-            f.write_str(FMT.format(i32::from(nanos).unsigned_abs()).as_str())?;
+            if nanos != C(0) {
+                if self.minutes.is_none() {
+                    bbuf.write_str(":00");
+                }
+                if self.seconds.is_none() {
+                    bbuf.write_str(":00");
+                }
+                bbuf.write_ascii_char(b'.');
+                bbuf.write_fraction(None, nanos.get().unsigned_abs().into());
+            }
         }
-        Ok(())
+        f.write_str(bbuf.filled())
     }
 }
 

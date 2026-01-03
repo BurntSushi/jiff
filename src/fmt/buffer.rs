@@ -186,6 +186,22 @@ impl<'data> BorrowedBuffer<'data> {
         self.filled += string.len() as u16;
     }
 
+    /// Writes the given Unicode scalar value (as UTF-8) to this writer.
+    ///
+    /// # Panics
+    ///
+    /// When the available space is shorter than the UTF-8 encoding of the
+    /// given Unicode scalar value (up to and including 4 bytes).
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_char(&mut self, ch: char) {
+        self.write_str(ch.encode_utf8(&mut [0; 4]));
+    }
+
+    /// Writes the given ASCII byte to this writer.
+    ///
+    /// # Panics
+    ///
+    /// When the available space is shorter than 1 or if `byte` is not ASCII.
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_ascii_char(&mut self, byte: u8) {
         assert!(byte.is_ascii());
@@ -270,7 +286,6 @@ impl<'data> BorrowedBuffer<'data> {
     /// digits in the decimal representation of `n`.
     ///
     /// This also panics when `pad_byte` is not ASCII.
-    #[allow(dead_code)]
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_int_pad(
         &mut self,
@@ -672,6 +687,13 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_char(&mut self, ch: char) -> Result<(), Error> {
+        self.if_will_fill_then_flush(ch.len_utf8())?;
+        self.bbuf.write_char(ch);
+        Ok(())
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_ascii_char(&mut self, byte: u8) -> Result<(), Error> {
         if self.bbuf.available_capacity() == 0 {
             self.flush()?;
@@ -688,21 +710,6 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
         Ok(())
     }
 
-    #[cfg_attr(feature = "perf-inline", inline(always))]
-    #[allow(dead_code)]
-    pub(crate) fn write_int_pad0(
-        &mut self,
-        n: u64,
-        pad_len: u8,
-    ) -> Result<(), Error> {
-        let pad_len = pad_len.min(MAX_INTEGER_LEN);
-        let digits = pad_len.max(digits(n));
-        self.if_will_fill_then_flush(digits)?;
-        self.bbuf.write_int_pad0(n, pad_len);
-        Ok(())
-    }
-
-    #[allow(dead_code)]
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_int_pad(
         &mut self,

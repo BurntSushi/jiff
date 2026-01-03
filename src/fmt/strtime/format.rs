@@ -4,32 +4,43 @@ use crate::{
         ErrorContext,
     },
     fmt::{
+        buffer::BorrowedWriter,
         strtime::{
             month_name_abbrev, month_name_full, weekday_name_abbrev,
             weekday_name_full, BrokenDownTime, Config, Custom, Extension,
             Flag,
         },
-        util::{FractionalFormatter, IntegerFormatter},
-        Write, WriteExt,
     },
     tz::Offset,
     util::utf8,
     Error,
 };
 
-pub(super) struct Formatter<'c, 'f, 't, 'w, W, L> {
-    pub(super) config: &'c Config<L>,
-    pub(super) fmt: &'f [u8],
-    pub(super) tm: &'t BrokenDownTime,
-    pub(super) wtr: &'w mut W,
+pub(super) struct Formatter<
+    'config,
+    'fmt,
+    'tm,
+    'writer,
+    'buffer,
+    'data,
+    'write,
+    L,
+> {
+    pub(super) config: &'config Config<L>,
+    pub(super) fmt: &'fmt [u8],
+    pub(super) tm: &'tm BrokenDownTime,
+    pub(super) wtr: &'writer mut BorrowedWriter<'buffer, 'data, 'write>,
 }
 
-impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
+impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
+    Formatter<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L>
+{
+    #[inline(never)]
     pub(super) fn format(&mut self) -> Result<(), Error> {
         while !self.fmt.is_empty() {
             if self.f() != b'%' {
                 if self.f().is_ascii() {
-                    self.wtr.write_char(char::from(self.f()))?;
+                    self.wtr.write_ascii_char(self.f())?;
                     self.bump_fmt();
                 } else {
                     let ch = self.utf8_decode_and_bump()?;
@@ -39,7 +50,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
             }
             if !self.bump_fmt() {
                 if self.config.lenient {
-                    self.wtr.write_str("%")?;
+                    self.wtr.write_ascii_char(b'%')?;
                     break;
                 }
                 return Err(E::UnexpectedEndAfterPercent.into());
@@ -52,7 +63,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
                 // `orig` is whatever failed to parse immediately after a `%`.
                 // Since it failed, we write out the `%` and then proceed to
                 // handle what failed to parse literally.
-                self.wtr.write_str("%")?;
+                self.wtr.write_ascii_char(b'%')?;
                 // Reset back to right after parsing the `%`.
                 self.fmt = orig;
             }
@@ -60,6 +71,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         Ok(())
     }
 
+    #[cfg_attr(feature = "perf-inline", inline(always))]
     fn format_one(&mut self) -> Result<(), Error> {
         let failc =
             |directive, colons| E::DirectiveFailure { directive, colons };
@@ -68,7 +80,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         // Parse extensions like padding/case options and padding width.
         let ext = self.parse_extension()?;
         match self.f() {
-            b'%' => self.wtr.write_str("%").context(fail(b'%')),
+            b'%' => self.wtr.write_ascii_char(b'%').context(fail(b'%')),
             b'A' => self.fmt_weekday_full(&ext).context(fail(b'A')),
             b'a' => self.fmt_weekday_abbrev(&ext).context(fail(b'a')),
             b'B' => self.fmt_month_full(&ext).context(fail(b'B')),
@@ -503,7 +515,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
             return Err(Error::from(FE::ZeroPrecisionFloat));
         }
         if subsec == 0 && ext.width.is_none() {
-            self.wtr.write_str("0")?;
+            self.wtr.write_ascii_char(b'0')?;
             return Ok(());
         }
         ext.write_fractional_seconds(subsec, self.wtr)?;
@@ -532,8 +544,7 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
         // Since `%N` is actually an alias for `%9f`, when the precision
         // is missing, we default to 9.
         if ext.width.is_none() {
-            let formatter = FractionalFormatter::new().precision(Some(9));
-            return self.wtr.write_fraction(&formatter, subsec);
+            return self.wtr.write_fraction(Some(9), subsec);
         }
         ext.write_fractional_seconds(subsec, self.wtr)?;
         Ok(())
@@ -843,31 +854,31 @@ impl<'c, 'f, 't, 'w, W: Write, L: Custom> Formatter<'c, 'f, 't, 'w, W, L> {
 ///
 /// When `second` is true, the second component is always printed. When false,
 /// the second component is only printed when it is non-zero.
-fn write_offset<W: Write>(
+#[cfg_attr(feature = "perf-inline", inline(always))]
+fn write_offset(
     offset: Offset,
     colon: bool,
     minute: bool,
     second: bool,
-    wtr: &mut W,
+    wtr: &mut BorrowedWriter<'_, '_, '_>,
 ) -> Result<(), Error> {
-    static FMT_TWO: IntegerFormatter = IntegerFormatter::new().padding(2);
+    let total_seconds = offset.seconds().unsigned_abs();
+    let hours = (total_seconds / (60 * 60)) as u8;
+    let minutes = ((total_seconds / 60) % 60) as u8;
+    let seconds = (total_seconds % 60) as u8;
 
-    let hours = offset.part_hours_ranged().abs().get();
-    let minutes = offset.part_minutes_ranged().abs().get();
-    let seconds = offset.part_seconds_ranged().abs().get();
-
-    wtr.write_str(if offset.is_negative() { "-" } else { "+" })?;
-    wtr.write_int(&FMT_TWO, hours)?;
+    wtr.write_ascii_char(if offset.is_negative() { b'-' } else { b'+' })?;
+    wtr.write_int_pad2(hours.into())?;
     if minute || minutes != 0 || seconds != 0 {
         if colon {
-            wtr.write_str(":")?;
+            wtr.write_ascii_char(b':')?;
         }
-        wtr.write_int(&FMT_TWO, minutes)?;
+        wtr.write_int_pad2(minutes.into())?;
         if second || seconds != 0 {
             if colon {
-                wtr.write_str(":")?;
+                wtr.write_ascii_char(b':')?;
             }
-            wtr.write_int(&FMT_TWO, seconds)?;
+            wtr.write_int_pad2(seconds.into())?;
         }
     }
     Ok(())
@@ -877,11 +888,11 @@ impl Extension {
     /// Writes the given string using the default case rule provided, unless
     /// an option in this extension config overrides the default case.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn write_str<W: Write>(
+    fn write_str(
         &self,
         default: Case,
         string: &str,
-        wtr: &mut W,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
         if self.flag.is_none() && matches!(default, Case::AsIs) {
             return wtr.write_str(string);
@@ -891,11 +902,11 @@ impl Extension {
 
     #[cold]
     #[inline(never)]
-    fn write_str_cold<W: Write>(
+    fn write_str_cold(
         &self,
         default: Case,
         string: &str,
-        wtr: &mut W,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
         let case = match self.flag {
             Some(Flag::Uppercase) => Case::Upper,
@@ -906,18 +917,13 @@ impl Extension {
             Case::AsIs => {
                 wtr.write_str(string)?;
             }
-            Case::Upper => {
+            Case::Upper | Case::Lower => {
                 for ch in string.chars() {
-                    for ch in ch.to_uppercase() {
-                        wtr.write_char(ch)?;
-                    }
-                }
-            }
-            Case::Lower => {
-                for ch in string.chars() {
-                    for ch in ch.to_lowercase() {
-                        wtr.write_char(ch)?;
-                    }
+                    wtr.write_char(if matches!(case, Case::Upper) {
+                        ch.to_ascii_uppercase()
+                    } else {
+                        ch.to_ascii_lowercase()
+                    })?;
                 }
             }
         }
@@ -927,12 +933,12 @@ impl Extension {
     /// Writes the given integer using the given padding width and byte, unless
     /// an option in this extension config overrides a default setting.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn write_int<W: Write>(
+    fn write_int(
         &self,
         pad_byte: u8,
         pad_width: Option<u8>,
         number: impl Into<i64>,
-        wtr: &mut W,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
         let number = number.into();
         let pad_byte = match self.flag {
@@ -941,31 +947,26 @@ impl Extension {
             _ => pad_byte,
         };
         let pad_width = if matches!(self.flag, Some(Flag::NoPad)) {
-            None
+            0
         } else {
-            self.width.or(pad_width)
+            self.width.or(pad_width).unwrap_or(0)
         };
-
-        let mut formatter = IntegerFormatter::new().padding_byte(pad_byte);
-        if let Some(width) = pad_width {
-            formatter = formatter.padding(width);
+        if number < 0 {
+            wtr.write_ascii_char(b'-')?;
         }
-        wtr.write_int(&formatter, number)
+        wtr.write_int_pad(number.unsigned_abs(), pad_byte, pad_width)
     }
 
     /// Writes the given number of nanoseconds as a fractional component of
     /// a second. This does not include the leading `.`.
     ///
     /// The `width` setting on `Extension` is treated as a precision setting.
-    fn write_fractional_seconds<W: Write>(
+    fn write_fractional_seconds(
         &self,
-        number: impl Into<u32>,
-        wtr: &mut W,
+        number: u32,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
-        let number = number.into();
-
-        let formatter = FractionalFormatter::new().precision(self.width);
-        wtr.write_fraction(&formatter, number)
+        wtr.write_fraction(self.width, number)
     }
 }
 
