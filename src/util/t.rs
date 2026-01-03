@@ -278,7 +278,7 @@ pub(crate) type SpanMinutes =
 ///
 /// Note that neither the existence of this constant nor defining our spans
 /// based on it impacts the correctness of doing arithmetic on zoned instants.
-/// Artihemetic on zoned instants still uses "civil" spans, but the length
+/// Arithmetic on zoned instants still uses "civil" spans, but the length
 /// of time for some units (like a day) might vary. The arithmetic for zoned
 /// instants accounts for this explicitly. But it still must obey the limits
 /// set here.
