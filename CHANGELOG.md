@@ -20,6 +20,9 @@ printer.
 * [#470](https://github.com/BurntSushi/jiff/pull/470):
 Improve runtime performance and binary size of the Temporal ISO 8601 datetime
 printer.
+* [#474](https://github.com/BurntSushi/jiff/pull/474):
+Improve runtime performance and binary size of Jiff's `strftime`
+implementation.
 
 
 0.2.17 (2025-12-24)
