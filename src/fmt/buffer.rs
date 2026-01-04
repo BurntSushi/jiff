@@ -391,7 +391,10 @@ impl<'data> BorrowedBuffer<'data> {
             .get_mut(..2)
             .expect("padded 2 digit integer exceeds available buffer space");
         let radix_offset = ((n % 100) * 2) as usize;
-        // SAFETY: Valid because of the assertion above.
+        // SAFETY: Valid because of the assertion above. And also,
+        // `RADIX_100_ZERO` always has exactly 200 elements and
+        // `radix_offset` is never greater than 198. (In that case,
+        // we do access element at index 199 below as well.)
         unsafe {
             dst.get_unchecked_mut(0)
                 .write(*RADIX_100_ZERO.get_unchecked(radix_offset));
@@ -424,7 +427,10 @@ impl<'data> BorrowedBuffer<'data> {
             .get_mut(..2)
             .expect("padded 2 digit integer exceeds available buffer space");
         let radix_offset = ((n % 100) * 2) as usize;
-        // SAFETY: Valid because of the assertion above.
+        // SAFETY: Valid because of the assertion above. And also,
+        // `RADIX_100_ZERO` always has exactly 200 elements and
+        // `radix_offset` is never greater than 198. (In that case,
+        // we do access element at index 199 below as well.)
         unsafe {
             dst.get_unchecked_mut(0)
                 .write(*RADIX_100_SPACE.get_unchecked(radix_offset));
@@ -458,7 +464,10 @@ impl<'data> BorrowedBuffer<'data> {
             .expect("padded 4 digit integer exceeds available buffer space");
 
         let radix_offset = ((n % 100) * 2) as usize;
-        // SAFETY: Valid because of the assertion above.
+        // SAFETY: Valid because of the assertion above. And also,
+        // `RADIX_100_ZERO` always has exactly 200 elements and
+        // `radix_offset` is never greater than 198. (In that case,
+        // we do access element at index 199 below as well.)
         unsafe {
             dst.get_unchecked_mut(2)
                 .write(*RADIX_100_ZERO.get_unchecked(radix_offset));
@@ -468,7 +477,10 @@ impl<'data> BorrowedBuffer<'data> {
 
         n /= 100;
         let radix_offset = ((n % 100) * 2) as usize;
-        // SAFETY: Valid because of the assertion above.
+        // SAFETY: Valid because of the assertion above. And also,
+        // `RADIX_100_ZERO` always has exactly 200 elements and
+        // `radix_offset` is never greater than 198. (In that case,
+        // we do access element at index 199 below as well.)
         unsafe {
             dst.get_unchecked_mut(0)
                 .write(*RADIX_100_ZERO.get_unchecked(radix_offset));
