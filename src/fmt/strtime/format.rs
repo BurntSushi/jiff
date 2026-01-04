@@ -1044,6 +1044,7 @@ impl Extension {
         let number = number.unsigned_abs();
         match (pad_byte, pad_width) {
             (b'0', 2) => wtr.write_int_pad2(number),
+            (b' ', 2) => wtr.write_int_pad2_space(number),
             (b'0', 4) => wtr.write_int_pad4(number),
             _ => wtr.write_int_pad(number, pad_byte, pad_width),
         }
