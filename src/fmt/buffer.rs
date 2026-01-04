@@ -13,6 +13,30 @@ const MAX_PRECISION: usize = 9;
 /// This relies on the fact that the maximum padding is clamped to `20`.
 const BROAD_MINIMUM_BUFFER_LEN: usize = 20;
 
+/// All integers in the range `0..=99`, zero padded.
+const RADIX_100_ZERO: [u8; 200] = *b"00010203040506070809\
+       10111213141516171819\
+       20212223242526272829\
+       30313233343536373839\
+       40414243444546474849\
+       50515253545556575859\
+       60616263646566676869\
+       70717273747576777879\
+       80818283848586878889\
+       90919293949596979899";
+
+/// All integers in the range `0..=99`, space padded.
+const RADIX_100_SPACE: [u8; 200] = *b" 0 1 2 3 4 5 6 7 8 9\
+       10111213141516171819\
+       20212223242526272829\
+       30313233343536373839\
+       40414243444546474849\
+       50515253545556575859\
+       60616263646566676869\
+       70717273747576777879\
+       80818283848586878889\
+       90919293949596979899";
+
 /// An uninitialized slice of bytes of fixed size.
 ///
 /// This is typically used with `BorrowedBuffer`.
@@ -350,7 +374,7 @@ impl<'data> BorrowedBuffer<'data> {
     ///
     /// When the available space is shorter than 2 or if `n > 99`.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn write_int_pad2(&mut self, mut n: u64) {
+    pub(crate) fn write_int_pad2(&mut self, n: u64) {
         // This is required for correctness. When `n > 99`, then the
         // last `n as u8` below could result in writing an invalid UTF-8
         // byte. We don't mind incorrect results, but writing invalid
@@ -365,15 +389,46 @@ impl<'data> BorrowedBuffer<'data> {
             .available()
             .get_mut(..2)
             .expect("padded 2 digit integer exceeds available buffer space");
+        let radix_offset = ((n % 100) * 2) as usize;
         // SAFETY: Valid because of the assertion above.
         unsafe {
-            *dst.get_unchecked_mut(1) =
-                MaybeUninit::new(b'0' + ((n % 10) as u8));
+            dst.get_unchecked_mut(0)
+                .write(*RADIX_100_ZERO.get_unchecked(radix_offset));
+            dst.get_unchecked_mut(1)
+                .write(*RADIX_100_ZERO.get_unchecked(radix_offset + 1));
         }
-        n /= 10;
+        self.filled += 2;
+    }
+
+    /// Writes the given integer as a 2-digit space padded integer to this
+    /// buffer.
+    ///
+    /// # Panics
+    ///
+    /// When the available space is shorter than 2 or if `n > 99`.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_int_pad2_space(&mut self, n: u64) {
+        // This is required for correctness. When `n > 99`, then the
+        // last `n as u8` below could result in writing an invalid UTF-8
+        // byte. We don't mind incorrect results, but writing invalid
+        // UTF-8 can lead to undefined behavior, and we want this API
+        // to be sound.
+        //
+        // We omit the final `% 10` because it makes micro-benchmark results
+        // worse. This panicking check has a more modest impact.
+        assert!(n <= 99);
+
+        let dst = self
+            .available()
+            .get_mut(..2)
+            .expect("padded 2 digit integer exceeds available buffer space");
+        let radix_offset = ((n % 100) * 2) as usize;
         // SAFETY: Valid because of the assertion above.
         unsafe {
-            *dst.get_unchecked_mut(0) = MaybeUninit::new(b'0' + (n as u8));
+            dst.get_unchecked_mut(0)
+                .write(*RADIX_100_SPACE.get_unchecked(radix_offset));
+            dst.get_unchecked_mut(1)
+                .write(*RADIX_100_SPACE.get_unchecked(radix_offset + 1));
         }
         self.filled += 2;
     }
@@ -400,28 +455,26 @@ impl<'data> BorrowedBuffer<'data> {
             .available()
             .get_mut(..4)
             .expect("padded 4 digit integer exceeds available buffer space");
+
+        let radix_offset = ((n % 100) * 2) as usize;
         // SAFETY: Valid because of the assertion above.
         unsafe {
-            *dst.get_unchecked_mut(3) =
-                MaybeUninit::new(b'0' + ((n % 10) as u8));
+            dst.get_unchecked_mut(2)
+                .write(*RADIX_100_ZERO.get_unchecked(radix_offset));
+            dst.get_unchecked_mut(3)
+                .write(*RADIX_100_ZERO.get_unchecked(radix_offset + 1));
         }
-        n /= 10;
+
+        n /= 100;
+        let radix_offset = ((n % 100) * 2) as usize;
         // SAFETY: Valid because of the assertion above.
         unsafe {
-            *dst.get_unchecked_mut(2) =
-                MaybeUninit::new(b'0' + ((n % 10) as u8));
+            dst.get_unchecked_mut(0)
+                .write(*RADIX_100_ZERO.get_unchecked(radix_offset));
+            dst.get_unchecked_mut(1)
+                .write(*RADIX_100_ZERO.get_unchecked(radix_offset + 1));
         }
-        n /= 10;
-        // SAFETY: Valid because of the assertion above.
-        unsafe {
-            *dst.get_unchecked_mut(1) =
-                MaybeUninit::new(b'0' + ((n % 10) as u8));
-        }
-        n /= 10;
-        // SAFETY: Valid because of the assertion above.
-        unsafe {
-            *dst.get_unchecked_mut(0) = MaybeUninit::new(b'0' + (n as u8));
-        }
+
         self.filled += 4;
     }
 
@@ -728,6 +781,16 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
     pub(crate) fn write_int_pad2(&mut self, n: u64) -> Result<(), Error> {
         self.if_will_fill_then_flush(2usize)?;
         self.bbuf.write_int_pad2(n);
+        Ok(())
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_int_pad2_space(
+        &mut self,
+        n: u64,
+    ) -> Result<(), Error> {
+        self.if_will_fill_then_flush(2usize)?;
+        self.bbuf.write_int_pad2_space(n);
         Ok(())
     }
 
