@@ -6578,8 +6578,7 @@ impl Nudge {
         let mut rounded_time_nanos =
             mode.round_by_unit_in_nanoseconds(time_nanos, smallest, increment);
         let (relative0, relative1) = clamp_relative_span(
-            // FIXME: Find a way to drop this clone.
-            &Relative::Zoned(relative_start.clone()),
+            &Relative::Zoned(relative_start.borrowed()),
             balanced.without_lower(Unit::Day),
             Unit::Day,
             sign.rinto(),
