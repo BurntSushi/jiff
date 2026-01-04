@@ -243,7 +243,8 @@ impl<'data> BorrowedBuffer<'data> {
     /// When the available space is insufficient to encode the number of
     /// digits in the decimal representation of `n`.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn write_int(&mut self, mut n: u64) {
+    pub(crate) fn write_int(&mut self, n: impl Into<u64>) {
+        let mut n = n.into();
         let digits = digits(n);
         let mut remaining_digits = usize::from(digits);
         let available = self
@@ -278,7 +279,8 @@ impl<'data> BorrowedBuffer<'data> {
     ///
     /// This also panics when `pad_byte` is not ASCII.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn write_int_pad0(&mut self, mut n: u64, pad_len: u8) {
+    pub(crate) fn write_int_pad0(&mut self, n: impl Into<u64>, pad_len: u8) {
+        let mut n = n.into();
         let pad_len = pad_len.min(MAX_INTEGER_LEN);
         let digits = pad_len.max(digits(n));
         let mut remaining_digits = usize::from(digits);
@@ -314,12 +316,13 @@ impl<'data> BorrowedBuffer<'data> {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_int_pad(
         &mut self,
-        mut n: u64,
+        n: impl Into<u64>,
         pad_byte: u8,
         pad_len: u8,
     ) {
         assert!(pad_byte.is_ascii(), "padding byte must be ASCII");
 
+        let mut n = n.into();
         let pad_len = pad_len.min(MAX_INTEGER_LEN);
         let digits = pad_len.max(digits(n));
         let mut remaining_digits = usize::from(digits);
@@ -358,7 +361,8 @@ impl<'data> BorrowedBuffer<'data> {
     ///
     /// When the available space is shorter than 1 or if `n > 9`.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn write_int1(&mut self, n: u64) {
+    pub(crate) fn write_int1(&mut self, n: impl Into<u64>) {
+        let n = n.into();
         // This is required for correctness. When `n > 9`, then the
         // `n as u8` below could result in writing an invalid UTF-8
         // byte. We don't mind incorrect results, but writing invalid
@@ -375,7 +379,8 @@ impl<'data> BorrowedBuffer<'data> {
     ///
     /// When the available space is shorter than 2 or if `n > 99`.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn write_int_pad2(&mut self, n: u64) {
+    pub(crate) fn write_int_pad2(&mut self, n: impl Into<u64>) {
+        let n = n.into();
         // This is required for correctness. When `n > 99`, then the
         // last `n as u8` below could result in writing an invalid UTF-8
         // byte. We don't mind incorrect results, but writing invalid
@@ -411,7 +416,8 @@ impl<'data> BorrowedBuffer<'data> {
     ///
     /// When the available space is shorter than 2 or if `n > 99`.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn write_int_pad2_space(&mut self, n: u64) {
+    pub(crate) fn write_int_pad2_space(&mut self, n: impl Into<u64>) {
+        let n = n.into();
         // This is required for correctness. When `n > 99`, then the
         // last `n as u8` below could result in writing an invalid UTF-8
         // byte. We don't mind incorrect results, but writing invalid
@@ -447,7 +453,8 @@ impl<'data> BorrowedBuffer<'data> {
     ///
     /// When the available space is shorter than 4 or if `n > 9999`.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn write_int_pad4(&mut self, mut n: u64) {
+    pub(crate) fn write_int_pad4(&mut self, n: impl Into<u64>) {
+        let mut n = n.into();
         // This is required for correctness. When `n > 9999`, then the
         // last `n as u8` below could result in writing an invalid UTF-8
         // byte. We don't mind incorrect results, but writing invalid
@@ -768,20 +775,13 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    #[allow(dead_code)]
-    pub(crate) fn write_int(&mut self, n: u64) -> Result<(), Error> {
-        self.if_will_fill_then_flush(digits(n))?;
-        self.bbuf.write_int(n);
-        Ok(())
-    }
-
-    #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_int_pad(
         &mut self,
-        n: u64,
+        n: impl Into<u64>,
         pad_byte: u8,
         pad_len: u8,
     ) -> Result<(), Error> {
+        let n = n.into();
         let pad_len = pad_len.min(MAX_INTEGER_LEN);
         let digits = pad_len.max(digits(n));
         self.if_will_fill_then_flush(digits)?;
@@ -790,7 +790,10 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn write_int_pad2(&mut self, n: u64) -> Result<(), Error> {
+    pub(crate) fn write_int_pad2(
+        &mut self,
+        n: impl Into<u64>,
+    ) -> Result<(), Error> {
         self.if_will_fill_then_flush(2usize)?;
         self.bbuf.write_int_pad2(n);
         Ok(())
@@ -799,7 +802,7 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_int_pad2_space(
         &mut self,
-        n: u64,
+        n: impl Into<u64>,
     ) -> Result<(), Error> {
         self.if_will_fill_then_flush(2usize)?;
         self.bbuf.write_int_pad2_space(n);
@@ -807,7 +810,10 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn write_int_pad4(&mut self, n: u64) -> Result<(), Error> {
+    pub(crate) fn write_int_pad4(
+        &mut self,
+        n: impl Into<u64>,
+    ) -> Result<(), Error> {
         self.if_will_fill_then_flush(4usize)?;
         self.bbuf.write_int_pad4(n);
         Ok(())
@@ -884,28 +890,28 @@ mod tests {
         let mut buf = ArrayBuffer::<100>::default();
         let mut bbuf = buf.as_borrowed();
 
-        bbuf.write_int(0);
+        bbuf.write_int(0u64);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "0");
         }
 
         bbuf.clear();
-        bbuf.write_int(1);
+        bbuf.write_int(1u64);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "1");
         }
 
         bbuf.clear();
-        bbuf.write_int(10);
+        bbuf.write_int(10u64);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "10");
         }
 
         bbuf.clear();
-        bbuf.write_int(100);
+        bbuf.write_int(100u64);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "100");
@@ -924,28 +930,28 @@ mod tests {
         let mut buf = ArrayBuffer::<100>::default();
         let mut bbuf = buf.as_borrowed();
 
-        bbuf.write_int_pad2(0);
+        bbuf.write_int_pad2(0u64);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "00");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad2(1);
+        bbuf.write_int_pad2(1u64);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "01");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad2(10);
+        bbuf.write_int_pad2(10u64);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "10");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad2(99);
+        bbuf.write_int_pad2(99u64);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "99");
@@ -959,7 +965,7 @@ mod tests {
         let mut bbuf = buf.as_borrowed();
         // technically unspecified behavior,
         // but should not result in undefined behavior.
-        bbuf.write_int_pad4(u64::MAX);
+        bbuf.write_int_pad2(u64::MAX);
     }
 
     #[test]
@@ -967,42 +973,42 @@ mod tests {
         let mut buf = ArrayBuffer::<100>::default();
         let mut bbuf = buf.as_borrowed();
 
-        bbuf.write_int_pad4(0);
+        bbuf.write_int_pad4(0u64);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "0000");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad4(1);
+        bbuf.write_int_pad4(1u64);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "0001");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad4(10);
+        bbuf.write_int_pad4(10u64);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "0010");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad4(99);
+        bbuf.write_int_pad4(99u64);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "0099");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad4(999);
+        bbuf.write_int_pad4(999u64);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "0999");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad4(9999);
+        bbuf.write_int_pad4(9999u64);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "9999");
@@ -1024,28 +1030,28 @@ mod tests {
         let mut buf = ArrayBuffer::<100>::default();
         let mut bbuf = buf.as_borrowed();
 
-        bbuf.write_int_pad(0, b'0', 0);
+        bbuf.write_int_pad(0u64, b'0', 0);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "0");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad(0, b'0', 1);
+        bbuf.write_int_pad(0u64, b'0', 1);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "0");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad(0, b'0', 2);
+        bbuf.write_int_pad(0u64, b'0', 2);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "00");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad(0, b'0', 20);
+        bbuf.write_int_pad(0u64, b'0', 20);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "00000000000000000000");
@@ -1053,14 +1059,14 @@ mod tests {
 
         bbuf.clear();
         // clamped to 20
-        bbuf.write_int_pad(0, b'0', 21);
+        bbuf.write_int_pad(0u64, b'0', 21);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "00000000000000000000");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad(0, b' ', 2);
+        bbuf.write_int_pad(0u64, b' ', 2);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, " 0");
@@ -1072,28 +1078,28 @@ mod tests {
         let mut buf = ArrayBuffer::<100>::default();
         let mut bbuf = buf.as_borrowed();
 
-        bbuf.write_int_pad(1, b'0', 0);
+        bbuf.write_int_pad(1u64, b'0', 0);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "1");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad(1, b'0', 1);
+        bbuf.write_int_pad(1u64, b'0', 1);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "1");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad(1, b'0', 2);
+        bbuf.write_int_pad(1u64, b'0', 2);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "01");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad(1, b'0', 20);
+        bbuf.write_int_pad(1u64, b'0', 20);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "00000000000000000001");
@@ -1101,14 +1107,14 @@ mod tests {
 
         bbuf.clear();
         // clamped to 20
-        bbuf.write_int_pad(1, b'0', 21);
+        bbuf.write_int_pad(1u64, b'0', 21);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, "00000000000000000001");
         }
 
         bbuf.clear();
-        bbuf.write_int_pad(1, b' ', 2);
+        bbuf.write_int_pad(1u64, b' ', 2);
         {
             let buf = bbuf.filled();
             assert_eq!(buf, " 1");
@@ -1168,7 +1174,7 @@ mod tests {
     fn write_int_pad_non_ascii_panic() {
         let mut buf = ArrayBuffer::<100>::default();
         let mut bbuf = buf.as_borrowed();
-        bbuf.write_int_pad(0, 0xFF, 0);
+        bbuf.write_int_pad(0u64, 0xFF, 0);
     }
 
     #[test]
@@ -1176,7 +1182,7 @@ mod tests {
     fn write_int_pad_insufficient_capacity_panic() {
         let mut buf = ArrayBuffer::<19>::default();
         let mut bbuf = buf.as_borrowed();
-        bbuf.write_int_pad(0, b'0', 20);
+        bbuf.write_int_pad(0u64, b'0', 20);
     }
 
     #[test]

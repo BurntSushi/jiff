@@ -1338,17 +1338,17 @@ impl DateTimePrinter {
 
         buf.write_str(weekday_abbrev(dt.weekday()));
         buf.write_str(", ");
-        buf.write_int(dt.day().unsigned_abs().into());
+        buf.write_int(dt.day().unsigned_abs());
         buf.write_ascii_char(b' ');
         buf.write_str(month_name(dt.month()));
         buf.write_ascii_char(b' ');
-        buf.write_int_pad4(dt.year().unsigned_abs().into());
+        buf.write_int_pad4(dt.year().unsigned_abs());
         buf.write_ascii_char(b' ');
-        buf.write_int_pad2(dt.hour().unsigned_abs().into());
+        buf.write_int_pad2(dt.hour().unsigned_abs());
         buf.write_ascii_char(b':');
-        buf.write_int_pad2(dt.minute().unsigned_abs().into());
+        buf.write_int_pad2(dt.minute().unsigned_abs());
         buf.write_ascii_char(b':');
-        buf.write_int_pad2(dt.second().unsigned_abs().into());
+        buf.write_int_pad2(dt.second().unsigned_abs());
         buf.write_ascii_char(b' ');
 
         let Some(offset) = offset else {
@@ -1357,8 +1357,8 @@ impl DateTimePrinter {
         };
         buf.write_ascii_char(if offset.is_negative() { b'-' } else { b'+' });
         let (offset_hours, offset_minutes) = offset.round_to_nearest_minute();
-        buf.write_int_pad2(offset_hours.into());
-        buf.write_int_pad2(offset_minutes.into());
+        buf.write_int_pad2(offset_hours);
+        buf.write_int_pad2(offset_minutes);
 
         Ok(())
     }
@@ -1378,17 +1378,17 @@ impl DateTimePrinter {
 
         buf.write_str(weekday_abbrev(dt.weekday()));
         buf.write_str(", ");
-        buf.write_int_pad2(dt.day().unsigned_abs().into());
+        buf.write_int_pad2(dt.day().unsigned_abs());
         buf.write_str(" ");
         buf.write_str(month_name(dt.month()));
         buf.write_str(" ");
-        buf.write_int_pad4(dt.year().unsigned_abs().into());
+        buf.write_int_pad4(dt.year().unsigned_abs());
         buf.write_str(" ");
-        buf.write_int_pad2(dt.hour().unsigned_abs().into());
+        buf.write_int_pad2(dt.hour().unsigned_abs());
         buf.write_str(":");
-        buf.write_int_pad2(dt.minute().unsigned_abs().into());
+        buf.write_int_pad2(dt.minute().unsigned_abs());
         buf.write_str(":");
-        buf.write_int_pad2(dt.second().unsigned_abs().into());
+        buf.write_int_pad2(dt.second().unsigned_abs());
         buf.write_str(" ");
         buf.write_str("GMT");
         Ok(())
