@@ -229,11 +229,10 @@ impl<'data> BorrowedBuffer<'data> {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_ascii_char(&mut self, byte: u8) {
         assert!(byte.is_ascii());
-        *self
-            .available()
+        self.available()
             .get_mut(0)
-            .expect("insufficient buffer space to write one byte") =
-            MaybeUninit::new(byte);
+            .expect("insufficient buffer space to write one byte")
+            .write(byte);
         self.filled += 1;
     }
 
@@ -256,8 +255,9 @@ impl<'data> BorrowedBuffer<'data> {
             // SAFETY: The assert above guarantees that `remaining_digits` is
             // always in bounds.
             unsafe {
-                *available.get_unchecked_mut(remaining_digits) =
-                    MaybeUninit::new(b'0' + ((n % 10) as u8));
+                available
+                    .get_unchecked_mut(remaining_digits)
+                    .write(b'0' + ((n % 10) as u8));
             }
             n /= 10;
         }
@@ -291,8 +291,9 @@ impl<'data> BorrowedBuffer<'data> {
             // SAFETY: The assert above guarantees that `remaining_digits` is
             // always in bounds.
             unsafe {
-                *available.get_unchecked_mut(remaining_digits) =
-                    MaybeUninit::new(b'0' + ((n % 10) as u8));
+                available
+                    .get_unchecked_mut(remaining_digits)
+                    .write(b'0' + ((n % 10) as u8));
             }
             n /= 10;
         }
@@ -331,8 +332,9 @@ impl<'data> BorrowedBuffer<'data> {
             // SAFETY: The assert above guarantees that `remaining_digits` is
             // always in bounds.
             unsafe {
-                *available.get_unchecked_mut(remaining_digits) =
-                    MaybeUninit::new(b'0' + ((n % 10) as u8));
+                available
+                    .get_unchecked_mut(remaining_digits)
+                    .write(b'0' + ((n % 10) as u8));
             }
             n /= 10;
             if n == 0 {
@@ -344,8 +346,7 @@ impl<'data> BorrowedBuffer<'data> {
             // SAFETY: The assert above guarantees that `remaining_digits` is
             // always in bounds.
             unsafe {
-                *available.get_unchecked_mut(remaining_digits) =
-                    MaybeUninit::new(pad_byte);
+                available.get_unchecked_mut(remaining_digits).write(pad_byte);
             }
         }
         self.filled += u16::from(digits);
@@ -499,8 +500,7 @@ impl<'data> BorrowedBuffer<'data> {
         let mut buf = ArrayBuffer::<MAX_PRECISION>::default();
         for i in (0..MAX_PRECISION).rev() {
             unsafe {
-                *buf.data.get_unchecked_mut(i) =
-                    MaybeUninit::new(b'0' + ((n % 10) as u8));
+                buf.data.get_unchecked_mut(i).write(b'0' + ((n % 10) as u8));
             }
             n /= 10;
         }
