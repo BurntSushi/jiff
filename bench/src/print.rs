@@ -962,4 +962,24 @@ fn print_strftime(c: &mut Criterion) {
             })
         });
     }
+
+    {
+        // `time-format` is mostly just a dumb wrapper around the libc
+        // time routines. Its crate API thus suffers from the deficient
+        // design of libc-based time functions. e.g., The only way one
+        // can format a timestamp in a specific time zone or offset is
+        // by setting the current local time zone and using `localtime`.
+        // It's pretty nuts. So we don't bother with that and just use
+        // UTC. Even using UTC is already stupidly slow here. Using
+        // localtime is even slower.
+        const EXPECTED: &str = "Mon Jul 15 08:24:59 PM +0000 2024";
+
+        let ts = zdt.timestamp().as_second();
+        benchmark(c, format!("{NAME}/oneshot/to_string/time-format"), |b| {
+            b.iter(|| {
+                let got = time_format::strftime_utc(bb(FMT), ts).unwrap();
+                assert_eq!(got, EXPECTED);
+            })
+        });
+    }
 }
