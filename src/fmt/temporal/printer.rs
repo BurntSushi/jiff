@@ -359,11 +359,11 @@ impl DateTimePrinter {
         if year < 0 {
             bbuf.write_str("-00");
         }
-        bbuf.write_int_pad4(year.unsigned_abs().into());
+        bbuf.write_int_pad4(year.unsigned_abs());
         bbuf.write_ascii_char(b'-');
-        bbuf.write_int_pad2(date.month().unsigned_abs().into());
+        bbuf.write_int_pad2(date.month().unsigned_abs());
         bbuf.write_ascii_char(b'-');
-        bbuf.write_int_pad2(date.day().unsigned_abs().into());
+        bbuf.write_int_pad2(date.day().unsigned_abs());
     }
 
     fn print_date_wtr(
@@ -375,11 +375,11 @@ impl DateTimePrinter {
         if year < 0 {
             wtr.write_str("-00")?;
         }
-        wtr.write_int_pad4(year.unsigned_abs().into())?;
+        wtr.write_int_pad4(year.unsigned_abs())?;
         wtr.write_ascii_char(b'-')?;
-        wtr.write_int_pad2(date.month().unsigned_abs().into())?;
+        wtr.write_int_pad2(date.month().unsigned_abs())?;
         wtr.write_ascii_char(b'-')?;
-        wtr.write_int_pad2(date.day().unsigned_abs().into())?;
+        wtr.write_int_pad2(date.day().unsigned_abs())?;
         Ok(())
     }
 
@@ -401,11 +401,11 @@ impl DateTimePrinter {
     }
 
     fn print_time_buf(&self, time: &Time, bbuf: &mut BorrowedBuffer<'_>) {
-        bbuf.write_int_pad2(time.hour().unsigned_abs().into());
+        bbuf.write_int_pad2(time.hour().unsigned_abs());
         bbuf.write_ascii_char(b':');
-        bbuf.write_int_pad2(time.minute().unsigned_abs().into());
+        bbuf.write_int_pad2(time.minute().unsigned_abs());
         bbuf.write_ascii_char(b':');
-        bbuf.write_int_pad2(time.second().unsigned_abs().into());
+        bbuf.write_int_pad2(time.second().unsigned_abs());
         let fractional_nanosecond = time.subsec_nanosecond();
         if self.precision.map_or(fractional_nanosecond != 0, |p| p > 0) {
             bbuf.write_ascii_char(b'.');
@@ -421,11 +421,11 @@ impl DateTimePrinter {
         time: &Time,
         wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
-        wtr.write_int_pad2(time.hour().unsigned_abs().into())?;
+        wtr.write_int_pad2(time.hour().unsigned_abs())?;
         wtr.write_ascii_char(b':')?;
-        wtr.write_int_pad2(time.minute().unsigned_abs().into())?;
+        wtr.write_int_pad2(time.minute().unsigned_abs())?;
         wtr.write_ascii_char(b':')?;
-        wtr.write_int_pad2(time.second().unsigned_abs().into())?;
+        wtr.write_int_pad2(time.second().unsigned_abs())?;
         let fractional_nanosecond = time.subsec_nanosecond();
         if self.precision.map_or(fractional_nanosecond != 0, |p| p > 0) {
             wtr.write_ascii_char(b'.')?;
@@ -583,17 +583,13 @@ impl DateTimePrinter {
         if year < 0 {
             bbuf.write_str("-00");
         }
-        bbuf.write_int_pad4(year.unsigned_abs().into());
+        bbuf.write_int_pad4(year.unsigned_abs());
         bbuf.write_ascii_char(b'-');
         bbuf.write_ascii_char(if self.lowercase { b'w' } else { b'W' });
-        bbuf.write_int_pad2(iso_week_date.week().unsigned_abs().into());
+        bbuf.write_int_pad2(iso_week_date.week().unsigned_abs());
         bbuf.write_ascii_char(b'-');
         bbuf.write_int1(
-            iso_week_date
-                .weekday()
-                .to_monday_one_offset()
-                .unsigned_abs()
-                .into(),
+            iso_week_date.weekday().to_monday_one_offset().unsigned_abs(),
         );
     }
 
@@ -625,9 +621,9 @@ impl DateTimePrinter {
     ) {
         bbuf.write_ascii_char(if offset.is_negative() { b'-' } else { b'+' });
         let (offset_hours, offset_minutes) = offset.round_to_nearest_minute();
-        bbuf.write_int_pad2(offset_hours.into());
+        bbuf.write_int_pad2(offset_hours);
         bbuf.write_ascii_char(b':');
-        bbuf.write_int_pad2(offset_minutes.into());
+        bbuf.write_int_pad2(offset_minutes);
     }
 
     /// Formats the given offset into the writer given.
@@ -641,9 +637,9 @@ impl DateTimePrinter {
     ) -> Result<(), Error> {
         wtr.write_ascii_char(if offset.is_negative() { b'-' } else { b'+' })?;
         let (offset_hours, offset_minutes) = offset.round_to_nearest_minute();
-        wtr.write_int_pad2(offset_hours.into())?;
+        wtr.write_int_pad2(offset_hours)?;
         wtr.write_ascii_char(b':')?;
-        wtr.write_int_pad2(offset_minutes.into())?;
+        wtr.write_int_pad2(offset_minutes)?;
         Ok(())
     }
 
@@ -661,12 +657,12 @@ impl DateTimePrinter {
         let hours = offset.part_hours_ranged().get().unsigned_abs();
         let minutes = offset.part_minutes_ranged().get().unsigned_abs();
         let seconds = offset.part_seconds_ranged().get().unsigned_abs();
-        bbuf.write_int_pad2(hours.into());
+        bbuf.write_int_pad2(hours);
         bbuf.write_ascii_char(b':');
-        bbuf.write_int_pad2(minutes.into());
+        bbuf.write_int_pad2(minutes);
         if seconds > 0 {
             bbuf.write_ascii_char(b':');
-            bbuf.write_int_pad2(seconds.into());
+            bbuf.write_int_pad2(seconds);
         }
     }
 
@@ -797,27 +793,19 @@ impl SpanPrinter {
 
         let units = span.units();
         if units.contains(Unit::Year) {
-            bbuf.write_int(
-                span.get_years_unsigned().get().unsigned_abs().into(),
-            );
+            bbuf.write_int(span.get_years_unsigned().get().unsigned_abs());
             bbuf.write_ascii_char(self.label(Unit::Year));
         }
         if units.contains(Unit::Month) {
-            bbuf.write_int(
-                span.get_months_unsigned().get().unsigned_abs().into(),
-            );
+            bbuf.write_int(span.get_months_unsigned().get().unsigned_abs());
             bbuf.write_ascii_char(self.label(Unit::Month));
         }
         if units.contains(Unit::Week) {
-            bbuf.write_int(
-                span.get_weeks_unsigned().get().unsigned_abs().into(),
-            );
+            bbuf.write_int(span.get_weeks_unsigned().get().unsigned_abs());
             bbuf.write_ascii_char(self.label(Unit::Week));
         }
         if units.contains(Unit::Day) {
-            bbuf.write_int(
-                span.get_days_unsigned().get().unsigned_abs().into(),
-            );
+            bbuf.write_int(span.get_days_unsigned().get().unsigned_abs());
             bbuf.write_ascii_char(self.label(Unit::Day));
         }
 
@@ -833,15 +821,11 @@ impl SpanPrinter {
         bbuf.write_ascii_char(b'T');
 
         if units.contains(Unit::Hour) {
-            bbuf.write_int(
-                span.get_hours_unsigned().get().unsigned_abs().into(),
-            );
+            bbuf.write_int(span.get_hours_unsigned().get().unsigned_abs());
             bbuf.write_ascii_char(self.label(Unit::Hour));
         }
         if units.contains(Unit::Minute) {
-            bbuf.write_int(
-                span.get_minutes_unsigned().get().unsigned_abs().into(),
-            );
+            bbuf.write_int(span.get_minutes_unsigned().get().unsigned_abs());
             bbuf.write_ascii_char(self.label(Unit::Minute));
         }
 
@@ -851,9 +835,7 @@ impl SpanPrinter {
         // seconds. But we only want to do that work if we need to.
         let has_subsecond = !units.intersection(SUBSECOND).is_empty();
         if units.contains(Unit::Second) && !has_subsecond {
-            bbuf.write_int(
-                span.get_seconds_unsigned().get().unsigned_abs().into(),
-            );
+            bbuf.write_int(span.get_seconds_unsigned().get().unsigned_abs());
             bbuf.write_ascii_char(self.label(Unit::Second));
         } else if has_subsecond {
             // We want to combine our seconds, milliseconds, microseconds and

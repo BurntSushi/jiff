@@ -1415,7 +1415,7 @@ impl SpanPrinter {
 
         let padding = self.padding.unwrap_or(2);
         wtr.bbuf.write_int_pad(
-            span.get_hours_ranged().get().unsigned_abs().into(),
+            span.get_hours_ranged().get().unsigned_abs(),
             b'0',
             padding,
         );
@@ -1748,7 +1748,7 @@ impl<'p, 'w, 'd> DesignatorWriter<'p, 'w, 'd> {
         #[cold]
         #[inline(never)]
         fn imp(wtr: &mut DesignatorWriter<'_, '_, '_>) {
-            wtr.bbuf.write_int_pad(0, b'0', wtr.padding);
+            wtr.bbuf.write_int_pad(0u64, b'0', wtr.padding);
             if let Some(byte) =
                 wtr.printer.spacing.between_units_and_designators()
             {

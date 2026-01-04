@@ -253,17 +253,17 @@ impl core::fmt::Display for Numeric {
         let mut bbuf = buf.as_borrowed();
 
         bbuf.write_ascii_char(if self.sign == C(-1) { b'-' } else { b'+' });
-        bbuf.write_int_pad2(self.hours.get().unsigned_abs().into());
+        bbuf.write_int_pad2(self.hours.get().unsigned_abs());
         if let Some(minutes) = self.minutes {
             bbuf.write_ascii_char(b':');
-            bbuf.write_int_pad2(minutes.get().unsigned_abs().into());
+            bbuf.write_int_pad2(minutes.get().unsigned_abs());
         }
         if let Some(seconds) = self.seconds {
             if self.minutes.is_none() {
                 bbuf.write_str(":00");
             }
             bbuf.write_ascii_char(b':');
-            bbuf.write_int_pad2(seconds.get().unsigned_abs().into());
+            bbuf.write_int_pad2(seconds.get().unsigned_abs());
         }
         if let Some(nanos) = self.nanoseconds {
             if nanos != C(0) {
@@ -274,7 +274,7 @@ impl core::fmt::Display for Numeric {
                     bbuf.write_str(":00");
                 }
                 bbuf.write_ascii_char(b'.');
-                bbuf.write_fraction(None, nanos.get().unsigned_abs().into());
+                bbuf.write_fraction(None, nanos.get().unsigned_abs());
             }
         }
         f.write_str(bbuf.filled())

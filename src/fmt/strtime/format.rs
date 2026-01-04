@@ -955,17 +955,17 @@ fn write_offset(
     let seconds = (total_seconds % 60) as u8;
 
     wtr.write_ascii_char(if offset.is_negative() { b'-' } else { b'+' })?;
-    wtr.write_int_pad2(hours.into())?;
+    wtr.write_int_pad2(hours)?;
     if minute || minutes != 0 || seconds != 0 {
         if colon {
             wtr.write_ascii_char(b':')?;
         }
-        wtr.write_int_pad2(minutes.into())?;
+        wtr.write_int_pad2(minutes)?;
         if second || seconds != 0 {
             if colon {
                 wtr.write_ascii_char(b':')?;
             }
-            wtr.write_int_pad2(seconds.into())?;
+            wtr.write_int_pad2(seconds)?;
         }
     }
     Ok(())
