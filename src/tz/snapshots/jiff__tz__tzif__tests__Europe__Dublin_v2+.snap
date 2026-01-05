@@ -17,7 +17,7 @@ LOCAL TIME TYPES
   007:  offset=+01        designation=IST       indicator=ut/std
   008:  offset=+01        designation=IST       indicator=local/wall
 TRANSITIONS
-  0000:  -009999-01-02T01:59:59Z  unix=-377705023201  wall=-009999-01-02T01:34:38  unambiguous                      type=0  -00:25:21  LMT  
+  0000:  -009999-01-02T01:59:59Z  unix=-377705023201  wall=-009999-01-01T00:00:00  unambiguous                      type=0  -00:25:21  LMT  
   0001:  1880-08-02T00:25:21Z     unix=-2821649679    wall=1880-08-02T00:00:00     unambiguous                      type=1  -00:25:21  DMT  
   0002:  1916-05-21T02:25:21Z     unix=-1691962479    wall=1916-05-21T02:00:00      gap-until(1916-05-21T03:00:00)  type=2  +00:34:39  IST  dst
   0003:  1916-10-01T02:25:21Z     unix=-1680471279    wall=1916-10-01T02:25:21     fold-until(1916-10-01T03:00:00)  type=4  +00        GMT  
