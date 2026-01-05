@@ -23,6 +23,8 @@ printer.
 * [#474](https://github.com/BurntSushi/jiff/pull/474):
 Improve runtime performance and binary size of Jiff's `strftime`
 implementation.
+* [#477](https://github.com/BurntSushi/jiff/pull/477):
+Fix a bug where time zone lookups for `civil::DateTime::MIN` could panic.
 
 
 0.2.17 (2025-12-24)

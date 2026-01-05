@@ -14,7 +14,7 @@ LOCAL TIME TYPES
   004:  offset=-04        designation=EWT  dst  indicator=local/wall
   005:  offset=-04        designation=EPT  dst  indicator=ut/std
 TRANSITIONS
-  0000:  -009999-01-02T01:59:59Z  unix=-377705023201  wall=-009999-01-01T21:03:57  unambiguous                      type=0  -04:56:02  LMT  
+  0000:  -009999-01-02T01:59:59Z  unix=-377705023201  wall=-009999-01-01T00:00:00  unambiguous                      type=0  -04:56:02  LMT  
   0001:  1883-11-18T17:00:00Z     unix=-2717650800    wall=1883-11-18T12:00:00     fold-until(1883-11-18T12:03:58)  type=3  -05        EST  
   0002:  1918-03-31T07:00:00Z     unix=-1633280400    wall=1918-03-31T02:00:00      gap-until(1918-03-31T03:00:00)  type=1  -04        EDT  dst
   0003:  1918-10-27T06:00:00Z     unix=-1615140000    wall=1918-10-27T01:00:00     fold-until(1918-10-27T02:00:00)  type=2  -05        EST  

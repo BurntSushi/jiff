@@ -353,13 +353,14 @@ pub enum TzifTransitionKind {
 /// Moreover, we pack the fields into a single `i64` to make comparisons
 /// extremely cheap. This is especially useful since we do a binary search on
 /// `&[TzifDateTime]` when doing a TZ lookup for a civil datetime.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct TzifDateTime {
     bits: i64,
 }
 
 impl TzifDateTime {
     pub const ZERO: TzifDateTime = TzifDateTime::new(0, 0, 0, 0, 0, 0);
+    const MIN: TzifDateTime = TzifDateTime::new(-9999, 1, 1, 0, 0, 0);
 
     pub const fn new(
         year: i16,
@@ -401,6 +402,26 @@ impl TzifDateTime {
 
     pub const fn second(self) -> i8 {
         (self.bits as u64 >> 8) as u8 as i8
+    }
+}
+
+impl core::fmt::Debug for TzifDateTime {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if !f.alternate() {
+            f.debug_struct("TzifDateTime").field("bits", &self.bits).finish()
+        } else {
+            f.debug_tuple("TzifDateTime")
+                .field(&format_args!(
+                    "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
+                    self.year(),
+                    self.month(),
+                    self.day(),
+                    self.hour(),
+                    self.minute(),
+                    self.second(),
+                ))
+                .finish()
+        }
     }
 }
 

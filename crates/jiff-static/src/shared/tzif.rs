@@ -517,7 +517,13 @@ impl TzifOwned {
         }
 
         let trans = &mut self.transitions;
-        for i in 0..trans.timestamps.len() {
+        // Special case the first transition, which is always a dummy
+        // transition establishing the lower bound. The loop below doesn't
+        // handle this correctly because it isn't guaranteed to get a
+        // `DateTime::MIN` value.
+        trans.infos[0].kind = TzifTransitionKind::Unambiguous;
+        trans.civil_starts[0] = TzifDateTime::MIN;
+        for i in 1..trans.timestamps.len() {
             let timestamp = trans.timestamps[i];
             let offset = {
                 let type_index = trans.infos[i].type_index;

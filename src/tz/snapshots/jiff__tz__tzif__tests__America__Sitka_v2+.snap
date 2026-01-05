@@ -17,7 +17,7 @@ LOCAL TIME TYPES
   007:  offset=-08        designation=AKDT  dst  indicator=local/wall
   008:  offset=-09        designation=AKST       indicator=local/wall
 TRANSITIONS
-  0000:  -009999-01-02T01:59:59Z  unix=-377705023201  wall=-009999-01-02T16:58:46  unambiguous                      type=0  +14:58:47  LMT   
+  0000:  -009999-01-02T01:59:59Z  unix=-377705023201  wall=-009999-01-01T00:00:00  unambiguous                      type=0  +14:58:47  LMT   
   0001:  1867-10-19T00:31:13Z     unix=-3225223727    wall=1867-10-18T15:30:00     fold-until(1867-10-19T15:30:00)  type=1  -09:01:13  LMT   
   0002:  1900-08-20T21:01:13Z     unix=-2188954727    wall=1900-08-20T12:00:00      gap-until(1900-08-20T13:01:13)  type=2  -08        PST   
   0003:  1942-02-09T10:00:00Z     unix=-880207200     wall=1942-02-09T02:00:00      gap-until(1942-02-09T03:00:00)  type=3  -07        PWT   dst

@@ -3889,4 +3889,20 @@ mod tests {
             ],
         );
     }
+
+    /// A regression test where a TZ lookup for the minimum civil datetime
+    /// resulted in a panic in the TZif handling.
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn regression_tz_lookup_datetime_min() {
+        use alloc::string::ToString;
+
+        let test_file = TzifTestFile::get("America/Boa_Vista");
+        let tz = TimeZone::tzif(test_file.name, test_file.data).unwrap();
+        let err = tz.to_timestamp(DateTime::MIN).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "converting datetime with time zone offset `-04:02:40` to timestamp overflowed: parameter 'unix-seconds' with value -377705102240 is not in the required range of -377705023201..=253402207200",
+        );
+    }
 }

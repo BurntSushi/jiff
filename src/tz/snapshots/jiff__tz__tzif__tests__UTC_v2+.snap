@@ -9,6 +9,6 @@ TIME ZONE VERSION
 LOCAL TIME TYPES
   000:  offset=+00  designation=UTC      indicator=local/wall
 TRANSITIONS
-  0000:  -009999-01-02T01:59:59Z  unix=-377705023201  wall=-009999-01-02T01:59:59  unambiguous  type=0  +00  UTC  
+  0000:  -009999-01-02T01:59:59Z  unix=-377705023201  wall=-009999-01-01T00:00:00  unambiguous  type=0  +00  UTC  
 POSIX TIME ZONE STRING
   UTC0

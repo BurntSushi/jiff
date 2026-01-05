@@ -17,7 +17,7 @@ LOCAL TIME TYPES
   007:  offset=-01:30     designation=NDDT  dst  indicator=local/wall
   008:  offset=-02:30     designation=NDT   dst  indicator=local/wall
 TRANSITIONS
-  0000:  -009999-01-02T01:59:59Z  unix=-377705023201  wall=-009999-01-01T22:29:07  unambiguous                      type=0  -03:30:52  LMT   
+  0000:  -009999-01-02T01:59:59Z  unix=-377705023201  wall=-009999-01-01T00:00:00  unambiguous                      type=0  -03:30:52  LMT   
   0001:  1884-01-01T03:30:52Z     unix=-2713897748    wall=1884-01-01T00:00:00     unambiguous                      type=2  -03:30:52  NST   
   0002:  1917-04-08T05:30:52Z     unix=-1664130548    wall=1917-04-08T02:00:00      gap-until(1917-04-08T03:00:00)  type=1  -02:30:52  NDT   dst
   0003:  1917-09-17T04:30:52Z     unix=-1650137348    wall=1917-09-17T01:00:00     fold-until(1917-09-17T02:00:00)  type=2  -03:30:52  NST   
