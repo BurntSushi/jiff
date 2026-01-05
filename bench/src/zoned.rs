@@ -91,6 +91,10 @@ fn fixed_offset_add_time(c: &mut Criterion) {
 ///
 /// For `time`, its zone aware datetime stores a "local" civil datetime, so
 /// this operation is effectively free.
+///
+/// 2025-01-05: `time` does quite a bit better than Jiff on this benchmark. It
+/// looks like it's because `time`'s `PartialEq` impl for `PrimitiveDateTime`
+/// is better optimized than Jiff's.
 fn fixed_offset_to_civil_datetime(c: &mut Criterion) {
     const NAME: &str = "zoned/fixed_offset_to_civil_datetime";
     const TZ: TimeZone = TimeZone::fixed(Offset::constant(-4));

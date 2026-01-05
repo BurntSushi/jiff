@@ -655,46 +655,77 @@ generally be competitive for equivalent operations. It's generally not
 possible for Chrono or Jiff to always be faster than the other, since
 they each use different representations for fundamental types. This in turn
 makes some operations faster and others slower, depending on what you're
-trying to do.
+trying to do. With that said, Jiff is uniformly faster than Chrono when it
+comes to printing and parsing.
 
 ```text
 $ cd bench
 $ cargo bench -- --save-baseline base
 [.. snip ..]
 $ critcmp base -g '(.*)/(?:jiff|chrono)$'
-group                                                           base//chrono                         base//jiff
------                                                           ------------                         ----------
-civil_datetime/add_days/diffyear/duration                       1.00      8.3±0.07ns        ? ?/sec    1.77     14.6±0.29ns        ? ?/sec
-civil_datetime/add_days/sameyear/duration                       1.00      6.4±0.07ns        ? ?/sec    2.29     14.6±0.23ns        ? ?/sec
-civil_datetime/to_datetime_static/bundled                       1.00     22.3±0.31ns        ? ?/sec
-civil_datetime/to_datetime_static/zoneinfo                      1.12     18.2±0.33ns        ? ?/sec    1.00     16.2±0.17ns        ? ?/sec
-civil_datetime/to_timestamp_tzdb_lookup/bundled                 1.00     32.0±0.28ns        ? ?/sec
-civil_datetime/to_timestamp_tzdb_lookup/zoneinfo                52.41     2.1±0.01µs        ? ?/sec    1.00     40.7±0.17ns        ? ?/sec
-date/add_days/diffyear/duration                                 1.00      5.9±0.04ns        ? ?/sec    1.11      6.5±0.04ns        ? ?/sec
-date/add_days/sameyear/duration                                 1.00      2.1±0.03ns        ? ?/sec    3.08      6.5±0.05ns        ? ?/sec
-date/difference_days/duration                                   1.23      3.4±0.03ns        ? ?/sec    1.00      2.8±0.02ns        ? ?/sec
-date/tomorrow/diff-month                                        1.00      0.4±0.00ns        ? ?/sec    3.24      1.3±0.01ns        ? ?/sec
-date/tomorrow/diff-year                                         1.24      1.8±0.02ns        ? ?/sec    1.00      1.4±0.01ns        ? ?/sec
-date/tomorrow/same-month                                        1.00      0.4±0.02ns        ? ?/sec    1.93      0.8±0.01ns        ? ?/sec
-date/yesterday/diff-month                                       1.00      0.4±0.00ns        ? ?/sec    3.31      1.3±0.01ns        ? ?/sec
-date/yesterday/diff-year                                        1.96      2.1±0.02ns        ? ?/sec    1.00      1.1±0.01ns        ? ?/sec
-date/yesterday/same-month                                       1.00      0.4±0.00ns        ? ?/sec    1.75      0.7±0.01ns        ? ?/sec
-parse/civil_datetime                                            3.13     73.6±0.69ns        ? ?/sec    1.00     23.5±0.17ns        ? ?/sec
-parse/rfc2822                                                   2.41     62.9±0.35ns        ? ?/sec    1.00     26.1±0.30ns        ? ?/sec
-parse/strptime/oneshot                                          2.93    172.8±3.46ns        ? ?/sec    1.00     59.0±0.94ns        ? ?/sec
-parse/strptime/prebuilt                                         1.00     91.0±1.25ns        ? ?/sec
-print/civil_datetime                                            3.08    155.6±3.81ns        ? ?/sec    1.00     50.5±0.18ns        ? ?/sec
-timestamp/add_time_secs/duration                                2.14      5.8±0.04ns        ? ?/sec    1.00      2.7±0.02ns        ? ?/sec
-timestamp/add_time_subsec/duration                              1.84      5.8±0.04ns        ? ?/sec    1.00      3.1±0.05ns        ? ?/sec
-timestamp/every_hour_in_week/byhand                             15.83  1654.8±2.72ns        ? ?/sec    1.00    104.5±1.31ns        ? ?/sec
-timestamp/to_civil_datetime_offset_conversion                   1.61      7.1±0.04ns        ? ?/sec    1.00      4.4±0.04ns        ? ?/sec
-timestamp/to_civil_datetime_static/America-New-York/bundled     1.00     21.3±0.12ns        ? ?/sec
-timestamp/to_civil_datetime_static/America-New-York/zoneinfo    1.15     20.5±0.18ns        ? ?/sec    1.00     17.7±0.15ns        ? ?/sec
-timestamp/to_civil_datetime_static/Asia-Shanghai/bundled        1.00     20.8±0.21ns        ? ?/sec
-timestamp/to_civil_datetime_static/Asia-Shanghai/zoneinfo       2.60     18.7±0.09ns        ? ?/sec    1.00      7.2±0.05ns        ? ?/sec
-zoned/fixed_offset_add_time/duration                            1.00      6.0±0.03ns        ? ?/sec    3.50     20.9±0.11ns        ? ?/sec
-zoned/fixed_offset_to_civil_datetime                            5.92      5.4±0.01ns        ? ?/sec    1.00      0.9±0.02ns        ? ?/sec
-zoned/fixed_offset_to_timestamp                                 3.17      1.2±0.01ns        ? ?/sec    1.00      0.4±0.01ns        ? ?/sec
+group                                                           baseline//chrono                       baseline//jiff
+-----                                                           ----------------                       --------------
+civil_datetime/add_days/diffyear/duration                       1.00      8.5±0.08ns        ? ?/sec    1.56     13.3±0.15ns        ? ?/sec
+civil_datetime/add_days/diffyear/span                                                                  1.00     23.9±0.13ns        ? ?/sec
+civil_datetime/add_days/sameyear/duration                       1.00      6.8±0.05ns        ? ?/sec    1.96     13.3±0.17ns        ? ?/sec
+civil_datetime/add_days/sameyear/span                                                                  1.00     23.8±0.13ns        ? ?/sec
+civil_datetime/to_timestamp_static/bundled                      2.05     22.3±0.24ns        ? ?/sec    1.00     10.9±0.14ns        ? ?/sec
+civil_datetime/to_timestamp_static/zoneinfo                     1.53     16.2±0.15ns        ? ?/sec    1.00     10.6±0.09ns        ? ?/sec
+civil_datetime/to_timestamp_tzdb_lookup/bundled                 1.00     32.0±0.15ns        ? ?/sec
+civil_datetime/to_timestamp_tzdb_lookup/zoneinfo                45.85  1919.7±6.17ns        ? ?/sec    1.00     41.9±0.15ns        ? ?/sec
+date/add_days/diffyear/duration                                 1.00      5.8±0.05ns        ? ?/sec    1.12      6.5±0.04ns        ? ?/sec
+date/add_days/diffyear/span                                                                            1.00      6.5±0.04ns        ? ?/sec
+date/add_days/one/duration                                      1.00      2.1±0.02ns        ? ?/sec    2.55      5.4±0.05ns        ? ?/sec
+date/add_days/one/span                                                                                 1.00      5.8±0.02ns        ? ?/sec
+date/add_days/sameyear/duration                                 1.00      2.1±0.01ns        ? ?/sec    3.08      6.5±0.05ns        ? ?/sec
+date/add_days/sameyear/span                                                                            1.00      6.5±0.05ns        ? ?/sec
+date/difference_days/duration                                   1.18      3.4±0.04ns        ? ?/sec    1.00      2.9±0.02ns        ? ?/sec
+date/difference_days/span                                                                              1.00      2.5±0.02ns        ? ?/sec
+date/tomorrow/diff-month                                        1.00      0.4±0.00ns        ? ?/sec    3.25      1.3±0.01ns        ? ?/sec
+date/tomorrow/diff-year                                         1.16      1.7±0.01ns        ? ?/sec    1.00      1.4±0.01ns        ? ?/sec
+date/tomorrow/same-month                                        1.00      0.4±0.00ns        ? ?/sec    1.99      0.8±0.00ns        ? ?/sec
+date/yesterday/diff-month                                       1.00      0.4±0.02ns        ? ?/sec    3.17      1.3±0.01ns        ? ?/sec
+date/yesterday/diff-year                                        1.85      2.0±0.01ns        ? ?/sec    1.00      1.1±0.01ns        ? ?/sec
+date/yesterday/same-month                                       1.00      0.4±0.03ns        ? ?/sec    1.72      0.7±0.02ns        ? ?/sec
+parse/civil_datetime                                            2.95     73.6±0.72ns        ? ?/sec    1.00     24.9±0.19ns        ? ?/sec
+parse/rfc2822                                                   3.09     59.9±0.30ns        ? ?/sec    1.00     19.3±0.17ns        ? ?/sec
+parse/strptime/oneshot                                          3.11    197.8±0.80ns        ? ?/sec    1.00     63.6±1.19ns        ? ?/sec
+parse/strptime/prebuilt                                         1.00     77.1±1.44ns        ? ?/sec
+print/civil_datetime                                            13.10   147.4±0.60ns        ? ?/sec    1.00     11.3±0.04ns        ? ?/sec
+print/iso8601_duration/long-time/duration/buffer                2.38     46.5±0.34ns        ? ?/sec    1.00     19.5±0.04ns        ? ?/sec
+print/iso8601_duration/long-time/duration/to_string             3.13     71.7±0.36ns        ? ?/sec    1.00     23.0±0.07ns        ? ?/sec
+print/iso8601_duration/short/duration/buffer                    2.65     32.3±0.30ns        ? ?/sec    1.00     12.2±0.04ns        ? ?/sec
+print/iso8601_duration/short/duration/to_string                 2.08     36.8±0.33ns        ? ?/sec    1.00     17.7±0.05ns        ? ?/sec
+print/iso8601_duration/tiny/duration/buffer                     2.74     31.6±0.32ns        ? ?/sec    1.00     11.6±0.03ns        ? ?/sec
+print/iso8601_duration/tiny/duration/to_string                  2.28     36.5±0.40ns        ? ?/sec    1.00     16.0±0.08ns        ? ?/sec
+print/rfc2822/buffer                                            4.91     64.6±0.59ns        ? ?/sec    1.00     13.2±0.03ns        ? ?/sec
+print/rfc2822/to_string                                         5.75    111.0±0.37ns        ? ?/sec    1.00     19.3±0.05ns        ? ?/sec
+print/rfc3339/buffer                                            3.79     64.2±0.56ns        ? ?/sec    1.00     17.0±0.14ns        ? ?/sec
+print/rfc3339/to_string                                         4.75    112.4±0.33ns        ? ?/sec    1.00     23.6±0.11ns        ? ?/sec
+print/rfc9557/buffer                                                                                   1.00     16.2±0.05ns        ? ?/sec
+print/rfc9557/to_string                                                                                1.00     22.2±0.07ns        ? ?/sec
+print/strftime/oneshot/buffer                                   3.90    213.9±1.99ns        ? ?/sec    1.00     54.8±0.32ns        ? ?/sec
+print/strftime/oneshot/to_string                                3.63    261.3±1.26ns        ? ?/sec    1.00     72.1±0.49ns        ? ?/sec
+print/strftime/oneshot/zoned                                                                           1.00     65.5±0.64ns        ? ?/sec
+print/strftime/prebuilt/buffer                                  1.00     85.4±0.52ns        ? ?/sec
+print/strftime/prebuilt/to_string                               1.00    147.4±0.76ns        ? ?/sec
+timestamp/add_time_secs/duration                                2.42      6.1±0.08ns        ? ?/sec    1.00      2.5±0.03ns        ? ?/sec
+timestamp/add_time_secs/span                                                                           1.00      3.8±0.06ns        ? ?/sec
+timestamp/add_time_subsec/duration                              2.10      6.1±0.04ns        ? ?/sec    1.00      2.9±0.02ns        ? ?/sec
+timestamp/add_time_subsec/span                                                                         1.00      8.1±0.09ns        ? ?/sec
+timestamp/every_hour_in_week/byhand                             16.15  1679.6±6.13ns        ? ?/sec    1.00    104.0±0.72ns        ? ?/sec
+timestamp/every_hour_in_week/series                                                                    1.00    105.9±0.66ns        ? ?/sec
+timestamp/from_seconds/integer                                  14.45     4.7±0.03ns        ? ?/sec    1.00      0.3±0.00ns        ? ?/sec
+timestamp/to_civil_datetime_offset_conversion                   1.65      7.3±0.02ns        ? ?/sec    1.00      4.4±0.04ns        ? ?/sec
+timestamp/to_civil_datetime_offset_holistic                                                            1.00      4.4±0.04ns        ? ?/sec
+timestamp/to_civil_datetime_static/America-New-York/bundled     1.00     16.0±0.16ns        ? ?/sec
+timestamp/to_civil_datetime_static/America-New-York/zoneinfo    1.42     18.4±0.11ns        ? ?/sec    1.00     13.0±0.11ns        ? ?/sec
+timestamp/to_civil_datetime_static/Asia-Shanghai/bundled        1.00     15.2±0.16ns        ? ?/sec
+timestamp/to_civil_datetime_static/Asia-Shanghai/zoneinfo       3.16     15.7±0.11ns        ? ?/sec    1.00      5.0±0.05ns        ? ?/sec
+zoned/fixed_offset_add_time/duration                            1.00      6.1±0.06ns        ? ?/sec    1.56      9.5±0.05ns        ? ?/sec
+zoned/fixed_offset_add_time/span                                                                       1.00     16.6±0.09ns        ? ?/sec
+zoned/fixed_offset_to_civil_datetime                            1.23      5.6±0.01ns        ? ?/sec    1.00      4.5±0.01ns        ? ?/sec
+zoned/fixed_offset_to_timestamp                                 3.15      1.2±0.01ns        ? ?/sec    1.00      0.4±0.00ns        ? ?/sec
 ```
 
 Questions about benchmarks are
@@ -1016,47 +1047,72 @@ fn main() -> anyhow::Result<()> {
 
 ### Jiff is generally faster than `time`
 
-Unlike Chrono, at least for Jiff's benchmarks, there are few cases where `time`
-is meaningfully faster than Jiff.
+When it comes to parsing and printing, Jiff is generally faster than `time`,
+sometimes substantially so. `time` is sometimes faster than Jiff on date
+arithmetic, but not by much. (Some of these may be due to faster equality
+comparisons on date values, which `time` is legitimately faster at than Jiff at
+present.)
 
-The following results were collected with `time 0.3.38`.
+The following results were collected with `time 0.3.44`.
 
 ```text
 $ cd bench
-$ cargo bench -- --save-baseline base
+$ cargo bench -- --save-baseline baseline
 [.. snip ..]
 $ critcmp base -g '(.*)/(?:jiff|time)$'
-group                                                           update//time                           update//jiff
------                                                           ------------                           ------------
-civil_datetime/add_days/diffyear/duration                       1.19     16.2±0.10ns        ? ?/sec    1.00     13.6±0.12ns        ? ?/sec
-civil_datetime/add_days/sameyear/duration                       1.22     16.6±0.12ns        ? ?/sec    1.00     13.6±0.15ns        ? ?/sec
-date/add_days/diffyear/duration                                 1.11      7.3±0.07ns        ? ?/sec    1.00      6.6±0.07ns        ? ?/sec
-date/add_days/one/duration                                      1.34      7.3±0.05ns        ? ?/sec    1.00      5.4±0.04ns        ? ?/sec
-date/add_days/sameyear/duration                                 1.16      7.6±0.08ns        ? ?/sec    1.00      6.6±0.07ns        ? ?/sec
-date/days_in_month/leap/feb                                     13.11     5.1±0.16ns        ? ?/sec    1.00      0.4±0.01ns        ? ?/sec
-date/days_in_month/leap/nofeb                                   9.11      3.5±0.16ns        ? ?/sec    1.00      0.4±0.00ns        ? ?/sec
-date/days_in_month/noleap/feb                                   12.66     4.9±0.17ns        ? ?/sec    1.00      0.4±0.01ns        ? ?/sec
-date/days_in_month/noleap/nofeb                                 8.40      3.3±0.10ns        ? ?/sec    1.00      0.4±0.00ns        ? ?/sec
-date/difference_days/duration                                   1.42      4.1±0.05ns        ? ?/sec    1.00      2.9±0.03ns        ? ?/sec
-date/tomorrow/diff-month                                        1.00      0.4±0.01ns        ? ?/sec    3.17      1.3±0.01ns        ? ?/sec
-date/tomorrow/diff-year                                         1.00      0.5±0.01ns        ? ?/sec    2.99      1.4±0.02ns        ? ?/sec
-date/tomorrow/same-month                                        1.00      0.4±0.01ns        ? ?/sec    2.00      0.8±0.01ns        ? ?/sec
-date/yesterday/diff-month                                       1.00      0.3±0.01ns        ? ?/sec    4.08      1.3±0.01ns        ? ?/sec
-date/yesterday/diff-year                                        1.00      0.7±0.01ns        ? ?/sec    1.57      1.1±0.01ns        ? ?/sec
-date/yesterday/same-month                                       1.00      0.3±0.01ns        ? ?/sec    2.23      0.7±0.01ns        ? ?/sec
-parse/civil_datetime                                            1.25     31.4±0.33ns        ? ?/sec    1.00     25.0±0.08ns        ? ?/sec
-parse/rfc2822                                                   3.10     80.9±1.19ns        ? ?/sec    1.00     26.1±0.41ns        ? ?/sec
-parse/strptime/oneshot                                                                                 1.00     59.9±1.03ns        ? ?/sec
-parse/strptime/prebuilt                                         1.00    112.8±1.06ns        ? ?/sec
-print/civil_datetime                                            1.00     37.6±0.49ns        ? ?/sec    1.48     55.7±0.31ns        ? ?/sec
-timestamp/add_time_secs/duration                                7.05     19.1±0.20ns        ? ?/sec    1.00      2.7±0.03ns        ? ?/sec
-timestamp/add_time_subsec/duration                              6.19     19.1±0.15ns        ? ?/sec    1.00      3.1±0.03ns        ? ?/sec
-timestamp/every_hour_in_week/byhand                             32.25     3.4±0.03µs        ? ?/sec    1.00    105.0±0.83ns        ? ?/sec
-timestamp/to_civil_datetime_offset_conversion                   3.14     14.6±0.16ns        ? ?/sec    1.00      4.7±0.05ns        ? ?/sec
-timestamp/to_civil_datetime_offset_holistic                     4.02     18.7±0.07ns        ? ?/sec    1.00      4.7±0.04ns        ? ?/sec
-zoned/fixed_offset_add_time/duration                            2.41     23.3±0.26ns        ? ?/sec    1.00      9.7±0.07ns        ? ?/sec
-zoned/fixed_offset_to_civil_datetime                            1.00      0.8±0.00ns        ? ?/sec    1.26      1.0±0.03ns        ? ?/sec
-zoned/fixed_offset_to_timestamp                                 6.92      2.7±0.02ns        ? ?/sec    1.00      0.4±0.00ns        ? ?/sec
+group                                                           baseline//time                       baseline//jiff
+-----                                                           --------------                       --------------
+civil_datetime/add_days/diffyear/duration                       1.00      9.0±0.05ns        ? ?/sec  1.48     13.3±0.15ns        ? ?/sec
+civil_datetime/add_days/diffyear/span                                                                1.00     23.9±0.13ns        ? ?/sec
+civil_datetime/add_days/sameyear/duration                       1.00      9.0±0.09ns        ? ?/sec  1.48     13.3±0.17ns        ? ?/sec
+civil_datetime/add_days/sameyear/span                                                                1.00     23.8±0.13ns        ? ?/sec
+date/add_days/diffyear/duration                                 1.00      4.3±0.04ns        ? ?/sec  1.51      6.5±0.04ns        ? ?/sec
+date/add_days/diffyear/span                                                                          1.00      6.5±0.04ns        ? ?/sec
+date/add_days/one/duration                                      1.00      4.3±0.04ns        ? ?/sec  1.25      5.4±0.05ns        ? ?/sec
+date/add_days/one/span                                                                               1.00      5.8±0.02ns        ? ?/sec
+date/add_days/sameyear/duration                                 1.00      4.3±0.02ns        ? ?/sec  1.52      6.5±0.05ns        ? ?/sec
+date/add_days/sameyear/span                                                                          1.00      6.5±0.05ns        ? ?/sec
+date/days_in_month/leap/feb                                     2.95      1.2±0.01ns        ? ?/sec  1.00      0.4±0.02ns        ? ?/sec
+date/days_in_month/leap/nofeb                                   2.74      1.1±0.00ns        ? ?/sec  1.00      0.4±0.00ns        ? ?/sec
+date/days_in_month/noleap/feb                                   3.02      1.2±0.01ns        ? ?/sec  1.00      0.4±0.00ns        ? ?/sec
+date/days_in_month/noleap/nofeb                                 2.78      1.1±0.01ns        ? ?/sec  1.00      0.4±0.00ns        ? ?/sec
+date/difference_days/duration                                   1.00      2.1±0.01ns        ? ?/sec  1.40      2.9±0.02ns        ? ?/sec
+date/difference_days/span                                                                            1.00      2.5±0.02ns        ? ?/sec
+date/tomorrow/diff-month                                        1.00      0.4±0.00ns        ? ?/sec  3.25      1.3±0.01ns        ? ?/sec
+date/tomorrow/diff-year                                         1.00      1.1±0.01ns        ? ?/sec  1.36      1.4±0.01ns        ? ?/sec
+date/tomorrow/same-month                                        1.00      0.4±0.00ns        ? ?/sec  2.00      0.8±0.00ns        ? ?/sec
+date/yesterday/diff-month                                       1.00      0.3±0.00ns        ? ?/sec  4.25      1.3±0.01ns        ? ?/sec
+date/yesterday/diff-year                                        1.00      1.0±0.01ns        ? ?/sec  1.10      1.1±0.01ns        ? ?/sec
+date/yesterday/same-month                                       1.00      0.3±0.00ns        ? ?/sec  2.33      0.7±0.02ns        ? ?/sec
+parse/civil_datetime                                            1.00     14.5±0.17ns        ? ?/sec  1.72     24.9±0.19ns        ? ?/sec
+parse/rfc2822                                                   4.00     77.4±0.88ns        ? ?/sec  1.00     19.3±0.17ns        ? ?/sec
+parse/strptime/oneshot                                                                               1.00     63.6±1.19ns        ? ?/sec
+parse/strptime/prebuilt                                         1.00    103.4±0.52ns        ? ?/sec
+print/civil_datetime                                            3.11     35.0±0.18ns        ? ?/sec  1.00     11.3±0.04ns        ? ?/sec
+print/rfc2822/buffer                                            1.70     22.3±0.06ns        ? ?/sec  1.00     13.2±0.03ns        ? ?/sec
+print/rfc2822/to_string                                         3.44     66.4±0.49ns        ? ?/sec  1.00     19.3±0.05ns        ? ?/sec
+print/rfc3339/buffer                                            2.61     44.4±0.42ns        ? ?/sec  1.00     17.0±0.14ns        ? ?/sec
+print/rfc3339/to_string                                         4.03     95.3±0.79ns        ? ?/sec  1.00     23.6±0.11ns        ? ?/sec
+print/strftime/oneshot/buffer                                   7.89    432.1±1.30ns        ? ?/sec  1.00     54.8±0.32ns        ? ?/sec
+print/strftime/oneshot/to_string                                7.60    547.9±1.97ns        ? ?/sec  1.00     72.1±0.49ns        ? ?/sec
+print/strftime/oneshot/zoned                                                                         1.00     65.5±0.64ns        ? ?/sec
+print/strftime/prebuilt/buffer                                  1.00    107.0±1.34ns        ? ?/sec
+print/strftime/prebuilt/buffer/bespoke                          1.00    108.2±0.83ns        ? ?/sec
+print/strftime/prebuilt/to_string                               1.00    170.2±1.68ns        ? ?/sec
+print/strftime/prebuilt/to_string/bespoke                       1.00    175.1±1.53ns        ? ?/sec
+timestamp/add_time_secs/duration                                4.17     10.5±0.05ns        ? ?/sec  1.00      2.5±0.03ns        ? ?/sec
+timestamp/add_time_secs/span                                                                         1.00      3.8±0.06ns        ? ?/sec
+timestamp/add_time_subsec/duration                              3.63     10.5±0.10ns        ? ?/sec  1.00      2.9±0.02ns        ? ?/sec
+timestamp/add_time_subsec/span                                                                       1.00      8.1±0.09ns        ? ?/sec
+timestamp/every_hour_in_week/byhand                             16.49 1714.7±17.52ns        ? ?/sec  1.00    104.0±0.72ns        ? ?/sec
+timestamp/every_hour_in_week/series                                                                  1.00    105.9±0.66ns        ? ?/sec
+timestamp/from_seconds/integer                                  14.43     4.7±0.03ns        ? ?/sec  1.00      0.3±0.00ns        ? ?/sec
+timestamp/to_civil_datetime_offset_conversion                   1.00      4.3±0.03ns        ? ?/sec  1.05      4.4±0.04ns        ? ?/sec
+timestamp/to_civil_datetime_offset_holistic                     1.13      5.0±0.03ns        ? ?/sec  1.00      4.4±0.04ns        ? ?/sec
+zoned/fixed_offset_add_time/duration                            1.13     10.7±0.07ns        ? ?/sec  1.00      9.5±0.05ns        ? ?/sec
+zoned/fixed_offset_add_time/span                                                                     1.00     16.6±0.09ns        ? ?/sec
+zoned/fixed_offset_to_civil_datetime                            1.00      0.5±0.02ns        ? ?/sec  9.55      4.5±0.01ns        ? ?/sec
+zoned/fixed_offset_to_timestamp                                 4.74      1.8±0.02ns        ? ?/sec  1.00      0.4±0.00ns        ? ?/sec
 ```
 
 Questions about benchmarks are
