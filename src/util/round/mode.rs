@@ -164,7 +164,9 @@ impl RoundMode {
                     }
                 }
                 RoundMode::HalfEven => {
-                    if expand_is_nearer || (tie && quotient % C(2) == C(1)) {
+                    if expand_is_nearer
+                        || (tie && quotient.rem_floor(C(2)) == C(1))
+                    {
                         quotient += sign;
                     }
                 }
