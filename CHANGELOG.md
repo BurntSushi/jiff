@@ -1,8 +1,16 @@
 # CHANGELOG
 
-0.2.18 (TBD)
-============
-TODO
+0.2.18 (2026-01-05)
+===================
+This release ships a sizeable refactor to the RFC 2822, RFC 9110, RC
+3339, RFC 9557, ISO 8601 and friendly format printers. Specifically,
+they are now all monomorphic internally (instead of being generic over
+`jiff::fmt::Write`) and write to uninitialized buffers. This improves
+runtime performance (sometimes dramatically so), and to a more modest
+degree, decreases binary size and improves compile times.
+
+This release also includes a bug fix where `DateTime::MIN.to_zoned(..)`
+could panic.
 
 Enhancements:
 
