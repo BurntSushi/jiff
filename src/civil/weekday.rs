@@ -174,6 +174,8 @@ impl Weekday {
     /// ```
     /// use jiff::civil::Weekday;
     ///
+    /// let weekday = Weekday::from_sunday_zero_offset(0)?;
+    /// assert_eq!(weekday, Weekday::Sunday);
     /// let weekday = Weekday::from_sunday_zero_offset(4)?;
     /// assert_eq!(weekday, Weekday::Thursday);
     ///
@@ -413,7 +415,7 @@ impl Weekday {
         let start = t::NoUnits::rfrom(self.to_monday_zero_offset_ranged());
         // OK because all i64 values fit in a NoUnits.
         let rhs = t::NoUnits::new(days.into()).unwrap();
-        let end = start.wrapping_add(rhs) % C(7);
+        let end = start.wrapping_add(rhs).rem_floor(C(7));
         Weekday::from_monday_zero_offset_ranged(end)
     }
 
@@ -551,7 +553,7 @@ impl Weekday {
     pub(crate) fn from_sunday_zero_offset_ranged(
         offset: impl RInto<t::WeekdayZero>,
     ) -> Weekday {
-        let offset_sunday = (offset.rinto() - C(1)) % C(7);
+        let offset_sunday = (offset.rinto() - C(1)).rem_floor(C(7));
         Weekday::from_monday_zero_offset_ranged(offset_sunday)
     }
 
@@ -589,7 +591,7 @@ impl Weekday {
 
     #[inline]
     pub(crate) fn to_sunday_zero_offset_ranged(self) -> t::WeekdayZero {
-        (self.to_monday_zero_offset_ranged() + C(1)) % C(7)
+        (self.to_monday_zero_offset_ranged() + C(1)).rem_floor(C(7))
     }
 
     #[inline]
@@ -606,7 +608,7 @@ impl Weekday {
     pub(crate) fn since_ranged(self, other: Weekday) -> t::WeekdayZero {
         (self.to_monday_zero_offset_ranged()
             - other.to_monday_zero_offset_ranged())
-            % C(7)
+        .rem_floor(C(7))
     }
 
     #[inline]

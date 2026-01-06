@@ -1797,25 +1797,25 @@ macro_rules! define_ranged {
             fn div(self, rhs: $name<MIN2, MAX2>) -> Self::Output {
                 #[cfg(not(debug_assertions))]
                 {
-                    let val = self.val.wrapping_div_euclid(rhs.val);
+                    let val = self.val.wrapping_div(rhs.val);
                     Self { val }
                 }
                 #[cfg(debug_assertions)]
                 {
                     let val =
-                        self.val.checked_div_euclid(rhs.val).expect(concat!(
+                        self.val.checked_div(rhs.val).expect(concat!(
                             "dividing ",
                             stringify!($name),
                             " values overflowed"
                         ));
                     let min =
-                        self.min.checked_div_euclid(rhs.min).expect(concat!(
+                        self.min.checked_div(rhs.min).expect(concat!(
                             "dividing ",
                             stringify!($name),
                             " minimums overflowed"
                         ));
                     let max =
-                        self.max.checked_div_euclid(rhs.max).expect(concat!(
+                        self.max.checked_div(rhs.max).expect(concat!(
                             "dividing ",
                             stringify!($name),
                             " maximums overflowed"
@@ -1849,25 +1849,25 @@ macro_rules! define_ranged {
             fn rem(self, rhs: $name<MIN2, MAX2>) -> Self::Output {
                 #[cfg(not(debug_assertions))]
                 {
-                    let val = self.val.wrapping_rem_euclid(rhs.val);
+                    let val = self.val.wrapping_rem(rhs.val);
                     Self { val }
                 }
                 #[cfg(debug_assertions)]
                 {
                     let val =
-                        self.val.checked_rem_euclid(rhs.val).expect(concat!(
+                        self.val.checked_rem(rhs.val).expect(concat!(
                             "modulo ",
                             stringify!($name),
                             " values overflowed"
                         ));
                     let min =
-                        self.min.checked_rem_euclid(rhs.min).expect(concat!(
+                        self.min.checked_rem(rhs.min).expect(concat!(
                             "modulo ",
                             stringify!($name),
                             " minimums overflowed"
                         ));
                     let max =
-                        self.max.checked_rem_euclid(rhs.max).expect(concat!(
+                        self.max.checked_rem(rhs.max).expect(concat!(
                             "modulo ",
                             stringify!($name),
                             " maximums overflowed"

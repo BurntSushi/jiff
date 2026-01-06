@@ -3654,8 +3654,8 @@ fn month_add_overflowing(
 ) -> (t::Month, t::SpanYears) {
     let month = t::SpanMonths::rfrom(month);
     let total = month - C(1) + span;
-    let years = total / C(12);
-    let month = (total % C(12)) + C(1);
+    let years = total.div_floor(C(12));
+    let month = total.rem_floor(C(12)) + C(1);
     (month.rinto(), years.rinto())
 }
 
@@ -3759,6 +3759,23 @@ mod tests {
     #[cfg(not(miri))]
     fn all_date_to_iso_week_date_roundtrip() {
         let year_range = 2000..=2500;
+        for year in year_range {
+            let year = Year::new(year).unwrap();
+            for month in [1, 2, 4] {
+                let month = Month::new(month).unwrap();
+                for day in 20..=days_in_month(year, month).get() {
+                    let date = date(year.get(), month.get(), day);
+                    let wd = date.iso_week_date();
+                    let got = wd.date();
+                    assert_eq!(
+                        date, got,
+                        "for date {date:?}, and ISO week date {wd:?}"
+                    );
+                }
+            }
+        }
+
+        let year_range = -9999..=-9500;
         for year in year_range {
             let year = Year::new(year).unwrap();
             for month in [1, 2, 4] {

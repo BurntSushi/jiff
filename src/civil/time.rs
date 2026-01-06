@@ -749,7 +749,7 @@ impl Time {
                 .wrapping_mul(t::NANOS_PER_MICRO),
         );
         sum = sum.wrapping_add(span.get_nanoseconds_ranged().without_bounds());
-        let civil_day_nanosecond = sum % t::NANOS_PER_CIVIL_DAY;
+        let civil_day_nanosecond = sum.rem_floor(t::NANOS_PER_CIVIL_DAY);
         Time::from_nanosecond(civil_day_nanosecond.rinto())
     }
 
@@ -757,7 +757,8 @@ impl Time {
     fn wrapping_add_signed_duration(self, duration: SignedDuration) -> Time {
         let start = t::NoUnits128::rfrom(self.to_nanosecond());
         let duration = t::NoUnits128::new_unchecked(duration.as_nanos());
-        let end = start.wrapping_add(duration) % t::NANOS_PER_CIVIL_DAY;
+        let end =
+            start.wrapping_add(duration).rem_floor(t::NANOS_PER_CIVIL_DAY);
         Time::from_nanosecond(end.rinto())
     }
 
@@ -825,7 +826,8 @@ impl Time {
         // OK because 96-bit unsigned integer can't overflow i128.
         let duration = i128::try_from(duration.as_nanos()).unwrap();
         let duration = t::NoUnits128::new_unchecked(duration);
-        let end = start.wrapping_sub(duration) % t::NANOS_PER_CIVIL_DAY;
+        let end =
+            start.wrapping_sub(duration).rem_floor(t::NANOS_PER_CIVIL_DAY);
         Time::from_nanosecond(end.rinto())
     }
 
