@@ -1,3 +1,5 @@
+use core::fmt;
+
 use crate::{
     error::Error,
     shared::util::itime::IWeekday,
@@ -614,6 +616,20 @@ impl Weekday {
     #[inline]
     pub(crate) fn until_ranged(self, other: Weekday) -> t::WeekdayZero {
         other.since_ranged(self)
+    }
+}
+
+impl fmt::Display for Weekday {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.pad(match *self {
+            Weekday::Monday => "Mon",
+            Weekday::Tuesday => "Tue",
+            Weekday::Wednesday => "Wed",
+            Weekday::Thursday => "Thu",
+            Weekday::Friday => "Fri",
+            Weekday::Saturday => "Sat",
+            Weekday::Sunday => "Sun",
+        })
     }
 }
 
