@@ -10,11 +10,7 @@ use crate::{
         strtime::{BrokenDownTime, Extension, Flag, Meridiem},
         Parsed,
     },
-    util::{
-        parse,
-        rangeint::{ri8, RFrom},
-        t::{self, C},
-    },
+    util::{b, parse},
     Error, Timestamp,
 };
 
@@ -302,8 +298,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             .context(PE::ParseDay)?;
         self.inp = inp;
 
-        let day = t::Day::try_new("day", day).context(PE::ParseDay)?;
-        self.tm.day = Some(day);
+        self.tm.day = Some(b::Day::check(day).context(PE::ParseDay)?);
         self.bump_fmt();
         Ok(())
     }
@@ -317,9 +312,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             .context(PE::ParseDayOfYear)?;
         self.inp = inp;
 
-        let day = t::DayOfYear::try_new("day-of-year", day)
-            .context(PE::ParseDayOfYear)?;
-        self.tm.day_of_year = Some(day);
+        self.tm.day_of_year =
+            Some(b::DayOfYear::check(day).context(PE::ParseDayOfYear)?);
         self.bump_fmt();
         Ok(())
     }
@@ -331,23 +325,23 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             .context(PE::ParseHour)?;
         self.inp = inp;
 
-        let hour = t::Hour::try_new("hour", hour).context(PE::ParseHour)?;
-        self.tm.set_hour_ranged(Some(hour));
+        let hour = b::Hour::check(hour).context(PE::ParseHour)?;
+        // OK because our hour is in bounds.
+        self.tm.set_hour(Some(hour)).unwrap();
         self.bump_fmt();
         Ok(())
     }
 
     /// Parses `%I`, which is equivalent to the hour on a 12-hour clock.
     fn parse_hour12(&mut self, ext: Extension) -> Result<(), Error> {
-        type Hour12 = ri8<1, 12>;
-
         let (hour, inp) = ext
             .parse_number(2, Flag::PadZero, self.inp)
             .context(PE::ParseHour)?;
         self.inp = inp;
 
-        let hour = Hour12::try_new("hour", hour).context(PE::ParseHour)?;
-        self.tm.set_hour_ranged(Some(t::Hour::rfrom(hour)));
+        let hour = b::Hour12::check(hour).context(PE::ParseHour)?;
+        // OK because our hour is in bounds.
+        self.tm.set_hour(Some(hour)).unwrap();
         self.bump_fmt();
         Ok(())
     }
@@ -368,9 +362,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             .context(PE::ParseMinute)?;
         self.inp = inp;
 
-        let minute =
-            t::Minute::try_new("minute", minute).context(PE::ParseMinute)?;
-        self.tm.minute = Some(minute);
+        self.tm.minute =
+            Some(b::Minute::check(minute).context(PE::ParseMinute)?);
         self.bump_fmt();
         Ok(())
     }
@@ -513,9 +506,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         if second == 60 {
             second = 59;
         }
-        let second =
-            t::Second::try_new("second", second).context(PE::ParseSecond)?;
-        self.tm.second = Some(second);
+        self.tm.second =
+            Some(b::Second::check(second).context(PE::ParseSecond)?);
         self.bump_fmt();
         Ok(())
     }
@@ -568,10 +560,10 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         // fractional nanosecond is 999_999_999, and which also corresponds
         // to the maximal expressible number with 9 ASCII digits. So every
         // possible expressible value here is in range.
-        let nanoseconds =
-            t::SubsecNanosecond::try_new("nanoseconds", nanoseconds)
-                .context(PE::ParseFractionalSeconds)?;
-        self.tm.subsec = Some(nanoseconds);
+        self.tm.subsec = Some(
+            b::SubsecNanosecond::check(nanoseconds)
+                .context(PE::ParseFractionalSeconds)?,
+        );
         self.bump_fmt();
         Ok(())
     }
@@ -595,9 +587,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             .context(PE::ParseMonth)?;
         self.inp = inp;
 
-        let month =
-            t::Month::try_new("month", month).context(PE::ParseMonth)?;
-        self.tm.month = Some(month);
+        self.tm.month = Some(b::Month::check(month).context(PE::ParseMonth)?);
         self.bump_fmt();
         Ok(())
     }
@@ -608,8 +598,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         self.inp = inp;
 
         // Both are OK because 0 <= index <= 11.
-        let index = i8::try_from(index).unwrap();
-        self.tm.month = Some(t::Month::new(index + 1).unwrap());
+        self.tm.month = Some(index + 1);
         self.bump_fmt();
         Ok(())
     }
@@ -636,8 +625,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         self.inp = inp;
 
         // Both are OK because 0 <= index <= 11.
-        let index = i8::try_from(index).unwrap();
-        self.tm.month = Some(t::Month::new(index + 1).unwrap());
+        self.tm.month = Some(index + 1);
         self.bump_fmt();
         Ok(())
     }
@@ -720,9 +708,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             .context(PE::ParseSundayWeekNumber)?;
         self.inp = inp;
 
-        let week = t::WeekNum::try_new("week", week)
-            .context(PE::ParseSundayWeekNumber)?;
-        self.tm.week_sun = Some(week);
+        self.tm.week_sun =
+            Some(b::WeekNum::check(week).context(PE::ParseSundayWeekNumber)?);
         self.bump_fmt();
         Ok(())
     }
@@ -734,9 +721,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             .context(PE::ParseIsoWeekNumber)?;
         self.inp = inp;
 
-        let week = t::ISOWeek::try_new("week", week)
-            .context(PE::ParseIsoWeekNumber)?;
-        self.tm.iso_week = Some(week);
+        self.tm.iso_week =
+            Some(b::ISOWeek::check(week).context(PE::ParseIsoWeekNumber)?);
         self.bump_fmt();
         Ok(())
     }
@@ -749,9 +735,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             .context(PE::ParseMondayWeekNumber)?;
         self.inp = inp;
 
-        let week = t::WeekNum::try_new("week", week)
-            .context(PE::ParseMondayWeekNumber)?;
-        self.tm.week_mon = Some(week);
+        self.tm.week_mon =
+            Some(b::WeekNum::check(week).context(PE::ParseMondayWeekNumber)?);
         self.bump_fmt();
         Ok(())
     }
@@ -766,8 +751,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         // OK because sign=={1,-1} and year can't be bigger than 4 digits
         // so overflow isn't possible.
         let year = sign.checked_mul(year).unwrap();
-        let year = t::Year::try_new("year", year).context(PE::ParseYear)?;
-        self.tm.year = Some(year);
+        self.tm.year = Some(b::Year::check(year).context(PE::ParseYear)?);
         self.bump_fmt();
         Ok(())
     }
@@ -776,20 +760,17 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     ///
     /// The numbers 69-99 refer to 1969-1999, while 00-68 refer to 2000-2068.
     fn parse_year2(&mut self, ext: Extension) -> Result<(), Error> {
-        type Year2Digit = ri8<0, 99>;
-
         let (year, inp) = ext
             .parse_number(2, Flag::PadZero, self.inp)
             .context(PE::ParseYearTwoDigit)?;
         self.inp = inp;
 
-        let year = Year2Digit::try_new("year (2 digits)", year)
-            .context(PE::ParseYearTwoDigit)?;
-        let mut year = t::Year::rfrom(year);
-        if year <= C(68) {
-            year += C(2000);
+        let mut year =
+            b::YearTwoDigit::check(year).context(PE::ParseYearTwoDigit)?;
+        if year <= 68 {
+            year += 2000;
         } else {
-            year += C(1900);
+            year += 1900;
         }
         self.tm.year = Some(year);
         self.bump_fmt();
@@ -804,10 +785,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             ext.parse_number(2, Flag::NoPad, inp).context(PE::ParseCentury)?;
         self.inp = inp;
 
-        if !(0 <= century && century <= 99) {
-            return Err(Error::range("century", century, 0, 99));
-        }
-
+        let century =
+            i64::from(b::Century::check(century).context(PE::ParseCentury)?);
         // OK because sign=={1,-1} and century can't be bigger than 2 digits
         // so overflow isn't possible.
         let century = sign.checked_mul(century).unwrap();
@@ -815,8 +794,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         // 100 will never overflow.
         let year = century.checked_mul(100).unwrap();
         // I believe the error condition here is impossible.
-        let year = t::Year::try_new("year", year).context(PE::ParseCentury)?;
-        self.tm.year = Some(year);
+        self.tm.year = Some(b::Year::check(year).context(PE::ParseCentury)?);
         self.bump_fmt();
         Ok(())
     }
@@ -832,9 +810,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         // OK because sign=={1,-1} and year can't be bigger than 4 digits
         // so overflow isn't possible.
         let year = sign.checked_mul(year).unwrap();
-        let year =
-            t::ISOYear::try_new("year", year).context(PE::ParseIsoWeekYear)?;
-        self.tm.iso_week_year = Some(year);
+        self.tm.iso_week_year =
+            Some(b::ISOYear::check(year).context(PE::ParseIsoWeekYear)?);
         self.bump_fmt();
         Ok(())
     }
@@ -843,20 +820,17 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     ///
     /// The numbers 69-99 refer to 1969-1999, while 00-68 refer to 2000-2068.
     fn parse_iso_week_year2(&mut self, ext: Extension) -> Result<(), Error> {
-        type Year2Digit = ri8<0, 99>;
-
         let (year, inp) = ext
             .parse_number(2, Flag::PadZero, self.inp)
             .context(PE::ParseIsoWeekYearTwoDigit)?;
         self.inp = inp;
 
-        let year = Year2Digit::try_new("year (2 digits)", year)
+        let mut year = b::YearTwoDigit::check(year)
             .context(PE::ParseIsoWeekYearTwoDigit)?;
-        let mut year = t::ISOYear::rfrom(year);
-        if year <= C(68) {
-            year += C(2000);
+        if year <= 68 {
+            year += 2000;
         } else {
-            year += C(1900);
+            year += 1900;
         }
         self.tm.iso_week_year = Some(year);
         self.bump_fmt();
@@ -951,17 +925,22 @@ fn parse_optional_sign<'i>(input: &'i [u8]) -> (i64, &'i [u8]) {
 ///
 /// If no choice given is a prefix of the input, then an error is returned.
 /// The error includes the possible allowed choices.
+///
+/// # Panics
+///
+/// When `choices.len()` exceeds `i8::MAX`.
 fn parse_choice<'i>(
     input: &'i [u8],
     choices: &'static [&'static [u8]],
-) -> Result<(usize, &'i [u8]), Error> {
+) -> Result<(i8, &'i [u8]), Error> {
+    debug_assert!(choices.len() < usize::from(i8::MAX.unsigned_abs()));
     for (i, choice) in choices.into_iter().enumerate() {
         if input.len() < choice.len() {
             continue;
         }
         let (candidate, input) = input.split_at(choice.len());
         if candidate.eq_ignore_ascii_case(choice) {
-            return Ok((i, input));
+            return Ok((i8::try_from(i).unwrap(), input));
         }
     }
     Err(Error::from(PE::ExpectedChoice { available: choices }))
@@ -1023,7 +1002,7 @@ fn parse_weekday_abbrev<'i>(
 #[cfg_attr(feature = "perf-inline", inline(always))]
 fn parse_month_name_abbrev<'i>(
     input: &'i [u8],
-) -> Result<(usize, &'i [u8]), Error> {
+) -> Result<(i8, &'i [u8]), Error> {
     if input.len() < 3 {
         return Err(Error::from(PE::ExpectedMonthAbbreviationTooShort));
     }
@@ -1755,23 +1734,23 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("%H", "24"),
-            @"strptime parsing failed: %H failed: failed to parse hour number: parameter 'hour' with value 24 is not in the required range of 0..=23",
+            @"strptime parsing failed: %H failed: failed to parse hour number: parameter 'hour' is not in the required range of 0..=23",
         );
         insta::assert_snapshot!(
             p("%M", "60"),
-            @"strptime parsing failed: %M failed: failed to parse minute number: parameter 'minute' with value 60 is not in the required range of 0..=59",
+            @"strptime parsing failed: %M failed: failed to parse minute number: parameter 'minute' is not in the required range of 0..=59",
         );
         insta::assert_snapshot!(
             p("%S", "61"),
-            @"strptime parsing failed: %S failed: failed to parse second number: parameter 'second' with value 61 is not in the required range of 0..=59",
+            @"strptime parsing failed: %S failed: failed to parse second number: parameter 'second' is not in the required range of 0..=59",
         );
         insta::assert_snapshot!(
             p("%I", "0"),
-            @"strptime parsing failed: %I failed: failed to parse hour number: parameter 'hour' with value 0 is not in the required range of 1..=12",
+            @"strptime parsing failed: %I failed: failed to parse hour number: parameter 'hour (12 hour clock)' is not in the required range of 1..=12",
         );
         insta::assert_snapshot!(
             p("%I", "13"),
-            @"strptime parsing failed: %I failed: failed to parse hour number: parameter 'hour' with value 13 is not in the required range of 1..=12",
+            @"strptime parsing failed: %I failed: failed to parse hour number: parameter 'hour (12 hour clock)' is not in the required range of 1..=12",
         );
         insta::assert_snapshot!(
             p("%p", "aa"),
@@ -2086,7 +2065,7 @@ mod tests {
 
         insta::assert_snapshot!(
             p("%^50C%", "2000000000000000000#0077)()"),
-            @"strptime parsing failed: %C failed: parameter 'century' with value 2000000000000000000 is not in the required range of 0..=99",
+            @"strptime parsing failed: %C failed: failed to parse year number for century: parameter 'century' is not in the required range of 0..=99",
         );
     }
 }

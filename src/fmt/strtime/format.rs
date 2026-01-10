@@ -368,8 +368,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
         let meridiem = match self.tm.meridiem() {
             Some(meridiem) => meridiem,
             None => {
-                let hour =
-                    self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
+                let hour = self.tm.hour().ok_or(FE::RequiresTime)?;
                 if hour < 12 {
                     Meridiem::AM
                 } else {
@@ -389,8 +388,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
         let meridiem = match self.tm.meridiem() {
             Some(meridiem) => meridiem,
             None => {
-                let hour =
-                    self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
+                let hour = self.tm.hour().ok_or(FE::RequiresTime)?;
                 if hour < 12 {
                     Meridiem::AM
                 } else {
@@ -472,10 +470,9 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     fn fmt_day_zero(&self) -> Result<ItemInteger, Error> {
         let day = self
             .tm
-            .day
-            .or_else(|| self.tm.to_date().ok().map(|d| d.day_ranged()))
-            .ok_or(FE::RequiresDate)?
-            .get();
+            .day()
+            .or_else(|| self.tm.to_date().ok().map(|d| d.day()))
+            .ok_or(FE::RequiresDate)?;
         Ok(ItemInteger::new(b'0', 2, day))
     }
 
@@ -483,16 +480,15 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     fn fmt_day_space(&self) -> Result<ItemInteger, Error> {
         let day = self
             .tm
-            .day
-            .or_else(|| self.tm.to_date().ok().map(|d| d.day_ranged()))
-            .ok_or(FE::RequiresDate)?
-            .get();
+            .day()
+            .or_else(|| self.tm.to_date().ok().map(|d| d.day()))
+            .ok_or(FE::RequiresDate)?;
         Ok(ItemInteger::new(b' ', 2, day))
     }
 
     /// %I
     fn fmt_hour12_zero(&self) -> Result<ItemInteger, Error> {
-        let mut hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
+        let mut hour = self.tm.hour().ok_or(FE::RequiresTime)?;
         if hour == 0 {
             hour = 12;
         } else if hour > 12 {
@@ -503,13 +499,13 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
 
     /// %H
     fn fmt_hour24_zero(&self) -> Result<ItemInteger, Error> {
-        let hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
+        let hour = self.tm.hour().ok_or(FE::RequiresTime)?;
         Ok(ItemInteger::new(b'0', 2, hour))
     }
 
     /// %l
     fn fmt_hour12_space(&self) -> Result<ItemInteger, Error> {
-        let mut hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
+        let mut hour = self.tm.hour().ok_or(FE::RequiresTime)?;
         if hour == 0 {
             hour = 12;
         } else if hour > 12 {
@@ -520,13 +516,13 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
 
     /// %k
     fn fmt_hour24_space(&self) -> Result<ItemInteger, Error> {
-        let hour = self.tm.hour_ranged().ok_or(FE::RequiresTime)?.get();
+        let hour = self.tm.hour().ok_or(FE::RequiresTime)?;
         Ok(ItemInteger::new(b' ', 2, hour))
     }
 
     /// %M
     fn fmt_minute(&self) -> Result<ItemInteger, Error> {
-        let minute = self.tm.minute.ok_or(FE::RequiresTime)?.get();
+        let minute = self.tm.minute().ok_or(FE::RequiresTime)?;
         Ok(ItemInteger::new(b'0', 2, minute))
     }
 
@@ -534,10 +530,9 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     fn fmt_month(&self) -> Result<ItemInteger, Error> {
         let month = self
             .tm
-            .month
-            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
-            .ok_or(FE::RequiresDate)?
-            .get();
+            .month()
+            .or_else(|| self.tm.to_date().ok().map(|d| d.month()))
+            .ok_or(FE::RequiresDate)?;
         Ok(ItemInteger::new(b'0', 2, month))
     }
 
@@ -545,8 +540,8 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     fn fmt_month_full(&self) -> Result<ItemString, Error> {
         let month = self
             .tm
-            .month
-            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
+            .month()
+            .or_else(|| self.tm.to_date().ok().map(|d| d.month()))
             .ok_or(FE::RequiresDate)?;
         Ok(ItemString::new(Case::AsIs, month_name_full(month)))
     }
@@ -555,8 +550,8 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     fn fmt_month_abbrev(&self) -> Result<ItemString, Error> {
         let month = self
             .tm
-            .month
-            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
+            .month()
+            .or_else(|| self.tm.to_date().ok().map(|d| d.month()))
             .ok_or(FE::RequiresDate)?;
         Ok(ItemString::new(Case::AsIs, month_name_abbrev(month)))
     }
@@ -611,7 +606,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
 
     /// %S
     fn fmt_second(&self) -> Result<ItemInteger, Error> {
-        let second = self.tm.second.ok_or(FE::RequiresTime)?.get();
+        let second = self.tm.second().ok_or(FE::RequiresTime)?;
         Ok(ItemInteger::new(b'0', 2, second))
     }
 
@@ -741,8 +736,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
         }
         let day = self
             .tm
-            .day_of_year
-            .map(|day| day.get())
+            .day_of_year()
             .or_else(|| self.tm.to_date().ok().map(|d| d.day_of_year()))
             .ok_or(FE::RequiresDate)?;
         let weekday = self
@@ -764,9 +758,9 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     fn fmt_week_iso(&self) -> Result<ItemInteger, Error> {
         let weeknum = self
             .tm
-            .iso_week
+            .iso_week()
             .or_else(|| {
-                self.tm.to_date().ok().map(|d| d.iso_week_date().week_ranged())
+                self.tm.to_date().ok().map(|d| d.iso_week_date().week())
             })
             .ok_or(FE::RequiresDate)?;
         Ok(ItemInteger::new(b'0', 2, weeknum))
@@ -780,8 +774,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
         }
         let day = self
             .tm
-            .day_of_year
-            .map(|day| day.get())
+            .day_of_year()
             .or_else(|| self.tm.to_date().ok().map(|d| d.day_of_year()))
             .ok_or(FE::RequiresDate)?;
         let weekday = self
@@ -803,10 +796,9 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     fn fmt_year(&self) -> Result<ItemInteger, Error> {
         let year = self
             .tm
-            .year
-            .or_else(|| self.tm.to_date().ok().map(|d| d.year_ranged()))
-            .ok_or(FE::RequiresDate)?
-            .get();
+            .year()
+            .or_else(|| self.tm.to_date().ok().map(|d| d.year()))
+            .ok_or(FE::RequiresDate)?;
         Ok(ItemInteger::new(b'0', 4, year))
     }
 
@@ -814,10 +806,9 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     fn fmt_year2(&self) -> Result<ItemInteger, Error> {
         let year = self
             .tm
-            .year
-            .or_else(|| self.tm.to_date().ok().map(|d| d.year_ranged()))
-            .ok_or(FE::RequiresDate)?
-            .get();
+            .year()
+            .or_else(|| self.tm.to_date().ok().map(|d| d.year()))
+            .ok_or(FE::RequiresDate)?;
         let year = year % 100;
         Ok(ItemInteger::new(b'0', 2, year))
     }
@@ -826,10 +817,9 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     fn fmt_century(&self) -> Result<ItemInteger, Error> {
         let year = self
             .tm
-            .year
-            .or_else(|| self.tm.to_date().ok().map(|d| d.year_ranged()))
-            .ok_or(FE::RequiresDate)?
-            .get();
+            .year()
+            .or_else(|| self.tm.to_date().ok().map(|d| d.year()))
+            .ok_or(FE::RequiresDate)?;
         let century = year / 100;
         Ok(ItemInteger::new(b' ', 0, century))
     }
@@ -838,12 +828,11 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     fn fmt_iso_week_year(&self) -> Result<ItemInteger, Error> {
         let year = self
             .tm
-            .iso_week_year
+            .iso_week_year()
             .or_else(|| {
-                self.tm.to_date().ok().map(|d| d.iso_week_date().year_ranged())
+                self.tm.to_date().ok().map(|d| d.iso_week_date().year())
             })
-            .ok_or(FE::RequiresDate)?
-            .get();
+            .ok_or(FE::RequiresDate)?;
         Ok(ItemInteger::new(b'0', 4, year))
     }
 
@@ -851,12 +840,11 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     fn fmt_iso_week_year2(&self) -> Result<ItemInteger, Error> {
         let year = self
             .tm
-            .iso_week_year
+            .iso_week_year()
             .or_else(|| {
-                self.tm.to_date().ok().map(|d| d.iso_week_date().year_ranged())
+                self.tm.to_date().ok().map(|d| d.iso_week_date().year())
             })
-            .ok_or(FE::RequiresDate)?
-            .get();
+            .ok_or(FE::RequiresDate)?;
         let year = year % 100;
         Ok(ItemInteger::new(b'0', 2, year))
     }
@@ -865,10 +853,9 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     fn fmt_quarter(&self) -> Result<ItemInteger, Error> {
         let month = self
             .tm
-            .month
-            .or_else(|| self.tm.to_date().ok().map(|d| d.month_ranged()))
-            .ok_or(FE::RequiresDate)?
-            .get();
+            .month()
+            .or_else(|| self.tm.to_date().ok().map(|d| d.month()))
+            .ok_or(FE::RequiresDate)?;
         let quarter = match month {
             1..=3 => 1,
             4..=6 => 2,
@@ -883,8 +870,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     fn fmt_day_of_year(&self) -> Result<ItemInteger, Error> {
         let day = self
             .tm
-            .day_of_year
-            .map(|day| day.get())
+            .day_of_year()
             .or_else(|| self.tm.to_date().ok().map(|d| d.day_of_year()))
             .ok_or(FE::RequiresDate)?;
         Ok(ItemInteger::new(b'0', 3, day))
