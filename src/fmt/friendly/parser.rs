@@ -5,7 +5,7 @@ use crate::{
         util::{parse_temporal_fraction, DurationUnits},
         Parsed,
     },
-    util::{c::Sign, parse},
+    util::{b::Sign, parse},
     Error, SignedDuration, Span, Unit,
 };
 

@@ -1,7 +1,7 @@
 use crate::{
     error::{fmt::util::Error as E, ErrorContext},
     fmt::Parsed,
-    util::{c::Sign, parse, t},
+    util::{b::Sign, parse, t},
     Error, SignedDuration, Span, Unit,
 };
 

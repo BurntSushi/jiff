@@ -1,4 +1,4 @@
-use crate::util::sync::Arc;
+use crate::util::{b::BoundsError, sync::Arc};
 
 pub(crate) mod civil;
 pub(crate) mod duration;
@@ -232,6 +232,12 @@ impl Error {
         Error::from(ErrorKind::SlimRange(SlimRangeError::new(what)))
     }
 
+    #[inline(never)]
+    #[cold]
+    pub(crate) fn bounds(err: BoundsError) -> Error {
+        Error::from(ErrorKind::Bounds(err))
+    }
+
     /// Creates a new error from the special "shared" error type.
     pub(crate) fn itime_range(
         err: crate::shared::util::itime::RangeError,
@@ -421,6 +427,7 @@ impl core::fmt::Debug for Error {
 #[cfg_attr(not(feature = "alloc"), derive(Clone))]
 enum ErrorKind {
     Adhoc(AdhocError),
+    Bounds(BoundsError),
     Civil(self::civil::Error),
     CrateFeature(CrateFeatureError),
     Duration(self::duration::Error),
@@ -470,6 +477,7 @@ impl core::fmt::Display for ErrorKind {
 
         match *self {
             Adhoc(ref msg) => msg.fmt(f),
+            Bounds(ref msg) => msg.fmt(f),
             Civil(ref err) => err.fmt(f),
             CrateFeature(ref err) => err.fmt(f),
             Duration(ref err) => err.fmt(f),
