@@ -21,9 +21,6 @@ pub(crate) enum Error {
     ParseMinutes,
     ParseSeconds,
     PrecisionLoss,
-    RangeHours,
-    RangeMinutes,
-    RangeSeconds,
     SeparatorAfterHours,
     SeparatorAfterMinutes,
     SubminutePrecisionNotEnabled,
@@ -111,18 +108,9 @@ impl core::fmt::Display for Error {
                 "failed to parse seconds (requires a two digit integer)",
             ),
             PrecisionLoss => f.write_str(
-                "due to precision loss, offset is \
-                 rounded to a value that is out of bounds",
+                "due to precision loss from fractional seconds, \
+                 time zone offset is rounded to a value that is out of bounds",
             ),
-            RangeHours => {
-                f.write_str("hour in time zone offset is out of range")
-            }
-            RangeMinutes => {
-                f.write_str("minute in time zone offset is out of range")
-            }
-            RangeSeconds => {
-                f.write_str("second in time zone offset is out of range")
-            }
             SeparatorAfterHours => f.write_str(
                 "failed to parse separator after hours in \
                  UTC numeric offset",

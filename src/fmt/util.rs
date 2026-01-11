@@ -1,7 +1,10 @@
 use crate::{
     error::{fmt::util::Error as E, ErrorContext},
     fmt::Parsed,
-    util::{b::Sign, parse, t},
+    util::{
+        b::{self, Sign},
+        parse,
+    },
     Error, SignedDuration, Span, Unit,
 };
 
@@ -191,7 +194,7 @@ impl DurationUnits {
         // are no bigger than the maximum year, then we know all
         // parsed unit values are necessarily within their
         // appropriate limits.
-        const LIMIT: u64 = t::SpanYears::MAX_SELF.get_unchecked() as u64;
+        const LIMIT: u64 = b::SpanYears::MAX as u64;
 
         // If we have a fraction or a particularly large unit,
         // bail out to the general case.
@@ -794,20 +797,16 @@ fn fractional_time_to_span(
     fraction: i32,
     mut span: Span,
 ) -> Result<Span, Error> {
-    const MAX_HOURS: i64 = t::SpanHours::MAX_SELF.get_unchecked() as i64;
-    const MAX_MINS: i64 = t::SpanMinutes::MAX_SELF.get_unchecked() as i64;
-    const MAX_SECS: i64 = t::SpanSeconds::MAX_SELF.get_unchecked() as i64;
-    const MAX_MILLIS: i128 =
-        t::SpanMilliseconds::MAX_SELF.get_unchecked() as i128;
-    const MAX_MICROS: i128 =
-        t::SpanMicroseconds::MAX_SELF.get_unchecked() as i128;
-    const MIN_HOURS: i64 = t::SpanHours::MIN_SELF.get_unchecked() as i64;
-    const MIN_MINS: i64 = t::SpanMinutes::MIN_SELF.get_unchecked() as i64;
-    const MIN_SECS: i64 = t::SpanSeconds::MIN_SELF.get_unchecked() as i64;
-    const MIN_MILLIS: i128 =
-        t::SpanMilliseconds::MIN_SELF.get_unchecked() as i128;
-    const MIN_MICROS: i128 =
-        t::SpanMicroseconds::MIN_SELF.get_unchecked() as i128;
+    const MAX_HOURS: i64 = b::SpanHours::MAX;
+    const MAX_MINS: i64 = b::SpanMinutes::MAX;
+    const MAX_SECS: i64 = b::SpanSeconds::MAX;
+    const MAX_MILLIS: i128 = b::SpanMilliseconds::MAX as i128;
+    const MAX_MICROS: i128 = b::SpanMicroseconds::MAX as i128;
+    const MIN_HOURS: i64 = b::SpanHours::MIN;
+    const MIN_MINS: i64 = b::SpanMinutes::MIN;
+    const MIN_SECS: i64 = b::SpanSeconds::MIN;
+    const MIN_MILLIS: i128 = b::SpanMilliseconds::MIN as i128;
+    const MIN_MICROS: i128 = b::SpanMicroseconds::MIN as i128;
 
     // We switch everything over to nanoseconds and then divy that up as
     // appropriate. In general, we always create a balanced span, but there
@@ -953,11 +952,11 @@ fn fractional_duration(
 ) -> Result<SignedDuration, Error> {
     let fraction = i64::from(fraction);
     let nanos = match unit {
-        Unit::Hour => fraction * t::SECONDS_PER_HOUR.value(),
-        Unit::Minute => fraction * t::SECONDS_PER_MINUTE.value(),
+        Unit::Hour => fraction * b::SECS_PER_HOUR,
+        Unit::Minute => fraction * b::SECS_PER_MIN,
         Unit::Second => fraction,
-        Unit::Millisecond => fraction / t::NANOS_PER_MICRO.value(),
-        Unit::Microsecond => fraction / t::NANOS_PER_MILLI.value(),
+        Unit::Millisecond => fraction / b::NANOS_PER_MICRO,
+        Unit::Microsecond => fraction / b::NANOS_PER_MILLI,
         unit => {
             return Err(Error::from(E::NotAllowedFractionalUnit {
                 found: unit,
@@ -985,13 +984,13 @@ fn duration_unit_value(
     let sdur = match unit {
         Unit::Hour => {
             let seconds = value
-                .checked_mul(t::SECONDS_PER_HOUR.value())
+                .checked_mul(b::SECS_PER_HOUR)
                 .ok_or(E::ConversionToSecondsFailed { unit: Unit::Hour })?;
             SignedDuration::from_secs(seconds)
         }
         Unit::Minute => {
             let seconds = value
-                .checked_mul(t::SECONDS_PER_MINUTE.value())
+                .checked_mul(b::SECS_PER_MIN)
                 .ok_or(E::ConversionToSecondsFailed { unit: Unit::Minute })?;
             SignedDuration::from_secs(seconds)
         }

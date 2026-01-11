@@ -9,6 +9,23 @@ ranged integers. I'm not quite sure where this will go.
 
 use crate::{util::t, Error};
 
+pub(crate) const MINS_PER_HOUR: i64 = 60;
+pub(crate) const SECS_PER_HOUR: i64 = SECS_PER_MIN * MINS_PER_HOUR;
+pub(crate) const SECS_PER_MIN: i64 = 60;
+pub(crate) const MILLIS_PER_SEC: i64 = 1_000;
+pub(crate) const MICROS_PER_MILLI: i64 = 1_000;
+pub(crate) const NANOS_PER_MICRO: i64 = 1_000;
+pub(crate) const NANOS_PER_MILLI: i64 = MICROS_PER_MILLI * NANOS_PER_MICRO;
+
+pub(crate) const MINS_PER_HOUR_32: i32 = 60;
+pub(crate) const SECS_PER_HOUR_32: i32 = SECS_PER_MIN_32 * MINS_PER_HOUR_32;
+pub(crate) const SECS_PER_MIN_32: i32 = 60;
+pub(crate) const MILLIS_PER_SEC_32: i32 = 1_000;
+pub(crate) const MICROS_PER_MILLI_32: i32 = 1_000;
+pub(crate) const NANOS_PER_MICRO_32: i32 = 1_000;
+pub(crate) const NANOS_PER_MILLI_32: i32 =
+    MICROS_PER_MILLI_32 * NANOS_PER_MICRO_32;
+
 macro_rules! define_bounds {
     ($((
         $name:ident,
@@ -33,6 +50,10 @@ macro_rules! define_bounds {
             }
 
             impl $name {
+                pub(crate) const MIN: $ty = <$name as Bounds>::MIN;
+                pub(crate) const MAX: $ty = <$name as Bounds>::MAX;
+                const LEN: i128 = Self::MAX as i128 - Self::MIN as i128 + 1;
+
                 #[cfg_attr(feature = "perf-inline", inline(always))]
                 pub(crate) fn check(n: impl Into<i64>) -> Result<$ty, BoundsError> {
                     <$name as Bounds>::check(n)
@@ -96,6 +117,11 @@ define_bounds! {
     // integer). But RFC 8536 does say that it *should* be in the range
     // `[-89999, 93599]`, which matches POSIX. In order to keep our offset
     // small, we stick roughly to what POSIX requires.
+    //
+    // Note that we support a slightly bigger range of offsets than Temporal.
+    // Temporal seems to support only up to 23 hours, but we go up to 25 hours.
+    // This is done to support POSIX time zone strings, which also require 25
+    // hours (plus the maximal minute/second components).
     (OffsetHours, i8, "time zone offset hours", -25, 25),
     (OffsetMinutes, i8, "time zone offset minutes", -59, 59),
     (OffsetSeconds, i8, "time zone offset seconds", -59, 59),
@@ -109,8 +135,114 @@ define_bounds! {
         + OffsetSeconds::MAX as i32,
     ),
     (Second, i8, "second", 0, 59),
+    (SpanYears, i16, "years", -Self::MAX, (Year::LEN - 1) as i16),
+    (SpanMonths, i32, "months", -Self::MAX, SpanYears::MAX as i32 * 12),
+    (SpanWeeks, i32, "weeks", -Self::MAX, SpanDays::MAX / 7),
+    (SpanDays, i32, "days", -Self::MAX, (SpanHours::MAX / 24) as i32),
+    (SpanHours, i64, "hours", -Self::MAX, SpanMinutes::MAX / 60),
+    (SpanMinutes, i64, "minutes", -Self::MAX, SpanSeconds::MAX / 60),
+    // The maximum number of seconds that can be expressed with a span.
+    //
+    // All of our span types (except for years and months, since they have
+    // variable length even in civil datetimes) are defined in terms of this
+    // constant. The way it's defined is a little odd, so let's break it down.
+    //
+    // Firstly, a span of seconds should be able to represent at least
+    // the complete span supported by `Timestamp`. Thus, it's based off of
+    // `UnixSeconds::LEN`. That is, a span should be able to represent the value
+    // `UnixSeconds::MAX - UnixSeconds::MIN`.
+    //
+    // Secondly, a span should also be able to account for any amount of possible
+    // time that a time zone offset might add or subtract to an `Timestamp`. This
+    // also means it can account for any difference between two `civil::DateTime`
+    // values.
+    //
+    // Thirdly, we would like our span to be divisible by `SECONDS_PER_CIVIL_DAY`.
+    // This isn't strictly required, but it makes defining boundaries a little
+    // smoother. If it weren't divisible, then the lower bounds on some types
+    // would need to be adjusted by one.
+    //
+    // Note that neither the existence of this constant nor defining our spans
+    // based on it impacts the correctness of doing arithmetic on zoned instants.
+    // Arithmetic on zoned instants still uses "civil" spans, but the length
+    // of time for some units (like a day) might vary. The arithmetic for zoned
+    // instants accounts for this explicitly. But it still must obey the limits
+    // set here.
+    (
+        SpanSeconds,
+        i64,
+        "seconds",
+        -Self::MAX,
+        next_multiple_of(
+            UnixSeconds::LEN as i64
+                + OffsetTotalSeconds::MAX as i64
+                + 86_400,
+            86_400,
+        ),
+    ),
+    (
+        SpanMilliseconds,
+        i64,
+        "milliseconds",
+        -Self::MAX,
+        SpanSeconds::MAX * 1_000,
+    ),
+    (
+        SpanMicroseconds,
+        i64,
+        "microseconds",
+        -Self::MAX,
+        SpanMilliseconds::MAX * 1_000,
+    ),
+    // A range of the allowed number of nanoseconds.
+    //
+    // For this, we cannot cover the full span of supported time instants since
+    // `UnixSeconds::MAX * NANOSECONDS_PER_SECOND` cannot fit into 64-bits. We
+    // could use a `i128`, but it doesn't seem worth it.
+    //
+    // Also note that our min is equal to -max, so that the total number of
+    // values in this range is one less than the number of distinct `i64`
+    // values. We do that so that the absolute value is always defined.
+    (SpanNanoseconds, i64, "nanoseconds", i64::MIN + 1, i64::MAX),
     (SubsecNanosecond, i32, "subsecond nanosecond", 0, 999_999_999),
+    (
+        UnixMilliseconds,
+        i64,
+        "Unix timestamp milliseconds",
+        UnixSeconds::MIN * 1_000,
+        UnixSeconds::MAX * 1_000,
+    ),
+    (
+        UnixMicroseconds,
+        i64,
+        "Unix timestamp microseconds",
+        UnixMilliseconds::MIN * 1_000,
+        UnixMilliseconds::MAX * 1_000,
+    ),
+    (
+        UnixNanoseconds,
+        i128,
+        "Unix timestamp nanoseconds",
+        UnixMicroseconds::MIN as i128 * 1_000,
+        UnixMicroseconds::MAX as i128 * 1_000,
+    ),
+    (
+        UnixSeconds,
+        i64,
+        "Unix timestamp seconds",
+        -377705116800 - OffsetTotalSeconds::MIN as i64,
+        253402300799 - OffsetTotalSeconds::MAX as i64,
+    ),
     (WeekNum, i8, "week-number", 0, 53),
+    // The range of years supported by Jiff.
+    //
+    // This is ultimately where some of the other ranges (like `UnixSeconds`)
+    // were determined from. That is, the range of years is the primary point
+    // at which the space of supported time instants is derived from. If one
+    // wanted to expand this range, you'd need to change it here and then
+    // compute the corresponding min/max values for `UnixSeconds`. (Among other
+    // things... Increasing the supported Jiff range is far more complicated
+    // than just changing some ranges here.)
     (Year, i16, "year", -9999, 9999),
     (YearTwoDigit, i16, "year (2 digits)", 0, 99),
 }
@@ -475,6 +607,25 @@ where
     Ok(n as i8)
 }
 */
+
+/// Computes the next multiple of `rhs` that is greater than or equal to `lhs`.
+///
+/// Taken from:
+/// https://github.com/rust-lang/rust/blob/eff958c59e8c07ba0515e164b825c9001b242294/library/core/src/num/int_macros.rs
+const fn next_multiple_of(lhs: i64, rhs: i64) -> i64 {
+    // This would otherwise fail when calculating `r` when self == T::MIN.
+    if rhs == -1 {
+        return lhs;
+    }
+
+    let r = lhs % rhs;
+    let m = if (r > 0 && rhs < 0) || (r < 0 && rhs > 0) { r + rhs } else { r };
+    if m == 0 {
+        lhs
+    } else {
+        lhs + (rhs - m)
+    }
+}
 
 #[cfg(test)]
 mod tests {
