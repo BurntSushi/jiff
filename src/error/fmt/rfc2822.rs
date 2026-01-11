@@ -19,15 +19,9 @@ pub(crate) enum Error {
     FailedZoned,
     InconsistentWeekday { parsed: Weekday, from_date: Weekday },
     InvalidDate,
-    InvalidHour,
-    InvalidMinute,
     InvalidMonth,
     InvalidObsoleteOffset,
-    InvalidOffsetHour,
-    InvalidOffsetMinute,
-    InvalidSecond,
     InvalidWeekday { got_non_digit: u8 },
-    InvalidYear,
     NegativeYear,
     ParseDay,
     ParseHour,
@@ -125,8 +119,6 @@ impl core::fmt::Display for Error {
                  but parsed datetime has weekday `{from_date:?}`",
             ),
             InvalidDate => f.write_str("invalid date"),
-            InvalidHour => f.write_str("invalid hour"),
-            InvalidMinute => f.write_str("invalid minute"),
             InvalidMonth => f.write_str(
                 "expected abbreviated month name, \
                  but did not recognize a valid abbreviated month name",
@@ -135,11 +127,6 @@ impl core::fmt::Display for Error {
                 "expected obsolete RFC 2822 time zone abbreviation, \
                  but did not recognize a valid abbreviation",
             ),
-            InvalidOffsetHour => f.write_str("invalid time zone offset hour"),
-            InvalidOffsetMinute => {
-                f.write_str("invalid time zone offset minute")
-            }
-            InvalidSecond => f.write_str("invalid second"),
             InvalidWeekday { got_non_digit } => write!(
                 f,
                 "expected day at beginning of RFC 2822 datetime \
@@ -148,7 +135,6 @@ impl core::fmt::Display for Error {
                  weekday abbreviation",
                 first = escape::Byte(got_non_digit),
             ),
-            InvalidYear => f.write_str("invalid year"),
             NegativeYear => f.write_str(
                 "datetime has negative year, \
                  which cannot be formatted with RFC 2822",

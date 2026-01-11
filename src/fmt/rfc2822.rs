@@ -46,11 +46,7 @@ use crate::{
     error::{fmt::rfc2822::Error as E, ErrorContext},
     fmt::{buffer::BorrowedBuffer, Parsed, Write},
     tz::{Offset, TimeZone},
-    util::{
-        parse,
-        rangeint::{ri8, RFrom},
-        t::{self, C},
-    },
+    util::{b, parse},
     Error, Timestamp, Zoned,
 };
 
@@ -453,7 +449,7 @@ impl DateTimeParser {
             if !whitespace_after_minute {
                 return Err(Error::from(E::WhitespaceAfterTime));
             }
-            (t::Second::N::<0>(), input)
+            (0, input)
         } else {
             let Parsed { input, .. } = self.parse_time_separator(input)?;
             let Parsed { input, .. } = self.skip_whitespace(input);
@@ -462,14 +458,11 @@ impl DateTimeParser {
             (second, input)
         };
 
-        let date =
-            Date::new_ranged(year, month, day).context(E::InvalidDate)?;
-        let time = Time::new_ranged(
-            hour,
-            minute,
-            second,
-            t::SubsecNanosecond::N::<0>(),
-        );
+        let date = Date::new(year, month, day).context(E::InvalidDate)?;
+        // OK because hour, minute and second have been verified as being
+        // in bounds. And all combinations of such in-bound values are also
+        // valid `Time` values.
+        let time = Time::new(hour, minute, second, 0).unwrap();
         let dt = DateTime::from_parts(date, time);
         if let Some(wd) = wd {
             if !self.relaxed_weekday && wd != dt.weekday() {
@@ -557,10 +550,7 @@ impl DateTimeParser {
     /// This also parses at least one mandatory whitespace character after the
     /// day.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn parse_day<'i>(
-        &self,
-        input: &'i [u8],
-    ) -> Result<Parsed<'i, t::Day>, Error> {
+    fn parse_day<'i>(&self, input: &'i [u8]) -> Result<Parsed<'i, i8>, Error> {
         if input.is_empty() {
             return Err(Error::from(E::EndOfInputDay));
         }
@@ -569,8 +559,7 @@ impl DateTimeParser {
             digits = 2;
         }
         let (day, input) = input.split_at(digits);
-        let day = parse::i64(day).context(E::ParseDay)?;
-        let day = t::Day::try_new("day", day).context(E::ParseDay)?;
+        let day = b::Day::parse(day).context(E::ParseDay)?;
         let Parsed { input, .. } =
             self.parse_whitespace(input).context(E::WhitespaceAfterDay)?;
         Ok(Parsed { value: day, input })
@@ -587,7 +576,7 @@ impl DateTimeParser {
     fn parse_month<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, t::Month>, Error> {
+    ) -> Result<Parsed<'i, i8>, Error> {
         if input.is_empty() {
             return Err(Error::from(E::EndOfInputMonth));
         }
@@ -614,9 +603,6 @@ impl DateTimeParser {
             b"dec" => 12,
             _ => return Err(Error::from(E::InvalidMonth)),
         };
-        // OK because we just assigned a numeric value ourselves
-        // above, and all values are valid months.
-        let month = t::Month::new(month).unwrap();
         let Parsed { input, .. } = self
             .parse_whitespace(&input[3..])
             .context(E::WhitespaceAfterMonth)?;
@@ -644,7 +630,7 @@ impl DateTimeParser {
     fn parse_year<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, t::Year>, Error> {
+    ) -> Result<Parsed<'i, i16>, Error> {
         let mut digits = 0;
         while digits <= 3
             && !input[digits..].is_empty()
@@ -658,14 +644,13 @@ impl DateTimeParser {
             }
         }
         let (year, input) = input.split_at(digits);
-        let year = parse::i64(year).context(E::ParseYear)?;
+        let year = b::Year::parse(year).context(E::ParseYear)?;
         let year = match digits {
             2 if year <= 49 => year + 2000,
             2 | 3 => year + 1900,
             4 => year,
             _ => unreachable!("digits={digits} must be 2, 3 or 4"),
         };
-        let year = t::Year::try_new("year", year).context(E::InvalidYear)?;
         let Parsed { input, .. } =
             self.parse_whitespace(input).context(E::WhitespaceAfterYear)?;
         Ok(Parsed { value: year, input })
@@ -680,10 +665,9 @@ impl DateTimeParser {
     fn parse_hour<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, t::Hour>, Error> {
+    ) -> Result<Parsed<'i, i8>, Error> {
         let (hour, input) = parse::split(input, 2).ok_or(E::EndOfInputHour)?;
-        let hour = parse::i64(hour).context(E::ParseHour)?;
-        let hour = t::Hour::try_new("hour", hour).context(E::InvalidHour)?;
+        let hour = b::Hour::parse(hour).context(E::ParseHour)?;
         Ok(Parsed { value: hour, input })
     }
 
@@ -693,12 +677,10 @@ impl DateTimeParser {
     fn parse_minute<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, t::Minute>, Error> {
+    ) -> Result<Parsed<'i, i8>, Error> {
         let (minute, input) =
             parse::split(input, 2).ok_or(E::EndOfInputMinute)?;
-        let minute = parse::i64(minute).context(E::ParseMinute)?;
-        let minute =
-            t::Minute::try_new("minute", minute).context(E::InvalidMinute)?;
+        let minute = b::Minute::parse(minute).context(E::ParseMinute)?;
         Ok(Parsed { value: minute, input })
     }
 
@@ -708,15 +690,14 @@ impl DateTimeParser {
     fn parse_second<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, t::Second>, Error> {
+    ) -> Result<Parsed<'i, i8>, Error> {
         let (second, input) =
             parse::split(input, 2).ok_or(E::EndOfInputSecond)?;
-        let mut second = parse::i64(second).context(E::ParseSecond)?;
+        let mut second =
+            b::LeapSecond::parse(second).context(E::ParseSecond)?;
         if second == 60 {
             second = 59;
         }
-        let second =
-            t::Second::try_new("second", second).context(E::InvalidSecond)?;
         Ok(Parsed { value: second, input })
     }
 
@@ -729,32 +710,25 @@ impl DateTimeParser {
         &self,
         input: &'i [u8],
     ) -> Result<Parsed<'i, Offset>, Error> {
-        type ParsedOffsetHours = ri8<0, { t::SpanZoneOffsetHours::MAX }>;
-        type ParsedOffsetMinutes = ri8<0, { t::SpanZoneOffsetMinutes::MAX }>;
-
         let sign = input.get(0).copied().ok_or(E::EndOfInputOffset)?;
         let sign = if sign == b'+' {
-            t::Sign::N::<1>()
+            b::Sign::Positive
         } else if sign == b'-' {
-            t::Sign::N::<-1>()
+            b::Sign::Negative
         } else {
             return self.parse_offset_obsolete(input);
         };
         let input = &input[1..];
         let (hhmm, input) = parse::split(input, 4).ok_or(E::TooShortOffset)?;
 
-        let hh = parse::i64(&hhmm[0..2]).context(E::ParseOffsetHour)?;
-        let hh = ParsedOffsetHours::try_new("zone-offset-hours", hh)
-            .context(E::InvalidOffsetHour)?;
-        let hh = t::SpanZoneOffset::rfrom(hh);
+        let hh =
+            b::OffsetHours::parse(&hhmm[0..2]).context(E::ParseOffsetHour)?;
+        let mm = b::OffsetMinutes::parse(&hhmm[2..4])
+            .context(E::ParseOffsetMinute)?;
 
-        let mm = parse::i64(&hhmm[2..4]).context(E::ParseOffsetMinute)?;
-        let mm = ParsedOffsetMinutes::try_new("zone-offset-minutes", mm)
-            .context(E::InvalidOffsetMinute)?;
-        let mm = t::SpanZoneOffset::rfrom(mm);
-
-        let seconds = hh * C(3_600) + mm * C(60);
-        let offset = Offset::from_seconds_ranged(seconds * sign);
+        let seconds = sign * (i32::from(hh) * 3_600 + i32::from(mm) * 60);
+        // OK because we check the bounds of both hours and minutes.
+        let offset = Offset::from_seconds(seconds).unwrap();
         Ok(Parsed { value: offset, input })
     }
 
@@ -1641,11 +1615,11 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("Tue, 32 Jun 2024 05:34:45 -0500"),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: failed to parse day: parameter 'day' with value 32 is not in the required range of 1..=31",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: failed to parse day: parameter 'day' is not in the required range of 1..=31",
         );
         insta::assert_snapshot!(
             p("Sun, 30 Jun 2024 24:00:00 -0500"),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: invalid hour: parameter 'hour' with value 24 is not in the required range of 0..=23",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: failed to parse hour (expects a two digit integer): parameter 'hour' is not in the required range of 0..=23",
         );
         // No whitespace after time
         insta::assert_snapshot!(
