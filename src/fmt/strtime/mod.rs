@@ -279,7 +279,7 @@ use crate::{
     error::{fmt::strtime::Error as E, ErrorContext},
     fmt::{
         buffer::{ArrayBuffer, BorrowedWriter},
-        strtime::{format::Formatter, parse::Parser},
+        strtime::{parse::Parser, printer::Formatter},
         Write,
     },
     tz::{Offset, OffsetConflict, TimeZone, TimeZoneDatabase},
@@ -287,8 +287,8 @@ use crate::{
     Error, Timestamp, Zoned,
 };
 
-mod format;
 mod parse;
+mod printer;
 
 /// Parse the given `input` according to the given `format` string.
 ///
