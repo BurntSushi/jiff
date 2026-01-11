@@ -15,7 +15,7 @@ macro_rules! define_bounds {
         $ty:ty,
         $what:expr,
         $min:expr,
-        $max:expr
+        $max:expr $(,)?
     )),* $(,)?) => {
         $(
             pub(crate) struct $name(());
@@ -41,6 +41,11 @@ macro_rules! define_bounds {
                 #[cfg_attr(feature = "perf-inline", inline(always))]
                 pub(crate) fn check128(n: impl Into<i128>) -> Result<$ty, BoundsError> {
                     <$name as Bounds>::check128(n)
+                }
+
+                #[cfg_attr(feature = "perf-inline", inline(always))]
+                pub(crate) fn parse(bytes: &[u8]) -> Result<$ty, Error> {
+                    <$name as Bounds>::parse(bytes)
                 }
             }
         )*
@@ -69,11 +74,40 @@ define_bounds! {
     (Hour12, i8, "hour (12 hour clock)", 1, 12),
     (ISOWeek, i8, "iso-week", 1, 53),
     (ISOYear, i16, "iso-year", -9999, 9999),
+    // This is only used in parsing. A value of `60` gets clamped to `59`.
+    (LeapSecond, i8, "second", 0, 60),
     (Microsecond, i16, "microsecond", 0, 999),
     (Millisecond, i16, "millisecond", 0, 999),
     (Minute, i8, "minute", 0, 59),
     (Month, i8, "month", 1, 12),
     (Nanosecond, i16, "nanosecond", 0, 999),
+    // The number of hours allowed in a time zone offset.
+    //
+    // This number was somewhat arbitrarily chosen. In part because it's bigger
+    // than any current offset in actual use by a wide margin, and in part
+    // because POSIX `TZ` strings require the ability to store offsets in the
+    // range `-24:59:59..=25:59:59`. Note though that we make the range a
+    // little bigger with `-25:59:59..=25:59:59` so that negating an offset
+    // always produces a valid offset.
+    //
+    // Note that RFC 8536 actually allows offsets to be much bigger, namely,
+    // in the range `(-2^31, 2^31)`, where both ends are _exclusive_ (`-2^31`
+    // is explicitly disallowed, and `2^31` overflows a signed 32-bit
+    // integer). But RFC 8536 does say that it *should* be in the range
+    // `[-89999, 93599]`, which matches POSIX. In order to keep our offset
+    // small, we stick roughly to what POSIX requires.
+    (OffsetHours, i8, "time zone offset hours", -25, 25),
+    (OffsetMinutes, i8, "time zone offset minutes", -59, 59),
+    (OffsetSeconds, i8, "time zone offset seconds", -59, 59),
+    (
+        OffsetTotalSeconds,
+        i32,
+        "time zone offset total seconds",
+        -Self::MAX,
+        (OffsetHours::MAX as i32 * 60 * 60)
+        + (OffsetMinutes::MAX as i32 * 60)
+        + OffsetSeconds::MAX as i32,
+    ),
     (Second, i8, "second", 0, 59),
     (SubsecNanosecond, i32, "subsecond nanosecond", 0, 999_999_999),
     (WeekNum, i8, "week-number", 0, 53),
@@ -159,6 +193,25 @@ pub(crate) trait Bounds: Sized {
             return Err(Self::error());
         }
         Ok(Self::Primitive::from_i128(n))
+    }
+
+    /// Parses a 64-bit integer from the beginning to the end of the given
+    /// slice of bytes.
+    ///
+    /// Note that this can never parse a negative integer since it doesn't
+    /// look for a sign. On success, the integer returned is always positive.
+    ///
+    /// # Errors
+    ///
+    /// If the given slice is not a valid integer (i.e., overflow or contains
+    /// anything other than `[0-9]`) or is not in the bounds for this trait
+    /// implementation, then an error is returned.
+    ///
+    /// Note that the error can either be a parsing error or it can be a
+    /// boundary error.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    fn parse(bytes: &[u8]) -> Result<Self::Primitive, Error> {
+        Ok(Self::check(crate::util::parse::i64(bytes)?)?)
     }
 }
 
@@ -276,25 +329,115 @@ pub(crate) enum Sign {
 
 impl Sign {
     /*
-    pub(crate) fn is_zero(&self) -> bool {
+    pub(crate) fn is_zero(self) -> bool {
         matches!(*self, Sign::Zero)
     }
 
-    pub(crate) fn is_positive(&self) -> bool {
+    pub(crate) fn is_positive(self) -> bool {
         matches!(*self, Sign::Positive)
     }
     */
 
-    pub(crate) fn is_negative(&self) -> bool {
-        matches!(*self, Sign::Negative)
+    pub(crate) fn is_negative(self) -> bool {
+        matches!(self, Sign::Negative)
     }
 
-    pub(crate) fn as_ranged_integer(&self) -> t::Sign {
-        match *self {
+    pub(crate) fn as_i8(self) -> i8 {
+        self as i8
+    }
+
+    pub(crate) fn as_i16(self) -> i16 {
+        i16::from(self.as_i8())
+    }
+
+    pub(crate) fn as_i32(self) -> i32 {
+        i32::from(self.as_i8())
+    }
+
+    pub(crate) fn as_i64(self) -> i64 {
+        i64::from(self.as_i8())
+    }
+
+    pub(crate) fn as_i128(self) -> i128 {
+        i128::from(self.as_i8())
+    }
+
+    pub(crate) fn as_ranged_integer(self) -> t::Sign {
+        match self {
             Sign::Zero => t::Sign::N::<0>(),
             Sign::Positive => t::Sign::N::<1>(),
             Sign::Negative => t::Sign::N::<-1>(),
         }
+    }
+}
+
+impl core::ops::Mul<i8> for Sign {
+    type Output = i8;
+    fn mul(self, n: i8) -> i8 {
+        self.as_i8() * n
+    }
+}
+
+impl core::ops::Mul<Sign> for i8 {
+    type Output = i8;
+    fn mul(self, n: Sign) -> i8 {
+        self * n.as_i8()
+    }
+}
+
+impl core::ops::Mul<i16> for Sign {
+    type Output = i16;
+    fn mul(self, n: i16) -> i16 {
+        self.as_i16() * n
+    }
+}
+
+impl core::ops::Mul<Sign> for i16 {
+    type Output = i16;
+    fn mul(self, n: Sign) -> i16 {
+        self * n.as_i16()
+    }
+}
+
+impl core::ops::Mul<i32> for Sign {
+    type Output = i32;
+    fn mul(self, n: i32) -> i32 {
+        self.as_i32() * n
+    }
+}
+
+impl core::ops::Mul<Sign> for i32 {
+    type Output = i32;
+    fn mul(self, n: Sign) -> i32 {
+        self * n.as_i32()
+    }
+}
+
+impl core::ops::Mul<i64> for Sign {
+    type Output = i64;
+    fn mul(self, n: i64) -> i64 {
+        self.as_i64() * n
+    }
+}
+
+impl core::ops::Mul<Sign> for i64 {
+    type Output = i64;
+    fn mul(self, n: Sign) -> i64 {
+        self * n.as_i64()
+    }
+}
+
+impl core::ops::Mul<i128> for Sign {
+    type Output = i128;
+    fn mul(self, n: i128) -> i128 {
+        self.as_i128() * n
+    }
+}
+
+impl core::ops::Mul<Sign> for i128 {
+    type Output = i128;
+    fn mul(self, n: Sign) -> i128 {
+        self * n.as_i128()
     }
 }
 
