@@ -110,19 +110,8 @@ use crate::{
         Parsed,
     },
     tz::Offset,
-    util::{
-        parse,
-        rangeint::{ri8, RFrom},
-        t::{self, C},
-    },
+    util::{b, parse},
 };
-
-// We define our own ranged types because we want them to only be positive. We
-// represent the sign explicitly as a separate field. But the range supported
-// is the same as the component fields of `Offset`.
-type ParsedOffsetHours = ri8<0, { t::SpanZoneOffsetHours::MAX }>;
-type ParsedOffsetMinutes = ri8<0, { t::SpanZoneOffsetMinutes::MAX }>;
-type ParsedOffsetSeconds = ri8<0, { t::SpanZoneOffsetSeconds::MAX }>;
 
 /// An offset that has been parsed from a datetime string.
 ///
@@ -166,7 +155,7 @@ impl ParsedOffset {
             ParsedOffsetKind::Zulu => Ok(PiecesOffset::Zulu),
             ParsedOffsetKind::Numeric(ref numeric) => {
                 let mut off = PiecesNumericOffset::from(numeric.to_offset()?);
-                if numeric.sign < C(0) {
+                if numeric.sign.is_negative() {
                     off = off.with_negative_zero();
                 }
                 Ok(PiecesOffset::from(off))
@@ -206,18 +195,18 @@ enum ParsedOffsetKind {
 struct Numeric {
     /// The sign that was parsed from the numeric UTC offset. This is always
     /// either `1` or `-1`, never `0`.
-    sign: t::Sign,
+    sign: b::Sign,
     /// The hours component. This is non-optional because every UTC offset must
     /// have at least hours.
-    hours: ParsedOffsetHours,
+    hours: i8,
     /// The minutes component.
-    minutes: Option<ParsedOffsetMinutes>,
+    minutes: Option<i8>,
     /// The seconds component. This is only possible when subminute resolution
     /// is enabled.
-    seconds: Option<ParsedOffsetSeconds>,
+    seconds: Option<i8>,
     /// The nanoseconds fractional component. This is only possible when
     /// subminute resolution is enabled.
-    nanoseconds: Option<t::SubsecNanosecond>,
+    nanoseconds: Option<i32>,
 }
 
 impl Numeric {
@@ -227,21 +216,23 @@ impl Numeric {
     /// result, if the parsed value would be rounded to a value not in bounds
     /// for a Jiff offset, this returns an error.
     fn to_offset(&self) -> Result<Offset, Error> {
-        let mut seconds = t::SpanZoneOffset::rfrom(C(3_600) * self.hours);
+        let mut seconds = i32::from(self.hours) * b::SECS_PER_HOUR_32;
         if let Some(part_minutes) = self.minutes {
-            seconds += C(60) * part_minutes;
+            seconds += i32::from(part_minutes) * b::SECS_PER_MIN_32;
         }
         if let Some(part_seconds) = self.seconds {
-            seconds += part_seconds;
+            seconds += i32::from(part_seconds);
         }
         if let Some(part_nanoseconds) = self.nanoseconds {
-            if part_nanoseconds >= C(500_000_000) {
-                seconds = seconds
-                    .try_checked_add("offset-seconds", C(1))
-                    .context(E::PrecisionLoss)?;
+            if part_nanoseconds >= 500_000_000 {
+                seconds += 1;
             }
         }
-        Ok(Offset::from_seconds_ranged(seconds * self.sign))
+        // This can only fail if rounding because of a fractional second
+        // would lead to a number of seconds that is out of bounds. In which
+        // case, we report it as a precision loss.
+        Ok(Offset::from_seconds(self.sign * seconds)
+            .map_err(|_| E::PrecisionLoss)?)
     }
 }
 
@@ -252,21 +243,25 @@ impl core::fmt::Display for Numeric {
         let mut buf = ArrayBuffer::<19>::default();
         let mut bbuf = buf.as_borrowed();
 
-        bbuf.write_ascii_char(if self.sign == C(-1) { b'-' } else { b'+' });
-        bbuf.write_int_pad2(self.hours.get().unsigned_abs());
+        bbuf.write_ascii_char(if self.sign.is_negative() {
+            b'-'
+        } else {
+            b'+'
+        });
+        bbuf.write_int_pad2(self.hours.unsigned_abs());
         if let Some(minutes) = self.minutes {
             bbuf.write_ascii_char(b':');
-            bbuf.write_int_pad2(minutes.get().unsigned_abs());
+            bbuf.write_int_pad2(minutes.unsigned_abs());
         }
         if let Some(seconds) = self.seconds {
             if self.minutes.is_none() {
                 bbuf.write_str(":00");
             }
             bbuf.write_ascii_char(b':');
-            bbuf.write_int_pad2(seconds.get().unsigned_abs());
+            bbuf.write_int_pad2(seconds.unsigned_abs());
         }
         if let Some(nanos) = self.nanoseconds {
-            if nanos != C(0) {
+            if nanos != 0 {
                 if self.minutes.is_none() {
                     bbuf.write_str(":00");
                 }
@@ -274,7 +269,7 @@ impl core::fmt::Display for Numeric {
                     bbuf.write_str(":00");
                 }
                 bbuf.write_ascii_char(b'.');
-                bbuf.write_fraction(None, nanos.get().unsigned_abs());
+                bbuf.write_fraction(None, nanos.unsigned_abs());
             }
         }
         f.write_str(bbuf.filled())
@@ -559,8 +554,7 @@ impl Parser {
             parse_temporal_fraction(input)
                 .context(E::InvalidSecondsFractional)?;
         // OK because `parse_temporal_fraction` guarantees `0..=999_999_999`.
-        numeric.nanoseconds =
-            nanoseconds.map(|n| t::SubsecNanosecond::new(n).unwrap());
+        numeric.nanoseconds = nanoseconds.map(|n| i32::try_from(n).unwrap());
         Ok(Parsed { value: numeric, input })
     }
 
@@ -568,12 +562,12 @@ impl Parser {
     fn parse_sign<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, t::Sign>, Error> {
+    ) -> Result<Parsed<'i, b::Sign>, Error> {
         let sign = input.get(0).copied().ok_or(E::EndOfInputNumeric)?;
         let sign = if sign == b'+' {
-            t::Sign::N::<1>()
+            b::Sign::Positive
         } else if sign == b'-' {
-            t::Sign::N::<-1>()
+            b::Sign::Negative
         } else {
             return Err(Error::from(E::InvalidSignPlusOrMinus));
         };
@@ -584,17 +578,10 @@ impl Parser {
     fn parse_hours<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, ParsedOffsetHours>, Error> {
+    ) -> Result<Parsed<'i, i8>, Error> {
         let (hours, input) =
             parse::split(input, 2).ok_or(E::EndOfInputHour)?;
-        let hours = parse::i64(hours).context(E::ParseHours)?;
-        // Note that we support a slightly bigger range of offsets than
-        // Temporal. Temporal seems to support only up to 23 hours, but
-        // we go up to 25 hours. This is done to support POSIX time zone
-        // strings, which also require 25 hours (plus the maximal minute/second
-        // components).
-        let hours = ParsedOffsetHours::try_new("hours", hours)
-            .context(E::RangeHours)?;
+        let hours = b::OffsetHours::parse(hours).context(E::ParseHours)?;
         Ok(Parsed { value: hours, input })
     }
 
@@ -602,12 +589,11 @@ impl Parser {
     fn parse_minutes<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, ParsedOffsetMinutes>, Error> {
+    ) -> Result<Parsed<'i, i8>, Error> {
         let (minutes, input) =
             parse::split(input, 2).ok_or(E::EndOfInputMinute)?;
-        let minutes = parse::i64(minutes).context(E::ParseMinutes)?;
-        let minutes = ParsedOffsetMinutes::try_new("minutes", minutes)
-            .context(E::RangeMinutes)?;
+        let minutes =
+            b::OffsetMinutes::parse(minutes).context(E::ParseMinutes)?;
         Ok(Parsed { value: minutes, input })
     }
 
@@ -615,12 +601,11 @@ impl Parser {
     fn parse_seconds<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, ParsedOffsetSeconds>, Error> {
+    ) -> Result<Parsed<'i, i8>, Error> {
         let (seconds, input) =
             parse::split(input, 2).ok_or(E::EndOfInputSecond)?;
-        let seconds = parse::i64(seconds).context(E::ParseSeconds)?;
-        let seconds = ParsedOffsetSeconds::try_new("seconds", seconds)
-            .context(E::RangeSeconds)?;
+        let seconds =
+            b::OffsetSeconds::parse(seconds).context(E::ParseSeconds)?;
         Ok(Parsed { value: seconds, input })
     }
 
@@ -667,8 +652,6 @@ pub(crate) enum Colon {
 
 #[cfg(test)]
 mod tests {
-    use crate::util::rangeint::RInto;
-
     use super::*;
 
     #[test]
@@ -897,7 +880,7 @@ mod tests {
     fn err_numeric_hours_out_of_range() {
         insta::assert_snapshot!(
             Parser::new().parse_numeric(b"-26").unwrap_err(),
-            @"failed to parse hours in UTC numeric offset: hour in time zone offset is out of range: parameter 'hours' with value 26 is not in the required range of 0..=25",
+            @"failed to parse hours in UTC numeric offset: failed to parse hours (requires a two digit integer): parameter 'time zone offset hours' is not in the required range of -25..=25",
         );
     }
 
@@ -924,7 +907,7 @@ mod tests {
     fn err_numeric_minutes_out_of_range() {
         insta::assert_snapshot!(
             Parser::new().parse_numeric(b"-05:60").unwrap_err(),
-            @"failed to parse minutes in UTC numeric offset: minute in time zone offset is out of range: parameter 'minutes' with value 60 is not in the required range of 0..=59",
+            @"failed to parse minutes in UTC numeric offset: failed to parse minutes (requires a two digit integer): parameter 'time zone offset minutes' is not in the required range of -59..=59",
         );
     }
 
@@ -951,7 +934,7 @@ mod tests {
     fn err_numeric_seconds_out_of_range() {
         insta::assert_snapshot!(
             Parser::new().parse_numeric(b"-05:30:60").unwrap_err(),
-            @"failed to parse seconds in UTC numeric offset: second in time zone offset is out of range: parameter 'seconds' with value 60 is not in the required range of 0..=59",
+            @"failed to parse seconds in UTC numeric offset: failed to parse seconds (requires a two digit integer): parameter 'time zone offset seconds' is not in the required range of -59..=59",
         );
     }
 
@@ -1021,24 +1004,24 @@ mod tests {
     #[test]
     fn err_numeric_too_big_for_offset() {
         let numeric = Numeric {
-            sign: t::Sign::MAX_SELF,
-            hours: ParsedOffsetHours::MAX_SELF,
-            minutes: Some(ParsedOffsetMinutes::MAX_SELF),
-            seconds: Some(ParsedOffsetSeconds::MAX_SELF),
-            nanoseconds: Some(C(499_999_999).rinto()),
+            sign: b::Sign::Positive,
+            hours: b::OffsetHours::MAX,
+            minutes: Some(b::OffsetMinutes::MAX),
+            seconds: Some(b::OffsetSeconds::MAX),
+            nanoseconds: Some(499_999_999),
         };
         assert_eq!(numeric.to_offset().unwrap(), Offset::MAX);
 
         let numeric = Numeric {
-            sign: t::Sign::MAX_SELF,
-            hours: ParsedOffsetHours::MAX_SELF,
-            minutes: Some(ParsedOffsetMinutes::MAX_SELF),
-            seconds: Some(ParsedOffsetSeconds::MAX_SELF),
-            nanoseconds: Some(C(500_000_000).rinto()),
+            sign: b::Sign::Positive,
+            hours: b::OffsetHours::MAX,
+            minutes: Some(b::OffsetMinutes::MAX),
+            seconds: Some(b::OffsetSeconds::MAX),
+            nanoseconds: Some(500_000_000),
         };
         insta::assert_snapshot!(
             numeric.to_offset().unwrap_err(),
-            @"due to precision loss, offset is rounded to a value that is out of bounds: parameter 'offset-seconds' with value 1 is not in the required range of -93599..=93599",
+            @"due to precision loss from fractional seconds, time zone offset is rounded to a value that is out of bounds",
         );
     }
 
@@ -1046,24 +1029,24 @@ mod tests {
     #[test]
     fn err_numeric_too_small_for_offset() {
         let numeric = Numeric {
-            sign: t::Sign::MIN_SELF,
-            hours: ParsedOffsetHours::MAX_SELF,
-            minutes: Some(ParsedOffsetMinutes::MAX_SELF),
-            seconds: Some(ParsedOffsetSeconds::MAX_SELF),
-            nanoseconds: Some(C(499_999_999).rinto()),
+            sign: b::Sign::Negative,
+            hours: b::OffsetHours::MAX,
+            minutes: Some(b::OffsetMinutes::MAX),
+            seconds: Some(b::OffsetSeconds::MAX),
+            nanoseconds: Some(499_999_999),
         };
         assert_eq!(numeric.to_offset().unwrap(), Offset::MIN);
 
         let numeric = Numeric {
-            sign: t::Sign::MIN_SELF,
-            hours: ParsedOffsetHours::MAX_SELF,
-            minutes: Some(ParsedOffsetMinutes::MAX_SELF),
-            seconds: Some(ParsedOffsetSeconds::MAX_SELF),
-            nanoseconds: Some(C(500_000_000).rinto()),
+            sign: b::Sign::Negative,
+            hours: b::OffsetHours::MAX,
+            minutes: Some(b::OffsetMinutes::MAX),
+            seconds: Some(b::OffsetSeconds::MAX),
+            nanoseconds: Some(500_000_000),
         };
         insta::assert_snapshot!(
             numeric.to_offset().unwrap_err(),
-            @"due to precision loss, offset is rounded to a value that is out of bounds: parameter 'offset-seconds' with value 1 is not in the required range of -93599..=93599",
+            @"due to precision loss from fractional seconds, time zone offset is rounded to a value that is out of bounds",
         );
     }
 }

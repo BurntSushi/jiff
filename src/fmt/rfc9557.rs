@@ -854,11 +854,11 @@ mod tests {
         );
         insta::assert_snapshot!(
             Parser::new().parse(b"[+26]").unwrap_err(),
-            @"failed to parse hours in UTC numeric offset: hour in time zone offset is out of range: parameter 'hours' with value 26 is not in the required range of 0..=25",
+            @"failed to parse hours in UTC numeric offset: failed to parse hours (requires a two digit integer): parameter 'time zone offset hours' is not in the required range of -25..=25",
         );
         insta::assert_snapshot!(
             Parser::new().parse(b"[-26]").unwrap_err(),
-            @"failed to parse hours in UTC numeric offset: hour in time zone offset is out of range: parameter 'hours' with value 26 is not in the required range of 0..=25",
+            @"failed to parse hours in UTC numeric offset: failed to parse hours (requires a two digit integer): parameter 'time zone offset hours' is not in the required range of -25..=25",
         );
         insta::assert_snapshot!(
             Parser::new().parse(b"[+05:12:34]").unwrap_err(),
