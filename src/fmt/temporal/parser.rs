@@ -24,12 +24,10 @@ use crate::{
 /// The datetime components parsed from a string.
 #[derive(Debug)]
 pub(super) struct ParsedDateTime<'i> {
-    /// The original input that the datetime was parsed from.
-    input: escape::Bytes<'i>,
     /// A required civil date.
-    date: ParsedDate<'i>,
+    date: ParsedDate,
     /// An optional civil time.
-    time: Option<ParsedTime<'i>>,
+    time: Option<ParsedTime>,
     /// An optional UTC offset.
     offset: Option<ParsedOffset>,
     /// An optional RFC 9557 annotations parsed.
@@ -173,45 +171,48 @@ impl<'i> ParsedDateTime<'i> {
 
 impl<'i> core::fmt::Display for ParsedDateTime<'i> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self.input, f)
+        core::fmt::Display::fmt(&self.date, f)?;
+        if let Some(ref time) = self.time {
+            core::fmt::Display::fmt(&time, f)?;
+        }
+        if let Some(ref offset) = self.offset {
+            core::fmt::Display::fmt(&offset, f)?;
+        }
+        core::fmt::Display::fmt(&self.annotations, f)
     }
 }
 
 /// The result of parsing a Gregorian calendar civil date.
 #[derive(Debug)]
-pub(super) struct ParsedDate<'i> {
-    /// The original input that the date was parsed from.
-    input: escape::Bytes<'i>,
+pub(super) struct ParsedDate {
     /// The actual parsed date.
     date: Date,
 }
 
-impl<'i> core::fmt::Display for ParsedDate<'i> {
+impl core::fmt::Display for ParsedDate {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self.input, f)
+        core::fmt::Display::fmt(&self.date, f)
     }
 }
 
 /// The result of parsing a 24-hour civil time.
 #[derive(Debug)]
-pub(super) struct ParsedTime<'i> {
-    /// The original input that the time was parsed from.
-    input: escape::Bytes<'i>,
+pub(super) struct ParsedTime {
     /// The actual parsed time.
     time: Time,
     /// Whether the time was parsed in extended format or not.
     extended: bool,
 }
 
-impl<'i> ParsedTime<'i> {
+impl ParsedTime {
     pub(super) fn to_time(&self) -> Time {
         self.time
     }
 }
 
-impl<'i> core::fmt::Display for ParsedTime<'i> {
+impl core::fmt::Display for ParsedTime {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self.input, f)
+        core::fmt::Display::fmt(&self.time, f)
     }
 }
 
@@ -287,11 +288,9 @@ impl DateTimeParser {
         &self,
         input: &'i [u8],
     ) -> Result<Parsed<'i, ParsedDateTime<'i>>, Error> {
-        let mkslice = parse::slicer(input);
         let Parsed { value: date, input } = self.parse_date_spec(input)?;
         let Some((&first, tail)) = input.split_first() else {
             let value = ParsedDateTime {
-                input: escape::Bytes(mkslice(input)),
                 date,
                 time: None,
                 offset: None,
@@ -312,13 +311,7 @@ impl DateTimeParser {
         };
         let Parsed { value: annotations, input } =
             self.parse_annotations(input)?;
-        let value = ParsedDateTime {
-            input: escape::Bytes(mkslice(input)),
-            date,
-            time,
-            offset,
-            annotations,
-        };
+        let value = ParsedDateTime { date, time, offset, annotations };
         Ok(Parsed { value, input })
     }
 
@@ -343,7 +336,7 @@ impl DateTimeParser {
     pub(super) fn parse_temporal_time<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, ParsedTime<'i>>, Error> {
+    ) -> Result<Parsed<'i, ParsedTime>, Error> {
         let mkslice = parse::slicer(input);
 
         if let Some(input) =
@@ -535,9 +528,7 @@ impl DateTimeParser {
     fn parse_date_spec<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, ParsedDate<'i>>, Error> {
-        let mkslice = parse::slicer(input);
-
+    ) -> Result<Parsed<'i, ParsedDate>, Error> {
         // Parse year component.
         let Parsed { value: year, input } =
             self.parse_year(input).context(E::FailedYearInDate)?;
@@ -563,7 +554,7 @@ impl DateTimeParser {
 
         let date =
             Date::new_ranged(year, month, day).context(E::InvalidDate)?;
-        let value = ParsedDate { input: escape::Bytes(mkslice(input)), date };
+        let value = ParsedDate { date };
         Ok(Parsed { value, input })
     }
 
@@ -577,9 +568,7 @@ impl DateTimeParser {
     fn parse_time_spec<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, ParsedTime<'i>>, Error> {
-        let mkslice = parse::slicer(input);
-
+    ) -> Result<Parsed<'i, ParsedTime>, Error> {
         // Parse hour component.
         let Parsed { value: hour, input } =
             self.parse_hour(input).context(E::FailedHourInTime)?;
@@ -595,11 +584,7 @@ impl DateTimeParser {
                 t::Second::N::<0>(),
                 t::SubsecNanosecond::N::<0>(),
             );
-            let value = ParsedTime {
-                input: escape::Bytes(mkslice(input)),
-                time,
-                extended,
-            };
+            let value = ParsedTime { time, extended };
             return Ok(Parsed { value, input });
         }
         let Parsed { value: minute, input } =
@@ -615,11 +600,7 @@ impl DateTimeParser {
                 t::Second::N::<0>(),
                 t::SubsecNanosecond::N::<0>(),
             );
-            let value = ParsedTime {
-                input: escape::Bytes(mkslice(input)),
-                time,
-                extended,
-            };
+            let value = ParsedTime { time, extended };
             return Ok(Parsed { value, input });
         }
         let Parsed { value: second, input } =
@@ -640,11 +621,7 @@ impl DateTimeParser {
                 .map(|n| t::SubsecNanosecond::new(n).unwrap())
                 .unwrap_or(t::SubsecNanosecond::N::<0>()),
         );
-        let value = ParsedTime {
-            input: escape::Bytes(mkslice(input)),
-            time,
-            extended,
-        };
+        let value = ParsedTime { time, extended };
         Ok(Parsed { value, input })
     }
 
@@ -1592,9 +1569,7 @@ mod tests {
         insta::assert_debug_snapshot!(p(b"2024-06-01"), @r#"
         Parsed {
             value: ParsedDateTime {
-                input: "2024-06-01",
                 date: ParsedDate {
-                    input: "2024-06-01",
                     date: 2024-06-01,
                 },
                 time: None,
@@ -1609,9 +1584,7 @@ mod tests {
         insta::assert_debug_snapshot!(p(b"2024-06-01[America/New_York]"), @r#"
         Parsed {
             value: ParsedDateTime {
-                input: "2024-06-01[America/New_York]",
                 date: ParsedDate {
-                    input: "2024-06-01",
                     date: 2024-06-01,
                 },
                 time: None,
@@ -1631,14 +1604,11 @@ mod tests {
         insta::assert_debug_snapshot!(p(b"2024-06-01T01:02:03"), @r#"
         Parsed {
             value: ParsedDateTime {
-                input: "2024-06-01T01:02:03",
                 date: ParsedDate {
-                    input: "2024-06-01",
                     date: 2024-06-01,
                 },
                 time: Some(
                     ParsedTime {
-                        input: "01:02:03",
                         time: 01:02:03,
                         extended: true,
                     },
@@ -1654,14 +1624,11 @@ mod tests {
         insta::assert_debug_snapshot!(p(b"2024-06-01T01:02:03-05"), @r#"
         Parsed {
             value: ParsedDateTime {
-                input: "2024-06-01T01:02:03-05",
                 date: ParsedDate {
-                    input: "2024-06-01",
                     date: 2024-06-01,
                 },
                 time: Some(
                     ParsedTime {
-                        input: "01:02:03",
                         time: 01:02:03,
                         extended: true,
                     },
@@ -1683,14 +1650,11 @@ mod tests {
         insta::assert_debug_snapshot!(p(b"2024-06-01T01:02:03-05[America/New_York]"), @r#"
         Parsed {
             value: ParsedDateTime {
-                input: "2024-06-01T01:02:03-05[America/New_York]",
                 date: ParsedDate {
-                    input: "2024-06-01",
                     date: 2024-06-01,
                 },
                 time: Some(
                     ParsedTime {
-                        input: "01:02:03",
                         time: 01:02:03,
                         extended: true,
                     },
@@ -1717,14 +1681,11 @@ mod tests {
         insta::assert_debug_snapshot!(p(b"2024-06-01T01:02:03Z[America/New_York]"), @r#"
         Parsed {
             value: ParsedDateTime {
-                input: "2024-06-01T01:02:03Z[America/New_York]",
                 date: ParsedDate {
-                    input: "2024-06-01",
                     date: 2024-06-01,
                 },
                 time: Some(
                     ParsedTime {
-                        input: "01:02:03",
                         time: 01:02:03,
                         extended: true,
                     },
@@ -1749,14 +1710,11 @@ mod tests {
         insta::assert_debug_snapshot!(p(b"2024-06-01T01:02:03-01[America/New_York]"), @r#"
         Parsed {
             value: ParsedDateTime {
-                input: "2024-06-01T01:02:03-01[America/New_York]",
                 date: ParsedDate {
-                    input: "2024-06-01",
                     date: 2024-06-01,
                 },
                 time: Some(
                     ParsedTime {
-                        input: "01:02:03",
                         time: 01:02:03,
                         extended: true,
                     },
@@ -1791,14 +1749,11 @@ mod tests {
         insta::assert_debug_snapshot!(p(b"2024-06-01T01"), @r#"
         Parsed {
             value: ParsedDateTime {
-                input: "2024-06-01T01",
                 date: ParsedDate {
-                    input: "2024-06-01",
                     date: 2024-06-01,
                 },
                 time: Some(
                     ParsedTime {
-                        input: "01",
                         time: 01:00:00,
                         extended: false,
                     },
@@ -1814,14 +1769,11 @@ mod tests {
         insta::assert_debug_snapshot!(p(b"2024-06-01T0102"), @r#"
         Parsed {
             value: ParsedDateTime {
-                input: "2024-06-01T0102",
                 date: ParsedDate {
-                    input: "2024-06-01",
                     date: 2024-06-01,
                 },
                 time: Some(
                     ParsedTime {
-                        input: "0102",
                         time: 01:02:00,
                         extended: false,
                     },
@@ -1837,14 +1789,11 @@ mod tests {
         insta::assert_debug_snapshot!(p(b"2024-06-01T01:02"), @r#"
         Parsed {
             value: ParsedDateTime {
-                input: "2024-06-01T01:02",
                 date: ParsedDate {
-                    input: "2024-06-01",
                     date: 2024-06-01,
                 },
                 time: Some(
                     ParsedTime {
-                        input: "01:02",
                         time: 01:02:00,
                         extended: true,
                     },
@@ -1868,14 +1817,11 @@ mod tests {
         insta::assert_debug_snapshot!(p(b"2024-06-01t01:02:03"), @r#"
         Parsed {
             value: ParsedDateTime {
-                input: "2024-06-01t01:02:03",
                 date: ParsedDate {
-                    input: "2024-06-01",
                     date: 2024-06-01,
                 },
                 time: Some(
                     ParsedTime {
-                        input: "01:02:03",
                         time: 01:02:03,
                         extended: true,
                     },
@@ -1891,14 +1837,11 @@ mod tests {
         insta::assert_debug_snapshot!(p(b"2024-06-01 01:02:03"), @r#"
         Parsed {
             value: ParsedDateTime {
-                input: "2024-06-01 01:02:03",
                 date: ParsedDate {
-                    input: "2024-06-01",
                     date: 2024-06-01,
                 },
                 time: Some(
                     ParsedTime {
-                        input: "01:02:03",
                         time: 01:02:03,
                         extended: true,
                     },
@@ -1918,46 +1861,42 @@ mod tests {
         let p =
             |input| DateTimeParser::new().parse_temporal_time(input).unwrap();
 
-        insta::assert_debug_snapshot!(p(b"01:02:03"), @r###"
+        insta::assert_debug_snapshot!(p(b"01:02:03"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "01:02:03",
                 time: 01:02:03,
                 extended: true,
             },
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"130113"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"130113"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "130113",
                 time: 13:01:13,
                 extended: false,
             },
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"T01:02:03"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"T01:02:03"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "01:02:03",
                 time: 01:02:03,
                 extended: true,
             },
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"T010203"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"T010203"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "010203",
                 time: 01:02:03,
                 extended: false,
             },
             input: "",
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -1965,88 +1904,80 @@ mod tests {
         let p =
             |input| DateTimeParser::new().parse_temporal_time(input).unwrap();
 
-        insta::assert_debug_snapshot!(p(b"2024-06-01T01:02:03"), @r###"
+        insta::assert_debug_snapshot!(p(b"2024-06-01T01:02:03"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "01:02:03",
                 time: 01:02:03,
                 extended: true,
             },
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"2024-06-01T01:02:03.123"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"2024-06-01T01:02:03.123"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "01:02:03.123",
                 time: 01:02:03.123,
                 extended: true,
             },
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"2024-06-01T01"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"2024-06-01T01"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "01",
                 time: 01:00:00,
                 extended: false,
             },
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"2024-06-01T0102"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"2024-06-01T0102"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "0102",
                 time: 01:02:00,
                 extended: false,
             },
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"2024-06-01T010203"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"2024-06-01T010203"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "010203",
                 time: 01:02:03,
                 extended: false,
             },
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"2024-06-01T010203-05"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"2024-06-01T010203-05"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "010203",
                 time: 01:02:03,
                 extended: false,
             },
             input: "",
         }
-        "###);
+        "#);
         insta::assert_debug_snapshot!(
-            p(b"2024-06-01T010203-05[America/New_York]"), @r###"
+            p(b"2024-06-01T010203-05[America/New_York]"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "010203",
                 time: 01:02:03,
                 extended: false,
             },
             input: "",
         }
-        "###);
+        "#);
         insta::assert_debug_snapshot!(
-            p(b"2024-06-01T010203[America/New_York]"), @r###"
+            p(b"2024-06-01T010203[America/New_York]"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "010203",
                 time: 01:02:03,
                 extended: false,
             },
             input: "",
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -2119,51 +2050,46 @@ mod tests {
     fn ok_date_basic() {
         let p = |input| DateTimeParser::new().parse_date_spec(input).unwrap();
 
-        insta::assert_debug_snapshot!(p(b"2010-03-14"), @r###"
+        insta::assert_debug_snapshot!(p(b"2010-03-14"), @r#"
         Parsed {
             value: ParsedDate {
-                input: "2010-03-14",
                 date: 2010-03-14,
             },
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"20100314"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"20100314"), @r#"
         Parsed {
             value: ParsedDate {
-                input: "20100314",
                 date: 2010-03-14,
             },
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"2010-03-14T01:02:03"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"2010-03-14T01:02:03"), @r#"
         Parsed {
             value: ParsedDate {
-                input: "2010-03-14",
                 date: 2010-03-14,
             },
             input: "T01:02:03",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"-009999-03-14"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"-009999-03-14"), @r#"
         Parsed {
             value: ParsedDate {
-                input: "-009999-03-14",
                 date: -009999-03-14,
             },
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"+009999-03-14"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"+009999-03-14"), @r#"
         Parsed {
             value: ParsedDate {
-                input: "+009999-03-14",
                 date: 9999-03-14,
             },
             input: "",
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -2279,121 +2205,112 @@ mod tests {
     fn ok_time_basic() {
         let p = |input| DateTimeParser::new().parse_time_spec(input).unwrap();
 
-        insta::assert_debug_snapshot!(p(b"01:02:03"), @r###"
+        insta::assert_debug_snapshot!(p(b"01:02:03"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "01:02:03",
                 time: 01:02:03,
                 extended: true,
             },
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"010203"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"010203"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "010203",
                 time: 01:02:03,
                 extended: false,
             },
             input: "",
         }
-        "###);
+        "#);
     }
 
     #[test]
     fn ok_time_fractional() {
         let p = |input| DateTimeParser::new().parse_time_spec(input).unwrap();
 
-        insta::assert_debug_snapshot!(p(b"01:02:03.123456789"), @r###"
+        insta::assert_debug_snapshot!(p(b"01:02:03.123456789"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "01:02:03.123456789",
                 time: 01:02:03.123456789,
                 extended: true,
             },
             input: "",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"010203.123456789"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"010203.123456789"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "010203.123456789",
                 time: 01:02:03.123456789,
                 extended: false,
             },
             input: "",
         }
-        "###);
+        "#);
 
-        insta::assert_debug_snapshot!(p(b"01:02:03.9"), @r###"
+        insta::assert_debug_snapshot!(p(b"01:02:03.9"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "01:02:03.9",
                 time: 01:02:03.9,
                 extended: true,
             },
             input: "",
         }
-        "###);
+        "#);
     }
 
     #[test]
     fn ok_time_no_fractional() {
         let p = |input| DateTimeParser::new().parse_time_spec(input).unwrap();
 
-        insta::assert_debug_snapshot!(p(b"01:02.123456789"), @r###"
+        insta::assert_debug_snapshot!(p(b"01:02.123456789"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "01:02",
                 time: 01:02:00,
                 extended: true,
             },
             input: ".123456789",
         }
-        "###);
+        "#);
     }
 
     #[test]
     fn ok_time_leap() {
         let p = |input| DateTimeParser::new().parse_time_spec(input).unwrap();
 
-        insta::assert_debug_snapshot!(p(b"01:02:60"), @r###"
+        insta::assert_debug_snapshot!(p(b"01:02:60"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "01:02:60",
                 time: 01:02:59,
                 extended: true,
             },
             input: "",
         }
-        "###);
+        "#);
     }
 
     #[test]
     fn ok_time_mixed_format() {
         let p = |input| DateTimeParser::new().parse_time_spec(input).unwrap();
 
-        insta::assert_debug_snapshot!(p(b"01:0203"), @r###"
+        insta::assert_debug_snapshot!(p(b"01:0203"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "01:02",
                 time: 01:02:00,
                 extended: true,
             },
             input: "03",
         }
-        "###);
-        insta::assert_debug_snapshot!(p(b"0102:03"), @r###"
+        "#);
+        insta::assert_debug_snapshot!(p(b"0102:03"), @r#"
         Parsed {
             value: ParsedTime {
-                input: "0102",
                 time: 01:02:00,
                 extended: false,
             },
             input: ":03",
         }
-        "###);
+        "#);
     }
 
     #[test]
