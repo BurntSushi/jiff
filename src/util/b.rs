@@ -234,6 +234,10 @@ define_bounds! {
         253402300799 - OffsetTotalSeconds::MAX as i64,
     ),
     (WeekNum, i8, "week-number", 0, 53),
+    (WeekdayMondayZero, i8, "weekday (Monday 0-indexed)", 0, 6),
+    (WeekdayMondayOne, i8, "weekday (Monday 1-indexed)", 1, 7),
+    (WeekdaySundayZero, i8, "weekday (Sunday 0-indexed)", 0, 6),
+    (WeekdaySundayOne, i8, "weekday (Sunday 1-indexed)", 1, 7),
     // The range of years supported by Jiff.
     //
     // This is ultimately where some of the other ranges (like `UnixSeconds`)

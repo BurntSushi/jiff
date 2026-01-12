@@ -978,7 +978,7 @@ mod tests {
         civil::{date, time, Weekday},
         fmt::StdFmtWrite,
         span::ToSpan,
-        util::t,
+        util::b,
     };
 
     use super::*;
@@ -1553,61 +1553,61 @@ mod tests {
         ), @"PT2.001001S");
         insta::assert_snapshot!(p(
             0.second()
-            .milliseconds(t::SpanMilliseconds::MAX_REPR),
+            .milliseconds(b::SpanMilliseconds::MAX),
         ), @"PT631107417600S");
         insta::assert_snapshot!(p(
             0.second()
-            .microseconds(t::SpanMicroseconds::MAX_REPR),
+            .microseconds(b::SpanMicroseconds::MAX),
         ), @"PT631107417600S");
         insta::assert_snapshot!(p(
             0.second()
-            .nanoseconds(t::SpanNanoseconds::MAX_REPR),
+            .nanoseconds(b::SpanNanoseconds::MAX),
         ), @"PT9223372036.854775807S");
 
         insta::assert_snapshot!(p(
             0.second()
-            .milliseconds(t::SpanMilliseconds::MAX_REPR)
+            .milliseconds(b::SpanMilliseconds::MAX)
             .microseconds(999_999),
         ), @"PT631107417600.999999S");
         // This is 1 microsecond more than the maximum number of seconds
         // representable in a span.
         insta::assert_snapshot!(p(
             0.second()
-            .milliseconds(t::SpanMilliseconds::MAX_REPR)
+            .milliseconds(b::SpanMilliseconds::MAX)
             .microseconds(1_000_000),
         ), @"PT631107417601S");
         insta::assert_snapshot!(p(
             0.second()
-            .milliseconds(t::SpanMilliseconds::MAX_REPR)
+            .milliseconds(b::SpanMilliseconds::MAX)
             .microseconds(1_000_001),
         ), @"PT631107417601.000001S");
         // This is 1 nanosecond more than the maximum number of seconds
         // representable in a span.
         insta::assert_snapshot!(p(
             0.second()
-            .milliseconds(t::SpanMilliseconds::MAX_REPR)
+            .milliseconds(b::SpanMilliseconds::MAX)
             .nanoseconds(1_000_000_000),
         ), @"PT631107417601S");
         insta::assert_snapshot!(p(
             0.second()
-            .milliseconds(t::SpanMilliseconds::MAX_REPR)
+            .milliseconds(b::SpanMilliseconds::MAX)
             .nanoseconds(1_000_000_001),
         ), @"PT631107417601.000000001S");
 
         // The max millis, micros and nanos, combined.
         insta::assert_snapshot!(p(
             0.second()
-            .milliseconds(t::SpanMilliseconds::MAX_REPR)
-            .microseconds(t::SpanMicroseconds::MAX_REPR)
-            .nanoseconds(t::SpanNanoseconds::MAX_REPR),
+            .milliseconds(b::SpanMilliseconds::MAX)
+            .microseconds(b::SpanMicroseconds::MAX)
+            .nanoseconds(b::SpanNanoseconds::MAX),
         ), @"PT1271438207236.854775807S");
         // The max seconds, millis, micros and nanos, combined.
         insta::assert_snapshot!(p(
             Span::new()
-            .seconds(t::SpanSeconds::MAX_REPR)
-            .milliseconds(t::SpanMilliseconds::MAX_REPR)
-            .microseconds(t::SpanMicroseconds::MAX_REPR)
-            .nanoseconds(t::SpanNanoseconds::MAX_REPR),
+            .seconds(b::SpanSeconds::MAX)
+            .milliseconds(b::SpanMilliseconds::MAX)
+            .microseconds(b::SpanMicroseconds::MAX)
+            .nanoseconds(b::SpanNanoseconds::MAX),
         ), @"PT1902545624836.854775807S");
     }
 
@@ -1629,61 +1629,61 @@ mod tests {
         ), @"-PT2.001001S");
         insta::assert_snapshot!(p(
             0.second()
-            .milliseconds(t::SpanMilliseconds::MIN_REPR),
+            .milliseconds(b::SpanMilliseconds::MIN),
         ), @"-PT631107417600S");
         insta::assert_snapshot!(p(
             0.second()
-            .microseconds(t::SpanMicroseconds::MIN_REPR),
+            .microseconds(b::SpanMicroseconds::MIN),
         ), @"-PT631107417600S");
         insta::assert_snapshot!(p(
             0.second()
-            .nanoseconds(t::SpanNanoseconds::MIN_REPR),
+            .nanoseconds(b::SpanNanoseconds::MIN),
         ), @"-PT9223372036.854775807S");
 
         insta::assert_snapshot!(p(
             0.second()
-            .milliseconds(t::SpanMilliseconds::MIN_REPR)
+            .milliseconds(b::SpanMilliseconds::MIN)
             .microseconds(999_999),
         ), @"-PT631107417600.999999S");
         // This is 1 microsecond more than the maximum number of seconds
         // representable in a span.
         insta::assert_snapshot!(p(
             0.second()
-            .milliseconds(t::SpanMilliseconds::MIN_REPR)
+            .milliseconds(b::SpanMilliseconds::MIN)
             .microseconds(1_000_000),
         ), @"-PT631107417601S");
         insta::assert_snapshot!(p(
             0.second()
-            .milliseconds(t::SpanMilliseconds::MIN_REPR)
+            .milliseconds(b::SpanMilliseconds::MIN)
             .microseconds(1_000_001),
         ), @"-PT631107417601.000001S");
         // This is 1 nanosecond more than the maximum number of seconds
         // representable in a span.
         insta::assert_snapshot!(p(
             0.second()
-            .milliseconds(t::SpanMilliseconds::MIN_REPR)
+            .milliseconds(b::SpanMilliseconds::MIN)
             .nanoseconds(1_000_000_000),
         ), @"-PT631107417601S");
         insta::assert_snapshot!(p(
             0.second()
-            .milliseconds(t::SpanMilliseconds::MIN_REPR)
+            .milliseconds(b::SpanMilliseconds::MIN)
             .nanoseconds(1_000_000_001),
         ), @"-PT631107417601.000000001S");
 
         // The max millis, micros and nanos, combined.
         insta::assert_snapshot!(p(
             0.second()
-            .milliseconds(t::SpanMilliseconds::MIN_REPR)
-            .microseconds(t::SpanMicroseconds::MIN_REPR)
-            .nanoseconds(t::SpanNanoseconds::MIN_REPR),
+            .milliseconds(b::SpanMilliseconds::MIN)
+            .microseconds(b::SpanMicroseconds::MIN)
+            .nanoseconds(b::SpanNanoseconds::MIN),
         ), @"-PT1271438207236.854775807S");
         // The max seconds, millis, micros and nanos, combined.
         insta::assert_snapshot!(p(
             Span::new()
-            .seconds(t::SpanSeconds::MIN_REPR)
-            .milliseconds(t::SpanMilliseconds::MIN_REPR)
-            .microseconds(t::SpanMicroseconds::MIN_REPR)
-            .nanoseconds(t::SpanNanoseconds::MIN_REPR),
+            .seconds(b::SpanSeconds::MIN)
+            .milliseconds(b::SpanMilliseconds::MIN)
+            .microseconds(b::SpanMicroseconds::MIN)
+            .nanoseconds(b::SpanNanoseconds::MIN),
         ), @"-PT1902545624836.854775807S");
     }
 

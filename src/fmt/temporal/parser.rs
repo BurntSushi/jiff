@@ -14,9 +14,8 @@ use crate::{
         TimeZoneDatabase,
     },
     util::{
-        b::Sign,
+        b::{self, Sign},
         escape, parse,
-        t::{self, C},
     },
     SignedDuration, Timestamp, Unit, Zoned,
 };
@@ -115,7 +114,7 @@ impl<'i> ParsedDateTime<'i> {
             // is stupidly rare, so I'm not sure it's worth the effort to
             // improve the error message. I'd be open to a simple patch
             // though.)
-            if candidate.part_seconds_ranged() == C(0)
+            if candidate.seconds() % b::SECS_PER_MIN_32 == 0
                 || parsed_offset.has_subminute()
             {
                 return parsed == candidate;
@@ -515,7 +514,7 @@ impl DateTimeParser {
         let Parsed { value: weekday, input } =
             self.parse_weekday(input).context(E::FailedWeekdayInDate)?;
 
-        let iso_week_date = ISOWeekDate::new_ranged(year, week, weekday)
+        let iso_week_date = ISOWeekDate::new(year, week, weekday)
             .context(E::InvalidWeekDate)?;
 
         Ok(Parsed { value: iso_week_date, input: input })
@@ -552,8 +551,7 @@ impl DateTimeParser {
         let Parsed { value: day, input } =
             self.parse_day(input).context(E::FailedDayInDate)?;
 
-        let date =
-            Date::new_ranged(year, month, day).context(E::InvalidDate)?;
+        let date = Date::new(year, month, day).context(E::InvalidDate)?;
         let value = ParsedDate { date };
         Ok(Parsed { value, input })
     }
@@ -578,12 +576,9 @@ impl DateTimeParser {
         let Parsed { value: has_minute, input } =
             self.parse_time_separator(input, extended);
         if !has_minute {
-            let time = Time::new_ranged(
-                hour,
-                t::Minute::N::<0>(),
-                t::Second::N::<0>(),
-                t::SubsecNanosecond::N::<0>(),
-            );
+            // OK because we know `hour` is in bounds and all combinations of
+            // `hour` with zeros are valid `Time` values.
+            let time = Time::new(hour, 0, 0, 0).unwrap();
             let value = ParsedTime { time, extended };
             return Ok(Parsed { value, input });
         }
@@ -594,12 +589,10 @@ impl DateTimeParser {
         let Parsed { value: has_second, input } =
             self.parse_time_separator(input, extended);
         if !has_second {
-            let time = Time::new_ranged(
-                hour,
-                minute,
-                t::Second::N::<0>(),
-                t::SubsecNanosecond::N::<0>(),
-            );
+            // OK because we know `hour` and `minute` are in bounds and all
+            // combinations of `hour` and `minute` with zero seconds/nanos are
+            // valid `Time` values.
+            let time = Time::new(hour, minute, 0, 0).unwrap();
             let value = ParsedTime { time, extended };
             return Ok(Parsed { value, input });
         }
@@ -611,16 +604,17 @@ impl DateTimeParser {
             parse_temporal_fraction(input)
                 .context(E::FailedFractionalSecondInTime)?;
 
-        let time = Time::new_ranged(
+        // OK because we know that all our components are in bounds and all
+        // combinations of in-bounds components are valid `Time` values.
+        let time = Time::new(
             hour,
             minute,
             second,
             // OK because `parse_temporal_fraction` guarantees
             // `0..=999_999_999`.
-            nanosecond
-                .map(|n| t::SubsecNanosecond::new(n).unwrap())
-                .unwrap_or(t::SubsecNanosecond::N::<0>()),
-        );
+            nanosecond.map(|n| i32::try_from(n).unwrap()).unwrap_or(0),
+        )
+        .unwrap();
         let value = ParsedTime { time, extended };
         Ok(Parsed { value, input })
     }
@@ -659,9 +653,7 @@ impl DateTimeParser {
         // permits 02-29, we use a leap year. The error message here is
         // probably confusing, but these errors should never be exposed to the
         // user.
-        let year = t::Year::N::<2024>();
-        let _ =
-            Date::new_ranged(year, month, day).context(E::InvalidMonthDay)?;
+        let _ = Date::new(2024, month, day).context(E::InvalidMonthDay)?;
 
         // We have a valid year-month. But we don't return it because we just
         // need to check validity.
@@ -693,9 +685,7 @@ impl DateTimeParser {
 
         // Check that the year-month is valid. We just use a day of 1, since
         // every month in every year must have a day 1.
-        let day = t::Day::N::<1>();
-        let _ =
-            Date::new_ranged(year, month, day).context(E::InvalidYearMonth)?;
+        let _ = Date::new(year, month, 1).context(E::InvalidYearMonth)?;
 
         // We have a valid year-month. But we don't return it because we just
         // need to check validity.
@@ -716,7 +706,7 @@ impl DateTimeParser {
     fn parse_year<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, t::Year>, Error> {
+    ) -> Result<Parsed<'i, i16>, Error> {
         let Parsed { value: sign, input } = self.parse_year_sign(input);
         if let Some(sign) = sign {
             return self.parse_signed_year(input, sign);
@@ -724,8 +714,7 @@ impl DateTimeParser {
 
         let (year, input) =
             parse::split(input, 4).ok_or(E::ExpectedFourDigitYear)?;
-        let year = parse::i64(year).context(E::ParseYearFourDigit)?;
-        let year = t::Year::try_new("year", year).context(E::InvalidYear)?;
+        let year = b::Year::parse(year).context(E::ParseYearFourDigit)?;
         Ok(Parsed { value: year, input })
     }
 
@@ -735,15 +724,14 @@ impl DateTimeParser {
         &self,
         input: &'i [u8],
         sign: Sign,
-    ) -> Result<Parsed<'i, t::Year>, Error> {
+    ) -> Result<Parsed<'i, i16>, Error> {
         let (year, input) =
             parse::split(input, 6).ok_or(E::ExpectedSixDigitYear)?;
-        let year = parse::i64(year).context(E::ParseYearSixDigit)?;
-        let year = t::Year::try_new("year", year).context(E::InvalidYear)?;
-        if year == C(0) && sign.is_negative() {
+        let year = b::Year::parse(year).context(E::ParseYearSixDigit)?;
+        if year == 0 && sign.is_negative() {
             return Err(Error::from(E::InvalidYearZero));
         }
-        Ok(Parsed { value: year * sign.as_ranged_integer(), input })
+        Ok(Parsed { value: sign * year, input })
     }
 
     // DateMonth :::
@@ -755,12 +743,10 @@ impl DateTimeParser {
     fn parse_month<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, t::Month>, Error> {
+    ) -> Result<Parsed<'i, i8>, Error> {
         let (month, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitMonth)?;
-        let month = parse::i64(month).context(E::ParseMonthTwoDigit)?;
-        let month =
-            t::Month::try_new("month", month).context(E::InvalidMonth)?;
+        let month = b::Month::parse(month).context(E::ParseMonthTwoDigit)?;
         Ok(Parsed { value: month, input })
     }
 
@@ -771,14 +757,10 @@ impl DateTimeParser {
     //   30
     //   31
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn parse_day<'i>(
-        &self,
-        input: &'i [u8],
-    ) -> Result<Parsed<'i, t::Day>, Error> {
+    fn parse_day<'i>(&self, input: &'i [u8]) -> Result<Parsed<'i, i8>, Error> {
         let (day, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitDay)?;
-        let day = parse::i64(day).context(E::ParseDayTwoDigit)?;
-        let day = t::Day::try_new("day", day).context(E::InvalidDay)?;
+        let day = b::Day::parse(day).context(E::ParseDayTwoDigit)?;
         Ok(Parsed { value: day, input })
     }
 
@@ -796,11 +778,10 @@ impl DateTimeParser {
     fn parse_hour<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, t::Hour>, Error> {
+    ) -> Result<Parsed<'i, i8>, Error> {
         let (hour, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitHour)?;
-        let hour = parse::i64(hour).context(E::ParseHourTwoDigit)?;
-        let hour = t::Hour::try_new("hour", hour).context(E::InvalidHour)?;
+        let hour = b::Hour::parse(hour).context(E::ParseHourTwoDigit)?;
         Ok(Parsed { value: hour, input })
     }
 
@@ -818,12 +799,11 @@ impl DateTimeParser {
     fn parse_minute<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, t::Minute>, Error> {
+    ) -> Result<Parsed<'i, i8>, Error> {
         let (minute, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitMinute)?;
-        let minute = parse::i64(minute).context(E::ParseMinuteTwoDigit)?;
         let minute =
-            t::Minute::try_new("minute", minute).context(E::InvalidMinute)?;
+            b::Minute::parse(minute).context(E::ParseMinuteTwoDigit)?;
         Ok(Parsed { value: minute, input })
     }
 
@@ -842,17 +822,16 @@ impl DateTimeParser {
     fn parse_second<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, t::Second>, Error> {
+    ) -> Result<Parsed<'i, i8>, Error> {
         let (second, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitSecond)?;
-        let mut second = parse::i64(second).context(E::ParseSecondTwoDigit)?;
+        let mut second =
+            b::LeapSecond::parse(second).context(E::ParseSecondTwoDigit)?;
         // NOTE: I believe Temporal allows one to make this configurable. That
         // is, to reject it. But for now, we just always clamp a leap second.
         if second == 60 {
             second = 59;
         }
-        let second =
-            t::Second::try_new("second", second).context(E::InvalidSecond)?;
         Ok(Parsed { value: second, input })
     }
 
@@ -991,13 +970,11 @@ impl DateTimeParser {
     fn parse_week_num<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, t::ISOWeek>, Error> {
+    ) -> Result<Parsed<'i, i8>, Error> {
         let (week_num, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitWeekNumber)?;
         let week_num =
-            parse::i64(week_num).context(E::ParseWeekNumberTwoDigit)?;
-        let week_num = t::ISOWeek::try_new("week_num", week_num)
-            .context(E::InvalidWeekNumber)?;
+            b::ISOWeek::parse(week_num).context(E::ParseWeekNumberTwoDigit)?;
         Ok(Parsed { value: week_num, input })
     }
 
@@ -1010,10 +987,10 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, Weekday>, Error> {
         let (weekday, input) =
             parse::split(input, 1).ok_or(E::ExpectedOneDigitWeekday)?;
-        let weekday = parse::i64(weekday).context(E::ParseWeekdayOneDigit)?;
-        let weekday = t::WeekdayOne::try_new("weekday", weekday)
-            .context(E::InvalidWeekday)?;
-        let weekday = Weekday::from_monday_one_offset_ranged(weekday);
+        let weekday = b::WeekdayMondayOne::parse(weekday)
+            .context(E::ParseWeekdayOneDigit)?;
+        // OK because we know `weekday` is in bounds from above.
+        let weekday = Weekday::from_monday_one_offset(weekday).unwrap();
         Ok(Parsed { value: weekday, input })
     }
 }
@@ -2018,7 +1995,7 @@ mod tests {
         // invalid time. (Because we're asking for a time here.)
         insta::assert_snapshot!(
             p(b"2099-13-01[America/New_York]"),
-            @"failed to parse minute in time: parsed minute is not valid: parameter 'minute' with value 99 is not in the required range of 0..=59",
+            @"failed to parse minute in time: failed to parse two digit integer as minute: parameter 'minute' is not in the required range of 0..=59",
         );
     }
 
@@ -2133,11 +2110,11 @@ mod tests {
         );
         insta::assert_snapshot!(
             DateTimeParser::new().parse_date_spec(b"+999999").unwrap_err(),
-            @"failed to parse year in date: parsed year is not valid: parameter 'year' with value 999999 is not in the required range of -9999..=9999",
+            @"failed to parse year in date: failed to parse six digit integer as year: parameter 'year' is not in the required range of -9999..=9999",
         );
         insta::assert_snapshot!(
             DateTimeParser::new().parse_date_spec(b"-010000").unwrap_err(),
-            @"failed to parse year in date: parsed year is not valid: parameter 'year' with value 10000 is not in the required range of -9999..=9999",
+            @"failed to parse year in date: failed to parse six digit integer as year: parameter 'year' is not in the required range of -9999..=9999",
         );
     }
 
@@ -2153,11 +2130,11 @@ mod tests {
         );
         insta::assert_snapshot!(
             DateTimeParser::new().parse_date_spec(b"2024-13-01").unwrap_err(),
-            @"failed to parse month in date: parsed month is not valid: parameter 'month' with value 13 is not in the required range of 1..=12",
+            @"failed to parse month in date: failed to parse two digit integer as month: parameter 'month' is not in the required range of 1..=12",
         );
         insta::assert_snapshot!(
             DateTimeParser::new().parse_date_spec(b"20241301").unwrap_err(),
-            @"failed to parse month in date: parsed month is not valid: parameter 'month' with value 13 is not in the required range of 1..=12",
+            @"failed to parse month in date: failed to parse two digit integer as month: parameter 'month' is not in the required range of 1..=12",
         );
     }
 
@@ -2173,7 +2150,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             DateTimeParser::new().parse_date_spec(b"2024-12-40").unwrap_err(),
-            @"failed to parse day in date: parsed day is not valid: parameter 'day' with value 40 is not in the required range of 1..=31",
+            @"failed to parse day in date: failed to parse two digit integer as day: parameter 'day' is not in the required range of 1..=31",
         );
         insta::assert_snapshot!(
             DateTimeParser::new().parse_date_spec(b"2024-11-31").unwrap_err(),
@@ -2333,7 +2310,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             DateTimeParser::new().parse_time_spec(b"24").unwrap_err(),
-            @"failed to parse hour in time: parsed hour is not valid: parameter 'hour' with value 24 is not in the required range of 0..=23",
+            @"failed to parse hour in time: failed to parse two digit integer as hour: parameter 'hour' is not in the required range of 0..=23",
         );
     }
 
@@ -2353,7 +2330,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             DateTimeParser::new().parse_time_spec(b"01:60").unwrap_err(),
-            @"failed to parse minute in time: parsed minute is not valid: parameter 'minute' with value 60 is not in the required range of 0..=59",
+            @"failed to parse minute in time: failed to parse two digit integer as minute: parameter 'minute' is not in the required range of 0..=59",
         );
     }
 
@@ -2373,7 +2350,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             DateTimeParser::new().parse_time_spec(b"01:02:61").unwrap_err(),
-            @"failed to parse second in time: parsed second is not valid: parameter 'second' with value 61 is not in the required range of 0..=59",
+            @"failed to parse second in time: failed to parse two digit integer as second: parameter 'second' is not in the required range of 0..=60",
         );
     }
 
@@ -2532,11 +2509,11 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("+999999"),
-            @"failed to parse year in date: parsed year is not valid: parameter 'year' with value 999999 is not in the required range of -9999..=9999",
+            @"failed to parse year in date: failed to parse six digit integer as year: parameter 'year' is not in the required range of -9999..=9999",
         );
         insta::assert_snapshot!(
             p("-010000"),
-            @"failed to parse year in date: parsed year is not valid: parameter 'year' with value 10000 is not in the required range of -9999..=9999",
+            @"failed to parse year in date: failed to parse six digit integer as year: parameter 'year' is not in the required range of -9999..=9999",
         );
     }
 
@@ -2619,7 +2596,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("2024-W11-8"),
-            @"failed to parse weekday in date: parsed weekday is not valid: parameter 'weekday' with value 8 is not in the required range of 1..=7",
+            @"failed to parse weekday in date: failed to parse one digit integer as weekday: parameter 'weekday (Monday 1-indexed)' is not in the required range of 1..=7",
         );
     }
 
