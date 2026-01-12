@@ -111,7 +111,10 @@ impl Error {
     /// ```
     pub fn is_range(&self) -> bool {
         use self::ErrorKind::*;
-        matches!(*self.root().kind(), Range(_) | SlimRange(_) | ITimeRange(_))
+        matches!(
+            *self.root().kind(),
+            Bounds(_) | Range(_) | SlimRange(_) | ITimeRange(_)
+        )
     }
 
     /// Returns true when this error originated as a result of an invalid
