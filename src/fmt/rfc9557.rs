@@ -138,6 +138,15 @@ impl<'i> ParsedAnnotations<'i> {
     }
 }
 
+impl<'i> core::fmt::Display for ParsedAnnotations<'i> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if let Some(ref tz) = self.time_zone {
+            core::fmt::Display::fmt(tz, f)?;
+        }
+        Ok(())
+    }
+}
+
 /// The result of parsing a time zone annotation.
 #[derive(Debug)]
 enum ParsedTimeZone<'i> {
@@ -179,6 +188,29 @@ impl<'i> ParsedTimeZone<'i> {
             }
         };
         Ok(TimeZoneAnnotation { kind, critical })
+    }
+}
+
+impl<'i> core::fmt::Display for ParsedTimeZone<'i> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        match *self {
+            ParsedTimeZone::Named { critical, name } => {
+                f.write_str("[")?;
+                if critical {
+                    f.write_str("!")?;
+                }
+                f.write_str(name)?;
+                f.write_str("]")
+            }
+            ParsedTimeZone::Offset { critical, ref offset } => {
+                f.write_str("[")?;
+                if critical {
+                    f.write_str("!")?;
+                }
+                core::fmt::Display::fmt(offset, f)?;
+                f.write_str("]")
+            }
+        }
     }
 }
 

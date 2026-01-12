@@ -181,6 +181,17 @@ impl ParsedOffset {
     }
 }
 
+impl core::fmt::Display for ParsedOffset {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        match self.kind {
+            ParsedOffsetKind::Zulu => f.write_str("Z"),
+            ParsedOffsetKind::Numeric(ref numeric) => {
+                core::fmt::Display::fmt(numeric, f)
+            }
+        }
+    }
+}
+
 /// The kind of a parsed offset.
 #[derive(Debug)]
 enum ParsedOffsetKind {
