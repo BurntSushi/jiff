@@ -63,17 +63,9 @@ pub(crate) enum Error {
     FailedYearInDate,
     FailedYearInYearMonth,
     InvalidDate,
-    InvalidDay,
-    InvalidHour,
-    InvalidMinute,
-    InvalidMonth,
     InvalidMonthDay,
-    InvalidSecond,
     InvalidTimeZoneUtf8,
     InvalidWeekDate,
-    InvalidWeekNumber,
-    InvalidWeekday,
-    InvalidYear,
     InvalidYearMonth,
     InvalidYearZero,
     MissingOffsetInTimestamp,
@@ -279,22 +271,12 @@ impl core::fmt::Display for Error {
                 f.write_str("failed to parse year in year-month")
             }
             InvalidDate => f.write_str("parsed date is not valid"),
-            InvalidDay => f.write_str("parsed day is not valid"),
-            InvalidHour => f.write_str("parsed hour is not valid"),
-            InvalidMinute => f.write_str("parsed minute is not valid"),
-            InvalidMonth => f.write_str("parsed month is not valid"),
             InvalidMonthDay => f.write_str("parsed month-day is not valid"),
-            InvalidSecond => f.write_str("parsed second is not valid"),
             InvalidTimeZoneUtf8 => f.write_str(
                 "found plausible IANA time zone identifier, \
                  but it is not valid UTF-8",
             ),
             InvalidWeekDate => f.write_str("parsed week date is not valid"),
-            InvalidWeekNumber => {
-                f.write_str("parsed week number is not valid")
-            }
-            InvalidWeekday => f.write_str("parsed weekday is not valid"),
-            InvalidYear => f.write_str("parsed year is not valid"),
             InvalidYearMonth => f.write_str("parsed year-month is not valid"),
             InvalidYearZero => f.write_str(
                 "year zero must be written without a sign or a \
