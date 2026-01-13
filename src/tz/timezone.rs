@@ -1938,10 +1938,7 @@ impl<'t> TimeZoneAbbreviation<'t> {
 mod repr {
     use core::mem::ManuallyDrop;
 
-    use crate::{
-        tz::tzif::TzifStatic,
-        util::{constant::unwrap, t},
-    };
+    use crate::{tz::tzif::TzifStatic, util::constant::unwrap};
     #[cfg(feature = "alloc")]
     use crate::{
         tz::{posix::PosixTimeZoneOwned, tzif::TzifOwned},
@@ -2139,10 +2136,9 @@ mod repr {
         pub(super) unsafe fn get_fixed(&self) -> Offset {
             #[allow(unstable_name_collisions)]
             let addr = self.ptr.addr();
-            // NOTE: Because of sign extension, we need to case to `i32`
+            // NOTE: Because of sign extension, we need to cast to `i32`
             // before shifting.
-            let seconds = t::SpanZoneOffset::new_unchecked((addr as i32) >> 4);
-            Offset::from_seconds_ranged(seconds)
+            Offset::from_seconds_unchecked((addr as i32) >> 4)
         }
 
         /// Returns true if and only if this representation corresponds to the
