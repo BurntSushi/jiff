@@ -9,22 +9,32 @@ ranged integers. I'm not quite sure where this will go.
 
 use crate::{util::t, Error};
 
+pub(crate) const DAYS_PER_WEEK: i64 = 7;
+pub(crate) const HOURS_PER_CIVIL_DAY: i64 = 24;
 pub(crate) const MINS_PER_HOUR: i64 = 60;
+pub(crate) const SECS_PER_CIVIL_DAY: i64 = HOURS_PER_CIVIL_DAY * SECS_PER_HOUR;
 pub(crate) const SECS_PER_HOUR: i64 = SECS_PER_MIN * MINS_PER_HOUR;
 pub(crate) const SECS_PER_MIN: i64 = 60;
 pub(crate) const MILLIS_PER_SEC: i64 = 1_000;
 pub(crate) const MICROS_PER_MILLI: i64 = 1_000;
-pub(crate) const NANOS_PER_MICRO: i64 = 1_000;
+pub(crate) const NANOS_PER_SEC: i64 = MILLIS_PER_SEC * NANOS_PER_MILLI;
 pub(crate) const NANOS_PER_MILLI: i64 = MICROS_PER_MILLI * NANOS_PER_MICRO;
+pub(crate) const NANOS_PER_MICRO: i64 = 1_000;
 
+pub(crate) const DAYS_PER_WEEK_32: i32 = 7;
+pub(crate) const HOURS_PER_CIVIL_DAY_32: i32 = 24;
 pub(crate) const MINS_PER_HOUR_32: i32 = 60;
+pub(crate) const SECS_PER_CIVIL_DAY_32: i32 =
+    HOURS_PER_CIVIL_DAY_32 * SECS_PER_HOUR_32;
 pub(crate) const SECS_PER_HOUR_32: i32 = SECS_PER_MIN_32 * MINS_PER_HOUR_32;
 pub(crate) const SECS_PER_MIN_32: i32 = 60;
 pub(crate) const MILLIS_PER_SEC_32: i32 = 1_000;
 pub(crate) const MICROS_PER_MILLI_32: i32 = 1_000;
-pub(crate) const NANOS_PER_MICRO_32: i32 = 1_000;
+pub(crate) const NANOS_PER_SEC_32: i32 =
+    MILLIS_PER_SEC_32 * NANOS_PER_MILLI_32;
 pub(crate) const NANOS_PER_MILLI_32: i32 =
     MICROS_PER_MILLI_32 * NANOS_PER_MICRO_32;
+pub(crate) const NANOS_PER_MICRO_32: i32 = 1_000;
 
 macro_rules! define_bounds {
     ($((
@@ -130,17 +140,17 @@ define_bounds! {
         i32,
         "time zone offset total seconds",
         -Self::MAX,
-        (OffsetHours::MAX as i32 * 60 * 60)
-        + (OffsetMinutes::MAX as i32 * 60)
+        (OffsetHours::MAX as i32 * SECS_PER_HOUR_32)
+        + (OffsetMinutes::MAX as i32 * MINS_PER_HOUR_32)
         + OffsetSeconds::MAX as i32,
     ),
     (Second, i8, "second", 0, 59),
     (SpanYears, i16, "years", -Self::MAX, (Year::LEN - 1) as i16),
     (SpanMonths, i32, "months", -Self::MAX, SpanYears::MAX as i32 * 12),
-    (SpanWeeks, i32, "weeks", -Self::MAX, SpanDays::MAX / 7),
-    (SpanDays, i32, "days", -Self::MAX, (SpanHours::MAX / 24) as i32),
-    (SpanHours, i64, "hours", -Self::MAX, SpanMinutes::MAX / 60),
-    (SpanMinutes, i64, "minutes", -Self::MAX, SpanSeconds::MAX / 60),
+    (SpanWeeks, i32, "weeks", -Self::MAX, SpanDays::MAX / DAYS_PER_WEEK_32),
+    (SpanDays, i32, "days", -Self::MAX, (SpanHours::MAX / HOURS_PER_CIVIL_DAY) as i32),
+    (SpanHours, i64, "hours", -Self::MAX, SpanMinutes::MAX / MINS_PER_HOUR),
+    (SpanMinutes, i64, "minutes", -Self::MAX, SpanSeconds::MAX / SECS_PER_MIN),
     // The maximum number of seconds that can be expressed with a span.
     //
     // All of our span types (except for years and months, since they have
@@ -176,8 +186,8 @@ define_bounds! {
         next_multiple_of(
             UnixSeconds::LEN as i64
                 + OffsetTotalSeconds::MAX as i64
-                + 86_400,
-            86_400,
+                + SECS_PER_CIVIL_DAY,
+            SECS_PER_CIVIL_DAY,
         ),
     ),
     (
@@ -185,14 +195,14 @@ define_bounds! {
         i64,
         "milliseconds",
         -Self::MAX,
-        SpanSeconds::MAX * 1_000,
+        SpanSeconds::MAX * MILLIS_PER_SEC,
     ),
     (
         SpanMicroseconds,
         i64,
         "microseconds",
         -Self::MAX,
-        SpanMilliseconds::MAX * 1_000,
+        SpanMilliseconds::MAX * MICROS_PER_MILLI,
     ),
     // A range of the allowed number of nanoseconds.
     //
@@ -204,27 +214,27 @@ define_bounds! {
     // values in this range is one less than the number of distinct `i64`
     // values. We do that so that the absolute value is always defined.
     (SpanNanoseconds, i64, "nanoseconds", i64::MIN + 1, i64::MAX),
-    (SubsecNanosecond, i32, "subsecond nanosecond", 0, 999_999_999),
+    (SubsecNanosecond, i32, "subsecond nanosecond", 0, NANOS_PER_SEC_32 - 1),
     (
         UnixMilliseconds,
         i64,
         "Unix timestamp milliseconds",
-        UnixSeconds::MIN * 1_000,
-        UnixSeconds::MAX * 1_000,
+        UnixSeconds::MIN * MILLIS_PER_SEC,
+        UnixSeconds::MAX * MILLIS_PER_SEC,
     ),
     (
         UnixMicroseconds,
         i64,
         "Unix timestamp microseconds",
-        UnixMilliseconds::MIN * 1_000,
-        UnixMilliseconds::MAX * 1_000,
+        UnixMilliseconds::MIN * MICROS_PER_MILLI,
+        UnixMilliseconds::MAX * MICROS_PER_MILLI,
     ),
     (
         UnixNanoseconds,
         i128,
         "Unix timestamp nanoseconds",
-        UnixMicroseconds::MIN as i128 * 1_000,
-        UnixMicroseconds::MAX as i128 * 1_000,
+        UnixMicroseconds::MIN as i128 * (NANOS_PER_MICRO as i128),
+        UnixMicroseconds::MAX as i128 * (NANOS_PER_MICRO as i128),
     ),
     (
         UnixSeconds,
