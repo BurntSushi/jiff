@@ -98,7 +98,7 @@ in such cases.
 [Time Zone Database]: https://www.iana.org/time-zones
 */
 
-#![allow(warnings)]
+#![allow(dead_code)]
 
 use core::{ops::RangeInclusive, str::FromStr};
 
@@ -118,12 +118,7 @@ use crate::{
     span::{Span, SpanFieldwise, ToSpan},
     timestamp::Timestamp,
     tz::{Dst, Offset},
-    util::{
-        parse,
-        rangeint::RInto,
-        sync::Arc,
-        t::{self, C},
-    },
+    util::{b, parse, sync::Arc},
     Unit,
 };
 
@@ -134,7 +129,7 @@ struct Zic {
 }
 
 impl Zic {
-    fn new(zicp: ZicP) -> Result<Zic, Error> {
+    fn new(_zicp: ZicP) -> Result<Zic, Error> {
         todo!()
     }
 }
@@ -230,8 +225,8 @@ struct Rule {
     dst: Dst,
     offset: Offset,
     letters: String,
-    years: RangeInclusive<t::Year>,
-    month: t::Month,
+    years: RangeInclusive<i16>,
+    month: i8,
     day: RuleOnP,
     at: RuleAtP,
 }
@@ -376,7 +371,7 @@ impl RuleP {
         let (on_field, fields) = (fields[0], &fields[1..]);
         let (at_field, fields) = (fields[0], &fields[1..]);
         let (save_field, fields) = (fields[0], &fields[1..]);
-        let (letters_field, fields) = (fields[0], &fields[1..]);
+        let letters_field = fields[0];
 
         let name = name_field
             .parse::<RuleNameP>()
@@ -399,17 +394,17 @@ impl RuleP {
         Ok(RuleP { name, from, to, inn, on, at, save, letters })
     }
 
-    fn years(&self) -> Result<RangeInclusive<t::Year>, Error> {
+    fn years(&self) -> Result<RangeInclusive<i16>, Error> {
         let start = self.from.year;
         let end = match self.to {
-            RuleToP::Max => t::Year::MAX_SELF,
+            RuleToP::Max => b::Year::MAX,
             RuleToP::Only => start,
             RuleToP::Year { year } => year,
         };
         if start > end {
             return Err(Error::from(E::InvalidRuleYear {
-                start: start.get(),
-                end: end.get(),
+                start: start,
+                end: end,
             }));
         }
         Ok(start..=end)
@@ -581,7 +576,7 @@ impl FromStr for RuleNameP {
 /// The year at which this rule begins (inclusive).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct RuleFromP {
-    year: t::Year,
+    year: i16,
 }
 
 impl FromStr for RuleFromP {
@@ -603,7 +598,7 @@ enum RuleToP {
     /// A specific year at which the rules ends. The year is an inclusive
     /// bound, but must be greater than or equal to the year in the FROM
     /// field of the rule.
-    Year { year: t::Year },
+    Year { year: i16 },
 }
 
 impl FromStr for RuleToP {
@@ -624,14 +619,14 @@ impl FromStr for RuleToP {
 /// The month in which a rule becomes active.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct RuleInP {
-    month: t::Month,
+    month: i8,
 }
 
 impl FromStr for RuleInP {
     type Err = Error;
 
     fn from_str(field: &str) -> Result<RuleInP, Error> {
-        static MONTH_PREFIXES: &[(u8, &str, &str)] = &[
+        static MONTH_PREFIXES: &[(i8, &str, &str)] = &[
             (1, "January", "Ja"),
             (2, "February", "F"),
             (3, "March", "Mar"),
@@ -645,9 +640,8 @@ impl FromStr for RuleInP {
             (11, "November", "N"),
             (12, "December", "D"),
         ];
-        for &(number, name, prefix) in MONTH_PREFIXES {
+        for &(month, name, prefix) in MONTH_PREFIXES {
             if field.starts_with(prefix) && name.starts_with(field) {
-                let month = t::Month::new(number).unwrap();
                 return Ok(RuleInP { month });
             }
         }
@@ -659,37 +653,36 @@ impl FromStr for RuleInP {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RuleOnP {
     /// A specific fixed day of a month.
-    Day { day: t::Day },
+    Day { day: i8 },
     /// The last weekday of a month.
     Last { weekday: Weekday },
     /// The weekday on or before a particular day of the month.
-    OnOrBefore { weekday: Weekday, day: t::Day },
+    OnOrBefore { weekday: Weekday, day: i8 },
     /// The weekday on or after a particular day of the month.
-    OnOrAfter { weekday: Weekday, day: t::Day },
+    OnOrAfter { weekday: Weekday, day: i8 },
 }
 
 impl RuleOnP {
     /// Given a year and a month, return the specific date for this "day of the
     /// month" specification.
-    fn date(&self, year: t::Year, month: t::Month) -> Result<Date, Error> {
+    fn date(&self, year: i16, month: i8) -> Result<Date, Error> {
         match *self {
-            RuleOnP::Day { day } => Date::new_ranged(year, month, day),
+            RuleOnP::Day { day } => Date::new(year, month, day),
             RuleOnP::Last { weekday } => {
-                // Always a valid month given that year/month are valid.
-                let date =
-                    Date::new_ranged(year, month, C(1).rinto()).unwrap();
+                // Always a valid date given that year/month are valid.
+                let date = Date::new(year, month, 1).unwrap();
                 date.nth_weekday_of_month(-1, weekday)
             }
             RuleOnP::OnOrBefore { weekday, day } => {
-                let start = Date::new_ranged(year, month, day)?
-                    .checked_add(1.day())?;
+                let start =
+                    Date::new(year, month, day)?.checked_add(1.day())?;
                 // nth_weekday returns "before" instead of "on or before," so
                 // offset the date by a day to get "on or before" semantics.
                 start.nth_weekday(-1, weekday)
             }
             RuleOnP::OnOrAfter { weekday, day } => {
-                let start = Date::new_ranged(year, month, day)?
-                    .checked_sub(1.day())?;
+                let start =
+                    Date::new(year, month, day)?.checked_sub(1.day())?;
                 // nth_weekday returns "after" instead of "on or after," so
                 // offset the date by a day to get "on or after" semantics.
                 start.nth_weekday(1, weekday)
@@ -1040,19 +1033,19 @@ impl FromStr for ZoneFormatP {
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum ZoneUntilP {
     Year {
-        year: t::Year,
+        year: i16,
     },
     YearMonth {
-        year: t::Year,
+        year: i16,
         month: RuleInP,
     },
     YearMonthDay {
-        year: t::Year,
+        year: i16,
         month: RuleInP,
         day: RuleOnP,
     },
     YearMonthDayTime {
-        year: t::Year,
+        year: i16,
         month: RuleInP,
         day: RuleOnP,
         /// Note that adding a span to the year/month/day could overflow
@@ -1105,7 +1098,7 @@ impl ZoneUntilP {
         Ok(dt)
     }
 
-    fn year(&self) -> t::Year {
+    fn year(&self) -> i16 {
         use self::ZoneUntilP::*;
 
         match *self {
@@ -1116,11 +1109,11 @@ impl ZoneUntilP {
         }
     }
 
-    fn month(&self) -> t::Month {
+    fn month(&self) -> i8 {
         use self::ZoneUntilP::*;
 
         match *self {
-            Year { .. } => t::Month::N::<1>(),
+            Year { .. } => 1,
             YearMonth { month, .. }
             | YearMonthDay { month, .. }
             | YearMonthDayTime { month, .. } => month.month,
@@ -1131,9 +1124,7 @@ impl ZoneUntilP {
         use self::ZoneUntilP::*;
 
         match *self {
-            Year { .. } | YearMonth { .. } => {
-                RuleOnP::Day { day: t::Day::N::<1>() }
-            }
+            Year { .. } | YearMonth { .. } => RuleOnP::Day { day: 1 },
             YearMonthDay { day, .. } | YearMonthDayTime { day, .. } => day,
         }
     }
@@ -1153,15 +1144,14 @@ impl ZoneUntilP {
 /// Parse a signed year value.
 ///
 /// This ensures the year is within the range supported by Jiff.
-fn parse_year(year: &str) -> Result<t::Year, Error> {
+fn parse_year(year: &str) -> Result<i16, Error> {
     let (sign, rest) = if year.starts_with("-") {
-        (t::Sign::N::<-1>(), &year[1..])
+        (b::Sign::Negative, &year[1..])
     } else {
-        (t::Sign::N::<1>(), year)
+        (b::Sign::Positive, year)
     };
-    let number = parse::i64(rest.as_bytes()).context(E::FailedParseYear)?;
-    let year = t::Year::try_new("year", number)?;
-    Ok(year * sign)
+    let year = b::Year::parse(rest.as_bytes()).context(E::FailedParseYear)?;
+    Ok(sign * year)
 }
 
 /// Parse a duration of time expressed in hours, minutes and seconds.
@@ -1181,16 +1171,17 @@ fn parse_span(span: &str) -> Result<Span, Error> {
     // too.
 
     let rest = span;
-    let (mut span, sign, rest) = if rest.starts_with("-") {
+    let (sign, rest) = if rest.starts_with("-") {
         // Special case where if the duration is just `-`, then it's equivalent
         // to zero.
         if span.len() == 1 {
             return Ok(Span::new());
         }
-        (Span::new(), t::Sign::N::<-1>(), &rest[1..])
+        (b::Sign::Negative, &rest[1..])
     } else {
-        (Span::new(), t::Sign::N::<1>(), rest)
+        (b::Sign::Positive, rest)
     };
+    let mut span = Span::new();
 
     // Pluck out the hour component.
     let hour_len = rest.chars().take_while(|c| c.is_ascii_digit()).count();
@@ -1198,9 +1189,9 @@ fn parse_span(span: &str) -> Result<Span, Error> {
     if hour_digits.is_empty() {
         return Err(Error::from(E::ExpectedTimeOneHour));
     }
-    let hours =
-        parse::i64(hour_digits.as_bytes()).context(E::FailedParseHour)?;
-    span = span.try_hours(hours.saturating_mul(i64::from(sign.get())))?;
+    let hours = b::SpanHours::parse(hour_digits.as_bytes())
+        .context(E::FailedParseHour)?;
+    span = span.hours(sign * hours);
     if rest.is_empty() {
         return Ok(span);
     }
@@ -1215,10 +1206,9 @@ fn parse_span(span: &str) -> Result<Span, Error> {
     if minute_digits.is_empty() {
         return Err(Error::from(E::ExpectedMinuteAfterHours));
     }
-    let minutes =
-        parse::i64(minute_digits.as_bytes()).context(E::FailedParseMinute)?;
-    let minutes_ranged = t::Minute::try_new("minutes", minutes)?;
-    span = span.minutes_ranged((minutes_ranged * sign).rinto());
+    let minutes = b::Minute::parse(minute_digits.as_bytes())
+        .context(E::FailedParseMinute)?;
+    span = span.minutes(sign * minutes);
     if rest.is_empty() {
         return Ok(span);
     }
@@ -1233,10 +1223,9 @@ fn parse_span(span: &str) -> Result<Span, Error> {
     if second_digits.is_empty() {
         return Err(Error::from(E::ExpectedSecondAfterMinutes));
     }
-    let seconds =
-        parse::i64(second_digits.as_bytes()).context(E::FailedParseSecond)?;
-    let seconds_ranged = t::Second::try_new("seconds", seconds)?;
-    span = span.seconds_ranged((seconds_ranged * sign).rinto());
+    let seconds = b::Second::parse(second_digits.as_bytes())
+        .context(E::FailedParseSecond)?;
+    span = span.seconds(sign * seconds);
     if rest.is_empty() {
         return Ok(span);
     }
@@ -1254,9 +1243,9 @@ fn parse_span(span: &str) -> Result<Span, Error> {
     }
     let nanoseconds = parse::fraction(nanosecond_digits.as_bytes())
         .context(E::FailedParseNanosecond)?;
-    let nanoseconds_ranged =
-        t::FractionalNanosecond::try_new("nanoseconds", nanoseconds)?;
-    span = span.nanoseconds_ranged((nanoseconds_ranged * sign).rinto());
+    // OK because `parse::fraction` can't return anything more than
+    // `999_999_999` nanoseconds.
+    span = span.nanoseconds(sign * i64::from(nanoseconds));
 
     // We should have consumed everything at this point.
     if !rest.is_empty() {
@@ -1269,10 +1258,8 @@ fn parse_span(span: &str) -> Result<Span, Error> {
 ///
 /// This checks that the day is in the range 1-31, but otherwise doesn't
 /// check that it is valid for a particular month.
-fn parse_day(string: &str) -> Result<t::Day, Error> {
-    let number = parse::i64(string.as_bytes()).context(E::FailedParseDay)?;
-    let day = t::Day::try_new("day", number)?;
-    Ok(day)
+fn parse_day(string: &str) -> Result<i8, Error> {
+    b::Day::parse(string.as_bytes()).context(E::FailedParseDay)
 }
 
 /// Parses a possibly abbreviated weekday from the given string.
@@ -1313,7 +1300,7 @@ struct FieldParser<'a> {
 
 impl<'a> FieldParser<'a> {
     /// Create a new parser from a UTF-8 encoded sequence of bytes.
-    fn new(src: &'a str) -> FieldParser {
+    fn new(src: &'a str) -> FieldParser<'a> {
         FieldParser {
             lines: src.lines(),
             line_number: 0,
@@ -1325,7 +1312,7 @@ impl<'a> FieldParser<'a> {
     /// Create a new parser from a sequence of bytes.
     ///
     /// This returns an error if the given bytes are not valid UTF-8.
-    fn from_bytes(src: &'a [u8]) -> Result<FieldParser, Error> {
+    fn from_bytes(src: &'a [u8]) -> Result<FieldParser<'a>, Error> {
         let src = core::str::from_utf8(src)
             .map_err(|_| Error::from(E::InvalidUtf8))?;
         Ok(FieldParser::new(src))
@@ -1342,7 +1329,7 @@ impl<'a> FieldParser<'a> {
     fn read_next_fields(&mut self) -> Result<bool, Error> {
         self.fields.clear();
         loop {
-            let Some(mut line) = self.lines.next() else { return Ok(false) };
+            let Some(line) = self.lines.next() else { return Ok(false) };
             self.line_number =
                 self.line_number.checked_add(1).ok_or(E::LineOverflow)?;
             parse_fields(&line, &mut self.fields)
@@ -1375,7 +1362,7 @@ impl<'a> FieldParser<'a> {
 ///
 /// This panics if a `\n` is seen while parsing the `line`.
 fn parse_fields<'a>(
-    mut line: &'a str,
+    line: &'a str,
     fields: &mut Vec<&'a str>,
 ) -> Result<(), Error> {
     /// Returns true if the given character corresponds to whitespace as
@@ -1877,11 +1864,11 @@ mod tests {
     #[test]
     fn parse_rule_from_ok() {
         let to: RuleFromP = "2025".parse().unwrap();
-        assert_eq!(to, RuleFromP { year: t::Year::new(2025).unwrap() });
+        assert_eq!(to, RuleFromP { year: 2025 });
         let to: RuleFromP = "9999".parse().unwrap();
-        assert_eq!(to, RuleFromP { year: t::Year::new(9999).unwrap() });
+        assert_eq!(to, RuleFromP { year: 9999 });
         let to: RuleFromP = "-9999".parse().unwrap();
-        assert_eq!(to, RuleFromP { year: t::Year::new(-9999).unwrap() });
+        assert_eq!(to, RuleFromP { year: -9999 });
     }
 
     #[test]
@@ -1893,11 +1880,11 @@ mod tests {
     #[test]
     fn parse_rule_to_ok() {
         let to: RuleToP = "2025".parse().unwrap();
-        assert_eq!(to, RuleToP::Year { year: t::Year::new(2025).unwrap() });
+        assert_eq!(to, RuleToP::Year { year: 2025 });
         let to: RuleToP = "9999".parse().unwrap();
-        assert_eq!(to, RuleToP::Year { year: t::Year::new(9999).unwrap() });
+        assert_eq!(to, RuleToP::Year { year: 9999 });
         let to: RuleToP = "-9999".parse().unwrap();
-        assert_eq!(to, RuleToP::Year { year: t::Year::new(-9999).unwrap() });
+        assert_eq!(to, RuleToP::Year { year: -9999 });
 
         let to: RuleToP = "o".parse().unwrap();
         assert_eq!(to, RuleToP::Only);
@@ -1932,62 +1919,62 @@ mod tests {
     #[test]
     fn parse_rule_in_ok() {
         let inn: RuleInP = "Ja".parse().unwrap();
-        assert_eq!(inn.month.get(), 1);
+        assert_eq!(inn.month, 1);
         let inn: RuleInP = "January".parse().unwrap();
-        assert_eq!(inn.month.get(), 1);
+        assert_eq!(inn.month, 1);
 
         let inn: RuleInP = "F".parse().unwrap();
-        assert_eq!(inn.month.get(), 2);
+        assert_eq!(inn.month, 2);
         let inn: RuleInP = "February".parse().unwrap();
-        assert_eq!(inn.month.get(), 2);
+        assert_eq!(inn.month, 2);
 
         let inn: RuleInP = "Mar".parse().unwrap();
-        assert_eq!(inn.month.get(), 3);
+        assert_eq!(inn.month, 3);
         let inn: RuleInP = "March".parse().unwrap();
-        assert_eq!(inn.month.get(), 3);
+        assert_eq!(inn.month, 3);
 
         let inn: RuleInP = "Ap".parse().unwrap();
-        assert_eq!(inn.month.get(), 4);
+        assert_eq!(inn.month, 4);
         let inn: RuleInP = "April".parse().unwrap();
-        assert_eq!(inn.month.get(), 4);
+        assert_eq!(inn.month, 4);
 
         let inn: RuleInP = "May".parse().unwrap();
-        assert_eq!(inn.month.get(), 5);
+        assert_eq!(inn.month, 5);
 
         let inn: RuleInP = "Jun".parse().unwrap();
-        assert_eq!(inn.month.get(), 6);
+        assert_eq!(inn.month, 6);
         let inn: RuleInP = "June".parse().unwrap();
-        assert_eq!(inn.month.get(), 6);
+        assert_eq!(inn.month, 6);
 
         let inn: RuleInP = "Jul".parse().unwrap();
-        assert_eq!(inn.month.get(), 7);
+        assert_eq!(inn.month, 7);
         let inn: RuleInP = "July".parse().unwrap();
-        assert_eq!(inn.month.get(), 7);
+        assert_eq!(inn.month, 7);
 
         let inn: RuleInP = "Au".parse().unwrap();
-        assert_eq!(inn.month.get(), 8);
+        assert_eq!(inn.month, 8);
         let inn: RuleInP = "August".parse().unwrap();
-        assert_eq!(inn.month.get(), 8);
+        assert_eq!(inn.month, 8);
 
         let inn: RuleInP = "S".parse().unwrap();
-        assert_eq!(inn.month.get(), 9);
+        assert_eq!(inn.month, 9);
         let inn: RuleInP = "September".parse().unwrap();
-        assert_eq!(inn.month.get(), 9);
+        assert_eq!(inn.month, 9);
 
         let inn: RuleInP = "O".parse().unwrap();
-        assert_eq!(inn.month.get(), 10);
+        assert_eq!(inn.month, 10);
         let inn: RuleInP = "October".parse().unwrap();
-        assert_eq!(inn.month.get(), 10);
+        assert_eq!(inn.month, 10);
 
         let inn: RuleInP = "N".parse().unwrap();
-        assert_eq!(inn.month.get(), 11);
+        assert_eq!(inn.month, 11);
         let inn: RuleInP = "November".parse().unwrap();
-        assert_eq!(inn.month.get(), 11);
+        assert_eq!(inn.month, 11);
 
         let inn: RuleInP = "D".parse().unwrap();
-        assert_eq!(inn.month.get(), 12);
+        assert_eq!(inn.month, 12);
         let inn: RuleInP = "December".parse().unwrap();
-        assert_eq!(inn.month.get(), 12);
+        assert_eq!(inn.month, 12);
     }
 
     #[test]
@@ -2002,11 +1989,11 @@ mod tests {
     fn parse_rule_on_ok() {
         // Specific day.
         let on: RuleOnP = "5".parse().unwrap();
-        assert_eq!(on, RuleOnP::Day { day: t::Day::new(5).unwrap() });
+        assert_eq!(on, RuleOnP::Day { day: 5 });
         let on: RuleOnP = "05".parse().unwrap();
-        assert_eq!(on, RuleOnP::Day { day: t::Day::new(5).unwrap() });
+        assert_eq!(on, RuleOnP::Day { day: 5 });
         let on: RuleOnP = "31".parse().unwrap();
-        assert_eq!(on, RuleOnP::Day { day: t::Day::new(31).unwrap() });
+        assert_eq!(on, RuleOnP::Day { day: 31 });
 
         // Last weekday of month.
         let on: RuleOnP = "lastSu".parse().unwrap();
@@ -2024,36 +2011,24 @@ mod tests {
         let on: RuleOnP = "Sun<=25".parse().unwrap();
         assert_eq!(
             on,
-            RuleOnP::OnOrBefore {
-                weekday: Weekday::Sunday,
-                day: t::Day::new(25).unwrap()
-            }
+            RuleOnP::OnOrBefore { weekday: Weekday::Sunday, day: 25 }
         );
         let on: RuleOnP = "Sunday<=25".parse().unwrap();
         assert_eq!(
             on,
-            RuleOnP::OnOrBefore {
-                weekday: Weekday::Sunday,
-                day: t::Day::new(25).unwrap()
-            }
+            RuleOnP::OnOrBefore { weekday: Weekday::Sunday, day: 25 }
         );
 
         // Weekday on or after a day of the month.
         let on: RuleOnP = "Sun>=8".parse().unwrap();
         assert_eq!(
             on,
-            RuleOnP::OnOrAfter {
-                weekday: Weekday::Sunday,
-                day: t::Day::new(8).unwrap()
-            }
+            RuleOnP::OnOrAfter { weekday: Weekday::Sunday, day: 8 }
         );
         let on: RuleOnP = "Sunday>=8".parse().unwrap();
         assert_eq!(
             on,
-            RuleOnP::OnOrAfter {
-                weekday: Weekday::Sunday,
-                day: t::Day::new(8).unwrap()
-            }
+            RuleOnP::OnOrAfter { weekday: Weekday::Sunday, day: 8 }
         );
     }
 
@@ -2367,45 +2342,33 @@ mod tests {
     #[test]
     fn parse_zone_until_ok() {
         let until = ZoneUntilP::parse(&["2025"]).unwrap();
-        assert_eq!(
-            until,
-            ZoneUntilP::Year { year: t::Year::new(2025).unwrap() },
-        );
+        assert_eq!(until, ZoneUntilP::Year { year: 2025 },);
         let until = ZoneUntilP::parse(&["9999"]).unwrap();
-        assert_eq!(
-            until,
-            ZoneUntilP::Year { year: t::Year::new(9999).unwrap() },
-        );
+        assert_eq!(until, ZoneUntilP::Year { year: 9999 },);
         let until = ZoneUntilP::parse(&["-9999"]).unwrap();
-        assert_eq!(
-            until,
-            ZoneUntilP::Year { year: t::Year::new(-9999).unwrap() },
-        );
+        assert_eq!(until, ZoneUntilP::Year { year: -9999 },);
 
         let until = ZoneUntilP::parse(&["2025", "Jan"]).unwrap();
         assert_eq!(
             until,
-            ZoneUntilP::YearMonth {
-                year: t::Year::new(2025).unwrap(),
-                month: RuleInP { month: t::Month::new(1).unwrap() },
-            },
+            ZoneUntilP::YearMonth { year: 2025, month: RuleInP { month: 1 } },
         );
 
         let until = ZoneUntilP::parse(&["2025", "Jan", "5"]).unwrap();
         assert_eq!(
             until,
             ZoneUntilP::YearMonthDay {
-                year: t::Year::new(2025).unwrap(),
-                month: RuleInP { month: t::Month::new(1).unwrap() },
-                day: RuleOnP::Day { day: t::Day::new(5).unwrap() },
+                year: 2025,
+                month: RuleInP { month: 1 },
+                day: RuleOnP::Day { day: 5 },
             },
         );
         let until = ZoneUntilP::parse(&["2025", "Jan", "lastSun"]).unwrap();
         assert_eq!(
             until,
             ZoneUntilP::YearMonthDay {
-                year: t::Year::new(2025).unwrap(),
-                month: RuleInP { month: t::Month::new(1).unwrap() },
+                year: 2025,
+                month: RuleInP { month: 1 },
                 day: RuleOnP::Last { weekday: Weekday::Sunday },
             },
         );
@@ -2415,8 +2378,8 @@ mod tests {
         assert_eq!(
             until,
             ZoneUntilP::YearMonthDayTime {
-                year: t::Year::new(2025).unwrap(),
-                month: RuleInP { month: t::Month::new(1).unwrap() },
+                year: 2025,
+                month: RuleInP { month: 1 },
                 day: RuleOnP::Last { weekday: Weekday::Sunday },
                 duration: RuleAtP { span: td(0, 0), suffix: None },
             },
@@ -2426,8 +2389,8 @@ mod tests {
         assert_eq!(
             until,
             ZoneUntilP::YearMonthDayTime {
-                year: t::Year::new(2025).unwrap(),
-                month: RuleInP { month: t::Month::new(1).unwrap() },
+                year: 2025,
+                month: RuleInP { month: 1 },
                 day: RuleOnP::Last { weekday: Weekday::Sunday },
                 duration: RuleAtP { span: td(5 * 60 * 60, 0), suffix: None },
             },
@@ -2437,8 +2400,8 @@ mod tests {
         assert_eq!(
             until,
             ZoneUntilP::YearMonthDayTime {
-                year: t::Year::new(2025).unwrap(),
-                month: RuleInP { month: t::Month::new(1).unwrap() },
+                year: 2025,
+                month: RuleInP { month: 1 },
                 day: RuleOnP::Last { weekday: Weekday::Sunday },
                 duration: RuleAtP { span: td(-5 * 60 * 60, 0), suffix: None },
             },
@@ -2449,8 +2412,8 @@ mod tests {
         assert_eq!(
             until,
             ZoneUntilP::YearMonthDayTime {
-                year: t::Year::new(2025).unwrap(),
-                month: RuleInP { month: t::Month::new(1).unwrap() },
+                year: 2025,
+                month: RuleInP { month: 1 },
                 day: RuleOnP::Last { weekday: Weekday::Sunday },
                 duration: RuleAtP { span: td(3661, 1), suffix: None },
             },
@@ -2460,8 +2423,8 @@ mod tests {
         assert_eq!(
             until,
             ZoneUntilP::YearMonthDayTime {
-                year: t::Year::new(2025).unwrap(),
-                month: RuleInP { month: t::Month::new(1).unwrap() },
+                year: 2025,
+                month: RuleInP { month: 1 },
                 day: RuleOnP::Last { weekday: Weekday::Sunday },
                 duration: RuleAtP {
                     span: td(5 * 60 * 60, 0),
@@ -2497,12 +2460,12 @@ mod tests {
 
     #[test]
     fn parse_year_ok() {
-        assert_eq!(parse_year("0").unwrap().get(), 0);
-        assert_eq!(parse_year("1").unwrap().get(), 1);
-        assert_eq!(parse_year("-1").unwrap().get(), -1);
-        assert_eq!(parse_year("2025").unwrap().get(), 2025);
-        assert_eq!(parse_year("9999").unwrap().get(), 9999);
-        assert_eq!(parse_year("-9999").unwrap().get(), -9999);
+        assert_eq!(parse_year("0").unwrap(), 0);
+        assert_eq!(parse_year("1").unwrap(), 1);
+        assert_eq!(parse_year("-1").unwrap(), -1);
+        assert_eq!(parse_year("2025").unwrap(), 2025);
+        assert_eq!(parse_year("9999").unwrap(), 9999);
+        assert_eq!(parse_year("-9999").unwrap(), -9999);
     }
 
     #[test]
@@ -2586,15 +2549,15 @@ mod tests {
 
     #[test]
     fn parse_day_ok() {
-        assert_eq!(parse_day("1").unwrap().get(), 1);
-        assert_eq!(parse_day("2").unwrap().get(), 2);
-        assert_eq!(parse_day("20").unwrap().get(), 20);
-        assert_eq!(parse_day("30").unwrap().get(), 30);
-        assert_eq!(parse_day("31").unwrap().get(), 31);
+        assert_eq!(parse_day("1").unwrap(), 1);
+        assert_eq!(parse_day("2").unwrap(), 2);
+        assert_eq!(parse_day("20").unwrap(), 20);
+        assert_eq!(parse_day("30").unwrap(), 30);
+        assert_eq!(parse_day("31").unwrap(), 31);
 
-        assert_eq!(parse_day("01").unwrap().get(), 1);
-        assert_eq!(parse_day("00000001").unwrap().get(), 1);
-        assert_eq!(parse_day("0000000000000000000001").unwrap().get(), 1);
+        assert_eq!(parse_day("01").unwrap(), 1);
+        assert_eq!(parse_day("00000001").unwrap(), 1);
+        assert_eq!(parse_day("0000000000000000000001").unwrap(), 1);
     }
 
     #[test]
