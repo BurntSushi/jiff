@@ -668,11 +668,15 @@ pub trait Custom: Sized {
     fn format_datetime<W: Write>(
         &self,
         config: &Config<Self>,
-        _ext: &Extension,
+        ext: &Extension,
         tm: &BrokenDownTime,
         wtr: &mut W,
     ) -> Result<(), Error> {
-        tm.format_with_config(config, "%Y M%m %-d, %a %H:%M:%S", wtr)
+        if matches!(ext.flag, Some(Flag::Uppercase)) {
+            tm.format_with_config(config, "%Y M%m %-d, %^a %H:%M:%S", wtr)
+        } else {
+            tm.format_with_config(config, "%Y M%m %-d, %a %H:%M:%S", wtr)
+        }
     }
 
     /// Called when formatting a datetime with the `%x` flag.
@@ -708,11 +712,15 @@ pub trait Custom: Sized {
     fn format_12hour_time<W: Write>(
         &self,
         config: &Config<Self>,
-        _ext: &Extension,
+        ext: &Extension,
         tm: &BrokenDownTime,
         wtr: &mut W,
     ) -> Result<(), Error> {
-        tm.format_with_config(config, "%-I:%M:%S %p", wtr)
+        if matches!(ext.flag, Some(Flag::Uppercase)) {
+            tm.format_with_config(config, "%-I:%M:%S %^p", wtr)
+        } else {
+            tm.format_with_config(config, "%-I:%M:%S %p", wtr)
+        }
     }
 }
 
@@ -791,11 +799,15 @@ impl Custom for PosixCustom {
     fn format_datetime<W: Write>(
         &self,
         config: &Config<Self>,
-        _ext: &Extension,
+        ext: &Extension,
         tm: &BrokenDownTime,
         wtr: &mut W,
     ) -> Result<(), Error> {
-        tm.format_with_config(config, "%a %b %e %H:%M:%S %Y", wtr)
+        if matches!(ext.flag, Some(Flag::Uppercase)) {
+            tm.format_with_config(config, "%^a %^b %e %H:%M:%S %Y", wtr)
+        } else {
+            tm.format_with_config(config, "%a %b %e %H:%M:%S %Y", wtr)
+        }
     }
 
     fn format_date<W: Write>(
@@ -821,11 +833,15 @@ impl Custom for PosixCustom {
     fn format_12hour_time<W: Write>(
         &self,
         config: &Config<Self>,
-        _ext: &Extension,
+        ext: &Extension,
         tm: &BrokenDownTime,
         wtr: &mut W,
     ) -> Result<(), Error> {
-        tm.format_with_config(config, "%I:%M:%S %p", wtr)
+        if matches!(ext.flag, Some(Flag::Uppercase)) {
+            tm.format_with_config(config, "%I:%M:%S %^p", wtr)
+        } else {
+            tm.format_with_config(config, "%I:%M:%S %p", wtr)
+        }
     }
 }
 
