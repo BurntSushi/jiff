@@ -17,6 +17,8 @@ Enable some non-default features for the Rust Playground deployment.
 
 Bug fixes:
 
+* [#485](https://github.com/BurntSushi/jiff/issues/485):
+Fix bug with padding for negative integers in `strftime`.
 * [#486](https://github.com/BurntSushi/jiff/issues/486):
 Make `%^c` result in uppercase strings where appropriate.
 
