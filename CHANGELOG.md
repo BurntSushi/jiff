@@ -15,6 +15,11 @@ Update comparison with the `time` crate in the Jiff documentation.
 * [#502](https://github.com/BurntSushi/jiff/issues/502):
 Enable some non-default features for the Rust Playground deployment.
 
+Bug fixes:
+
+* [#486](https://github.com/BurntSushi/jiff/issues/486):
+Make `%^c` result in uppercase strings where appropriate.
+
 
 0.2.19 (2026-02-05)
 ===================
