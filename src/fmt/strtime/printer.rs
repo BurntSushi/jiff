@@ -1422,6 +1422,28 @@ mod tests {
     }
 
     #[test]
+    fn ok_format_compound_uppercase() {
+        let f = |fmt: &str, date: DateTime| format(fmt, date).unwrap();
+
+        insta::assert_snapshot!(
+            f("%^c", date(2024, 7, 14).at(0, 0, 0, 0)),
+            @"2024 M07 14, SUN 00:00:00",
+        );
+        insta::assert_snapshot!(
+            f("%^x", date(2024, 7, 14).at(0, 0, 0, 0)),
+            @"2024 M07 14",
+        );
+        insta::assert_snapshot!(
+            f("%^X", date(2024, 7, 14).at(8, 30, 0, 0)),
+            @"08:30:00",
+        );
+        insta::assert_snapshot!(
+            f("%^r", date(2024, 7, 14).at(8, 30, 0, 0)),
+            @"8:30:00 AM",
+        );
+    }
+
+    #[test]
     fn ok_format_posix_locale() {
         let f = |fmt: &str, date: DateTime| {
             let config = Config::new().custom(PosixCustom::default());
