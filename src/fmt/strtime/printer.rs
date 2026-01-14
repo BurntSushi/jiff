@@ -1025,6 +1025,18 @@ impl Extension {
             self.width.unwrap_or(pad_width)
         };
         if number < 0 {
+            // Special case formatting a negative integer with non-zero
+            // padding. This case isn't handled by the `BorrowedWriter`
+            // API, so just handle it specially instead of bloating up
+            // the hot path.
+            if pad_width > 0 {
+                return Self::write_negative_int(
+                    pad_byte,
+                    pad_width,
+                    number.unsigned_abs(),
+                    wtr,
+                );
+            }
             wtr.write_ascii_char(b'-')?;
         }
         let number = number.unsigned_abs();
@@ -1034,6 +1046,39 @@ impl Extension {
             (b'0', 4) if number <= 9999 => wtr.write_int_pad4(number),
             _ => wtr.write_int_pad(number, pad_byte, pad_width),
         }
+    }
+
+    /// Writes a negative integer with explicit width, where sign is part of
+    /// total width.
+    #[cold]
+    #[inline(never)]
+    fn write_negative_int(
+        pad_byte: u8,
+        pad_width: u8,
+        number: u64,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        // The sign is part of the total width, so offset the
+        // padding to account for it.
+        let mut pad_width = pad_width.saturating_sub(1);
+        // When padding to spaces, we want the padding first
+        // and then the `-` sign. So handle the padding here
+        // explicitly. For padding to zeros, we handle it
+        // normally (other than offsetting the padding width
+        // above).
+        if pad_byte == b' ' {
+            let d = 1 + number.checked_ilog10().unwrap_or(0) as u8;
+            for _ in 0..pad_width.saturating_sub(d) {
+                wtr.write_ascii_char(b' ')?;
+            }
+            // Don't do any padding to the call below.
+            // We could instead add a `BorrowedWriter::write_int`
+            // routine, but I don't think it's worth doing for
+            // this case.
+            pad_width = 0;
+        }
+        wtr.write_ascii_char(b'-')?;
+        wtr.write_int_pad(number, pad_byte, pad_width)
     }
 }
 
@@ -1363,7 +1408,7 @@ mod tests {
 
         insta::assert_snapshot!(f("%Y", date(2024, 7, 14)), @"2024");
         insta::assert_snapshot!(f("%Y", date(24, 7, 14)), @"0024");
-        insta::assert_snapshot!(f("%Y", date(-24, 7, 14)), @"-0024");
+        insta::assert_snapshot!(f("%Y", date(-24, 7, 14)), @"-024");
 
         insta::assert_snapshot!(f("%C", date(2024, 7, 14)), @"20");
         insta::assert_snapshot!(f("%C", date(1815, 7, 14)), @"18");
@@ -1374,6 +1419,31 @@ mod tests {
         insta::assert_snapshot!(f("%C", date(-2024, 7, 14)), @"-20");
         insta::assert_snapshot!(f("%C", date(-1815, 7, 14)), @"-18");
         insta::assert_snapshot!(f("%C", date(-915, 7, 14)), @"-9");
+    }
+
+    #[test]
+    fn ok_format_year_negative_padded() {
+        let f = |fmt: &str, date: Date| format(fmt, date).unwrap();
+
+        insta::assert_snapshot!(f("%06Y", date(-2025, 1, 13)), @"-02025");
+        insta::assert_snapshot!(f("%06Y", date(-25, 1, 13)), @"-00025");
+        insta::assert_snapshot!(f("%06Y", date(-1, 1, 13)), @"-00001");
+        insta::assert_snapshot!(f("%08Y", date(-2025, 1, 13)), @"-0002025");
+        insta::assert_snapshot!(f("%_6Y", date(-2025, 1, 13)), @" -2025");
+        insta::assert_snapshot!(f("%_6Y", date(-25, 1, 13)), @"   -25");
+        insta::assert_snapshot!(f("%_6Y", date(-1, 1, 13)), @"    -1");
+        insta::assert_snapshot!(f("%_8Y", date(-2025, 1, 13)), @"   -2025");
+        insta::assert_snapshot!(f("%06Y", date(2025, 1, 13)), @"002025");
+        insta::assert_snapshot!(f("%_6Y", date(2025, 1, 13)), @"  2025");
+        insta::assert_snapshot!(f("%Y", date(-2025, 1, 13)), @"-2025");
+        insta::assert_snapshot!(f("%Y", date(-25, 1, 13)), @"-025");
+        insta::assert_snapshot!(f("%_Y", date(-2025, 1, 13)), @"-2025");
+        insta::assert_snapshot!(f("%_Y", date(-25, 1, 13)), @" -25");
+        insta::assert_snapshot!(f("%03Y", date(-2025, 1, 13)), @"-2025");
+        insta::assert_snapshot!(f("%_3Y", date(-2025, 1, 13)), @"-2025");
+        insta::assert_snapshot!(f("%-6Y", date(-2025, 1, 13)), @"-2025");
+        insta::assert_snapshot!(f("%04Y", date(-2025, 1, 13)), @"-2025");
+        insta::assert_snapshot!(f("%05Y", date(-2025, 1, 13)), @"-2025");
     }
 
     #[test]
@@ -1390,7 +1460,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             f("%c", date(-24, 7, 14).at(0, 0, 0, 0)),
-            @"-0024 M07 14, Wed 00:00:00",
+            @"-024 M07 14, Wed 00:00:00",
         );
         insta::assert_snapshot!(
             f("%c", date(2024, 7, 14).at(17, 31, 59, 123_456_789)),
@@ -1461,7 +1531,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             f("%c", date(-24, 7, 14).at(0, 0, 0, 0)),
-            @"Wed Jul 14 00:00:00 -0024",
+            @"Wed Jul 14 00:00:00 -024",
         );
         insta::assert_snapshot!(
             f("%c", date(2024, 7, 14).at(17, 31, 59, 123_456_789)),
@@ -1515,7 +1585,7 @@ mod tests {
 
         insta::assert_snapshot!(f("%G", date(2019, 11, 30)), @"2019");
         insta::assert_snapshot!(f("%G", date(19, 11, 30)), @"0019");
-        insta::assert_snapshot!(f("%G", date(-19, 11, 30)), @"-0019");
+        insta::assert_snapshot!(f("%G", date(-19, 11, 30)), @"-019");
 
         // tricksy
         insta::assert_snapshot!(f("%G", date(2019, 12, 30)), @"2020");
