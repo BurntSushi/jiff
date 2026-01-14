@@ -10,7 +10,7 @@ use crate::{
     shared::util::itime::ITimestamp,
     tz::{Offset, TimeZone},
     util::{
-        rangeint::{self, Composite, RFrom, RInto},
+        rangeint::{RFrom, RInto},
         round::increment,
         t::{
             self, FractionalNanosecond, NoUnits, NoUnits128, UnixMicroseconds,
@@ -2322,27 +2322,6 @@ impl Timestamp {
             UnixSeconds::rfrom(nanosecond.div_ceil(t::NANOS_PER_SECOND));
         let nanosecond = nanosecond.rem_ceil(t::NANOS_PER_SECOND).rinto();
         Timestamp { second, nanosecond }
-    }
-
-    #[inline]
-    pub(crate) fn from_itimestamp(
-        its: Composite<ITimestamp>,
-    ) -> Result<Timestamp, Error> {
-        let (second, nanosecond) =
-            rangeint::uncomposite!(its, c => (c.second, c.nanosecond));
-        Ok(Timestamp {
-            second: second.try_to_rint("unix-seconds")?,
-            nanosecond: nanosecond.to_rint(),
-        })
-    }
-
-    #[inline]
-    pub(crate) fn to_itimestamp(&self) -> Composite<ITimestamp> {
-        rangeint::composite! {
-            (second = self.second, nanosecond = self.nanosecond) => {
-                ITimestamp { second, nanosecond }
-            }
-        }
     }
 
     #[inline]

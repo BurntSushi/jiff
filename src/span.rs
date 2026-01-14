@@ -2423,10 +2423,10 @@ impl Span {
     #[inline]
     pub(crate) fn to_duration_invariant(&self) -> SignedDuration {
         // This guarantees, at compile time, that a maximal invariant Span
-        // (that is, all units are days or lower and all units are set to their
-        // maximum values) will still balance out to a number of seconds that
-        // fits into a `i64`. This in turn implies that a `SignedDuration` can
-        // represent all possible invariant positive spans.
+        // (that is, all units are weeks or lower and all units are set to
+        // their maximum values) will still balance out to a number of seconds
+        // that fits into a `i64`. This in turn implies that a `SignedDuration`
+        // can represent all possible invariant positive spans.
         const _FITS_IN_U64: () = {
             debug_assert!(
                 i64::MAX as i128
@@ -2448,14 +2448,20 @@ impl Span {
             ()
         };
 
-        let nanos = self.to_invariant_nanoseconds();
         debug_assert!(
             self.largest_unit() <= Unit::Week,
             "units must be weeks or lower"
         );
         // OK because we have a compile time assert above that ensures our
         // nanoseconds are in the valid range of a `SignedDuration`.
-        SignedDuration::from_nanos_i128(nanos.get())
+        SignedDuration::from_civil_weeks32(self.get_weeks())
+            + SignedDuration::from_civil_days32(self.get_days())
+            + SignedDuration::from_hours32(self.get_hours())
+            + SignedDuration::from_mins(self.get_minutes())
+            + SignedDuration::from_secs(self.get_seconds())
+            + SignedDuration::from_millis(self.get_milliseconds())
+            + SignedDuration::from_micros(self.get_microseconds())
+            + SignedDuration::from_nanos(self.get_nanoseconds())
     }
 }
 

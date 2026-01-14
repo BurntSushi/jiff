@@ -910,7 +910,10 @@ mod tests {
             // back up to `expected_size *= 6`. And that was with me being
             // conscientious about what data we store inside of error types.
             // Blech.
-            expected_size *= 6;
+            //
+            // 2026-01-14: A change to the `Offset` type made this move back
+            // down to `expected_size *= 4`.
+            expected_size *= 4;
         }
         assert_eq!(expected_size, core::mem::size_of::<Error>());
     }
