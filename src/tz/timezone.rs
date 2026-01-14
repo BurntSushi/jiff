@@ -456,7 +456,7 @@ impl TimeZone {
     #[inline]
     pub const fn fixed(offset: Offset) -> TimeZone {
         // Not doing `offset == Offset::UTC` because of `const`.
-        if offset.seconds_ranged().get_unchecked() == 0 {
+        if offset.seconds() == 0 {
             return TimeZone::UTC;
         }
         let repr = Repr::fixed(offset);
@@ -2064,7 +2064,7 @@ mod repr {
         /// Creates a representation for a fixed offset time zone.
         #[inline]
         pub(super) const fn fixed(offset: Offset) -> Repr {
-            let seconds = offset.seconds_ranged().get_unchecked();
+            let seconds = offset.seconds();
             // OK because offset is in -93599..=93599.
             let shifted = unwrap!(
                 seconds.checked_shl(4),
@@ -3898,7 +3898,7 @@ mod tests {
         let err = tz.to_timestamp(DateTime::MIN).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "converting datetime with time zone offset `-04:02:40` to timestamp overflowed: parameter 'unix-seconds' with value -377705102240 is not in the required range of -377705023201..=253402207200",
+            "converting datetime with time zone offset `-04:02:40` to timestamp overflowed: parameter 'second' with value -377705102240 is not in the required range of -377705023201..=253402207200",
         );
     }
 }

@@ -36,12 +36,26 @@ pub(crate) const NANOS_PER_MILLI_32: i32 =
     MICROS_PER_MILLI_32 * NANOS_PER_MICRO_32;
 pub(crate) const NANOS_PER_MICRO_32: i32 = 1_000;
 
+/// This macro writes out the boiler plate to define a boundary type.
+///
+/// Specifically, it implements the `Bounds` trait and provides a few
+/// concrete methods. The concrete methods are mostly wrappers around
+/// the generic trait methods. They are provided so that callers don't
+/// have to import the `Bounds` trait to use them.
 macro_rules! define_bounds {
     ($((
+        // The name of the boundary type.
         $name:ident,
-        $ty:ty,
+        // The underlying primitive type. This is usually, but not always,
+        // the smallest signed primitive integer type that can represent both
+        // the minimum and maximum boundary values.
+        $ty:ident,
+        // A short human readable description that appears in error messages
+        // when the boundaries of this type are violated.
         $what:expr,
+        // The minimum value.
         $min:expr,
+        // The maximum value.
         $max:expr $(,)?
     )),* $(,)?) => {
         $(
@@ -70,6 +84,14 @@ macro_rules! define_bounds {
                 }
 
                 #[cfg_attr(feature = "perf-inline", inline(always))]
+                pub(crate) const fn checkc(n: i64) -> Result<$ty, BoundsError> {
+                    match self::checkc::$ty(n) {
+                        Ok(n) => Ok(n),
+                        Err(err) => Err(BoundsError::$name(err)),
+                    }
+                }
+
+                #[cfg_attr(feature = "perf-inline", inline(always))]
                 pub(crate) fn check128(n: impl Into<i128>) -> Result<$ty, BoundsError> {
                     <$name as Bounds>::check128(n)
                 }
@@ -77,6 +99,21 @@ macro_rules! define_bounds {
                 #[cfg_attr(feature = "perf-inline", inline(always))]
                 pub(crate) fn parse(bytes: &[u8]) -> Result<$ty, Error> {
                     <$name as Bounds>::parse(bytes)
+                }
+
+                #[cfg_attr(feature = "perf-inline", inline(always))]
+                pub(crate) fn checked_add(n1: $ty, n2: $ty) -> Result<$ty, BoundsError> {
+                    <$name as Bounds>::checked_add(n1, n2)
+                }
+
+                #[cfg_attr(feature = "perf-inline", inline(always))]
+                pub(crate) fn checked_sub(n1: $ty, n2: $ty) -> Result<$ty, BoundsError> {
+                    <$name as Bounds>::checked_sub(n1, n2)
+                }
+
+                #[cfg_attr(feature = "perf-inline", inline(always))]
+                pub(crate) fn checked_mul(n1: $ty, n2: $ty) -> Result<$ty, BoundsError> {
+                    <$name as Bounds>::checked_mul(n1, n2)
                 }
             }
         )*
@@ -157,27 +194,27 @@ define_bounds! {
     // variable length even in civil datetimes) are defined in terms of this
     // constant. The way it's defined is a little odd, so let's break it down.
     //
-    // Firstly, a span of seconds should be able to represent at least
-    // the complete span supported by `Timestamp`. Thus, it's based off of
-    // `UnixSeconds::LEN`. That is, a span should be able to represent the value
-    // `UnixSeconds::MAX - UnixSeconds::MIN`.
+    // Firstly, a span of seconds should be able to represent at least the
+    // complete span supported by `Timestamp`. Thus, it's based off of
+    // `UnixSeconds::LEN`. That is, a span should be able to represent the
+    // value `UnixSeconds::MAX - UnixSeconds::MIN`.
     //
-    // Secondly, a span should also be able to account for any amount of possible
-    // time that a time zone offset might add or subtract to an `Timestamp`. This
-    // also means it can account for any difference between two `civil::DateTime`
-    // values.
+    // Secondly, a span should also be able to account for any amount of
+    // possible time that a time zone offset might add or subtract to an
+    // `Timestamp`. This also means it can account for any difference between
+    // two `civil::DateTime` values.
     //
-    // Thirdly, we would like our span to be divisible by `SECONDS_PER_CIVIL_DAY`.
-    // This isn't strictly required, but it makes defining boundaries a little
-    // smoother. If it weren't divisible, then the lower bounds on some types
-    // would need to be adjusted by one.
+    // Thirdly, we would like our span to be divisible by
+    // `SECONDS_PER_CIVIL_DAY`. This isn't strictly required, but it makes
+    // defining boundaries a little smoother. If it weren't divisible, then the
+    // lower bounds on some types would need to be adjusted by one.
     //
-    // Note that neither the existence of this constant nor defining our spans
-    // based on it impacts the correctness of doing arithmetic on zoned instants.
-    // Arithmetic on zoned instants still uses "civil" spans, but the length
-    // of time for some units (like a day) might vary. The arithmetic for zoned
-    // instants accounts for this explicitly. But it still must obey the limits
-    // set here.
+    // Note that neither the existence of this constant nor defining our
+    // spans based on it impacts the correctness of doing arithmetic on zoned
+    // instants. Arithmetic on zoned instants still uses "civil" spans, but the
+    // length of time for some units (like a day) might vary. The arithmetic
+    // for zoned instants accounts for this explicitly. But it still must obey
+    // the limits set here.
     (
         SpanSeconds,
         i64,
@@ -229,13 +266,18 @@ define_bounds! {
         UnixMilliseconds::MIN * MICROS_PER_MILLI,
         UnixMilliseconds::MAX * MICROS_PER_MILLI,
     ),
-    (
-        UnixNanoseconds,
-        i128,
-        "Unix timestamp nanoseconds",
-        UnixMicroseconds::MIN as i128 * (NANOS_PER_MICRO as i128),
-        UnixMicroseconds::MAX as i128 * (NANOS_PER_MICRO as i128),
-    ),
+    // BREADCRUMBS: Supporting i128 in our `Bounds` framework is pretty
+    // awkward. It seems like this is the only type that uses i128 (outside
+    // of the `NoUnits` types in the old scheme, but I don't think we'll need
+    // those here---we can just use the primitive integer types directly),
+    // so we should just special case it.
+    // (
+        // UnixNanoseconds,
+        // i128,
+        // "Unix timestamp nanoseconds",
+        // UnixMicroseconds::MIN as i128 * (NANOS_PER_MICRO as i128),
+        // UnixMicroseconds::MAX as i128 * (NANOS_PER_MICRO as i128),
+    // ),
     (
         UnixSeconds,
         i64,
@@ -306,7 +348,7 @@ pub(crate) trait Bounds: Sized {
     /// # Panics
     ///
     /// This panics when `debug_assertions` are enabled if the bounds of
-    /// this implementation exceed what is representation in an `i64`. In
+    /// this implementation exceed what is representable in an `i64`. In
     /// this case, callers must use `check128`.
     #[cfg_attr(feature = "perf-inline", inline(always))]
     fn check(n: impl Into<i64>) -> Result<Self::Primitive, BoundsError> {
@@ -341,6 +383,21 @@ pub(crate) trait Bounds: Sized {
         Ok(Self::Primitive::from_i128(n))
     }
 
+    /// Checks whether the given integer, in the same primitive representation
+    /// as this boundary type, is in bounds.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given integer does not fit in the bounds
+    /// prescribed by this trait implementation.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    fn check_self(n: Self::Primitive) -> Result<Self::Primitive, BoundsError> {
+        if !(Self::MIN <= n && n <= Self::MAX) {
+            return Err(Self::error());
+        }
+        Ok(n)
+    }
+
     /// Parses a 64-bit integer from the beginning to the end of the given
     /// slice of bytes.
     ///
@@ -359,13 +416,65 @@ pub(crate) trait Bounds: Sized {
     fn parse(bytes: &[u8]) -> Result<Self::Primitive, Error> {
         Ok(Self::check(crate::util::parse::i64(bytes)?)?)
     }
+
+    /// Performs checked addition using this boundary type's primitive
+    /// representation.
+    ///
+    /// # Errors
+    ///
+    /// If the result exceeds the boundaries of the primitive type or of the
+    /// declared range for this type, then an error is returned.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    fn checked_add(
+        n1: Self::Primitive,
+        n2: Self::Primitive,
+    ) -> Result<Self::Primitive, BoundsError> {
+        Self::check_self(n1.checked_add(n2).ok_or_else(Self::error)?)
+    }
+
+    /// Performs checked subtraction using this boundary type's primitive
+    /// representation.
+    ///
+    /// # Errors
+    ///
+    /// If the result exceeds the boundaries of the primitive type or of the
+    /// declared range for this type, then an error is returned.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    fn checked_sub(
+        n1: Self::Primitive,
+        n2: Self::Primitive,
+    ) -> Result<Self::Primitive, BoundsError> {
+        Self::check_self(n1.checked_sub(n2).ok_or_else(Self::error)?)
+    }
+
+    /// Performs checked multiplication using this boundary type's primitive
+    /// representation.
+    ///
+    /// # Errors
+    ///
+    /// If the result exceeds the boundaries of the primitive type or of the
+    /// declared range for this type, then an error is returned.
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    fn checked_mul(
+        n1: Self::Primitive,
+        n2: Self::Primitive,
+    ) -> Result<Self::Primitive, BoundsError> {
+        Self::check_self(n1.checked_mul(n2).ok_or_else(Self::error)?)
+    }
 }
 
 /// A simple trait for making `int as int` usable in a generic context.
 ///
 /// All of these methods require callers to ensure the cast is correct.
 pub(crate) trait Primitive:
-    Clone + Copy + core::fmt::Debug + core::fmt::Display
+    Clone
+    + Copy
+    + Eq
+    + PartialEq
+    + PartialOrd
+    + Ord
+    + core::fmt::Debug
+    + core::fmt::Display
 {
     fn as_i8(self) -> i8;
     fn as_i16(self) -> i16;
@@ -378,6 +487,10 @@ pub(crate) trait Primitive:
     fn from_i32(n: i32) -> Self;
     fn from_i64(n: i64) -> Self;
     fn from_i128(n: i128) -> Self;
+
+    fn checked_add(self, n: Self) -> Option<Self>;
+    fn checked_sub(self, n: Self) -> Option<Self>;
+    fn checked_mul(self, n: Self) -> Option<Self>;
 }
 
 macro_rules! impl_primitive {
@@ -395,6 +508,18 @@ macro_rules! impl_primitive {
                 fn from_i32(n: i32) -> Self { n as $intty }
                 fn from_i64(n: i64) -> Self { n as $intty }
                 fn from_i128(n: i128) -> Self { n as $intty }
+
+                fn checked_add(self, n: $intty) -> Option<$intty> {
+                    <$intty>::checked_add(self, n)
+                }
+
+                fn checked_sub(self, n: $intty) -> Option<$intty> {
+                    <$intty>::checked_sub(self, n)
+                }
+
+                fn checked_mul(self, n: $intty) -> Option<$intty> {
+                    <$intty>::checked_mul(self, n)
+                }
             }
         )*
     }
@@ -517,6 +642,36 @@ impl Sign {
     }
 }
 
+impl From<i8> for Sign {
+    fn from(n: i8) -> Sign {
+        Sign::from(i64::from(n))
+    }
+}
+
+impl From<i16> for Sign {
+    fn from(n: i16) -> Sign {
+        Sign::from(i64::from(n))
+    }
+}
+
+impl From<i32> for Sign {
+    fn from(n: i32) -> Sign {
+        Sign::from(i64::from(n))
+    }
+}
+
+impl From<i64> for Sign {
+    fn from(n: i64) -> Sign {
+        if n == 0 {
+            Sign::Zero
+        } else if n > 0 {
+            Sign::Positive
+        } else {
+            Sign::Negative
+        }
+    }
+}
+
 impl core::ops::Mul<i8> for Sign {
     type Output = i8;
     fn mul(self, n: i8) -> i8 {
@@ -597,30 +752,101 @@ impl core::fmt::Display for Sign {
     }
 }
 
-/*
-#[cfg_attr(feature = "perf-inline", inline(always))]
-const fn check_i8<B>(n: i64) -> Result<i8, RawBoundsError<B>>
-where
-    B: Bounds<Primitive = i8>,
-{
-    // These asserts confirm that we only call this routine
-    // when our bounds fit into an i64. Otherwise, the
-    // `as_i64()` casts below are incorrect.
-    debug_assert!(
-        (i64::MIN as i128) <= (B::MIN as i128)
-            && (B::MIN as i128) <= (i64::MAX as i128),
-    );
-    debug_assert!(
-        (i64::MIN as i128) <= (B::MAX as i128)
-            && (B::MAX as i128) <= (i64::MAX as i128),
-    );
+mod checkc {
+    use super::{Bounds, RawBoundsError};
 
-    if !((B::MIN as i64) <= n && n <= (B::MAX as i64)) {
-        return Err(RawBoundsError::new());
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(super) const fn i8<B>(n: i64) -> Result<i8, RawBoundsError<B>>
+    where
+        B: Bounds<Primitive = i8>,
+    {
+        // These asserts confirm that we only call this routine
+        // when our bounds fit into an i64. Otherwise, the
+        // `as` casts below are incorrect.
+        debug_assert!(
+            (i64::MIN as i128) <= (B::MIN as i128)
+                && (B::MIN as i128) <= (i64::MAX as i128),
+        );
+        debug_assert!(
+            (i64::MIN as i128) <= (B::MAX as i128)
+                && (B::MAX as i128) <= (i64::MAX as i128),
+        );
+
+        if !((B::MIN as i64) <= n && n <= (B::MAX as i64)) {
+            return Err(RawBoundsError::new());
+        }
+        Ok(n as i8)
     }
-    Ok(n as i8)
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(super) const fn i16<B>(n: i64) -> Result<i16, RawBoundsError<B>>
+    where
+        B: Bounds<Primitive = i16>,
+    {
+        // These asserts confirm that we only call this routine
+        // when our bounds fit into an i64. Otherwise, the
+        // `as` casts below are incorrect.
+        debug_assert!(
+            (i64::MIN as i128) <= (B::MIN as i128)
+                && (B::MIN as i128) <= (i64::MAX as i128),
+        );
+        debug_assert!(
+            (i64::MIN as i128) <= (B::MAX as i128)
+                && (B::MAX as i128) <= (i64::MAX as i128),
+        );
+
+        if !((B::MIN as i64) <= n && n <= (B::MAX as i64)) {
+            return Err(RawBoundsError::new());
+        }
+        Ok(n as i16)
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(super) const fn i32<B>(n: i64) -> Result<i32, RawBoundsError<B>>
+    where
+        B: Bounds<Primitive = i32>,
+    {
+        // These asserts confirm that we only call this routine
+        // when our bounds fit into an i64. Otherwise, the
+        // `as` casts below are incorrect.
+        debug_assert!(
+            (i64::MIN as i128) <= (B::MIN as i128)
+                && (B::MIN as i128) <= (i64::MAX as i128),
+        );
+        debug_assert!(
+            (i64::MIN as i128) <= (B::MAX as i128)
+                && (B::MAX as i128) <= (i64::MAX as i128),
+        );
+
+        if !((B::MIN as i64) <= n && n <= (B::MAX as i64)) {
+            return Err(RawBoundsError::new());
+        }
+        Ok(n as i32)
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(super) const fn i64<B>(n: i64) -> Result<i64, RawBoundsError<B>>
+    where
+        B: Bounds<Primitive = i64>,
+    {
+        // These asserts confirm that we only call this routine
+        // when our bounds fit into an i64. Otherwise, the
+        // `as` casts below are incorrect.
+        debug_assert!(
+            (i64::MIN as i128) <= (B::MIN as i128)
+                && (B::MIN as i128) <= (i64::MAX as i128),
+        );
+        debug_assert!(
+            (i64::MIN as i128) <= (B::MAX as i128)
+                && (B::MAX as i128) <= (i64::MAX as i128),
+        );
+
+        if !(B::MIN <= n && n <= B::MAX) {
+            return Err(RawBoundsError::new());
+        }
+        Ok(n)
+    }
 }
-*/
 
 /// Computes the next multiple of `rhs` that is greater than or equal to `lhs`.
 ///

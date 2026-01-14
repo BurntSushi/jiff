@@ -654,9 +654,9 @@ impl DateTimePrinter {
         bbuf: &mut BorrowedBuffer<'_>,
     ) {
         bbuf.write_ascii_char(if offset.is_negative() { b'-' } else { b'+' });
-        let hours = offset.part_hours_ranged().get().unsigned_abs();
-        let minutes = offset.part_minutes_ranged().get().unsigned_abs();
-        let seconds = offset.part_seconds_ranged().get().unsigned_abs();
+        let hours = offset.part_hours().unsigned_abs();
+        let minutes = offset.part_minutes().unsigned_abs();
+        let seconds = offset.part_seconds().unsigned_abs();
         bbuf.write_int_pad2(hours);
         bbuf.write_ascii_char(b':');
         bbuf.write_int_pad2(minutes);

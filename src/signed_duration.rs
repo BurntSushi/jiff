@@ -19,6 +19,8 @@ const MILLIS_PER_SEC: i64 = 1_000;
 const MICROS_PER_SEC: i64 = 1_000_000;
 const SECS_PER_MINUTE: i64 = 60;
 const MINS_PER_HOUR: i64 = 60;
+const HOURS_PER_CIVIL_DAY: i64 = 24;
+const DAYS_PER_WEEK: i64 = 7;
 
 /// A signed duration of time represented as a 96-bit integer of nanoseconds.
 ///
@@ -2297,6 +2299,52 @@ impl SignedDuration {
 /// as efficiently outside of Jiff. If we exposed a `new_unchecked`
 /// constructor, then I believe that would be sufficient.
 impl SignedDuration {
+    /// Creates a signed duration from a 32-bit number of civil weeks. (That
+    /// is, every day is exactly 24 hours long and every week is 7 such days.)
+    ///
+    /// This is infallible. It can never panic.
+    #[inline]
+    pub(crate) const fn from_civil_weeks32(weeks: i32) -> SignedDuration {
+        SignedDuration::from_secs(
+            (weeks as i64)
+                * DAYS_PER_WEEK
+                * HOURS_PER_CIVIL_DAY
+                * MINS_PER_HOUR
+                * SECS_PER_MINUTE,
+        )
+    }
+
+    /// Creates a signed duration from a 32-bit number of civil days. (That is,
+    /// every day is exactly 24 hours long.)
+    ///
+    /// This is infallible. It can never panic.
+    #[inline]
+    pub(crate) const fn from_civil_days32(days: i32) -> SignedDuration {
+        SignedDuration::from_secs(
+            (days as i64)
+                * HOURS_PER_CIVIL_DAY
+                * MINS_PER_HOUR
+                * SECS_PER_MINUTE,
+        )
+    }
+
+    /// Like `SignedDuration::from_hours`, but for 32-bit integers
+    /// and thus infallible (including never panicking).
+    #[inline]
+    pub(crate) const fn from_hours32(hours: i32) -> SignedDuration {
+        SignedDuration::from_secs(
+            (hours as i64) * MINS_PER_HOUR * SECS_PER_MINUTE,
+        )
+    }
+
+    /// Like `SignedDuration::from_mins`, but for 32-bit integers
+    /// and thus infallible (including never panicking).
+    #[allow(dead_code)]
+    #[inline]
+    pub(crate) const fn from_mins32(mins: i32) -> SignedDuration {
+        SignedDuration::from_secs((mins as i64) * SECS_PER_MINUTE)
+    }
+
     /// Returns the number of whole hours in this duration (equivalent to
     /// `SignedDuration::as_hours`) along with a duration equivalent to the
     /// fractional remainder.
