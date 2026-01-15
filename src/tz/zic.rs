@@ -115,11 +115,11 @@ use crate::{
         tz::zic::{Error as E, MAX_LINE_LEN},
         Error, ErrorContext,
     },
-    span::{Span, SpanFieldwise, ToSpan},
+    span::ToSpan,
     timestamp::Timestamp,
     tz::{Dst, Offset},
     util::{b, parse, sync::Arc},
-    Unit,
+    SignedDuration,
 };
 
 #[derive(Debug, Default, Eq, PartialEq)]
@@ -722,7 +722,7 @@ impl FromStr for RuleOnP {
 struct RuleAtP {
     /// The amount of time to add to the start of the day specified by
     /// `RuleOnP`. This may be negative.
-    span: SpanFieldwise,
+    dur: SignedDuration,
     /// An optional suffix indicating how to interpret the overall time at
     /// which a rule takes effect. As I understand it, this applies to the
     /// entire datetime that is specified by IN, ON and AT and not just the
@@ -751,12 +751,12 @@ impl FromStr for RuleAtP {
         }
         let (span_string, suffix_string) = at.split_at(at.len() - 1);
         if suffix_string.chars().all(|ch| ch.is_ascii_alphabetic()) {
-            let span = parse_span(span_string)?.fieldwise();
+            let span = parse_duration(span_string)?;
             let suffix = suffix_string.parse()?;
-            Ok(RuleAtP { span, suffix: Some(suffix) })
+            Ok(RuleAtP { dur: span, suffix: Some(suffix) })
         } else {
-            let span = parse_span(at)?.fieldwise();
-            Ok(RuleAtP { span, suffix: None })
+            let span = parse_duration(at)?;
+            Ok(RuleAtP { dur: span, suffix: None })
         }
     }
 }
@@ -788,7 +788,7 @@ impl FromStr for RuleAtSuffixP {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct RuleSaveP {
     /// The amount of time to add. This may be negative.
-    span: SpanFieldwise,
+    dur: SignedDuration,
     /// An optional suffix indicating how the resulting time after applying
     /// this rule should be interpreted. When absent, this defaults to DST.
     suffix: Option<RuleSaveSuffixP>,
@@ -801,11 +801,7 @@ impl RuleSaveP {
     fn to_offset(&self) -> Result<Offset, Error> {
         // TODO: I think `zic` rounds to the nearest second, breaking ties to
         // the nearest even second?
-        let seconds = Span::from_invariant_nanoseconds(
-            Unit::Second,
-            self.span.0.to_invariant_nanoseconds(),
-        )?
-        .get_seconds();
+        let seconds = self.dur.as_secs();
         let seconds = i32::try_from(seconds).map_err(|_| {
             Error::range("SAVE seconds", seconds, i32::MIN, i32::MAX)
         })?;
@@ -818,7 +814,7 @@ impl RuleSaveP {
     /// span in the field.
     fn suffix(&self) -> RuleSaveSuffixP {
         self.suffix.unwrap_or_else(|| {
-            if self.span.0.is_zero() {
+            if self.dur.is_zero() {
                 RuleSaveSuffixP::Standard
             } else {
                 RuleSaveSuffixP::Dst
@@ -836,12 +832,12 @@ impl FromStr for RuleSaveP {
         }
         let (span_string, suffix_string) = at.split_at(at.len() - 1);
         if suffix_string.chars().all(|ch| ch.is_ascii_alphabetic()) {
-            let span = parse_span(span_string)?.fieldwise();
+            let span = parse_duration(span_string)?;
             let suffix = suffix_string.parse()?;
-            Ok(RuleSaveP { span, suffix: Some(suffix) })
+            Ok(RuleSaveP { dur: span, suffix: Some(suffix) })
         } else {
-            let span = parse_span(at)?.fieldwise();
-            Ok(RuleSaveP { span, suffix: None })
+            let span = parse_duration(at)?;
+            Ok(RuleSaveP { dur: span, suffix: None })
         }
     }
 }
@@ -921,15 +917,15 @@ impl FromStr for ZoneNameP {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ZoneStdoffP {
     /// The duration. This only uses units of hours or lower.
-    span: SpanFieldwise,
+    dur: SignedDuration,
 }
 
 impl FromStr for ZoneStdoffP {
     type Err = Error;
 
     fn from_str(stdoff: &str) -> Result<ZoneStdoffP, Error> {
-        let span = parse_span(stdoff)?.fieldwise();
-        Ok(ZoneStdoffP { span })
+        let dur = parse_duration(stdoff)?;
+        Ok(ZoneStdoffP { dur })
     }
 }
 
@@ -1092,9 +1088,8 @@ impl ZoneUntilP {
 
     fn to_datetime(&self) -> Result<DateTime, Error> {
         let date = self.on().date(self.year(), self.month())?;
-        let dt = date
-            .to_datetime(Time::midnight())
-            .checked_add(self.at().span.0)?;
+        let dt =
+            date.to_datetime(Time::midnight()).checked_add(self.at().dur)?;
         Ok(dt)
     }
 
@@ -1134,7 +1129,7 @@ impl ZoneUntilP {
 
         match *self {
             Year { .. } | YearMonth { .. } | YearMonthDay { .. } => {
-                RuleAtP { span: Span::new().fieldwise(), suffix: None }
+                RuleAtP { dur: SignedDuration::ZERO, suffix: None }
             }
             YearMonthDayTime { duration, .. } => duration,
         }
@@ -1164,7 +1159,7 @@ fn parse_year(year: &str) -> Result<i16, Error> {
 /// the nearest second at a higher level.) Hours can seemingly be any number we
 /// can reasonably represent. The leading `-` sign means it can be negative.
 /// And as a special case, a `-` all on its own is equivalent to `0`.
-fn parse_span(span: &str) -> Result<Span, Error> {
+fn parse_duration(span: &str) -> Result<SignedDuration, Error> {
     // This function is just brutal. I feel like I'm over-complicating it. I
     // suppoose we could probably do a little better here with a better set of
     // parser combinator helpers. But it's all inter-woven with parsing numbers
@@ -1175,13 +1170,13 @@ fn parse_span(span: &str) -> Result<Span, Error> {
         // Special case where if the duration is just `-`, then it's equivalent
         // to zero.
         if span.len() == 1 {
-            return Ok(Span::new());
+            return Ok(SignedDuration::ZERO);
         }
         (b::Sign::Negative, &rest[1..])
     } else {
         (b::Sign::Positive, rest)
     };
-    let mut span = Span::new();
+    let mut dur = SignedDuration::ZERO;
 
     // Pluck out the hour component.
     let hour_len = rest.chars().take_while(|c| c.is_ascii_digit()).count();
@@ -1191,9 +1186,9 @@ fn parse_span(span: &str) -> Result<Span, Error> {
     }
     let hours = b::SpanHours::parse(hour_digits.as_bytes())
         .context(E::FailedParseHour)?;
-    span = span.hours(sign * hours);
+    dur += SignedDuration::from_hours(sign * hours);
     if rest.is_empty() {
-        return Ok(span);
+        return Ok(dur);
     }
 
     // Now pluck out the minute component.
@@ -1208,9 +1203,9 @@ fn parse_span(span: &str) -> Result<Span, Error> {
     }
     let minutes = b::Minute::parse(minute_digits.as_bytes())
         .context(E::FailedParseMinute)?;
-    span = span.minutes(sign * minutes);
+    dur += SignedDuration::from_mins(sign * i64::from(minutes));
     if rest.is_empty() {
-        return Ok(span);
+        return Ok(dur);
     }
 
     // Now pluck out the second component.
@@ -1225,9 +1220,9 @@ fn parse_span(span: &str) -> Result<Span, Error> {
     }
     let seconds = b::Second::parse(second_digits.as_bytes())
         .context(E::FailedParseSecond)?;
-    span = span.seconds(sign * seconds);
+    dur += SignedDuration::from_secs(sign * i64::from(seconds));
     if rest.is_empty() {
-        return Ok(span);
+        return Ok(dur);
     }
 
     // Now look for the fractional nanosecond component.
@@ -1245,13 +1240,13 @@ fn parse_span(span: &str) -> Result<Span, Error> {
         .context(E::FailedParseNanosecond)?;
     // OK because `parse::fraction` can't return anything more than
     // `999_999_999` nanoseconds.
-    span = span.nanoseconds(sign * i64::from(nanoseconds));
+    dur += SignedDuration::from_nanos(sign * i64::from(nanoseconds));
 
     // We should have consumed everything at this point.
     if !rest.is_empty() {
         return Err(Error::from(E::UnrecognizedTrailingTimeDuration));
     }
-    span.rebalance(Unit::Hour)
+    Ok(dur)
 }
 
 /// Parses a day of the month.
@@ -1456,13 +1451,8 @@ mod tests {
 
     use super::*;
 
-    fn td(seconds: i64, nanoseconds: i32) -> SpanFieldwise {
-        Span::new()
-            .seconds(seconds)
-            .nanoseconds(nanoseconds)
-            .rebalance(Unit::Hour)
-            .unwrap()
-            .fieldwise()
+    fn td(seconds: i64, nanoseconds: i32) -> SignedDuration {
+        SignedDuration::new(seconds, nanoseconds)
     }
 
     #[test]
@@ -1607,7 +1597,7 @@ mod tests {
             "US", "1967", "1973", "-", "Apr", "lastSun", "2:00w", "1:00d", "D",
         ])
         .unwrap();
-        insta::assert_debug_snapshot!(rule, @r###"
+        insta::assert_debug_snapshot!(rule, @r#"
         RuleP {
             name: RuleNameP {
                 name: "US",
@@ -1625,17 +1615,13 @@ mod tests {
                 weekday: Sunday,
             },
             at: RuleAtP {
-                span: SpanFieldwise(
-                    2h,
-                ),
+                dur: 7200s,
                 suffix: Some(
                     Wall,
                 ),
             },
             save: RuleSaveP {
-                span: SpanFieldwise(
-                    1h,
-                ),
+                dur: 3600s,
                 suffix: Some(
                     Dst,
                 ),
@@ -1644,7 +1630,7 @@ mod tests {
                 part: "D",
             },
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -1666,15 +1652,13 @@ mod tests {
         let zone: ZoneFirstP =
             ZoneFirstP::parse(&["America/Menominee", "-5:00", "-", "EST"])
                 .unwrap();
-        insta::assert_debug_snapshot!(zone, @r###"
+        insta::assert_debug_snapshot!(zone, @r#"
         ZoneFirstP {
             name: ZoneNameP {
                 name: "America/Menominee",
             },
             stdoff: ZoneStdoffP {
-                span: SpanFieldwise(
-                    5h ago,
-                ),
+                dur: -18000s,
             },
             rules: None,
             format: Static {
@@ -1682,7 +1666,7 @@ mod tests {
             },
             until: None,
         }
-        "###);
+        "#);
 
         let zone: ZoneFirstP = ZoneFirstP::parse(&[
             "America/Menominee",
@@ -1695,15 +1679,13 @@ mod tests {
             "2:00",
         ])
         .unwrap();
-        insta::assert_debug_snapshot!(zone, @r###"
+        insta::assert_debug_snapshot!(zone, @r#"
         ZoneFirstP {
             name: ZoneNameP {
                 name: "America/Menominee",
             },
             stdoff: ZoneStdoffP {
-                span: SpanFieldwise(
-                    5h ago,
-                ),
+                dur: -18000s,
             },
             rules: None,
             format: Static {
@@ -1719,15 +1701,13 @@ mod tests {
                         day: 29,
                     },
                     duration: RuleAtP {
-                        span: SpanFieldwise(
-                            2h,
-                        ),
+                        dur: 7200s,
                         suffix: None,
                     },
                 },
             ),
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -1747,12 +1727,10 @@ mod tests {
     fn parse_zone_continuation_ok() {
         let zone: ZoneContinuationP =
             ZoneContinuationP::parse(&["-5:00", "-", "EST"]).unwrap();
-        insta::assert_debug_snapshot!(zone, @r###"
+        insta::assert_debug_snapshot!(zone, @r#"
         ZoneContinuationP {
             stdoff: ZoneStdoffP {
-                span: SpanFieldwise(
-                    5h ago,
-                ),
+                dur: -18000s,
             },
             rules: None,
             format: Static {
@@ -1760,18 +1738,16 @@ mod tests {
             },
             until: None,
         }
-        "###);
+        "#);
 
         let zone: ZoneContinuationP = ZoneContinuationP::parse(&[
             "-5:00", "-", "EST", "1973", "Apr", "29", "2:00",
         ])
         .unwrap();
-        insta::assert_debug_snapshot!(zone, @r###"
+        insta::assert_debug_snapshot!(zone, @r#"
         ZoneContinuationP {
             stdoff: ZoneStdoffP {
-                span: SpanFieldwise(
-                    5h ago,
-                ),
+                dur: -18000s,
             },
             rules: None,
             format: Static {
@@ -1787,15 +1763,13 @@ mod tests {
                         day: 29,
                     },
                     duration: RuleAtP {
-                        span: SpanFieldwise(
-                            2h,
-                        ),
+                        dur: 7200s,
                         suffix: None,
                     },
                 },
             ),
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -2071,13 +2045,13 @@ mod tests {
     #[test]
     fn parse_rule_at_ok() {
         let at: RuleAtP = "5".parse().unwrap();
-        assert_eq!(at, RuleAtP { span: td(5 * 60 * 60, 0), suffix: None });
+        assert_eq!(at, RuleAtP { dur: td(5 * 60 * 60, 0), suffix: None });
 
         let at: RuleAtP = "5w".parse().unwrap();
         assert_eq!(
             at,
             RuleAtP {
-                span: td(5 * 60 * 60, 0),
+                dur: td(5 * 60 * 60, 0),
                 suffix: Some(RuleAtSuffixP::Wall)
             }
         );
@@ -2086,18 +2060,18 @@ mod tests {
         assert_eq!(
             at,
             RuleAtP {
-                span: td(-5 * 60 * 60, 0),
+                dur: td(-5 * 60 * 60, 0),
                 suffix: Some(RuleAtSuffixP::Wall)
             }
         );
 
         let at: RuleAtP = "-".parse().unwrap();
-        assert_eq!(at, RuleAtP { span: td(0, 0), suffix: None });
+        assert_eq!(at, RuleAtP { dur: td(0, 0), suffix: None });
 
         let at: RuleAtP = "-s".parse().unwrap();
         assert_eq!(
             at,
-            RuleAtP { span: td(0, 0), suffix: Some(RuleAtSuffixP::Standard) }
+            RuleAtP { dur: td(0, 0), suffix: Some(RuleAtSuffixP::Standard) }
         );
     }
 
@@ -2133,13 +2107,13 @@ mod tests {
     #[test]
     fn parse_rule_save_ok() {
         let at: RuleSaveP = "5".parse().unwrap();
-        assert_eq!(at, RuleSaveP { span: td(5 * 60 * 60, 0), suffix: None });
+        assert_eq!(at, RuleSaveP { dur: td(5 * 60 * 60, 0), suffix: None });
 
         let at: RuleSaveP = "5s".parse().unwrap();
         assert_eq!(
             at,
             RuleSaveP {
-                span: td(5 * 60 * 60, 0),
+                dur: td(5 * 60 * 60, 0),
                 suffix: Some(RuleSaveSuffixP::Standard)
             }
         );
@@ -2148,19 +2122,19 @@ mod tests {
         assert_eq!(
             at,
             RuleSaveP {
-                span: td(-5 * 60 * 60, 0),
+                dur: td(-5 * 60 * 60, 0),
                 suffix: Some(RuleSaveSuffixP::Standard)
             }
         );
 
         let at: RuleSaveP = "-".parse().unwrap();
-        assert_eq!(at, RuleSaveP { span: td(0, 0), suffix: None });
+        assert_eq!(at, RuleSaveP { dur: td(0, 0), suffix: None });
 
         let at: RuleSaveP = "-s".parse().unwrap();
         assert_eq!(
             at,
             RuleSaveP {
-                span: td(0, 0),
+                dur: td(0, 0),
                 suffix: Some(RuleSaveSuffixP::Standard)
             }
         );
@@ -2223,10 +2197,10 @@ mod tests {
     #[test]
     fn parse_zone_stdoff_ok() {
         let stdoff: ZoneStdoffP = "5".parse().unwrap();
-        assert_eq!(stdoff, ZoneStdoffP { span: td(5 * 60 * 60, 0) });
+        assert_eq!(stdoff, ZoneStdoffP { dur: td(5 * 60 * 60, 0) });
 
         let stdoff: ZoneStdoffP = "-5".parse().unwrap();
-        assert_eq!(stdoff, ZoneStdoffP { span: td(-5 * 60 * 60, 0) });
+        assert_eq!(stdoff, ZoneStdoffP { dur: td(-5 * 60 * 60, 0) });
     }
 
     #[test]
@@ -2251,7 +2225,7 @@ mod tests {
         assert_eq!(
             rules,
             ZoneRulesP::Save(RuleSaveP {
-                span: td(5 * 60 * 60, 0),
+                dur: td(5 * 60 * 60, 0),
                 suffix: None,
             })
         );
@@ -2259,7 +2233,7 @@ mod tests {
         assert_eq!(
             rules,
             ZoneRulesP::Save(RuleSaveP {
-                span: td(-5 * 60 * 60, 0),
+                dur: td(-5 * 60 * 60, 0),
                 suffix: None,
             })
         );
@@ -2267,7 +2241,7 @@ mod tests {
         assert_eq!(
             rules,
             ZoneRulesP::Save(RuleSaveP {
-                span: td(-1 * 60 * 60, 0),
+                dur: td(-1 * 60 * 60, 0),
                 suffix: Some(RuleSaveSuffixP::Dst),
             })
         );
@@ -2381,7 +2355,7 @@ mod tests {
                 year: 2025,
                 month: RuleInP { month: 1 },
                 day: RuleOnP::Last { weekday: Weekday::Sunday },
-                duration: RuleAtP { span: td(0, 0), suffix: None },
+                duration: RuleAtP { dur: td(0, 0), suffix: None },
             },
         );
         let until =
@@ -2392,7 +2366,7 @@ mod tests {
                 year: 2025,
                 month: RuleInP { month: 1 },
                 day: RuleOnP::Last { weekday: Weekday::Sunday },
-                duration: RuleAtP { span: td(5 * 60 * 60, 0), suffix: None },
+                duration: RuleAtP { dur: td(5 * 60 * 60, 0), suffix: None },
             },
         );
         let until =
@@ -2403,7 +2377,7 @@ mod tests {
                 year: 2025,
                 month: RuleInP { month: 1 },
                 day: RuleOnP::Last { weekday: Weekday::Sunday },
-                duration: RuleAtP { span: td(-5 * 60 * 60, 0), suffix: None },
+                duration: RuleAtP { dur: td(-5 * 60 * 60, 0), suffix: None },
             },
         );
         let until =
@@ -2415,7 +2389,7 @@ mod tests {
                 year: 2025,
                 month: RuleInP { month: 1 },
                 day: RuleOnP::Last { weekday: Weekday::Sunday },
-                duration: RuleAtP { span: td(3661, 1), suffix: None },
+                duration: RuleAtP { dur: td(3661, 1), suffix: None },
             },
         );
         let until =
@@ -2427,7 +2401,7 @@ mod tests {
                 month: RuleInP { month: 1 },
                 day: RuleOnP::Last { weekday: Weekday::Sunday },
                 duration: RuleAtP {
-                    span: td(5 * 60 * 60, 0),
+                    dur: td(5 * 60 * 60, 0),
                     suffix: Some(RuleAtSuffixP::Universal),
                 },
             },
@@ -2480,71 +2454,74 @@ mod tests {
 
     #[test]
     fn parse_duration_ok() {
-        assert_eq!(parse_span("-").unwrap(), td(0, 0));
-        assert_eq!(parse_span("0").unwrap(), td(0, 0));
-        assert_eq!(parse_span("-0").unwrap(), td(0, 0));
+        assert_eq!(parse_duration("-").unwrap(), td(0, 0));
+        assert_eq!(parse_duration("0").unwrap(), td(0, 0));
+        assert_eq!(parse_duration("-0").unwrap(), td(0, 0));
 
-        assert_eq!(parse_span("1").unwrap(), td(3600, 0));
-        assert_eq!(parse_span("1:1").unwrap(), td(3660, 0));
-        assert_eq!(parse_span("1:1:1").unwrap(), td(3661, 0));
-        assert_eq!(parse_span("1:1:1.1").unwrap(), td(3661, 100_000_000));
+        assert_eq!(parse_duration("1").unwrap(), td(3600, 0));
+        assert_eq!(parse_duration("1:1").unwrap(), td(3660, 0));
+        assert_eq!(parse_duration("1:1:1").unwrap(), td(3661, 0));
+        assert_eq!(parse_duration("1:1:1.1").unwrap(), td(3661, 100_000_000));
         assert_eq!(
-            parse_span("1:1:1.123456789").unwrap(),
+            parse_duration("1:1:1.123456789").unwrap(),
             td(3661, 123_456_789)
         );
-        assert_eq!(parse_span("0:1:0").unwrap(), td(60, 0));
-        assert_eq!(parse_span("0:0:1").unwrap(), td(1, 0));
-        assert_eq!(parse_span("0:0:0.000000001").unwrap(), td(0, 1));
-        assert_eq!(parse_span("0:0:0.000000000").unwrap(), td(0, 0));
+        assert_eq!(parse_duration("0:1:0").unwrap(), td(60, 0));
+        assert_eq!(parse_duration("0:0:1").unwrap(), td(1, 0));
+        assert_eq!(parse_duration("0:0:0.000000001").unwrap(), td(0, 1));
+        assert_eq!(parse_duration("0:0:0.000000000").unwrap(), td(0, 0));
 
-        assert_eq!(parse_span("-1").unwrap(), td(-3600, 0));
-        assert_eq!(parse_span("-1:1").unwrap(), td(-3660, 0));
-        assert_eq!(parse_span("-1:1:1").unwrap(), td(-3661, 0));
-        assert_eq!(parse_span("-1:1:1.1").unwrap(), td(-3661, -100_000_000));
+        assert_eq!(parse_duration("-1").unwrap(), td(-3600, 0));
+        assert_eq!(parse_duration("-1:1").unwrap(), td(-3660, 0));
+        assert_eq!(parse_duration("-1:1:1").unwrap(), td(-3661, 0));
         assert_eq!(
-            parse_span("-1:1:1.123456789").unwrap(),
+            parse_duration("-1:1:1.1").unwrap(),
+            td(-3661, -100_000_000)
+        );
+        assert_eq!(
+            parse_duration("-1:1:1.123456789").unwrap(),
             td(-3661, -123_456_789)
         );
-        assert_eq!(parse_span("-0:1:0").unwrap(), td(-60, 0));
-        assert_eq!(parse_span("-0:0:1").unwrap(), td(-1, 0));
-        assert_eq!(parse_span("-0:0:0.000000001").unwrap(), td(0, -1));
+        assert_eq!(parse_duration("-0:1:0").unwrap(), td(-60, 0));
+        assert_eq!(parse_duration("-0:0:1").unwrap(), td(-1, 0));
+        assert_eq!(parse_duration("-0:0:0.000000001").unwrap(), td(0, -1));
     }
 
     #[test]
     fn parse_duration_err() {
-        assert!(parse_span("").is_err());
-        assert!(parse_span(" ").is_err());
-        assert!(parse_span("a").is_err());
-        assert!(parse_span("999999999999999").is_err());
-        assert!(parse_span("1:").is_err());
-        assert!(parse_span("1:a").is_err());
-        assert!(parse_span("1:60").is_err());
-        assert!(parse_span("1:01:").is_err());
-        assert!(parse_span("1:01:60").is_err());
-        assert!(parse_span("1:01:59.").is_err());
-        assert!(parse_span("1:01:59.0000000001").is_err());
-        assert!(parse_span("1:01:59.0000000000").is_err());
-        assert!(parse_span("1:01:59.000000001a").is_err());
-        assert!(parse_span("1:01:59.000000001 ").is_err());
-        assert!(parse_span("1::59").is_err());
-        assert!(parse_span("1::.1").is_err());
-        assert!(parse_span("::").is_err());
+        assert!(parse_duration("").is_err());
+        assert!(parse_duration(" ").is_err());
+        assert!(parse_duration("a").is_err());
+        assert!(parse_duration("999999999999999").is_err());
+        assert!(parse_duration("1:").is_err());
+        assert!(parse_duration("1:a").is_err());
+        assert!(parse_duration("1:60").is_err());
+        assert!(parse_duration("1:01:").is_err());
+        assert!(parse_duration("1:01:60").is_err());
+        assert!(parse_duration("1:01:59.").is_err());
+        assert!(parse_duration("1:01:59.0000000001").is_err());
+        assert!(parse_duration("1:01:59.0000000000").is_err());
+        assert!(parse_duration("1:01:59.000000001a").is_err());
+        assert!(parse_duration("1:01:59.000000001 ").is_err());
+        assert!(parse_duration("1::59").is_err());
+        assert!(parse_duration("1::.1").is_err());
+        assert!(parse_duration("::").is_err());
         // Maybe we should support this?
-        assert!(parse_span("+1").is_err());
+        assert!(parse_duration("+1").is_err());
 
         // Tricky cases where the number of hours is at the limit, but there
         // are other units present.
-        assert!(parse_span("175307616").is_ok());
-        assert!(parse_span("175307617").is_err());
-        assert!(parse_span("175307616:01").is_ok());
-        assert!(parse_span("175307616:00:01").is_ok());
-        assert!(parse_span("175307616:00:00.999999999").is_ok());
+        assert!(parse_duration("175307616").is_ok());
+        assert!(parse_duration("175307617").is_err());
+        assert!(parse_duration("175307616:01").is_ok());
+        assert!(parse_duration("175307616:00:01").is_ok());
+        assert!(parse_duration("175307616:00:00.999999999").is_ok());
         // Same as above, but for negative hours.
-        assert!(parse_span("-175307616").is_ok());
-        assert!(parse_span("-175307617").is_err());
-        assert!(parse_span("-175307616:01").is_ok());
-        assert!(parse_span("-175307616:00:01").is_ok());
-        assert!(parse_span("-175307616:00:00.999999999").is_ok());
+        assert!(parse_duration("-175307616").is_ok());
+        assert!(parse_duration("-175307617").is_err());
+        assert!(parse_duration("-175307616:01").is_ok());
+        assert!(parse_duration("-175307616:00:01").is_ok());
+        assert!(parse_duration("-175307616:00:00.999999999").is_ok());
     }
 
     #[test]

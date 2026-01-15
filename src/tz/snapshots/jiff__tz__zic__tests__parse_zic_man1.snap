@@ -22,15 +22,11 @@ ZicP {
                     weekday: Sunday,
                 },
                 at: RuleAtP {
-                    span: SpanFieldwise(
-                        2h,
-                    ),
+                    dur: 7200s,
                     suffix: None,
                 },
                 save: RuleSaveP {
-                    span: SpanFieldwise(
-                        0s,
-                    ),
+                    dur: 0s,
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -54,15 +50,11 @@ ZicP {
                     weekday: Sunday,
                 },
                 at: RuleAtP {
-                    span: SpanFieldwise(
-                        2h,
-                    ),
+                    dur: 7200s,
                     suffix: None,
                 },
                 save: RuleSaveP {
-                    span: SpanFieldwise(
-                        1h,
-                    ),
+                    dur: 3600s,
                     suffix: None,
                 },
                 letters: RuleLettersP {
@@ -78,9 +70,7 @@ ZicP {
                     name: "America/Menominee",
                 },
                 stdoff: ZoneStdoffP {
-                    span: SpanFieldwise(
-                        5h ago,
-                    ),
+                    dur: -18000s,
                 },
                 rules: None,
                 format: Static {
@@ -96,9 +86,7 @@ ZicP {
                             day: 29,
                         },
                         duration: RuleAtP {
-                            span: SpanFieldwise(
-                                2h,
-                            ),
+                            dur: 7200s,
                             suffix: None,
                         },
                     },
@@ -107,9 +95,7 @@ ZicP {
             continuations: [
                 ZoneContinuationP {
                     stdoff: ZoneStdoffP {
-                        span: SpanFieldwise(
-                            6h ago,
-                        ),
+                        dur: -21600s,
                     },
                     rules: Named(
                         RuleNameP {
