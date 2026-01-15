@@ -3898,7 +3898,7 @@ mod tests {
         let err = tz.to_timestamp(DateTime::MIN).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "converting datetime with time zone offset `-04:02:40` to timestamp overflowed: parameter 'second' with value -377705102240 is not in the required range of -377705023201..=253402207200",
+            "converting datetime with time zone offset `-04:02:40` to timestamp overflowed: parameter 'Unix timestamp seconds' is not in the required range of -377705023201..=253402207200",
         );
     }
 }

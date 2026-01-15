@@ -795,24 +795,6 @@ impl SignedDuration {
         }
     }
 
-    /// Converts the given timestamp into a signed duration.
-    ///
-    /// This isn't exported because it's not clear that it makes semantic
-    /// sense, since it somewhat encodes the assumption that the "desired"
-    /// duration is relative to the Unix epoch. Which is... probably fine?
-    /// But I'm not sure.
-    ///
-    /// But the point of this is to make the conversion a little cheaper.
-    /// Namely, since a `Timestamp` internally uses same representation as a
-    /// `SignedDuration` with the same guarantees (except with smaller limits),
-    /// we can avoid a fair bit of case analysis done in `SignedDuration::new`.
-    pub(crate) fn from_timestamp(timestamp: Timestamp) -> SignedDuration {
-        SignedDuration::new_unchecked(
-            timestamp.as_second(),
-            timestamp.subsec_nanosecond(),
-        )
-    }
-
     /// Returns true if this duration spans no time.
     ///
     /// # Example

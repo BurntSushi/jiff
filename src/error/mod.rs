@@ -1,4 +1,7 @@
-use crate::util::{b::BoundsError, sync::Arc};
+use crate::util::{
+    b::{BoundsError, SpecialBoundsError},
+    sync::Arc,
+};
 
 pub(crate) mod civil;
 pub(crate) mod duration;
@@ -113,7 +116,11 @@ impl Error {
         use self::ErrorKind::*;
         matches!(
             *self.root().kind(),
-            Bounds(_) | Range(_) | SlimRange(_) | ITimeRange(_)
+            Bounds(_)
+                | SpecialBounds(_)
+                | Range(_)
+                | SlimRange(_)
+                | ITimeRange(_)
         )
     }
 
@@ -239,6 +246,12 @@ impl Error {
     #[cold]
     pub(crate) fn bounds(err: BoundsError) -> Error {
         Error::from(ErrorKind::Bounds(err))
+    }
+
+    #[inline(never)]
+    #[cold]
+    pub(crate) fn special_bounds(err: SpecialBoundsError) -> Error {
+        Error::from(ErrorKind::SpecialBounds(err))
     }
 
     /// Creates a new error from the special "shared" error type.
@@ -458,6 +471,7 @@ enum ErrorKind {
     SignedDuration(self::signed_duration::Error),
     SlimRange(SlimRangeError),
     Span(self::span::Error),
+    SpecialBounds(SpecialBoundsError),
     Timestamp(self::timestamp::Error),
     TzAmbiguous(self::tz::ambiguous::Error),
     TzDb(self::tz::db::Error),
@@ -506,6 +520,7 @@ impl core::fmt::Display for ErrorKind {
             SignedDuration(ref err) => err.fmt(f),
             SlimRange(ref err) => err.fmt(f),
             Span(ref err) => err.fmt(f),
+            SpecialBounds(ref msg) => msg.fmt(f),
             Timestamp(ref err) => err.fmt(f),
             TzAmbiguous(ref err) => err.fmt(f),
             TzDb(ref err) => err.fmt(f),

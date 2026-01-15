@@ -3021,6 +3021,158 @@ impl Span {
         }
     }
 
+    // TODO: Come back to this. Too much to change at once.
+    /*
+    pub(crate) fn from_invariant_duration(
+        largest: Unit,
+        dur: SignedDuration,
+    ) -> Result<Span, Error> {
+        let mut span = Span::new();
+        match largest {
+            Unit::Week => {
+                let micros = nanos.div_ceil(t::NANOS_PER_MICRO);
+                span = span.try_nanoseconds_ranged(
+                    nanos.rem_ceil(t::NANOS_PER_MICRO),
+                )?;
+                let millis = micros.div_ceil(t::MICROS_PER_MILLI);
+                span = span.try_microseconds_ranged(
+                    micros.rem_ceil(t::MICROS_PER_MILLI),
+                )?;
+                let secs = millis.div_ceil(t::MILLIS_PER_SECOND);
+                span = span.try_milliseconds_ranged(
+                    millis.rem_ceil(t::MILLIS_PER_SECOND),
+                )?;
+                let mins = secs.div_ceil(t::SECONDS_PER_MINUTE);
+                span = span.try_seconds_ranged(
+                    secs.rem_ceil(t::SECONDS_PER_MINUTE),
+                )?;
+                let hours = mins.div_ceil(t::MINUTES_PER_HOUR);
+                span = span
+                    .try_minutes_ranged(mins.rem_ceil(t::MINUTES_PER_HOUR))?;
+                let days = hours.div_ceil(t::HOURS_PER_CIVIL_DAY);
+                span = span.try_hours_ranged(
+                    hours.rem_ceil(t::HOURS_PER_CIVIL_DAY),
+                )?;
+                let weeks = days.div_ceil(t::DAYS_PER_CIVIL_WEEK);
+                span = span
+                    .try_days_ranged(days.rem_ceil(t::DAYS_PER_CIVIL_WEEK))?;
+                span = span.weeks_ranged(weeks.try_rinto("weeks")?);
+                Ok(span)
+            }
+            Unit::Year | Unit::Month | Unit::Day => {
+                // Unit::Year | Unit::Month | Unit::Week | Unit::Day => {
+                let micros = nanos.div_ceil(t::NANOS_PER_MICRO);
+                span = span.try_nanoseconds_ranged(
+                    nanos.rem_ceil(t::NANOS_PER_MICRO),
+                )?;
+                let millis = micros.div_ceil(t::MICROS_PER_MILLI);
+                span = span.try_microseconds_ranged(
+                    micros.rem_ceil(t::MICROS_PER_MILLI),
+                )?;
+                let secs = millis.div_ceil(t::MILLIS_PER_SECOND);
+                span = span.try_milliseconds_ranged(
+                    millis.rem_ceil(t::MILLIS_PER_SECOND),
+                )?;
+                let mins = secs.div_ceil(t::SECONDS_PER_MINUTE);
+                span = span.try_seconds_ranged(
+                    secs.rem_ceil(t::SECONDS_PER_MINUTE),
+                )?;
+                let hours = mins.div_ceil(t::MINUTES_PER_HOUR);
+                span = span
+                    .try_minutes_ranged(mins.rem_ceil(t::MINUTES_PER_HOUR))?;
+                let days = hours.div_ceil(t::HOURS_PER_CIVIL_DAY);
+                span = span.try_hours_ranged(
+                    hours.rem_ceil(t::HOURS_PER_CIVIL_DAY),
+                )?;
+                span = span.try_days_ranged(days)?;
+                Ok(span)
+            }
+            Unit::Hour => {
+                let micros = nanos.div_ceil(t::NANOS_PER_MICRO);
+                span = span.try_nanoseconds_ranged(
+                    nanos.rem_ceil(t::NANOS_PER_MICRO),
+                )?;
+                let millis = micros.div_ceil(t::MICROS_PER_MILLI);
+                span = span.try_microseconds_ranged(
+                    micros.rem_ceil(t::MICROS_PER_MILLI),
+                )?;
+                let secs = millis.div_ceil(t::MILLIS_PER_SECOND);
+                span = span.try_milliseconds_ranged(
+                    millis.rem_ceil(t::MILLIS_PER_SECOND),
+                )?;
+                let mins = secs.div_ceil(t::SECONDS_PER_MINUTE);
+                span = span.try_seconds_ranged(
+                    secs.rem_ceil(t::SECONDS_PER_MINUTE),
+                )?;
+                let hours = mins.div_ceil(t::MINUTES_PER_HOUR);
+                span = span
+                    .try_minutes_ranged(mins.rem_ceil(t::MINUTES_PER_HOUR))?;
+                span = span.try_hours_ranged(hours)?;
+                Ok(span)
+            }
+            Unit::Minute => {
+                let micros = nanos.div_ceil(t::NANOS_PER_MICRO);
+                span = span.try_nanoseconds_ranged(
+                    nanos.rem_ceil(t::NANOS_PER_MICRO),
+                )?;
+                let millis = micros.div_ceil(t::MICROS_PER_MILLI);
+                span = span.try_microseconds_ranged(
+                    micros.rem_ceil(t::MICROS_PER_MILLI),
+                )?;
+                let secs = millis.div_ceil(t::MILLIS_PER_SECOND);
+                span = span.try_milliseconds_ranged(
+                    millis.rem_ceil(t::MILLIS_PER_SECOND),
+                )?;
+                let mins = secs.div_ceil(t::SECONDS_PER_MINUTE);
+                span =
+                    span.try_seconds(secs.rem_ceil(t::SECONDS_PER_MINUTE))?;
+                span = span.try_minutes_ranged(mins)?;
+                Ok(span)
+            }
+            Unit::Second => {
+                let micros = nanos.div_ceil(t::NANOS_PER_MICRO);
+                span = span.try_nanoseconds_ranged(
+                    nanos.rem_ceil(t::NANOS_PER_MICRO),
+                )?;
+                let millis = micros.div_ceil(t::MICROS_PER_MILLI);
+                span = span.try_microseconds_ranged(
+                    micros.rem_ceil(t::MICROS_PER_MILLI),
+                )?;
+                let secs = millis.div_ceil(t::MILLIS_PER_SECOND);
+                span = span.try_milliseconds_ranged(
+                    millis.rem_ceil(t::MILLIS_PER_SECOND),
+                )?;
+                span = span.try_seconds_ranged(secs)?;
+                Ok(span)
+            }
+            Unit::Millisecond => {
+                let micros = nanos.div_ceil(t::NANOS_PER_MICRO);
+                span = span.try_nanoseconds_ranged(
+                    nanos.rem_ceil(t::NANOS_PER_MICRO),
+                )?;
+                let millis = micros.div_ceil(t::MICROS_PER_MILLI);
+                span = span.try_microseconds_ranged(
+                    micros.rem_ceil(t::MICROS_PER_MILLI),
+                )?;
+                span = span.try_milliseconds_ranged(millis)?;
+                Ok(span)
+            }
+            Unit::Microsecond => {
+                let micros = nanos.div_ceil(t::NANOS_PER_MICRO);
+                span = span.try_nanoseconds_ranged(
+                    nanos.rem_ceil(t::NANOS_PER_MICRO),
+                )?;
+                span = span.try_microseconds_ranged(micros)?;
+                Ok(span)
+            }
+            Unit::Nanosecond => {
+                span = span.try_nanoseconds_ranged(nanos)?;
+                Ok(span)
+            }
+        }
+    }
+    */
+
     /// Converts the non-variable units of this `Span` to a total number of
     /// nanoseconds.
     ///
@@ -3063,7 +3215,7 @@ impl Span {
     ///
     /// All units above weeks are always ignored.
     #[inline]
-    pub(crate) fn to_invariant_seconds(&self) -> Option<NoUnits> {
+    pub(crate) fn to_invariant_seconds(&self) -> Option<i64> {
         if self.has_fractional_seconds() {
             return None;
         }
@@ -3076,7 +3228,7 @@ impl Span {
             NoUnits::rfrom(self.get_days_ranged()) * t::SECONDS_PER_CIVIL_DAY;
         seconds += NoUnits::rfrom(self.get_weeks_ranged())
             * t::SECONDS_PER_CIVIL_WEEK;
-        Some(seconds)
+        Some(seconds.get())
     }
 
     /// Returns true if and only if this span has at least one non-zero
@@ -6084,9 +6236,11 @@ impl<'a> Relative<'a> {
     /// civil datetime minimum and maximum values.
     fn to_nanosecond(&self) -> NoUnits128 {
         match *self {
-            Relative::Civil(dt) => dt.timestamp.as_nanosecond_ranged().rinto(),
+            Relative::Civil(dt) => {
+                t::NoUnits128::borked(dt.timestamp.as_nanosecond())
+            }
             Relative::Zoned(ref zdt) => {
-                zdt.zoned.timestamp().as_nanosecond_ranged().rinto()
+                t::NoUnits128::borked(zdt.zoned.timestamp().as_nanosecond())
             }
         }
     }
@@ -6164,7 +6318,8 @@ impl<'a> Relative<'a> {
                         mode,
                     )?
                 } else {
-                    let relative_end = end.timestamp.as_nanosecond_ranged();
+                    let relative_end =
+                        t::NoUnits128::borked(end.timestamp.as_nanosecond());
                     Nudge::relative_invariant(
                         relspan.span,
                         relative_end.rinto(),
@@ -6197,8 +6352,9 @@ impl<'a> Relative<'a> {
                     )?
                 } else {
                     // Otherwise, rounding is the same as civil datetime.
-                    let relative_end =
-                        end.zoned.timestamp().as_nanosecond_ranged();
+                    let relative_end = t::NoUnits128::borked(
+                        end.zoned.timestamp().as_nanosecond(),
+                    );
                     Nudge::relative_invariant(
                         relspan.span,
                         relative_end.rinto(),
@@ -6643,8 +6799,8 @@ impl Nudge {
                     start.checked_add(span_end)?.zoned.timestamp()
                 }
             };
-            let beyond =
-                self.rounded_relative_end - threshold.as_nanosecond_ranged();
+            let beyond = self.rounded_relative_end
+                - t::NoUnits128::borked(threshold.as_nanosecond());
             if beyond == C(0) || beyond.signum() == sign {
                 balanced = span_end;
             } else {

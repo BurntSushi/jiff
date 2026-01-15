@@ -713,7 +713,7 @@ fn out_of_range_when_adjusting_rounded_days() -> Result {
     insta::assert_snapshot!(
         sp.round(options).unwrap_err(),
         // Kind of a brutal error message...
-        @"failed to add span to timestamp from zoned datetime: adding span overflowed timestamp: parameter 'span' with value 631107331200999999999 is not in the required range of -377705023201000000000..=253402207200999999999",
+        @"failed to add span to timestamp from zoned datetime: parameter 'Unix timestamp seconds' is not in the required range of -377705023201..=253402207200",
     );
 
     Ok(())

@@ -1865,11 +1865,11 @@ mod tests {
 
         insta::assert_snapshot!(
             p("%s", "-377705023202"),
-            @"strptime parsing failed: %s failed: failed to parse Unix timestamp (in seconds): parameter 'second' with value -377705023202 is not in the required range of -377705023201..=253402207200",
+            @"strptime parsing failed: %s failed: failed to parse Unix timestamp (in seconds): parameter 'Unix timestamp seconds' is not in the required range of -377705023201..=253402207200",
         );
         insta::assert_snapshot!(
             p("%s", "253402207201"),
-            @"strptime parsing failed: %s failed: failed to parse Unix timestamp (in seconds): parameter 'second' with value 253402207201 is not in the required range of -377705023201..=253402207200",
+            @"strptime parsing failed: %s failed: failed to parse Unix timestamp (in seconds): parameter 'Unix timestamp seconds' is not in the required range of -377705023201..=253402207200",
         );
         insta::assert_snapshot!(
             p("%s", "-9999999999999999999"),
