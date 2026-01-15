@@ -3079,26 +3079,6 @@ impl Span {
         Some(seconds)
     }
 
-    /// Rebalances the invariant units (days or lower) on this span so that
-    /// the largest possible non-zero unit is the one given.
-    ///
-    /// Units above day are ignored and dropped.
-    ///
-    /// If the given unit is greater than days, then it is treated as-if it
-    /// were days.
-    ///
-    /// # Errors
-    ///
-    /// This can return an error in the case of lop-sided units. For example,
-    /// if this span has maximal values for all units, then rebalancing is
-    /// not possible because the number of days after balancing would exceed
-    /// the limit.
-    #[cfg(test)] // currently only used in zic parser?
-    #[inline]
-    pub(crate) fn rebalance(self, unit: Unit) -> Result<Span, Error> {
-        Span::from_invariant_nanoseconds(unit, self.to_invariant_nanoseconds())
-    }
-
     /// Returns true if and only if this span has at least one non-zero
     /// fractional second unit.
     #[inline]
