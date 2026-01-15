@@ -16,6 +16,7 @@ pub(crate) const SECS_PER_CIVIL_DAY: i64 = HOURS_PER_CIVIL_DAY * SECS_PER_HOUR;
 pub(crate) const SECS_PER_HOUR: i64 = SECS_PER_MIN * MINS_PER_HOUR;
 pub(crate) const SECS_PER_MIN: i64 = 60;
 pub(crate) const MILLIS_PER_SEC: i64 = 1_000;
+pub(crate) const MICROS_PER_SEC: i64 = MILLIS_PER_SEC * MICROS_PER_MILLI;
 pub(crate) const MICROS_PER_MILLI: i64 = 1_000;
 pub(crate) const NANOS_PER_SEC: i64 = MILLIS_PER_SEC * NANOS_PER_MILLI;
 pub(crate) const NANOS_PER_MILLI: i64 = MICROS_PER_MILLI * NANOS_PER_MICRO;
@@ -29,6 +30,8 @@ pub(crate) const SECS_PER_CIVIL_DAY_32: i32 =
 pub(crate) const SECS_PER_HOUR_32: i32 = SECS_PER_MIN_32 * MINS_PER_HOUR_32;
 pub(crate) const SECS_PER_MIN_32: i32 = 60;
 pub(crate) const MILLIS_PER_SEC_32: i32 = 1_000;
+pub(crate) const MICROS_PER_SEC_32: i32 =
+    MILLIS_PER_SEC_32 * MICROS_PER_MILLI_32;
 pub(crate) const MICROS_PER_MILLI_32: i32 = 1_000;
 pub(crate) const NANOS_PER_SEC_32: i32 =
     MILLIS_PER_SEC_32 * NANOS_PER_MILLI_32;
@@ -78,6 +81,11 @@ macro_rules! define_bounds {
                 pub(crate) const MAX: $ty = <$name as Bounds>::MAX;
                 const LEN: i128 = Self::MAX as i128 - Self::MIN as i128 + 1;
 
+                #[cold]
+                pub(crate) fn error() -> BoundsError {
+                    <$name as Bounds>::error()
+                }
+
                 #[cfg_attr(feature = "perf-inline", inline(always))]
                 pub(crate) fn check(n: impl Into<i64>) -> Result<$ty, BoundsError> {
                     <$name as Bounds>::check(n)
@@ -114,6 +122,16 @@ macro_rules! define_bounds {
                 #[cfg_attr(feature = "perf-inline", inline(always))]
                 pub(crate) fn checked_mul(n1: $ty, n2: $ty) -> Result<$ty, BoundsError> {
                     <$name as Bounds>::checked_mul(n1, n2)
+                }
+
+                #[cfg(test)]
+                pub(crate) fn arbitrary(g: &mut quickcheck::Gen) -> $ty {
+                    use quickcheck::Arbitrary;
+
+                    let mut n: $ty = <$ty>::arbitrary(g);
+                    n = n.wrapping_rem_euclid(Self::LEN as $ty);
+                    n += Self::MIN;
+                    n
                 }
             }
         )*
@@ -252,6 +270,13 @@ define_bounds! {
     // values. We do that so that the absolute value is always defined.
     (SpanNanoseconds, i64, "nanoseconds", i64::MIN + 1, i64::MAX),
     (SubsecNanosecond, i32, "subsecond nanosecond", 0, NANOS_PER_SEC_32 - 1),
+    (
+        SignedSubsecNanosecond,
+        i32,
+        "subsecond nanosecond",
+        -SubsecNanosecond::MAX,
+        SubsecNanosecond::MAX,
+    ),
     (
         UnixMilliseconds,
         i64,
@@ -580,6 +605,44 @@ where
             min = B::MIN,
             max = B::MAX,
         )
+    }
+}
+
+/// Like `BoundsError`, but maintained manually.
+///
+/// This is useful for range errors outside of the framework above.
+#[derive(Clone, Debug)]
+pub(crate) enum SpecialBoundsError {
+    UnixNanoseconds,
+}
+
+impl core::fmt::Display for SpecialBoundsError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use self::SpecialBoundsError::*;
+
+        let (what, min, max) = match *self {
+            UnixNanoseconds => (
+                "Unix timestamp nanoseconds",
+                UnixMicroseconds::MIN as i128 * (NANOS_PER_MICRO as i128),
+                UnixMicroseconds::MAX as i128 * (NANOS_PER_MICRO as i128),
+            ),
+        };
+        write!(
+            f,
+            "parameter '{what}' is not in the required range of {min}..={max}",
+        )
+    }
+}
+
+impl From<SpecialBoundsError> for Error {
+    fn from(err: SpecialBoundsError) -> Error {
+        Error::special_bounds(err)
+    }
+}
+
+impl crate::error::IntoError for SpecialBoundsError {
+    fn into_error(self) -> Error {
+        self.into()
     }
 }
 

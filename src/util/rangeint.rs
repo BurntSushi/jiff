@@ -211,6 +211,31 @@ macro_rules! define_ranged {
                 }
             }
 
+            /// This is like `new_unchecked`, but it sets the min/max values
+            /// (when `debug_assertions` are enabled) to `val`. This effectively
+            /// disables ranged integer checking.
+            ///
+            /// This was added as a temporary routine to make the migration
+            /// *off* of ranged integers easier. i.e., This lets us do things
+            /// like `SomeRangeType::borked(non_ranged_value)` between
+            /// API boundaries in Jiff to make incremental migration possible.
+            ///
+            /// If one used `new_unchecked` instead, then the min/max values
+            /// would be the min/max for the range itself. And thus will
+            /// incorrectly trip errors in debug mode.
+            #[inline]
+            pub(crate) const fn borked(val: $repr) -> Self {
+                #[cfg(not(debug_assertions))]
+                {
+                    Self { val }
+                }
+                #[cfg(debug_assertions)]
+                {
+                    assert!(Self::contains(val), "val is not in range");
+                    Self { val, min: val, max: val }
+                }
+            }
+
             #[inline]
             pub(crate) const fn N<const VAL: $repr>() -> Self {
                 #[cfg(not(debug_assertions))]

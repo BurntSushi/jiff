@@ -4395,14 +4395,15 @@ impl<'a> ZonedDifference<'a> {
                 panic!("this should be an error too");
             }
         }
-        let remainder_nano = zdt2.timestamp().as_nanosecond_ranged()
-            - zmid.timestamp().as_nanosecond_ranged();
+        // TODO: This should use `SignedDuration`.
+        let remainder_nano = zdt2.timestamp().as_nanosecond()
+            - zmid.timestamp().as_nanosecond();
         dt2 = mid;
 
         let date_span = dt1.date().until((largest, dt2.date()))?;
         Ok(Span::from_invariant_nanoseconds(
             Unit::Hour,
-            remainder_nano.rinto(),
+            t::NoUnits128::new_unchecked(remainder_nano),
         )
         .expect("difference between time always fits in span")
         .years_ranged(date_span.get_years_ranged())
@@ -4655,14 +4656,19 @@ impl ZonedRound {
         let day_length =
             ZonedDayNanoseconds::try_rfrom("nanoseconds-per-zoned-day", nanos)
                 .context(E::FailedSpanNanoseconds)?;
-        let progress = zdt.timestamp().as_nanosecond_ranged()
-            - start.timestamp().as_nanosecond_ranged();
-        let rounded = self.round.get_mode().round(progress, day_length);
+        let progress = zdt.timestamp().as_nanosecond()
+            - start.timestamp().as_nanosecond();
+        let rounded = self
+            .round
+            .get_mode()
+            .round(t::NoUnits128::new_unchecked(progress), day_length)
+            .get();
         let nanos = start
             .timestamp()
-            .as_nanosecond_ranged()
-            .try_checked_add("timestamp-nanos", rounded)?;
-        Ok(Timestamp::from_nanosecond_ranged(nanos)
+            .as_nanosecond()
+            .checked_add(rounded)
+            .ok_or(E::FailedSpanNanoseconds)?;
+        Ok(Timestamp::from_nanosecond(nanos)?
             .to_zoned(zdt.time_zone().clone()))
     }
 }
@@ -5873,11 +5879,11 @@ mod tests {
         {
             #[cfg(feature = "alloc")]
             {
-                assert_eq!(88, core::mem::size_of::<Zoned>());
+                assert_eq!(64, core::mem::size_of::<Zoned>());
             }
             #[cfg(all(target_pointer_width = "64", not(feature = "alloc")))]
             {
-                assert_eq!(88, core::mem::size_of::<Zoned>());
+                assert_eq!(64, core::mem::size_of::<Zoned>());
             }
         }
         #[cfg(not(debug_assertions))]

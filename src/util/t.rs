@@ -104,32 +104,6 @@ pub(crate) type UnixSeconds = ri64<
     { 253402300799 - SpanZoneOffset::MAX },
 >;
 
-/// Like UnixSeconds, but expressed in units of milliseconds.
-pub(crate) type UnixMilliseconds = ri64<
-    { UnixSeconds::MIN * MILLIS_PER_SECOND.bound() },
-    {
-        (UnixSeconds::MAX * MILLIS_PER_SECOND.bound())
-            + (FractionalNanosecond::MAX / NANOS_PER_MILLI.bound())
-    },
->;
-
-/// Like UnixSeconds, but expressed in units of microseconds.
-pub(crate) type UnixMicroseconds = ri64<
-    { UnixSeconds::MIN * MICROS_PER_SECOND.bound() },
-    {
-        (UnixSeconds::MAX * MICROS_PER_SECOND.bound())
-            + (FractionalNanosecond::MAX / NANOS_PER_MICRO.bound())
-    },
->;
-
-/// Like UnixSeconds, but expressed in units of nanoseconds.
-pub(crate) type UnixNanoseconds = ri128<
-    { UnixSeconds::MIN * NANOS_PER_SECOND.bound() },
-    {
-        UnixSeconds::MAX * NANOS_PER_SECOND.bound() + FractionalNanosecond::MAX
-    },
->;
-
 /// The range of possible month values.
 pub(crate) type Month = ri8<1, 12>;
 
@@ -306,33 +280,6 @@ pub(crate) type SpanMicroseconds =
 /// that so that the absolute value is always defined.
 pub(crate) type SpanNanoseconds =
     ri64<{ (i64::MIN + 1) as i128 }, { i64::MAX as i128 }>;
-
-/// The range of allowable fractional milliseconds.
-///
-/// That is, this corresponds to the range of milliseconds allowable within a
-/// single second. It can be either positive or negative.
-pub(crate) type FractionalMillisecond = ri32<
-    { -(MILLIS_PER_SECOND.bound() - 1) },
-    { MILLIS_PER_SECOND.bound() - 1 },
->;
-
-/// The range of allowable fractional microseconds.
-///
-/// That is, this corresponds to the range of microseconds allowable within a
-/// single second. It can be either positive or negative.
-pub(crate) type FractionalMicrosecond = ri32<
-    { -(MICROS_PER_SECOND.bound() - 1) },
-    { MICROS_PER_SECOND.bound() - 1 },
->;
-
-/// The range of allowable fractional nanoseconds.
-///
-/// That is, this corresponds to the range of nanoseconds allowable within a
-/// single second. It can be either positive or negative.
-pub(crate) type FractionalNanosecond = ri32<
-    { -(NANOS_PER_SECOND.bound() - 1) },
-    { NANOS_PER_SECOND.bound() - 1 },
->;
 
 /// The span of seconds permitted for expressing the offset of a time zone.
 pub(crate) type SpanZoneOffset =
