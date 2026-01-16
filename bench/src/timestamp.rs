@@ -12,6 +12,7 @@ use crate::{benchmark, convert::ConvertFrom};
 
 pub(super) fn define(c: &mut Criterion) {
     add_time_secs(c);
+    sub_time_secs(c);
     add_time_subsec(c);
     from_seconds(c);
     every_hour_in_week(c);
@@ -63,6 +64,55 @@ fn add_time_secs(c: &mut Criterion) {
         benchmark(c, format!("{NAME}/duration/time"), |b| {
             b.iter(|| {
                 let end = bb(start).checked_add(bb(duration)).unwrap();
+                assert_eq!(end, expected);
+            })
+        });
+    }
+}
+
+/// Measures how long it takes to add 86400 seconds to a timestamp.
+fn sub_time_secs(c: &mut Criterion) {
+    const NAME: &str = "timestamp/sub_time_secs";
+    const START: Timestamp = Timestamp::constant(1719755160, 0);
+    const EXPECTED: Timestamp = Timestamp::constant(1719755160 - 86400, 0);
+
+    {
+        let span = jiff::Span::new().seconds(86400);
+        benchmark(c, format!("{NAME}/span/jiff"), |b| {
+            b.iter(|| {
+                let end = bb(&START).checked_sub(bb(span)).unwrap();
+                assert_eq!(end, EXPECTED);
+            })
+        });
+
+        let duration = jiff::SignedDuration::from_secs(86400);
+        benchmark(c, format!("{NAME}/duration/jiff"), |b| {
+            b.iter(|| {
+                let end = bb(&START).checked_sub(bb(duration)).unwrap();
+                assert_eq!(end, EXPECTED);
+            })
+        });
+    }
+
+    {
+        let expected = chrono::DateTime::convert_from(EXPECTED);
+        let start = chrono::DateTime::convert_from(START);
+        let delta = chrono::TimeDelta::new(86400, 0).unwrap();
+        benchmark(c, format!("{NAME}/duration/chrono"), |b| {
+            b.iter(|| {
+                let end = bb(start).checked_sub_signed(bb(delta)).unwrap();
+                assert_eq!(end, expected);
+            })
+        });
+    }
+
+    {
+        let expected = time::OffsetDateTime::convert_from(EXPECTED);
+        let start = time::OffsetDateTime::convert_from(START);
+        let duration = time::Duration::new(86400, 0);
+        benchmark(c, format!("{NAME}/duration/time"), |b| {
+            b.iter(|| {
+                let end = bb(start).checked_sub(bb(duration)).unwrap();
                 assert_eq!(end, expected);
             })
         });

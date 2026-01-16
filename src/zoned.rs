@@ -2236,7 +2236,7 @@ impl Zoned {
     }
 
     #[inline]
-    fn checked_add_span(self, span: Span) -> Result<Zoned, Error> {
+    fn checked_add_span(self, span: &Span) -> Result<Zoned, Error> {
         let span_calendar = span.only_calendar();
         // If our duration only consists of "time" (hours, minutes, etc), then
         // we can short-circuit and do timestamp math. This also avoids dealing
