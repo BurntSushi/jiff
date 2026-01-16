@@ -7,6 +7,7 @@ use crate::{
     fmt::{friendly, temporal},
     tz::TimeZone,
     util::{
+        b,
         borrow::DumbCow,
         rangeint::{ri64, ri8, RFrom, RInto, TryRFrom, TryRInto},
         round::increment,
@@ -3201,43 +3202,27 @@ impl Span {
         nanos
     }
 
-    /// Converts the non-variable units of this `Span` to a total number of
-    /// seconds if there is no fractional second component. Otherwise,
-    /// `None` is returned.
+    /// Converts the hour, minute and second units in this `Span` to seconds.
     ///
-    /// This is useful for short-circuiting in arithmetic operations when
-    /// it's faster to only deal with seconds. And in particular, acknowledges
-    /// that nanosecond precision durations are somewhat rare.
-    ///
-    /// This includes days and weeks, even though they can be of irregular
-    /// length during time zone transitions. If this applies, then callers
-    /// should set the days and weeks to `0` before calling this routine.
-    ///
-    /// All units above weeks are always ignored.
+    /// This ignores all other units.
     #[inline]
-    pub(crate) fn to_invariant_seconds(&self) -> Option<i64> {
-        if self.has_fractional_seconds() {
-            return None;
-        }
-        let mut seconds = NoUnits::rfrom(self.get_seconds_ranged());
-        seconds +=
-            NoUnits::rfrom(self.get_minutes_ranged()) * t::SECONDS_PER_MINUTE;
-        seconds +=
-            NoUnits::rfrom(self.get_hours_ranged()) * t::SECONDS_PER_HOUR;
-        seconds +=
-            NoUnits::rfrom(self.get_days_ranged()) * t::SECONDS_PER_CIVIL_DAY;
-        seconds += NoUnits::rfrom(self.get_weeks_ranged())
-            * t::SECONDS_PER_CIVIL_WEEK;
-        Some(seconds.get())
+    pub(crate) fn to_hms_seconds(&self) -> i64 {
+        let mut secs = self.seconds.get();
+        secs += self.minutes.get() * b::SECS_PER_MIN;
+        secs += i64::from(self.hours.get()) * b::SECS_PER_HOUR;
+        i64::from(self.sign.get()) * secs
     }
 
     /// Returns true if and only if this span has at least one non-zero
     /// fractional second unit.
     #[inline]
     pub(crate) fn has_fractional_seconds(&self) -> bool {
-        self.milliseconds != C(0)
-            || self.microseconds != C(0)
-            || self.nanoseconds != C(0)
+        static SUBSECOND: UnitSet = UnitSet::from_slice(&[
+            Unit::Millisecond,
+            Unit::Microsecond,
+            Unit::Nanosecond,
+        ]);
+        !self.units().intersection(SUBSECOND).is_empty()
     }
 
     /// Returns an equivalent span, but with all non-calendar (units below

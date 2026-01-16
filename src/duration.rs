@@ -19,9 +19,9 @@ impl Duration {
     /// This returns an error only in the case where this is an unsigned
     /// duration with a number of whole seconds that exceeds `|i64::MIN|`.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn to_signed(self) -> Result<SDuration, Error> {
-        match self {
-            Duration::Span(span) => Ok(SDuration::Span(span)),
+    pub(crate) fn to_signed(&self) -> Result<SDuration<'_>, Error> {
+        match *self {
+            Duration::Span(ref span) => Ok(SDuration::Span(span)),
             Duration::Signed(sdur) => Ok(SDuration::Absolute(sdur)),
             Duration::Unsigned(udur) => {
                 let sdur = SignedDuration::try_from(udur)
@@ -140,7 +140,7 @@ impl From<UnsignedDuration> for Duration {
 /// support doing actual arithmetic with unsigned durations separately from
 /// signed durations.
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum SDuration {
-    Span(Span),
+pub(crate) enum SDuration<'a> {
+    Span(&'a Span),
     Absolute(SignedDuration),
 }

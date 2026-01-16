@@ -1688,7 +1688,7 @@ impl DateTime {
     }
 
     #[inline]
-    fn checked_add_span(self, span: Span) -> Result<DateTime, Error> {
+    fn checked_add_span(self, span: &Span) -> Result<DateTime, Error> {
         let (old_date, old_time) = (self.date(), self.time());
         let units = span.units();
         match (units.only_calendar().is_empty(), units.only_time().is_empty())
@@ -1709,7 +1709,7 @@ impl DateTime {
                     .context(E::FailedAddSpanOverflowing)?;
                 Ok(DateTime::from_parts(new_date, new_time))
             }
-            (false, false) => self.checked_add_span_general(&span),
+            (false, false) => self.checked_add_span_general(span),
         }
     }
 
@@ -1721,7 +1721,7 @@ impl DateTime {
         let span_time = span.only_lower(Unit::Day);
 
         let (new_time, leftovers) = old_time
-            .overflowing_add(span_time)
+            .overflowing_add(&span_time)
             .context(E::FailedAddSpanTime)?;
         let new_date =
             old_date.checked_add(span_date).context(E::FailedAddSpanDate)?;

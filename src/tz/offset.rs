@@ -620,7 +620,7 @@ impl Offset {
     }
 
     #[inline]
-    fn checked_add_span(self, span: Span) -> Result<Offset, Error> {
+    fn checked_add_span(self, span: &Span) -> Result<Offset, Error> {
         if let Some(err) = span.smallest_non_time_non_zero_unit_error() {
             return Err(err);
         }

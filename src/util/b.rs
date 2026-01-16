@@ -12,6 +12,7 @@ use crate::{util::t, Error};
 pub(crate) const DAYS_PER_WEEK: i64 = 7;
 pub(crate) const HOURS_PER_CIVIL_DAY: i64 = 24;
 pub(crate) const MINS_PER_HOUR: i64 = 60;
+pub(crate) const SECS_PER_WEEK: i64 = DAYS_PER_WEEK * SECS_PER_CIVIL_DAY;
 pub(crate) const SECS_PER_CIVIL_DAY: i64 = HOURS_PER_CIVIL_DAY * SECS_PER_HOUR;
 pub(crate) const SECS_PER_HOUR: i64 = SECS_PER_MIN * MINS_PER_HOUR;
 pub(crate) const SECS_PER_MIN: i64 = 60;
@@ -71,6 +72,7 @@ macro_rules! define_bounds {
                 type Primitive = $ty;
 
                 #[cold]
+                #[inline(never)]
                 fn error() -> BoundsError {
                     BoundsError::$name(RawBoundsError::new())
                 }

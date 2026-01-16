@@ -954,7 +954,7 @@ impl Time {
     }
 
     #[inline]
-    fn checked_add_span(self, span: Span) -> Result<Time, Error> {
+    fn checked_add_span(self, span: &Span) -> Result<Time, Error> {
         let (time, span) = self.overflowing_add(span)?;
         if let Some(err) = span.smallest_non_time_non_zero_unit_error() {
             return Err(err);
@@ -1108,7 +1108,7 @@ impl Time {
     #[inline]
     pub(crate) fn overflowing_add(
         self,
-        span: Span,
+        span: &Span,
     ) -> Result<(Time, Span), Error> {
         if let Some(err) = span.smallest_non_time_non_zero_unit_error() {
             return Err(err);
@@ -3448,7 +3448,7 @@ mod tests {
     #[test]
     fn overflowing_add() {
         let t1 = time(23, 30, 0, 0);
-        let (t2, span) = t1.overflowing_add(5.hours()).unwrap();
+        let (t2, span) = t1.overflowing_add(&5.hours()).unwrap();
         assert_eq!(t2, time(4, 30, 0, 0));
         span_eq!(span, 1.days());
     }
@@ -3463,7 +3463,7 @@ mod tests {
             .milliseconds(t::SpanMilliseconds::MAX_REPR)
             .microseconds(t::SpanMicroseconds::MAX_REPR)
             .nanoseconds(t::SpanNanoseconds::MAX_REPR);
-        assert!(t1.overflowing_add(span).is_err());
+        assert!(t1.overflowing_add(&span).is_err());
     }
 
     #[test]

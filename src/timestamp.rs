@@ -1487,7 +1487,7 @@ impl Timestamp {
     }
 
     #[inline]
-    fn checked_add_span(self, span: Span) -> Result<Timestamp, Error> {
+    fn checked_add_span(self, span: &Span) -> Result<Timestamp, Error> {
         if let Some(err) = span.smallest_non_time_non_zero_unit_error() {
             return Err(err);
         }
@@ -1499,15 +1499,13 @@ impl Timestamp {
         //
         // Note that this only works when *both* the span and timestamp lack
         // fractional seconds.
-        if self.subsec_nanosecond() == 0 {
-            if let Some(span_seconds) = span.to_invariant_seconds() {
-                let time_seconds = self.as_second();
-                let sum =
-                    b::UnixSeconds::checked_add(span_seconds, time_seconds)
-                        .context(E::OverflowAddSpan)?;
-                // We know `sum` is in bounds so we don't need to recheck.
-                return Ok(Timestamp { dur: SignedDuration::from_secs(sum) });
-            }
+        if self.subsec_nanosecond() == 0 && !span.has_fractional_seconds() {
+            let span_seconds = span.to_hms_seconds();
+            let time_seconds = self.as_second();
+            let sum = b::UnixSeconds::checked_add(span_seconds, time_seconds)
+                .context(E::OverflowAddSpan)?;
+            // We know `sum` is in bounds so we don't need to recheck.
+            return Ok(Timestamp { dur: SignedDuration::from_secs(sum) });
         }
         let sum = self
             .as_duration()
@@ -2418,7 +2416,7 @@ impl core::ops::Add<Span> for Timestamp {
 
     #[inline]
     fn add(self, rhs: Span) -> Timestamp {
-        self.checked_add_span(rhs).expect("adding span to timestamp failed")
+        self.checked_add_span(&rhs).expect("adding span to timestamp failed")
     }
 }
 
@@ -2446,7 +2444,7 @@ impl core::ops::Sub<Span> for Timestamp {
 
     #[inline]
     fn sub(self, rhs: Span) -> Timestamp {
-        self.checked_add_span(rhs.negate())
+        self.checked_add_span(&rhs.negate())
             .expect("subtracting span from timestamp failed")
     }
 }

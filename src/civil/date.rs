@@ -1472,7 +1472,7 @@ impl Date {
     }
 
     #[inline]
-    fn checked_add_span(self, span: Span) -> Result<Date, Error> {
+    fn checked_add_span(self, span: &Span) -> Result<Date, Error> {
         if span.is_zero() {
             return Ok(self);
         }
