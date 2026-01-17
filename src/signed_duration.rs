@@ -5,7 +5,6 @@ use crate::{
     error::{signed_duration::Error as E, ErrorContext},
     fmt::{friendly, temporal},
     tz::Offset,
-    util::{rangeint::TryRFrom, t},
     Error, RoundMode, Timestamp, Unit, Zoned,
 };
 
@@ -2836,24 +2835,11 @@ impl SignedDurationRound {
                 unit: self.smallest,
             }));
         }
-        let nanos = t::NoUnits128::new_unchecked(dur.as_nanos());
-        let increment = t::NoUnits::new_unchecked(self.increment);
-        let rounded = self.mode.round_by_unit_in_nanoseconds(
-            nanos,
-            self.smallest,
-            increment,
-        );
-
-        let seconds = rounded / t::NANOS_PER_SECOND;
-        let seconds =
-            t::NoUnits::try_rfrom("seconds", seconds).map_err(|_| {
-                Error::from(E::RoundOverflowed { unit: self.smallest })
-            })?;
-        let subsec_nanos = rounded % t::NANOS_PER_SECOND;
-        // OK because % 1_000_000_000 above guarantees that the result fits
-        // in a i32.
-        let subsec_nanos = i32::try_from(subsec_nanos).unwrap();
-        Ok(SignedDuration::new(seconds.get(), subsec_nanos))
+        let nanos = dur.as_nanos();
+        let increment = self.increment;
+        let rounded = self.mode.round_by_unit(nanos, self.smallest, increment);
+        Ok(SignedDuration::try_from_nanos_i128(rounded)
+            .ok_or_else(|| E::RoundOverflowed { unit: self.smallest })?)
     }
 }
 

@@ -1,8 +1,5 @@
 use crate::{
-    util::{
-        rangeint::{RFrom, RInto},
-        t::{NoUnits, NoUnits128, C, C128},
-    },
+    util::{rangeint::RInto, t::NoUnits128},
     Unit,
 };
 
@@ -90,24 +87,44 @@ pub enum RoundMode {
     HalfEven,
 }
 
+// TODO: Can we make `quantity` a `SignedDuration`? Hard to say as of
+// 2026-01-17, but seems plausible. Will need to audit more carefully
+// once we switch off of ranged integers completely.
+
 impl RoundMode {
     /// Given a `quantity` in nanoseconds and an `increment` in units of
     /// `unit`, this rounds it according to this mode and returns the result
     /// in nanoseconds.
-    pub(crate) fn round_by_unit_in_nanoseconds(
+    pub(crate) fn round_by_unit_in_nanoseconds_ranged(
         self,
         quantity: impl RInto<NoUnits128>,
         unit: Unit,
         increment: impl RInto<NoUnits128>,
     ) -> NoUnits128 {
-        let quantity = quantity.rinto();
-        let increment = unit.nanoseconds() * increment.rinto();
+        NoUnits128::borked(self.round_by_unit(
+            quantity.rinto().get(),
+            unit,
+            i64::try_from(increment.rinto().get()).unwrap(),
+        ))
+    }
+
+    pub(crate) fn round_by_unit(
+        self,
+        quantity: i128,
+        unit: Unit,
+        increment: i64,
+    ) -> i128 {
+        // OK because the max for the number of nanoseconds in a unit
+        // is weeks at `604_800_000_000_000` and `increment` could be
+        // `i64::MAX`. This can overflow a `SignedDuration` but not an `i128`.
+        let increment =
+            i128::from(unit.nanoseconds_unranged()) * i128::from(increment);
         let rounded = self.round(quantity, increment);
         rounded
     }
 
     /// Rounds `quantity` to the nearest `increment` in units of nanoseconds.
-    pub(crate) fn round(
+    pub(crate) fn round_ranged(
         self,
         quantity: impl RInto<NoUnits128>,
         increment: impl RInto<NoUnits128>,
@@ -118,78 +135,87 @@ impl RoundMode {
             quantity: NoUnits128,
             increment: NoUnits128,
         ) -> NoUnits128 {
-            let mut quotient = quantity.div_ceil(increment);
-            let remainder = quantity.rem_ceil(increment);
-            if remainder == C(0) {
-                return quantity;
-            }
-            let sign = if remainder < C(0) { C128(-1) } else { C128(1) };
-            let tiebreaker = (remainder * C128(2)).abs();
-            let tie = tiebreaker == increment;
-            let expand_is_nearer = tiebreaker > increment;
-            // ref: https://tc39.es/proposal-temporal/#sec-temporal-roundnumbertoincrement
-            match mode {
-                RoundMode::Ceil => {
-                    if sign > C(0) {
-                        quotient += sign;
-                    }
-                }
-                RoundMode::Floor => {
-                    if sign < C(0) {
-                        quotient += sign;
-                    }
-                }
-                RoundMode::Expand => {
-                    quotient += sign;
-                }
-                RoundMode::Trunc => {}
-                RoundMode::HalfCeil => {
-                    if expand_is_nearer || (tie && sign > C(0)) {
-                        quotient += sign;
-                    }
-                }
-                RoundMode::HalfFloor => {
-                    if expand_is_nearer || (tie && sign < C(0)) {
-                        quotient += sign;
-                    }
-                }
-                RoundMode::HalfExpand => {
-                    if expand_is_nearer || tie {
-                        quotient += sign;
-                    }
-                }
-                RoundMode::HalfTrunc => {
-                    if expand_is_nearer {
-                        quotient += sign;
-                    }
-                }
-                RoundMode::HalfEven => {
-                    if expand_is_nearer
-                        || (tie && quotient.rem_floor(C(2)) == C(1))
-                    {
-                        quotient += sign;
-                    }
-                }
-            }
-            // We use saturating arithmetic here because this can overflow
-            // when `quantity` is the max value. Since we're rounding, we just
-            // refuse to go over the maximum. I'm not 100% convinced this is
-            // correct, but I think the only alternative is to return an error,
-            // and I'm not sure that's ideal either.
-            quotient.saturating_mul(increment)
+            NoUnits128::borked(mode.round(quantity.get(), increment.get()))
         }
         inner(self, quantity.rinto(), increment.rinto())
     }
 
-    pub(crate) fn round_float(
+    /// Rounds `quantity` to the nearest `increment` in units of nanoseconds.
+    pub(crate) fn round(self, quantity: i128, increment: i128) -> i128 {
+        // ref: https://tc39.es/proposal-temporal/#sec-temporal-roundnumbertoincrement
+        let mode = self;
+        let mut quotient = quantity / increment;
+        let remainder = quantity % increment;
+        if remainder == 0 {
+            return quantity;
+        }
+        let sign = if remainder < 0 { -1 } else { 1 };
+        let tiebreaker = (remainder * 2).abs();
+        let tie = tiebreaker == increment;
+        let expand_is_nearer = tiebreaker > increment;
+        // ref: https://tc39.es/proposal-temporal/#sec-temporal-roundnumbertoincrement
+        match mode {
+            RoundMode::Ceil => {
+                if sign > 0 {
+                    quotient += sign;
+                }
+            }
+            RoundMode::Floor => {
+                if sign < 0 {
+                    quotient += sign;
+                }
+            }
+            RoundMode::Expand => {
+                quotient += sign;
+            }
+            RoundMode::Trunc => {}
+            RoundMode::HalfCeil => {
+                if expand_is_nearer || (tie && sign > 0) {
+                    quotient += sign;
+                }
+            }
+            RoundMode::HalfFloor => {
+                if expand_is_nearer || (tie && sign < 0) {
+                    quotient += sign;
+                }
+            }
+            RoundMode::HalfExpand => {
+                if expand_is_nearer || tie {
+                    quotient += sign;
+                }
+            }
+            RoundMode::HalfTrunc => {
+                if expand_is_nearer {
+                    quotient += sign;
+                }
+            }
+            RoundMode::HalfEven => {
+                if expand_is_nearer || (tie && quotient.rem_euclid(2) == 1) {
+                    quotient += sign;
+                }
+            }
+        }
+        // We use saturating arithmetic here because this can overflow
+        // when `quantity` is the max value. Since we're rounding, we just
+        // refuse to go over the maximum. I'm not 100% convinced this is
+        // correct, but I think the only alternative is to return an error,
+        // and I'm not sure that's ideal either.
+        quotient.saturating_mul(increment)
+    }
+
+    pub(crate) fn round_float_ranged(
         self,
         quantity: f64,
         increment: NoUnits128,
     ) -> NoUnits128 {
+        NoUnits128::borked(self.round_float(quantity, increment.get()))
+    }
+
+    pub(crate) fn round_float(self, quantity: f64, increment: i128) -> i128 {
         #[cfg(not(feature = "std"))]
         use crate::util::libm::Float;
 
-        let quotient = quantity / (increment.get() as f64);
+        let quotient = quantity / (increment as f64);
         let rounded = match self {
             RoundMode::Ceil => quotient.ceil(),
             RoundMode::Floor => quotient.floor(),
@@ -233,8 +259,7 @@ impl RoundMode {
                 }
             }
         };
-        let rounded = NoUnits::new(rounded as i64).unwrap();
-        NoUnits128::rfrom(rounded.saturating_mul(increment))
+        (rounded as i128).saturating_mul(increment)
     }
 }
 
@@ -245,10 +270,8 @@ mod tests {
     // Some ad hoc tests I wrote while writing the rounding increment code.
     #[test]
     fn round_to_increment_half_expand_ad_hoc() {
-        let round = |quantity: i64, increment: i64| -> i64 {
-            let quantity = NoUnits::new(quantity).unwrap();
-            let increment = NoUnits::new(increment).unwrap();
-            i64::from(RoundMode::HalfExpand.round(quantity, increment))
+        let round = |quantity: i128, increment: i128| -> i128 {
+            RoundMode::HalfExpand.round(quantity, increment)
         };
         assert_eq!(26, round(20, 13));
 
@@ -268,10 +291,8 @@ mod tests {
 
     #[test]
     fn round_to_increment_temporal_table_ceil() {
-        let round = |quantity: i64, increment: i64| -> i64 {
-            let quantity = NoUnits::new(quantity).unwrap();
-            let increment = NoUnits::new(increment).unwrap();
-            RoundMode::Ceil.round(quantity, increment).into()
+        let round = |quantity: i128, increment: i128| -> i128 {
+            RoundMode::Ceil.round(quantity, increment)
         };
         assert_eq!(-10, round(-15, 10));
         assert_eq!(0, round(-5, 10));
@@ -279,14 +300,31 @@ mod tests {
         assert_eq!(10, round(5, 10));
         assert_eq!(10, round(6, 10));
         assert_eq!(20, round(15, 10));
+
+        assert_eq!(i128::MAX, round(i128::MAX, 1));
+        assert_eq!(i128::MAX, round(i128::MAX, i128::MAX));
+
+        // TODO: This test currently panics on overflow.
+        // We should overall scrutinize the input constraints
+        // for our rounding routines and align with their call
+        // sites. We were previously relying on ranged integers
+        // to holistically verify we weren't doing anything that
+        // could result in overflow. I suspect that we can't
+        // actually support the i128 quantity range (and I don't
+        // think we need to). The question is whether we should
+        // make the rounding interface fallible or if this
+        // should just document panicking conditions.
+        //
+        // Oh, we should introduce a new internal `Increment`
+        // wrapper that provides guarantees about its range.
+        // assert_eq!(i128::MIN, round(i128::MIN, -1));
+        // assert_eq!(i128::MIN, round(i128::MIN, i128::MIN));
     }
 
     #[test]
     fn round_to_increment_temporal_table_floor() {
-        let round = |quantity: i64, increment: i64| -> i64 {
-            let quantity = NoUnits::new(quantity).unwrap();
-            let increment = NoUnits::new(increment).unwrap();
-            RoundMode::Floor.round(quantity, increment).into()
+        let round = |quantity: i128, increment: i128| -> i128 {
+            RoundMode::Floor.round(quantity, increment)
         };
         assert_eq!(-20, round(-15, 10));
         assert_eq!(-10, round(-5, 10));
@@ -298,10 +336,8 @@ mod tests {
 
     #[test]
     fn round_to_increment_temporal_table_expand() {
-        let round = |quantity: i64, increment: i64| -> i64 {
-            let quantity = NoUnits::new(quantity).unwrap();
-            let increment = NoUnits::new(increment).unwrap();
-            RoundMode::Expand.round(quantity, increment).into()
+        let round = |quantity: i128, increment: i128| -> i128 {
+            RoundMode::Expand.round(quantity, increment)
         };
         assert_eq!(-20, round(-15, 10));
         assert_eq!(-10, round(-5, 10));
@@ -313,10 +349,8 @@ mod tests {
 
     #[test]
     fn round_to_increment_temporal_table_trunc() {
-        let round = |quantity: i64, increment: i64| -> i64 {
-            let quantity = NoUnits::new(quantity).unwrap();
-            let increment = NoUnits::new(increment).unwrap();
-            RoundMode::Trunc.round(quantity, increment).into()
+        let round = |quantity: i128, increment: i128| -> i128 {
+            RoundMode::Trunc.round(quantity, increment)
         };
         assert_eq!(-10, round(-15, 10));
         assert_eq!(0, round(-5, 10));
@@ -328,10 +362,8 @@ mod tests {
 
     #[test]
     fn round_to_increment_temporal_table_half_ceil() {
-        let round = |quantity: i64, increment: i64| -> i64 {
-            let quantity = NoUnits::new(quantity).unwrap();
-            let increment = NoUnits::new(increment).unwrap();
-            RoundMode::HalfCeil.round(quantity, increment).into()
+        let round = |quantity: i128, increment: i128| -> i128 {
+            RoundMode::HalfCeil.round(quantity, increment)
         };
         assert_eq!(-10, round(-15, 10));
         assert_eq!(0, round(-5, 10));
@@ -343,10 +375,8 @@ mod tests {
 
     #[test]
     fn round_to_increment_temporal_table_half_floor() {
-        let round = |quantity: i64, increment: i64| -> i64 {
-            let quantity = NoUnits::new(quantity).unwrap();
-            let increment = NoUnits::new(increment).unwrap();
-            RoundMode::HalfFloor.round(quantity, increment).into()
+        let round = |quantity: i128, increment: i128| -> i128 {
+            RoundMode::HalfFloor.round(quantity, increment)
         };
         assert_eq!(-20, round(-15, 10));
         assert_eq!(-10, round(-5, 10));
@@ -358,10 +388,8 @@ mod tests {
 
     #[test]
     fn round_to_increment_temporal_table_half_expand() {
-        let round = |quantity: i64, increment: i64| -> i64 {
-            let quantity = NoUnits::new(quantity).unwrap();
-            let increment = NoUnits::new(increment).unwrap();
-            RoundMode::HalfExpand.round(quantity, increment).into()
+        let round = |quantity: i128, increment: i128| -> i128 {
+            RoundMode::HalfExpand.round(quantity, increment)
         };
         assert_eq!(-20, round(-15, 10));
         assert_eq!(-10, round(-5, 10));
@@ -373,10 +401,8 @@ mod tests {
 
     #[test]
     fn round_to_increment_temporal_table_half_trunc() {
-        let round = |quantity: i64, increment: i64| -> i64 {
-            let quantity = NoUnits::new(quantity).unwrap();
-            let increment = NoUnits::new(increment).unwrap();
-            RoundMode::HalfTrunc.round(quantity, increment).into()
+        let round = |quantity: i128, increment: i128| -> i128 {
+            RoundMode::HalfTrunc.round(quantity, increment)
         };
         assert_eq!(-10, round(-15, 10));
         assert_eq!(0, round(-5, 10));
@@ -388,10 +414,8 @@ mod tests {
 
     #[test]
     fn round_to_increment_temporal_table_half_even() {
-        let round = |quantity: i64, increment: i64| -> i64 {
-            let quantity = NoUnits::new(quantity).unwrap();
-            let increment = NoUnits::new(increment).unwrap();
-            RoundMode::HalfEven.round(quantity, increment).into()
+        let round = |quantity: i128, increment: i128| -> i128 {
+            RoundMode::HalfEven.round(quantity, increment)
         };
         assert_eq!(-20, round(-15, 10));
         assert_eq!(0, round(-5, 10));

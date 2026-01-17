@@ -4637,7 +4637,7 @@ impl ZonedRound {
         // Rounding by days requires an increment of 1. We just re-use the
         // civil datetime rounding checks, which has the same constraint
         // although it does check for other things that aren't relevant here.
-        increment::for_datetime(Unit::Day, self.round.get_increment())?;
+        increment::for_datetime_ranged(Unit::Day, self.round.get_increment())?;
 
         // FIXME: We should be doing this with a &TimeZone, but will need a
         // refactor so that we do zone-aware arithmetic using just a Timestamp
@@ -4661,7 +4661,7 @@ impl ZonedRound {
         let rounded = self
             .round
             .get_mode()
-            .round(t::NoUnits128::new_unchecked(progress), day_length)
+            .round_ranged(t::NoUnits128::new_unchecked(progress), day_length)
             .get();
         let nanos = start
             .timestamp()

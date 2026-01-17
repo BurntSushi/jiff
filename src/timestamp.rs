@@ -9,7 +9,7 @@ use crate::{
     },
     shared::util::itime::ITimestamp,
     tz::{Offset, TimeZone},
-    util::{b, constant, round::increment, t},
+    util::{b, constant, round::increment},
     zoned::Zoned,
     RoundMode, SignedDuration, Span, SpanRound, Unit,
 };
@@ -3447,14 +3447,11 @@ impl TimestampRound {
     ) -> Result<Timestamp, Error> {
         let increment =
             increment::for_timestamp(self.smallest, self.increment)?;
-        // TODO: Rounding should ideally use a `SignedDuration`...
-        let nanosecond = t::NoUnits128::borked(timestamp.as_nanosecond());
-        let rounded = self.mode.round_by_unit_in_nanoseconds(
-            nanosecond,
+        Timestamp::from_nanosecond(self.mode.round_by_unit(
+            timestamp.as_nanosecond(),
             self.smallest,
             increment,
-        );
-        Timestamp::from_nanosecond(rounded.get())
+        ))
     }
 }
 
@@ -3554,12 +3551,12 @@ mod tests {
     #[test]
     fn to_datetime_many_seconds_in_some_days() {
         let days = [
-            i64::from(t::UnixEpochDay::MIN_REPR),
+            i64::from(crate::util::t::UnixEpochDay::MIN_REPR),
             -1000,
             -5,
             23,
             2000,
-            i64::from(t::UnixEpochDay::MAX_REPR),
+            i64::from(crate::util::t::UnixEpochDay::MAX_REPR),
         ];
         let seconds = [
             -86_400, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4,

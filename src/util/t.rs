@@ -326,13 +326,6 @@ pub(crate) const DAYS_PER_CIVIL_WEEK: Constant = Constant(7);
 /// The number of whole hours in one day.
 pub(crate) const HOURS_PER_CIVIL_DAY: Constant = Constant(24);
 
-/// The number of minutes in a civil day.
-pub(crate) const MINUTES_PER_CIVIL_DAY: Constant =
-    Constant(HOURS_PER_CIVIL_DAY.value() * MINUTES_PER_HOUR.value());
-
-/// The number of minutes in an hour.
-pub(crate) const MINUTES_PER_HOUR: Constant = Constant(60);
-
 /// The number of seconds in a civil week.
 ///
 /// Some weeks will have more or less seconds because of DST transitions. But
@@ -358,20 +351,6 @@ pub(crate) const SECONDS_PER_HOUR: Constant =
 
 /// The number of seconds in a single minute.
 pub(crate) const SECONDS_PER_MINUTE: Constant = Constant(60);
-
-/// The number of microseconds in a civil day.
-pub(crate) const MILLIS_PER_CIVIL_DAY: Constant =
-    Constant(SECONDS_PER_CIVIL_DAY.value() * MILLIS_PER_SECOND.value());
-
-/// The number of milliseconds in a single second.
-pub(crate) const MILLIS_PER_SECOND: Constant = Constant(1_000);
-
-/// The number of microseconds in a civil day.
-pub(crate) const MICROS_PER_CIVIL_DAY: Constant =
-    Constant(SECONDS_PER_CIVIL_DAY.value() * MICROS_PER_SECOND.value());
-
-/// The number of microseconds in a single second.
-pub(crate) const MICROS_PER_SECOND: Constant = Constant(1_000_000);
 
 /// The number of microseconds in a single millisecond.
 pub(crate) const MICROS_PER_MILLI: Constant = Constant(1_000);
@@ -463,11 +442,6 @@ pub(crate) struct Constant(pub(crate) i64);
 pub(crate) fn C(
     constant: i64,
 ) -> ri64<{ i64::MIN as i128 }, { i64::MAX as i128 }> {
-    Constant(constant).rinto()
-}
-
-#[allow(non_snake_case)]
-pub(crate) fn C128(constant: i64) -> ri128<{ i128::MIN }, { i128::MAX }> {
     Constant(constant).rinto()
 }
 

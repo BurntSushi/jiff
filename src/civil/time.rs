@@ -2863,9 +2863,10 @@ impl TimeRound {
 
     /// Does the actual rounding.
     pub(crate) fn round(&self, t: Time) -> Result<Time, Error> {
-        let increment = increment::for_time(self.smallest, self.increment)?;
+        let increment =
+            increment::for_time_ranged(self.smallest, self.increment)?;
         let nanos = t.to_nanosecond();
-        let rounded = self.mode.round_by_unit_in_nanoseconds(
+        let rounded = self.mode.round_by_unit_in_nanoseconds_ranged(
             nanos,
             self.smallest,
             increment,
