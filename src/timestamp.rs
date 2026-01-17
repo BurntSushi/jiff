@@ -3215,13 +3215,10 @@ impl TimestampDifference {
             ));
         }
 
-        // TODO: Come back to this and use `SignedDuration`.
-        let nano1 = t1.as_nanosecond();
-        let nano2 = t2.as_nanosecond();
-        let diff = nano2 - nano1;
+        let diff = t2.as_duration() - t1.as_duration();
         // This can fail when `largest` is nanoseconds since not all intervals
         // can be represented by a single i64 in units of nanoseconds.
-        Span::from_invariant_nanoseconds(largest, t::NoUnits128::borked(diff))
+        Span::from_invariant_duration(largest, diff)
     }
 }
 

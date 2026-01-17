@@ -2327,6 +2327,54 @@ impl SignedDuration {
         SignedDuration::from_secs((mins as i64) * SECS_PER_MINUTE)
     }
 
+    /// Returns the number of whole civil weeks in this duration.
+    #[inline]
+    pub(crate) const fn as_civil_weeks(&self) -> i64 {
+        self.as_secs()
+            / (DAYS_PER_WEEK
+                * HOURS_PER_CIVIL_DAY
+                * MINS_PER_HOUR
+                * SECS_PER_MINUTE)
+    }
+
+    /// Returns the number of whole civil days in this duration.
+    #[inline]
+    pub(crate) const fn as_civil_days(&self) -> i64 {
+        self.as_secs()
+            / (HOURS_PER_CIVIL_DAY * MINS_PER_HOUR * SECS_PER_MINUTE)
+    }
+
+    /// Returns the number of whole civil weeks in this duration (equivalent to
+    /// `SignedDuration::as_civil_weeks`) along with a duration equivalent to
+    /// the fractional remainder.
+    #[inline]
+    pub(crate) fn as_civil_weeks_with_remainder(
+        &self,
+    ) -> (i64, SignedDuration) {
+        let weeks = self.as_civil_weeks();
+        let secs = self.as_secs()
+            % (DAYS_PER_WEEK
+                * HOURS_PER_CIVIL_DAY
+                * MINS_PER_HOUR
+                * SECS_PER_MINUTE);
+        let rem = SignedDuration::new_unchecked(secs, self.subsec_nanos());
+        (weeks, rem)
+    }
+
+    /// Returns the number of whole civil days in this duration (equivalent to
+    /// `SignedDuration::as_civil_days`) along with a duration equivalent to
+    /// the fractional remainder.
+    #[inline]
+    pub(crate) fn as_civil_days_with_remainder(
+        &self,
+    ) -> (i64, SignedDuration) {
+        let days = self.as_civil_days();
+        let secs = self.as_secs()
+            % (HOURS_PER_CIVIL_DAY * MINS_PER_HOUR * SECS_PER_MINUTE);
+        let rem = SignedDuration::new_unchecked(secs, self.subsec_nanos());
+        (days, rem)
+    }
+
     /// Returns the number of whole hours in this duration (equivalent to
     /// `SignedDuration::as_hours`) along with a duration equivalent to the
     /// fractional remainder.

@@ -728,7 +728,7 @@ fn out_of_range_when_converting_from_normalized_duration() -> Result {
     insta::assert_snapshot!(
         sp.round(options).unwrap_err(),
         // Kind of a brutal error message...
-        @"failed to convert rounded nanoseconds to span for largest unit set to 'nanoseconds': parameter 'nanoseconds' with value 631107417600999999999 is not in the required range of -9223372036854775807..=9223372036854775807",
+        @"failed to convert rounded nanoseconds to span for largest unit set to 'nanoseconds': parameter 'nanoseconds' is not in the required range of -9223372036854775807..=9223372036854775807",
     );
 
     Ok(())
