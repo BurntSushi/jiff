@@ -11,14 +11,24 @@ use crate::{util::t, Error};
 
 pub(crate) const DAYS_PER_WEEK: i64 = 7;
 pub(crate) const HOURS_PER_CIVIL_DAY: i64 = 24;
+pub(crate) const MINS_PER_CIVIL_DAY: i64 = HOURS_PER_CIVIL_DAY * MINS_PER_HOUR;
 pub(crate) const MINS_PER_HOUR: i64 = 60;
 pub(crate) const SECS_PER_WEEK: i64 = DAYS_PER_WEEK * SECS_PER_CIVIL_DAY;
 pub(crate) const SECS_PER_CIVIL_DAY: i64 = HOURS_PER_CIVIL_DAY * SECS_PER_HOUR;
 pub(crate) const SECS_PER_HOUR: i64 = SECS_PER_MIN * MINS_PER_HOUR;
 pub(crate) const SECS_PER_MIN: i64 = 60;
+pub(crate) const MILLIS_PER_CIVIL_DAY: i64 =
+    SECS_PER_CIVIL_DAY * MILLIS_PER_SEC;
 pub(crate) const MILLIS_PER_SEC: i64 = 1_000;
+pub(crate) const MICROS_PER_CIVIL_DAY: i64 =
+    SECS_PER_CIVIL_DAY * MICROS_PER_SEC;
 pub(crate) const MICROS_PER_SEC: i64 = MILLIS_PER_SEC * MICROS_PER_MILLI;
 pub(crate) const MICROS_PER_MILLI: i64 = 1_000;
+pub(crate) const NANOS_PER_WEEK: i64 = DAYS_PER_WEEK * NANOS_PER_CIVIL_DAY;
+pub(crate) const NANOS_PER_CIVIL_DAY: i64 =
+    HOURS_PER_CIVIL_DAY * NANOS_PER_HOUR;
+pub(crate) const NANOS_PER_HOUR: i64 = MINS_PER_HOUR * NANOS_PER_MIN;
+pub(crate) const NANOS_PER_MIN: i64 = SECS_PER_MIN * NANOS_PER_SEC;
 pub(crate) const NANOS_PER_SEC: i64 = MILLIS_PER_SEC * NANOS_PER_MILLI;
 pub(crate) const NANOS_PER_MILLI: i64 = MICROS_PER_MILLI * NANOS_PER_MICRO;
 pub(crate) const NANOS_PER_MICRO: i64 = 1_000;
@@ -293,18 +303,6 @@ define_bounds! {
         UnixMilliseconds::MIN * MICROS_PER_MILLI,
         UnixMilliseconds::MAX * MICROS_PER_MILLI,
     ),
-    // BREADCRUMBS: Supporting i128 in our `Bounds` framework is pretty
-    // awkward. It seems like this is the only type that uses i128 (outside
-    // of the `NoUnits` types in the old scheme, but I don't think we'll need
-    // those here---we can just use the primitive integer types directly),
-    // so we should just special case it.
-    // (
-        // UnixNanoseconds,
-        // i128,
-        // "Unix timestamp nanoseconds",
-        // UnixMicroseconds::MIN as i128 * (NANOS_PER_MICRO as i128),
-        // UnixMicroseconds::MAX as i128 * (NANOS_PER_MICRO as i128),
-    // ),
     (
         UnixSeconds,
         i64,

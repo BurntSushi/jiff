@@ -3523,7 +3523,7 @@ impl DateTimeRound {
         // ref: https://tc39.es/proposal-temporal/#sec-temporal.plaindatetime.prototype.round
 
         let increment =
-            increment::for_datetime(self.smallest, self.increment)?;
+            increment::for_datetime_ranged(self.smallest, self.increment)?;
         // We permit rounding to any time unit and days, but nothing else.
         // We should support this, but Temporal doesn't. So for now, we're
         // sticking to what Temporal does because they're probably not doing
@@ -3545,7 +3545,7 @@ impl DateTimeRound {
 
         let time_nanos = dt.time().to_nanosecond();
         let sign = t::NoUnits128::rfrom(dt.date().year_ranged().signum());
-        let time_rounded = self.mode.round_by_unit_in_nanoseconds(
+        let time_rounded = self.mode.round_by_unit_in_nanoseconds_ranged(
             time_nanos,
             self.smallest,
             increment,

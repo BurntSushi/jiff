@@ -2431,20 +2431,20 @@ impl Span {
         const _FITS_IN_U64: () = {
             debug_assert!(
                 i64::MAX as i128
-                    > ((t::SpanWeeks::MAX
-                        * t::SECONDS_PER_CIVIL_WEEK.bound())
-                        + (t::SpanDays::MAX
-                            * t::SECONDS_PER_CIVIL_DAY.bound())
-                        + (t::SpanHours::MAX * t::SECONDS_PER_HOUR.bound())
-                        + (t::SpanMinutes::MAX
-                            * t::SECONDS_PER_MINUTE.bound())
-                        + t::SpanSeconds::MAX
-                        + (t::SpanMilliseconds::MAX
-                            / t::MILLIS_PER_SECOND.bound())
-                        + (t::SpanMicroseconds::MAX
-                            / t::MICROS_PER_SECOND.bound())
-                        + (t::SpanNanoseconds::MAX
-                            / t::NANOS_PER_SECOND.bound())),
+                    > ((b::SpanWeeks::MAX as i128 * b::SECS_PER_WEEK as i128)
+                        + (b::SpanDays::MAX as i128
+                            * b::SECS_PER_CIVIL_DAY as i128)
+                        + (b::SpanHours::MAX as i128
+                            * b::SECS_PER_HOUR as i128)
+                        + (b::SpanMinutes::MAX as i128
+                            * b::SECS_PER_MIN as i128)
+                        + b::SpanSeconds::MAX as i128
+                        + (b::SpanMilliseconds::MAX as i128
+                            / b::MILLIS_PER_SEC as i128)
+                        + (b::SpanMicroseconds::MAX as i128
+                            / b::MICROS_PER_SEC as i128)
+                        + (b::SpanNanoseconds::MAX as i128
+                            / b::NANOS_PER_SEC as i128)),
             );
             ()
         };
@@ -4135,6 +4135,20 @@ impl Unit {
         .rinto()
     }
 
+    pub(crate) fn nanoseconds_unranged(self) -> i64 {
+        match self {
+            Unit::Nanosecond => 1,
+            Unit::Microsecond => b::NANOS_PER_MICRO,
+            Unit::Millisecond => b::NANOS_PER_MILLI,
+            Unit::Second => b::NANOS_PER_SEC,
+            Unit::Minute => b::NANOS_PER_MIN,
+            Unit::Hour => b::NANOS_PER_HOUR,
+            Unit::Day => b::NANOS_PER_CIVIL_DAY,
+            Unit::Week => b::NANOS_PER_WEEK,
+            unit => unreachable!("{unit:?} has no definitive time interval"),
+        }
+    }
+
     /// Returns true when this unit is definitively variable.
     ///
     /// In effect, this is any unit bigger than 'day', because any such unit
@@ -5322,7 +5336,7 @@ impl<'a> SpanRound<'a> {
         let largest =
             self.largest.unwrap_or_else(|| smallest.max(existing_largest));
         let max = existing_largest.max(largest);
-        let increment = increment::for_span(smallest, self.increment)?;
+        let increment = increment::for_span_ranged(smallest, self.increment)?;
         if largest < smallest {
             return Err(Error::from(
                 E::NotAllowedLargestSmallerThanSmallest { smallest, largest },
@@ -6324,7 +6338,7 @@ impl Nudge {
 
         let sign = balanced.get_sign_ranged();
         let balanced_nanos = balanced.to_invariant_nanoseconds();
-        let rounded_nanos = mode.round_by_unit_in_nanoseconds(
+        let rounded_nanos = mode.round_by_unit_in_nanoseconds_ranged(
             balanced_nanos,
             smallest,
             increment,
@@ -6380,7 +6394,7 @@ impl Nudge {
         let numer = (relative_end.to_nanosecond() - relative0).get() as f64;
         let exact = (truncated.get() as f64)
             + (numer / denom) * (sign.get() as f64) * (increment.get() as f64);
-        let rounded = mode.round_float(exact, increment);
+        let rounded = mode.round_float_ranged(exact, increment);
         let grew_big_unit =
             ((rounded.get() as f64) - exact).signum() == (sign.get() as f64);
 
@@ -6402,8 +6416,9 @@ impl Nudge {
         let sign = balanced.get_sign_ranged();
         let time_nanos =
             balanced.only_lower(Unit::Day).to_invariant_nanoseconds();
-        let mut rounded_time_nanos =
-            mode.round_by_unit_in_nanoseconds(time_nanos, smallest, increment);
+        let mut rounded_time_nanos = mode.round_by_unit_in_nanoseconds_ranged(
+            time_nanos, smallest, increment,
+        );
         let (relative0, relative1) = clamp_relative_span(
             &Relative::Zoned(relative_start.borrowed()),
             balanced.without_lower(Unit::Day),
@@ -6417,7 +6432,7 @@ impl Nudge {
         let rounded_relative_end =
             if beyond_day_nanos == C(0) || beyond_day_nanos.signum() == sign {
                 day_delta += C(1);
-                rounded_time_nanos = mode.round_by_unit_in_nanoseconds(
+                rounded_time_nanos = mode.round_by_unit_in_nanoseconds_ranged(
                     beyond_day_nanos,
                     smallest,
                     increment,
@@ -6518,7 +6533,7 @@ fn round_span_invariant(
     assert!(largest <= Unit::Week);
     let nanos = span.to_invariant_nanoseconds();
     let rounded =
-        mode.round_by_unit_in_nanoseconds(nanos, smallest, increment);
+        mode.round_by_unit_in_nanoseconds_ranged(nanos, smallest, increment);
     Span::from_invariant_nanoseconds(largest, rounded)
         .context(E::ConvertNanoseconds { unit: largest })
 }
