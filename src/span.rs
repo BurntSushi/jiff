@@ -2552,69 +2552,6 @@ impl Span {
     }
 
     #[inline]
-    fn try_days_ranged(
-        self,
-        days: impl TryRInto<t::SpanDays>,
-    ) -> Result<Span, Error> {
-        let days = days.try_rinto("days")?;
-        Ok(self.days_ranged(days))
-    }
-
-    #[inline]
-    pub(crate) fn try_hours_ranged(
-        self,
-        hours: impl TryRInto<t::SpanHours>,
-    ) -> Result<Span, Error> {
-        let hours = hours.try_rinto("hours")?;
-        Ok(self.hours_ranged(hours))
-    }
-
-    #[inline]
-    pub(crate) fn try_minutes_ranged(
-        self,
-        minutes: impl TryRInto<t::SpanMinutes>,
-    ) -> Result<Span, Error> {
-        let minutes = minutes.try_rinto("minutes")?;
-        Ok(self.minutes_ranged(minutes))
-    }
-
-    #[inline]
-    pub(crate) fn try_seconds_ranged(
-        self,
-        seconds: impl TryRInto<t::SpanSeconds>,
-    ) -> Result<Span, Error> {
-        let seconds = seconds.try_rinto("seconds")?;
-        Ok(self.seconds_ranged(seconds))
-    }
-
-    #[inline]
-    pub(crate) fn try_milliseconds_ranged(
-        self,
-        milliseconds: impl TryRInto<t::SpanMilliseconds>,
-    ) -> Result<Span, Error> {
-        let milliseconds = milliseconds.try_rinto("milliseconds")?;
-        Ok(self.milliseconds_ranged(milliseconds))
-    }
-
-    #[inline]
-    pub(crate) fn try_microseconds_ranged(
-        self,
-        microseconds: impl TryRInto<t::SpanMicroseconds>,
-    ) -> Result<Span, Error> {
-        let microseconds = microseconds.try_rinto("microseconds")?;
-        Ok(self.microseconds_ranged(microseconds))
-    }
-
-    #[inline]
-    pub(crate) fn try_nanoseconds_ranged(
-        self,
-        nanoseconds: impl TryRInto<t::SpanNanoseconds>,
-    ) -> Result<Span, Error> {
-        let nanoseconds = nanoseconds.try_rinto("nanoseconds")?;
-        Ok(self.nanoseconds_ranged(nanoseconds))
-    }
-
-    #[inline]
     fn try_units_ranged(
         self,
         unit: Unit,
@@ -2877,208 +2814,65 @@ impl Span {
         largest: Unit,
         nanos: NoUnits128,
     ) -> Result<Span, Error> {
-        let mut span = Span::new();
-        if matches!(largest, Unit::Nanosecond) {
-            return span.try_nanoseconds_ranged(nanos);
-        }
-
-        let micros = nanos.div_ceil(t::NANOS_PER_MICRO);
-        span =
-            span.try_nanoseconds_ranged(nanos.rem_ceil(t::NANOS_PER_MICRO))?;
-        if matches!(largest, Unit::Microsecond) {
-            return span.try_microseconds_ranged(micros);
-        }
-
-        let millis = micros.div_ceil(t::MICROS_PER_MILLI);
-        span = span
-            .try_microseconds_ranged(micros.rem_ceil(t::MICROS_PER_MILLI))?;
-        if matches!(largest, Unit::Millisecond) {
-            return span.try_milliseconds_ranged(millis);
-        }
-
-        let secs = millis.div_ceil(t::MILLIS_PER_SECOND);
-        span = span
-            .try_milliseconds_ranged(millis.rem_ceil(t::MILLIS_PER_SECOND))?;
-        if matches!(largest, Unit::Second) {
-            return span.try_seconds_ranged(secs);
-        }
-
-        let mins = secs.div_ceil(t::SECONDS_PER_MINUTE);
-        span = span.try_seconds(secs.rem_ceil(t::SECONDS_PER_MINUTE))?;
-        if matches!(largest, Unit::Minute) {
-            return span.try_minutes_ranged(mins);
-        }
-
-        let hours = mins.div_ceil(t::MINUTES_PER_HOUR);
-        span = span.try_minutes_ranged(mins.rem_ceil(t::MINUTES_PER_HOUR))?;
-        if matches!(largest, Unit::Hour) {
-            return span.try_hours_ranged(hours);
-        }
-
-        let days = hours.div_ceil(t::HOURS_PER_CIVIL_DAY);
-        span =
-            span.try_hours_ranged(hours.rem_ceil(t::HOURS_PER_CIVIL_DAY))?;
-        if matches!(largest, Unit::Year | Unit::Month | Unit::Day) {
-            return span.try_days_ranged(days);
-        }
-
-        debug_assert!(matches!(largest, Unit::Week));
-        let weeks = days.div_ceil(t::DAYS_PER_CIVIL_WEEK);
-        span = span.try_days_ranged(days.rem_ceil(t::DAYS_PER_CIVIL_WEEK))?;
-        Ok(span.weeks_ranged(weeks.try_rinto("weeks")?))
+        let dur = SignedDuration::try_from_nanos_i128(nanos.get())
+            .ok_or_else(|| Error::slim_range("nanoseconds too big"))?;
+        Span::from_invariant_duration(largest, dur)
     }
 
-    // TODO: Come back to this. Too much to change at once.
-    /*
+    /// Like `Span::from_invariant_nanoseconds`, but uses a `SignedDuration`.
     pub(crate) fn from_invariant_duration(
         largest: Unit,
-        dur: SignedDuration,
+        mut dur: SignedDuration,
     ) -> Result<Span, Error> {
         let mut span = Span::new();
-        match largest {
-            Unit::Week => {
-                let micros = nanos.div_ceil(t::NANOS_PER_MICRO);
-                span = span.try_nanoseconds_ranged(
-                    nanos.rem_ceil(t::NANOS_PER_MICRO),
-                )?;
-                let millis = micros.div_ceil(t::MICROS_PER_MILLI);
-                span = span.try_microseconds_ranged(
-                    micros.rem_ceil(t::MICROS_PER_MILLI),
-                )?;
-                let secs = millis.div_ceil(t::MILLIS_PER_SECOND);
-                span = span.try_milliseconds_ranged(
-                    millis.rem_ceil(t::MILLIS_PER_SECOND),
-                )?;
-                let mins = secs.div_ceil(t::SECONDS_PER_MINUTE);
-                span = span.try_seconds_ranged(
-                    secs.rem_ceil(t::SECONDS_PER_MINUTE),
-                )?;
-                let hours = mins.div_ceil(t::MINUTES_PER_HOUR);
-                span = span
-                    .try_minutes_ranged(mins.rem_ceil(t::MINUTES_PER_HOUR))?;
-                let days = hours.div_ceil(t::HOURS_PER_CIVIL_DAY);
-                span = span.try_hours_ranged(
-                    hours.rem_ceil(t::HOURS_PER_CIVIL_DAY),
-                )?;
-                let weeks = days.div_ceil(t::DAYS_PER_CIVIL_WEEK);
-                span = span
-                    .try_days_ranged(days.rem_ceil(t::DAYS_PER_CIVIL_WEEK))?;
-                span = span.weeks_ranged(weeks.try_rinto("weeks")?);
-                Ok(span)
-            }
-            Unit::Year | Unit::Month | Unit::Day => {
-                // Unit::Year | Unit::Month | Unit::Week | Unit::Day => {
-                let micros = nanos.div_ceil(t::NANOS_PER_MICRO);
-                span = span.try_nanoseconds_ranged(
-                    nanos.rem_ceil(t::NANOS_PER_MICRO),
-                )?;
-                let millis = micros.div_ceil(t::MICROS_PER_MILLI);
-                span = span.try_microseconds_ranged(
-                    micros.rem_ceil(t::MICROS_PER_MILLI),
-                )?;
-                let secs = millis.div_ceil(t::MILLIS_PER_SECOND);
-                span = span.try_milliseconds_ranged(
-                    millis.rem_ceil(t::MILLIS_PER_SECOND),
-                )?;
-                let mins = secs.div_ceil(t::SECONDS_PER_MINUTE);
-                span = span.try_seconds_ranged(
-                    secs.rem_ceil(t::SECONDS_PER_MINUTE),
-                )?;
-                let hours = mins.div_ceil(t::MINUTES_PER_HOUR);
-                span = span
-                    .try_minutes_ranged(mins.rem_ceil(t::MINUTES_PER_HOUR))?;
-                let days = hours.div_ceil(t::HOURS_PER_CIVIL_DAY);
-                span = span.try_hours_ranged(
-                    hours.rem_ceil(t::HOURS_PER_CIVIL_DAY),
-                )?;
-                span = span.try_days_ranged(days)?;
-                Ok(span)
-            }
-            Unit::Hour => {
-                let micros = nanos.div_ceil(t::NANOS_PER_MICRO);
-                span = span.try_nanoseconds_ranged(
-                    nanos.rem_ceil(t::NANOS_PER_MICRO),
-                )?;
-                let millis = micros.div_ceil(t::MICROS_PER_MILLI);
-                span = span.try_microseconds_ranged(
-                    micros.rem_ceil(t::MICROS_PER_MILLI),
-                )?;
-                let secs = millis.div_ceil(t::MILLIS_PER_SECOND);
-                span = span.try_milliseconds_ranged(
-                    millis.rem_ceil(t::MILLIS_PER_SECOND),
-                )?;
-                let mins = secs.div_ceil(t::SECONDS_PER_MINUTE);
-                span = span.try_seconds_ranged(
-                    secs.rem_ceil(t::SECONDS_PER_MINUTE),
-                )?;
-                let hours = mins.div_ceil(t::MINUTES_PER_HOUR);
-                span = span
-                    .try_minutes_ranged(mins.rem_ceil(t::MINUTES_PER_HOUR))?;
-                span = span.try_hours_ranged(hours)?;
-                Ok(span)
-            }
-            Unit::Minute => {
-                let micros = nanos.div_ceil(t::NANOS_PER_MICRO);
-                span = span.try_nanoseconds_ranged(
-                    nanos.rem_ceil(t::NANOS_PER_MICRO),
-                )?;
-                let millis = micros.div_ceil(t::MICROS_PER_MILLI);
-                span = span.try_microseconds_ranged(
-                    micros.rem_ceil(t::MICROS_PER_MILLI),
-                )?;
-                let secs = millis.div_ceil(t::MILLIS_PER_SECOND);
-                span = span.try_milliseconds_ranged(
-                    millis.rem_ceil(t::MILLIS_PER_SECOND),
-                )?;
-                let mins = secs.div_ceil(t::SECONDS_PER_MINUTE);
-                span =
-                    span.try_seconds(secs.rem_ceil(t::SECONDS_PER_MINUTE))?;
-                span = span.try_minutes_ranged(mins)?;
-                Ok(span)
-            }
-            Unit::Second => {
-                let micros = nanos.div_ceil(t::NANOS_PER_MICRO);
-                span = span.try_nanoseconds_ranged(
-                    nanos.rem_ceil(t::NANOS_PER_MICRO),
-                )?;
-                let millis = micros.div_ceil(t::MICROS_PER_MILLI);
-                span = span.try_microseconds_ranged(
-                    micros.rem_ceil(t::MICROS_PER_MILLI),
-                )?;
-                let secs = millis.div_ceil(t::MILLIS_PER_SECOND);
-                span = span.try_milliseconds_ranged(
-                    millis.rem_ceil(t::MILLIS_PER_SECOND),
-                )?;
-                span = span.try_seconds_ranged(secs)?;
-                Ok(span)
-            }
-            Unit::Millisecond => {
-                let micros = nanos.div_ceil(t::NANOS_PER_MICRO);
-                span = span.try_nanoseconds_ranged(
-                    nanos.rem_ceil(t::NANOS_PER_MICRO),
-                )?;
-                let millis = micros.div_ceil(t::MICROS_PER_MILLI);
-                span = span.try_microseconds_ranged(
-                    micros.rem_ceil(t::MICROS_PER_MILLI),
-                )?;
-                span = span.try_milliseconds_ranged(millis)?;
-                Ok(span)
-            }
-            Unit::Microsecond => {
-                let micros = nanos.div_ceil(t::NANOS_PER_MICRO);
-                span = span.try_nanoseconds_ranged(
-                    nanos.rem_ceil(t::NANOS_PER_MICRO),
-                )?;
-                span = span.try_microseconds_ranged(micros)?;
-                Ok(span)
-            }
-            Unit::Nanosecond => {
-                span = span.try_nanoseconds_ranged(nanos)?;
-                Ok(span)
-            }
+
+        if matches!(largest, Unit::Week) {
+            let (weeks, rem) = dur.as_civil_weeks_with_remainder();
+            span = span.try_weeks(weeks)?;
+            dur = rem;
         }
+        if largest >= Unit::Day {
+            let (days, rem) = dur.as_civil_days_with_remainder();
+            span = span.try_days(days)?;
+            dur = rem;
+        }
+        if largest >= Unit::Hour {
+            let (hours, rem) = dur.as_hours_with_remainder();
+            span = span.try_hours(hours)?;
+            dur = rem;
+        }
+        if largest >= Unit::Minute {
+            let (mins, rem) = dur.as_mins_with_remainder();
+            span = span.try_minutes(mins)?;
+            dur = rem;
+        }
+        if largest >= Unit::Second {
+            let (secs, rem) = dur.as_secs_with_remainder();
+            span = span.try_seconds(secs)?;
+            dur = rem;
+        }
+        if largest >= Unit::Millisecond {
+            let (millis, rem) = dur.as_millis_with_remainder();
+            let millis = i64::try_from(millis)
+                .map_err(|_| b::SpanMilliseconds::error())?;
+            span = span.try_milliseconds(millis)?;
+            dur = rem;
+        }
+        if largest >= Unit::Microsecond {
+            let (micros, rem) = dur.as_micros_with_remainder();
+            let micros = i64::try_from(micros)
+                .map_err(|_| b::SpanMicroseconds::error())?;
+            span = span.try_microseconds(micros)?;
+            dur = rem;
+        }
+        if largest >= Unit::Nanosecond {
+            let nanos = i64::try_from(dur.as_nanos())
+                .map_err(|_| b::SpanNanoseconds::error())?;
+            span = span.try_nanoseconds(nanos)?;
+        }
+
+        Ok(span)
     }
-    */
 
     /// Converts the non-variable units of this `Span` to a total number of
     /// nanoseconds.
