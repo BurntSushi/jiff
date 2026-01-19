@@ -289,6 +289,23 @@ define_bounds! {
         -SubsecNanosecond::MAX,
         SubsecNanosecond::MAX,
     ),
+    // The number of days from the Unix epoch for the Gregorian calendar.
+    //
+    // The range supported is based on the range of Unix timestamps that we
+    // support.
+    //
+    // While I had originally used the "rate die" concept from Calendrical
+    // Calculations, I found [Howard Hinnant's formulation][date-algorithms]
+    // much more straight-forward.
+    //
+    // [date-algorithms]: http://howardhinnant.github.io/date_algorithms.html
+    (
+        UnixEpochDays,
+        i32,
+        "Unix epoch days",
+        (UnixSeconds::MIN+ OffsetTotalSeconds::MIN as i64).div_euclid(SECS_PER_CIVIL_DAY) as i32,
+        (UnixSeconds::MAX + OffsetTotalSeconds::MAX as i64).div_euclid(SECS_PER_CIVIL_DAY) as i32,
+    ),
     (
         UnixMilliseconds,
         i64,
