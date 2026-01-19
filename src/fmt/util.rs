@@ -233,7 +233,7 @@ impl DurationUnits {
         // The unchecked setters above don't manipulate
         // the sign, which defaults to zero. So we need to
         // set it even when it's positive.
-        span = span.sign_unchecked(self.get_sign().as_ranged_integer());
+        span = span.sign_unchecked(self.get_sign());
 
         Ok(span)
     }

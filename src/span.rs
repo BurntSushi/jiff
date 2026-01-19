@@ -2791,7 +2791,12 @@ impl Span {
     }
 
     #[inline]
-    pub(crate) fn sign_unchecked(self, sign: Sign) -> Span {
+    pub(crate) fn sign_unchecked(self, sign: b::Sign) -> Span {
+        let sign = match sign {
+            b::Sign::Zero => t::Sign::N::<0>(),
+            b::Sign::Positive => t::Sign::N::<1>(),
+            b::Sign::Negative => t::Sign::N::<-1>(),
+        };
         Span { sign, ..self }
     }
 }
