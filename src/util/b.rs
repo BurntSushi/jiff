@@ -7,7 +7,7 @@ ranged integers. I'm not quite sure where this will go.
 
 #![allow(dead_code)]
 
-use crate::{util::t, Error};
+use crate::Error;
 
 pub(crate) const DAYS_PER_WEEK: i64 = 7;
 pub(crate) const HOURS_PER_CIVIL_DAY: i64 = 24;
@@ -694,14 +694,6 @@ impl Sign {
 
     pub(crate) fn as_i128(self) -> i128 {
         i128::from(self.as_i8())
-    }
-
-    pub(crate) fn as_ranged_integer(self) -> t::Sign {
-        match self {
-            Sign::Zero => t::Sign::N::<0>(),
-            Sign::Positive => t::Sign::N::<1>(),
-            Sign::Negative => t::Sign::N::<-1>(),
-        }
     }
 }
 
