@@ -3551,12 +3551,12 @@ mod tests {
     #[test]
     fn to_datetime_many_seconds_in_some_days() {
         let days = [
-            i64::from(crate::util::t::UnixEpochDay::MIN_REPR),
+            i64::from(b::UnixEpochDays::MIN),
             -1000,
             -5,
             23,
             2000,
-            i64::from(crate::util::t::UnixEpochDay::MAX_REPR),
+            i64::from(b::UnixEpochDays::MAX),
         ];
         let seconds = [
             -86_400, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4,

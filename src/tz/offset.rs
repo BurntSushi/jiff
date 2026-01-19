@@ -11,7 +11,7 @@ use crate::{
     span::Span,
     timestamp::Timestamp,
     tz::{AmbiguousOffset, AmbiguousTimestamp, AmbiguousZoned, TimeZone},
-    util::{array_str::ArrayStr, b, constant, t},
+    util::{array_str::ArrayStr, b, constant},
     RoundMode, SignedDuration, SignedDurationRound, Unit,
 };
 
@@ -1062,10 +1062,8 @@ impl Offset {
         #[inline(never)]
         #[cold]
         fn round(mut hours: u8, mut minutes: u8) -> (u8, u8) {
-            const MAX_HOURS: u8 =
-                t::SpanZoneOffsetHours::MAX_REPR.unsigned_abs();
-            const MAX_MINS: u8 =
-                t::SpanZoneOffsetMinutes::MAX_REPR.unsigned_abs();
+            const MAX_HOURS: u8 = b::OffsetHours::MAX.unsigned_abs();
+            const MAX_MINS: u8 = b::OffsetMinutes::MAX.unsigned_abs();
 
             if minutes == 59 {
                 hours += 1;
