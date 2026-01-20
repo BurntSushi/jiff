@@ -31,12 +31,6 @@ pub(crate) type NoUnits96 = ri128<{ -(1 << 95) }, { (1 << 95) - 1 }>;
 /// values to what can be represented by an `i128`.
 pub(crate) type NoUnits128 = ri128<{ i128::MIN }, { i128::MAX }>;
 
-/// A type alias for a ranged 32-bit integer with no units.
-///
-/// This is like `NoUnits`, but useful in contexts where one wants to limit
-/// values to what can be represented by an `i32`.
-pub(crate) type NoUnits32 = ri32<{ i32::MIN as i128 }, { i32::MAX as i128 }>;
-
 /// A type alias for a ranged 16-bit integer with no units.
 ///
 /// This is like `NoUnits`, but useful in contexts where one wants to limit
@@ -119,10 +113,6 @@ pub(crate) type WeekdayOne = ri8<1, 7>;
 /// with days needs to be careful to check that it is valid for whatever month
 /// is being used.
 pub(crate) type Day = ri8<1, 31>;
-
-pub(crate) type ISOYear = ri16<-9999, 9999>;
-
-pub(crate) type ISOWeek = ri8<1, 53>;
 
 /// The range of possible hour values.
 pub(crate) type Hour = ri8<0, 23>;

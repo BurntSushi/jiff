@@ -2553,11 +2553,11 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("2024-W53-1"),
-            @"parsed week date is not valid: ISO week number is invalid for given year",
+            @"parsed week date is not valid: parameter 'iso-week' is not in the required range of 1..=53",
         );
         insta::assert_snapshot!(
             p("2030W531"),
-            @"parsed week date is not valid: ISO week number is invalid for given year",
+            @"parsed week date is not valid: parameter 'iso-week' is not in the required range of 1..=53",
         );
     }
 
@@ -2571,11 +2571,11 @@ mod tests {
 
         insta::assert_snapshot!(
             p("2024-W53-1"),
-            @"parsed week date is not valid: ISO week number is invalid for given year",
+            @"parsed week date is not valid: parameter 'iso-week' is not in the required range of 1..=53",
         );
         insta::assert_snapshot!(
             p("2025-W53-1"),
-            @"parsed week date is not valid: ISO week number is invalid for given year",
+            @"parsed week date is not valid: parameter 'iso-week' is not in the required range of 1..=53",
         );
     }
 

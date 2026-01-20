@@ -10,7 +10,6 @@ pub(crate) enum Error {
     IllegalTimeWithMicrosecond,
     IllegalTimeWithMillisecond,
     IllegalTimeWithNanosecond,
-    InvalidISOWeekNumber,
     OverflowDaysDuration,
     OverflowTimeNanoseconds,
     RoundMustUseDaysOrBigger { unit: Unit },
@@ -57,9 +56,6 @@ impl core::fmt::Display for Error {
                 "cannot set both `TimeWith::nanosecond` \
                  and `TimeWith::subsec_nanosecond`",
             ),
-            InvalidISOWeekNumber => {
-                f.write_str("ISO week number is invalid for given year")
-            }
             OverflowDaysDuration => f.write_str(
                 "number of days derived from duration exceed's \
                  Jiff's datetime limits",
