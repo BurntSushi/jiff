@@ -11,6 +11,7 @@ use crate::{
     shared::util::itime::{self, IDate, IEpochDay},
     tz::TimeZone,
     util::{
+        b,
         rangeint::{self, Composite, RFrom, RInto, TryRFrom},
         t::{self, Day, Month, Sign, UnixEpochDay, Year, C},
     },
@@ -339,9 +340,10 @@ impl Date {
     /// ```
     #[inline]
     pub fn from_iso_week_date(weekdate: ISOWeekDate) -> Date {
-        let mut days = iso_week_start_from_year(weekdate.year_ranged());
-        let year = t::NoUnits16::rfrom(weekdate.year_ranged());
-        let week = t::NoUnits16::rfrom(weekdate.week_ranged());
+        let mut days =
+            UnixEpochDay::borked(iso_week_start_from_year(weekdate.year()));
+        let year = t::NoUnits16::borked(weekdate.year());
+        let week = t::NoUnits16::borked(i16::from(weekdate.week()));
         let weekday = t::NoUnits16::rfrom(
             weekdate.weekday().to_monday_zero_offset_ranged(),
         );
@@ -1131,38 +1133,28 @@ impl Date {
     /// ```
     #[inline]
     pub fn iso_week_date(self) -> ISOWeekDate {
-        let days = t::NoUnits32::rfrom(self.to_unix_epoch_day());
-        let year = t::NoUnits32::rfrom(self.year_ranged());
-        let week_start = t::NoUnits32::vary([days, year], |[days, year]| {
-            let mut week_start =
-                t::NoUnits32::rfrom(iso_week_start_from_year(year.rinto()));
-            if days < week_start {
-                week_start = t::NoUnits32::rfrom(iso_week_start_from_year(
-                    (year - C(1)).rinto(),
-                ));
-            } else {
-                let next_year_week_start = t::NoUnits32::rfrom(
-                    iso_week_start_from_year((year + C(1)).rinto()),
-                );
-                if days >= next_year_week_start {
-                    week_start = next_year_week_start;
-                }
+        let days = self.to_unix_epoch_day().get();
+        let year = self.year();
+        let mut week_start = iso_week_start_from_year(year);
+        if days < week_start {
+            week_start = iso_week_start_from_year(year - 1);
+        } else if year < b::Year::MAX {
+            let next_year_week_start = iso_week_start_from_year(year + 1);
+            if days >= next_year_week_start {
+                week_start = next_year_week_start;
             }
-            week_start
-        });
+        }
 
-        let weekday = Weekday::from_iweekday(
-            IEpochDay { epoch_day: days.get() }.weekday(),
-        );
-        let week = ((days - week_start) / C(7)) + C(1);
+        let weekday =
+            Weekday::from_iweekday(IEpochDay { epoch_day: days }.weekday());
+        let week = i8::try_from(((days - week_start) / 7) + 1).unwrap();
 
-        let unix_epoch_day = week_start
-            + t::NoUnits32::rfrom(
-                Weekday::Thursday.since_ranged(Weekday::Monday),
-            );
+        let unix_epoch_day =
+            week_start + i32::from(Weekday::Thursday.since(Weekday::Monday));
         let year =
-            Date::from_unix_epoch_day(unix_epoch_day.rinto()).year_ranged();
-        ISOWeekDate::new_ranged(year, week, weekday)
+            Date::from_unix_epoch_day(UnixEpochDay::borked(unix_epoch_day))
+                .year();
+        ISOWeekDate::new(year, week, weekday)
             .expect("all Dates infallibly convert to ISOWeekDates")
     }
 
@@ -3605,19 +3597,17 @@ enum DateWithDay {
 /// week year given.
 ///
 /// Ref: http://howardhinnant.github.io/date_algorithms.html
-fn iso_week_start_from_year(year: t::ISOYear) -> UnixEpochDay {
+fn iso_week_start_from_year(year: i16) -> i32 {
     // A week's year always corresponds to the Gregorian year in which the
     // Thursday of that week falls. Therefore, Jan 4 is *always* in the first
     // week of any ISO week year.
     let date_in_first_week =
-        Date::new_ranged(year.rinto(), C(1).rinto(), C(4).rinto())
-            .expect("Jan 4 is valid for all valid years");
+        Date::new(year, 1, 4).expect("Jan 4 is valid for all valid years");
     // The start of the first week is a Monday, so find the number of days
     // since Monday from a date that we know is in the first ISO week of
     // `year`.
-    let diff_from_monday =
-        date_in_first_week.weekday().since_ranged(Weekday::Monday);
-    date_in_first_week.to_unix_epoch_day() - diff_from_monday
+    let diff_from_monday = date_in_first_week.weekday().since(Weekday::Monday);
+    date_in_first_week.to_unix_epoch_day().get() - i32::from(diff_from_monday)
 }
 
 /// Adds or subtracts `sign` from the given `year`/`month`.
