@@ -101,12 +101,6 @@ pub(crate) type UnixSeconds = ri64<
 /// The range of possible month values.
 pub(crate) type Month = ri8<1, 12>;
 
-/// The range of a weekday, offset from zero.
-pub(crate) type WeekdayZero = ri8<0, 6>;
-
-/// The range of a weekday, offset from one.
-pub(crate) type WeekdayOne = ri8<1, 7>;
-
 /// The range of possible day values.
 ///
 /// Obviously this range is not valid for every month. Therefore, code working

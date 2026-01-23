@@ -1882,11 +1882,11 @@ mod tests {
 
         insta::assert_snapshot!(
             p("%u", "0"),
-            @"strptime parsing failed: %u failed: failed to parse weekday number: parameter 'weekday' with value 0 is not in the required range of 1..=7",
+            @"strptime parsing failed: %u failed: failed to parse weekday number: parameter 'weekday (Monday 1-indexed)' is not in the required range of 1..=7",
         );
         insta::assert_snapshot!(
             p("%w", "7"),
-            @"strptime parsing failed: %w failed: failed to parse weekday number: parameter 'weekday' with value 7 is not in the required range of 0..=6",
+            @"strptime parsing failed: %w failed: failed to parse weekday number: parameter 'weekday (Sunday 0-indexed)' is not in the required range of 0..=6",
         );
         insta::assert_snapshot!(
             p("%u", "128"),

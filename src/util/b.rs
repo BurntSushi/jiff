@@ -179,6 +179,7 @@ define_bounds! {
     (Minute, i8, "minute", 0, 59),
     (Month, i8, "month", 1, 12),
     (Nanosecond, i16, "nanosecond", 0, 999),
+    (NthWeekday, i32, "nth weekday", SpanWeeks::MIN, SpanWeeks::MAX),
     // The number of hours allowed in a time zone offset.
     //
     // This number was somewhat arbitrarily chosen. In part because it's bigger
