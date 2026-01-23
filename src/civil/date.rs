@@ -344,9 +344,9 @@ impl Date {
             UnixEpochDay::borked(iso_week_start_from_year(weekdate.year()));
         let year = t::NoUnits16::borked(weekdate.year());
         let week = t::NoUnits16::borked(i16::from(weekdate.week()));
-        let weekday = t::NoUnits16::rfrom(
-            weekdate.weekday().to_monday_zero_offset_ranged(),
-        );
+        let weekday = t::NoUnits16::borked(i16::from(
+            weekdate.weekday().to_monday_zero_offset(),
+        ));
         let [week, weekday] = t::NoUnits16::vary_many(
             [year, week, weekday],
             |[year, week, weekday]| {
@@ -1059,23 +1059,25 @@ impl Date {
     ) -> Result<Date, Error> {
         // ref: http://howardhinnant.github.io/date_algorithms.html#next_weekday
 
-        let nth = t::SpanWeeks::try_new("nth weekday", nth)?;
-        if nth == C(0) {
-            Err(Error::slim_range("nth weekday"))
-        } else if nth > C(0) {
-            let nth = nth.max(C(1));
-            let weekday_diff = weekday.since_ranged(self.weekday().next());
-            let diff = (nth - C(1)) * C(7) + weekday_diff;
-            let start = self.tomorrow()?.to_unix_epoch_day();
-            let end = start.try_checked_add("days", diff)?;
-            Ok(Date::from_unix_epoch_day(end))
+        let nth = b::NthWeekday::check(nth)?;
+        if nth == 0 {
+            Err(b::NthWeekday::error().into())
+        } else if nth > 0 {
+            let nth = nth.max(1);
+            let weekday_diff = i32::from(weekday.since(self.weekday().next()));
+            let diff = (nth - 1) * 7 + weekday_diff;
+            let start = self.tomorrow()?.to_unix_epoch_day().get();
+            let end = b::UnixEpochDays::checked_add(start, diff)?;
+            Ok(Date::from_unix_epoch_day(t::UnixEpochDay::borked(end)))
         } else {
-            let nth: t::SpanWeeks = nth.min(C(-1)).abs();
-            let weekday_diff = self.weekday().previous().since_ranged(weekday);
-            let diff = (nth - C(1)) * C(7) + weekday_diff;
-            let start = self.yesterday()?.to_unix_epoch_day();
-            let end = start.try_checked_sub("days", diff)?;
-            Ok(Date::from_unix_epoch_day(end))
+            // OK because of the range on `NthWeekday`.
+            let nth = nth.min(-1).abs();
+            let weekday_diff =
+                i32::from(self.weekday().previous().since(weekday));
+            let diff = (nth - 1) * 7 + weekday_diff;
+            let start = self.yesterday()?.to_unix_epoch_day().get();
+            let end = b::UnixEpochDays::checked_sub(start, diff)?;
+            Ok(Date::from_unix_epoch_day(t::UnixEpochDay::borked(end)))
         }
     }
 

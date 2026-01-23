@@ -1,11 +1,4 @@
-use crate::{
-    error::Error,
-    shared::util::itime::IWeekday,
-    util::{
-        rangeint::{RFrom, RInto},
-        t::{self, C},
-    },
-};
+use crate::{error::Error, shared::util::itime::IWeekday, util::b};
 
 /// A representation for the day of the week.
 ///
@@ -126,8 +119,23 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn from_monday_zero_offset(offset: i8) -> Result<Weekday, Error> {
-        let offset = t::WeekdayZero::try_new("weekday", offset)?;
-        Ok(Weekday::from_monday_zero_offset_ranged(offset))
+        Ok(Weekday::from_monday_zero_offset_unchecked(
+            b::WeekdayMondayZero::check(offset)?,
+        ))
+    }
+
+    #[inline]
+    fn from_monday_zero_offset_unchecked(offset: impl Into<i64>) -> Weekday {
+        match offset.into() {
+            0 => Weekday::Monday,
+            1 => Weekday::Tuesday,
+            2 => Weekday::Wednesday,
+            3 => Weekday::Thursday,
+            4 => Weekday::Friday,
+            5 => Weekday::Saturday,
+            6 => Weekday::Sunday,
+            _ => unreachable!(),
+        }
     }
 
     /// Convert an offset to a structured `Weekday`.
@@ -155,8 +163,8 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn from_monday_one_offset(offset: i8) -> Result<Weekday, Error> {
-        let offset = t::WeekdayOne::try_new("weekday", offset)?;
-        Ok(Weekday::from_monday_one_offset_ranged(offset))
+        let offset = b::WeekdayMondayOne::check(offset)?;
+        Weekday::from_monday_zero_offset(offset - 1)
     }
 
     /// Convert an offset to a structured `Weekday`.
@@ -186,8 +194,8 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn from_sunday_zero_offset(offset: i8) -> Result<Weekday, Error> {
-        let offset = t::WeekdayZero::try_new("weekday", offset)?;
-        Ok(Weekday::from_sunday_zero_offset_ranged(offset))
+        let offset = b::WeekdaySundayZero::check(offset)?;
+        Weekday::from_monday_zero_offset((offset - 1).rem_euclid(7))
     }
 
     /// Convert an offset to a structured `Weekday`.
@@ -215,8 +223,8 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn from_sunday_one_offset(offset: i8) -> Result<Weekday, Error> {
-        let offset = t::WeekdayOne::try_new("weekday", offset)?;
-        Ok(Weekday::from_sunday_one_offset_ranged(offset))
+        let offset = b::WeekdaySundayOne::check(offset)?;
+        Weekday::from_monday_zero_offset((offset - 2).rem_euclid(7))
     }
 
     /// Returns this weekday as an offset.
@@ -235,7 +243,7 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn to_monday_zero_offset(self) -> i8 {
-        self.to_monday_zero_offset_ranged().get()
+        self.to_monday_one_offset() - 1
     }
 
     /// Returns this weekday as an offset.
@@ -254,7 +262,7 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn to_monday_one_offset(self) -> i8 {
-        self.to_monday_one_offset_ranged().get()
+        self as i8
     }
 
     /// Returns this weekday as an offset.
@@ -273,7 +281,12 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn to_sunday_zero_offset(self) -> i8 {
-        self.to_sunday_zero_offset_ranged().get()
+        let offset = self.to_monday_one_offset();
+        if offset == 7 {
+            0
+        } else {
+            offset
+        }
     }
 
     /// Returns this weekday as an offset.
@@ -292,7 +305,7 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn to_sunday_one_offset(self) -> i8 {
-        self.to_sunday_one_offset_ranged().get()
+        self.to_sunday_zero_offset() + 1
     }
 
     /// Returns the next weekday, wrapping around at the end of week to the
@@ -353,7 +366,8 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn since(self, other: Weekday) -> i8 {
-        self.since_ranged(other).get()
+        (self.to_monday_zero_offset() - other.to_monday_zero_offset())
+            .rem_euclid(7)
     }
 
     /// Returns the number of days until `other` from this weekday.
@@ -374,7 +388,7 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn until(self, other: Weekday) -> i8 {
-        self.until_ranged(other).get()
+        other.since(self)
     }
 
     /// Add the given number of days to this weekday, using wrapping arithmetic,
@@ -412,11 +426,11 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn wrapping_add<D: Into<i64>>(self, days: D) -> Weekday {
-        let start = t::NoUnits::rfrom(self.to_monday_zero_offset_ranged());
-        // OK because all i64 values fit in a NoUnits.
-        let rhs = t::NoUnits::new(days.into()).unwrap();
-        let end = start.wrapping_add(rhs).rem_floor(C(7));
-        Weekday::from_monday_zero_offset_ranged(end)
+        let start = i64::from(self.to_monday_zero_offset());
+        let rhs = days.into();
+        let end = start.wrapping_add(rhs).rem_euclid(7);
+        // Always valid because of the mod 7 above.
+        Weekday::from_monday_zero_offset_unchecked(end)
     }
 
     /// Subtract the given number of days from this weekday, using wrapping
@@ -526,46 +540,6 @@ impl Weekday {
 
 impl Weekday {
     #[inline]
-    pub(crate) fn from_monday_zero_offset_ranged(
-        offset: impl RInto<t::WeekdayZero>,
-    ) -> Weekday {
-        match offset.rinto().get() {
-            0 => Weekday::Monday,
-            1 => Weekday::Tuesday,
-            2 => Weekday::Wednesday,
-            3 => Weekday::Thursday,
-            4 => Weekday::Friday,
-            5 => Weekday::Saturday,
-            6 => Weekday::Sunday,
-            _ => unreachable!(),
-        }
-    }
-
-    #[inline]
-    pub(crate) fn from_monday_one_offset_ranged(
-        offset: impl RInto<t::WeekdayOne>,
-    ) -> Weekday {
-        let offset_zero = offset.rinto() - C(1);
-        Weekday::from_monday_zero_offset_ranged(offset_zero)
-    }
-
-    #[inline]
-    pub(crate) fn from_sunday_zero_offset_ranged(
-        offset: impl RInto<t::WeekdayZero>,
-    ) -> Weekday {
-        let offset_sunday = (offset.rinto() - C(1)).rem_floor(C(7));
-        Weekday::from_monday_zero_offset_ranged(offset_sunday)
-    }
-
-    #[inline]
-    pub(crate) fn from_sunday_one_offset_ranged(
-        offset: impl RInto<t::WeekdayOne>,
-    ) -> Weekday {
-        let offset_zero = offset.rinto() - C(1);
-        Weekday::from_sunday_zero_offset_ranged(offset_zero)
-    }
-
-    #[inline]
     pub(crate) fn from_iweekday(iweekday: IWeekday) -> Weekday {
         match iweekday.to_monday_one_offset() {
             1 => Weekday::Monday,
@@ -580,40 +554,8 @@ impl Weekday {
     }
 
     #[inline]
-    pub(crate) fn to_monday_zero_offset_ranged(self) -> t::WeekdayZero {
-        (self.to_monday_one_offset_ranged() - C(1)).rinto()
-    }
-
-    #[inline]
-    pub(crate) fn to_monday_one_offset_ranged(self) -> t::WeekdayOne {
-        t::WeekdayOne::new_unchecked(self as i8)
-    }
-
-    #[inline]
-    pub(crate) fn to_sunday_zero_offset_ranged(self) -> t::WeekdayZero {
-        (self.to_monday_zero_offset_ranged() + C(1)).rem_floor(C(7))
-    }
-
-    #[inline]
-    pub(crate) fn to_sunday_one_offset_ranged(self) -> t::WeekdayOne {
-        (self.to_sunday_zero_offset_ranged() + C(1)).rinto()
-    }
-
-    #[inline]
     pub(crate) fn to_iweekday(self) -> IWeekday {
         IWeekday::from_monday_one_offset(self.to_monday_one_offset())
-    }
-
-    #[inline]
-    pub(crate) fn since_ranged(self, other: Weekday) -> t::WeekdayZero {
-        (self.to_monday_zero_offset_ranged()
-            - other.to_monday_zero_offset_ranged())
-        .rem_floor(C(7))
-    }
-
-    #[inline]
-    pub(crate) fn until_ranged(self, other: Weekday) -> t::WeekdayZero {
-        other.since_ranged(self)
     }
 }
 
@@ -791,15 +733,15 @@ impl core::ops::SubAssign<i64> for Weekday {
 #[cfg(test)]
 impl quickcheck::Arbitrary for Weekday {
     fn arbitrary(g: &mut quickcheck::Gen) -> Weekday {
-        let offset = t::WeekdayZero::arbitrary(g);
-        Weekday::from_monday_zero_offset_ranged(offset)
+        let offset = b::WeekdayMondayZero::arbitrary(g);
+        Weekday::from_monday_zero_offset(offset).unwrap()
     }
 
     fn shrink(&self) -> alloc::boxed::Box<dyn Iterator<Item = Weekday>> {
         alloc::boxed::Box::new(
-            self.to_monday_zero_offset_ranged()
+            self.to_monday_zero_offset()
                 .shrink()
-                .map(Weekday::from_monday_zero_offset_ranged),
+                .filter_map(|n| Weekday::from_monday_zero_offset(n).ok()),
         )
     }
 }
