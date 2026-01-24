@@ -2369,7 +2369,8 @@ impl DateTime {
     #[inline]
     fn to_nanosecond(self) -> t::NoUnits128 {
         let day_nano = self.date().to_unix_epoch_day();
-        let time_nano = self.time().to_nanosecond();
+        let time_nano =
+            t::CivilDayNanosecond::borked(self.time().to_nanosecond());
         (t::NoUnits128::rfrom(day_nano) * t::NANOS_PER_CIVIL_DAY) + time_nano
     }
 
@@ -3245,7 +3246,8 @@ impl DateTimeDifference {
         let (d1, mut d2) = (dt1.date(), dt2.date());
         let (t1, t2) = (dt1.time(), dt2.time());
         let sign = t::sign(d2, d1);
-        let mut time_diff = t1.until_nanoseconds(t2);
+        let mut time_diff =
+            t::SpanNanoseconds::borked(t1.until_nanoseconds(t2));
         if time_diff.signum() == -sign {
             // These unwraps will always succeed, but the argument for why is
             // subtle. The key here is that the only way, e.g., d2.tomorrow()
@@ -3543,7 +3545,8 @@ impl DateTimeRound {
             _ => {}
         }
 
-        let time_nanos = dt.time().to_nanosecond();
+        let time_nanos =
+            t::CivilDayNanosecond::borked(dt.time().to_nanosecond());
         let sign = t::NoUnits128::rfrom(dt.date().year_ranged().signum());
         let time_rounded = self.mode.round_by_unit_in_nanoseconds_ranged(
             time_nanos,
@@ -3551,8 +3554,11 @@ impl DateTimeRound {
             increment,
         );
         let days = sign * time_rounded.div_ceil(t::NANOS_PER_CIVIL_DAY);
-        let time_nanos = time_rounded.rem_ceil(t::NANOS_PER_CIVIL_DAY);
-        let time = Time::from_nanosecond(time_nanos.rinto());
+        // OK because `NANOS_PER_CIVIL_DAY` is guaranteed to fit into an `i64`.
+        let time_nanos =
+            i64::try_from(time_rounded.rem_ceil(t::NANOS_PER_CIVIL_DAY).get())
+                .unwrap();
+        let time = Time::from_nanosecond_unchecked(time_nanos);
 
         let date_days = t::SpanDays::rfrom(dt.date().day_ranged());
         // OK because days is limited by the fact that the length of a day
@@ -4513,7 +4519,7 @@ mod tests {
     fn datetime_size() {
         #[cfg(debug_assertions)]
         {
-            assert_eq!(36, core::mem::size_of::<DateTime>());
+            assert_eq!(20, core::mem::size_of::<DateTime>());
         }
         #[cfg(not(debug_assertions))]
         {

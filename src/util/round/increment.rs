@@ -10,7 +10,7 @@ for time units must divide evenly into 1 unit of the next highest unit.
 
 use crate::{
     error::{util::RoundingIncrementError as E, Error, ErrorContext},
-    util::{b, t},
+    util::{b, rangeint::RFrom, t},
     Unit,
 };
 
@@ -21,10 +21,10 @@ pub(crate) fn for_span_ranged(
     unit: Unit,
     increment: i64,
 ) -> Result<t::NoUnits128, Error> {
-    for_span(unit, increment).map(t::NoUnits128::borked)
+    for_span(unit, increment).map(t::NoUnits::borked).map(t::NoUnits128::rfrom)
 }
 
-pub(crate) fn for_span(unit: Unit, increment: i64) -> Result<i128, Error> {
+pub(crate) fn for_span(unit: Unit, increment: i64) -> Result<i64, Error> {
     // Indexed by `Unit`.
     static LIMIT: &[i64] = &[
         b::NANOS_PER_MICRO,
@@ -41,7 +41,7 @@ pub(crate) fn for_span(unit: Unit, increment: i64) -> Result<i128, Error> {
     // always spill over into days so that hours/minutes/... will never exceed
     // 24/60/...
     if unit >= Unit::Day {
-        Ok(i128::from(increment))
+        Ok(increment)
     } else {
         get_with_limit(unit, increment, LIMIT).context(E::ForSpan)
     }
@@ -55,10 +55,12 @@ pub(crate) fn for_datetime_ranged(
     unit: Unit,
     increment: i64,
 ) -> Result<t::NoUnits128, Error> {
-    for_datetime(unit, increment).map(t::NoUnits128::borked)
+    for_datetime(unit, increment)
+        .map(t::NoUnits::borked)
+        .map(t::NoUnits128::rfrom)
 }
 
-pub(crate) fn for_datetime(unit: Unit, increment: i64) -> Result<i128, Error> {
+pub(crate) fn for_datetime(unit: Unit, increment: i64) -> Result<i64, Error> {
     // Indexed by `Unit`.
     static LIMIT: &[i64] = &[
         b::NANOS_PER_MICRO,
@@ -76,14 +78,7 @@ pub(crate) fn for_datetime(unit: Unit, increment: i64) -> Result<i128, Error> {
 ///
 /// This validation ensures the rounding increment is valid for rounding
 /// civil times.
-pub(crate) fn for_time_ranged(
-    unit: Unit,
-    increment: i64,
-) -> Result<t::NoUnits128, Error> {
-    for_time(unit, increment).map(t::NoUnits128::borked)
-}
-
-pub(crate) fn for_time(unit: Unit, increment: i64) -> Result<i128, Error> {
+pub(crate) fn for_time(unit: Unit, increment: i64) -> Result<i64, Error> {
     // Indexed by `Unit`.
     static LIMIT: &[i64] = &[
         b::NANOS_PER_MICRO,
@@ -117,7 +112,7 @@ fn get_with_limit(
     unit: Unit,
     increment: i64,
     limit: &[i64],
-) -> Result<i128, E> {
+) -> Result<i64, E> {
     if increment <= 0 {
         return Err(E::GreaterThanZero { unit });
     }
@@ -127,7 +122,7 @@ fn get_with_limit(
     if increment >= must_divide || must_divide % increment != 0 {
         Err(E::InvalidDivide { unit, must_divide })
     } else {
-        Ok(i128::from(increment))
+        Ok(increment)
     }
 }
 
