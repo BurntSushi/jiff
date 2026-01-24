@@ -166,6 +166,20 @@ macro_rules! define_bounds {
 
 define_bounds! {
     (Century, i8, "century", 0, 99),
+    (
+        CivilDayNanosecond,
+        i64,
+        "nanoseconds (in one civil day)",
+        0,
+        NANOS_PER_CIVIL_DAY - 1,
+    ),
+    (
+        CivilDaySecond,
+        i32,
+        "seconds (in one civil day)",
+        0,
+        SECS_PER_CIVIL_DAY_32 - 1,
+    ),
     (Day, i8, "day", 1, 31),
     (DayOfYear, i16, "day-of-year", 1, 366),
     (Hour, i8, "hour", 0, 23),

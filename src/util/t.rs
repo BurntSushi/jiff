@@ -108,31 +108,6 @@ pub(crate) type Month = ri8<1, 12>;
 /// is being used.
 pub(crate) type Day = ri8<1, 31>;
 
-/// The range of possible hour values.
-pub(crate) type Hour = ri8<0, 23>;
-
-/// The range of possible minute values.
-pub(crate) type Minute = ri8<0, 59>;
-
-/// The range of possible second values not accounting for leap seconds.
-pub(crate) type Second = ri8<0, 59>;
-
-/// The range of possible millisecond values.
-pub(crate) type Millisecond = ri16<0, 999>;
-
-/// The range of possible microsecond values.
-pub(crate) type Microsecond = ri16<0, 999>;
-
-/// The range of possible nanosecond values.
-pub(crate) type Nanosecond = ri16<0, 999>;
-
-/// The range of possible nanosecond values.
-pub(crate) type SubsecNanosecond = ri32<0, { NANOS_PER_SECOND.bound() - 1 }>;
-
-/// A range representing each possible second in a single civil day.
-pub(crate) type CivilDaySecond =
-    ri32<0, { SECONDS_PER_CIVIL_DAY.bound() - 1 }>;
-
 /// A range representing each possible nanosecond in a single civil day.
 pub(crate) type CivilDayNanosecond =
     ri64<0, { NANOS_PER_CIVIL_DAY.bound() - 1 }>;
@@ -335,9 +310,6 @@ pub(crate) const SECONDS_PER_HOUR: Constant =
 
 /// The number of seconds in a single minute.
 pub(crate) const SECONDS_PER_MINUTE: Constant = Constant(60);
-
-/// The number of microseconds in a single millisecond.
-pub(crate) const MICROS_PER_MILLI: Constant = Constant(1_000);
 
 /// The number of nanoseconds in a civil week.
 ///

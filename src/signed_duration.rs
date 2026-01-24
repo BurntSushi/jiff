@@ -996,6 +996,20 @@ impl SignedDuration {
         nanos + (self.nanos as i128)
     }
 
+    /// Like `SignedDuration::as_nanos()`, but only returns a result when it
+    /// fits into a 64-bit integer.
+    #[inline]
+    pub(crate) fn as_nanos64(&self) -> Option<i64> {
+        const MIN: SignedDuration = SignedDuration::from_nanos(i64::MIN);
+        const MAX: SignedDuration = SignedDuration::from_nanos(i64::MAX);
+        if MIN <= *self && *self <= MAX {
+            let nanos = self.secs * (NANOS_PER_SEC as i64);
+            Some(nanos + (self.nanos as i64))
+        } else {
+            None
+        }
+    }
+
     // NOTE: We don't provide `abs_diff` here because we can't represent the
     // difference between all possible durations. For example,
     // `abs_diff(SignedDuration::MAX, SignedDuration::MIN)`. It therefore seems
@@ -2069,8 +2083,7 @@ impl SignedDuration {
     }
 
     pub(crate) fn time_until(time1: Time, time2: Time) -> SignedDuration {
-        let nanos = time1.until_nanoseconds(time2);
-        SignedDuration::from_nanos(nanos.get())
+        SignedDuration::from_nanos(time1.until_nanoseconds(time2))
     }
 
     pub(crate) fn offset_until(

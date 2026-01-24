@@ -4364,7 +4364,11 @@ impl<'a> ZonedDifference<'a> {
         let (dt1, mut dt2) = (zdt1.datetime(), zdt2.datetime());
 
         let mut day_correct: t::SpanDays = C(0).rinto();
-        if -sign == dt1.time().until_nanoseconds(dt2.time()).signum() {
+        if -sign
+            == t::Sign::borked(
+                dt1.time().until_nanoseconds(dt2.time()).signum() as i8,
+            )
+        {
             day_correct += C(1);
         }
 
@@ -5879,11 +5883,11 @@ mod tests {
         {
             #[cfg(feature = "alloc")]
             {
-                assert_eq!(64, core::mem::size_of::<Zoned>());
+                assert_eq!(48, core::mem::size_of::<Zoned>());
             }
             #[cfg(all(target_pointer_width = "64", not(feature = "alloc")))]
             {
-                assert_eq!(64, core::mem::size_of::<Zoned>());
+                assert_eq!(48, core::mem::size_of::<Zoned>());
             }
         }
         #[cfg(not(debug_assertions))]
