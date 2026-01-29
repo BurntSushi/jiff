@@ -2398,7 +2398,7 @@ impl Span {
         let max_unit = self.largest_unit();
         let relative: SpanRelativeTo<'a> = relative.into();
         let Some(result) = relative.to_relative(max_unit).transpose() else {
-            return Ok(self.to_duration_invariant());
+            return Ok(self.to_invariant_duration());
         };
         let relspan = result
             .and_then(|r| r.into_relative_span(Unit::Second, *self))
@@ -2410,7 +2410,7 @@ impl Span {
                 }
             })?;
         debug_assert!(relspan.span.largest_unit() <= Unit::Second);
-        Ok(relspan.span.to_duration_invariant())
+        Ok(relspan.span.to_invariant_duration())
     }
 
     /// Converts an entirely invariant span to a `SignedDuration`.
@@ -2422,7 +2422,7 @@ impl Span {
     /// then callers have either provided a civil relative date or the special
     /// `SpanRelativeTo::days_are_24_hours()` marker.
     #[inline]
-    pub(crate) fn to_duration_invariant(&self) -> SignedDuration {
+    pub(crate) fn to_invariant_duration(&self) -> SignedDuration {
         // This guarantees, at compile time, that a maximal invariant Span
         // (that is, all units are weeks or lower and all units are set to
         // their maximum values) will still balance out to a number of seconds
@@ -2458,6 +2458,42 @@ impl Span {
         SignedDuration::from_civil_weeks32(self.get_weeks())
             + SignedDuration::from_civil_days32(self.get_days())
             + SignedDuration::from_hours32(self.get_hours())
+            + SignedDuration::from_mins(self.get_minutes())
+            + SignedDuration::from_secs(self.get_seconds())
+            + SignedDuration::from_millis(self.get_milliseconds())
+            + SignedDuration::from_micros(self.get_microseconds())
+            + SignedDuration::from_nanos(self.get_nanoseconds())
+    }
+
+    /// Like `Span::to_invariant_duration`, except only considers units of
+    /// hours and lower. All bigger units are ignored.
+    #[inline]
+    pub(crate) fn to_invariant_duration_time_only(&self) -> SignedDuration {
+        // This guarantees, at compile time, that a maximal invariant Span
+        // (that is, all units are weeks or lower and all units are set to
+        // their maximum values) will still balance out to a number of seconds
+        // that fits into a `i64`. This in turn implies that a `SignedDuration`
+        // can represent all possible invariant positive spans.
+        const _FITS_IN_U64: () = {
+            debug_assert!(
+                i64::MAX as i128
+                    > ((b::SpanHours::MAX as i128 * b::SECS_PER_HOUR as i128)
+                        + (b::SpanMinutes::MAX as i128
+                            * b::SECS_PER_MIN as i128)
+                        + b::SpanSeconds::MAX as i128
+                        + (b::SpanMilliseconds::MAX as i128
+                            / b::MILLIS_PER_SEC as i128)
+                        + (b::SpanMicroseconds::MAX as i128
+                            / b::MICROS_PER_SEC as i128)
+                        + (b::SpanNanoseconds::MAX as i128
+                            / b::NANOS_PER_SEC as i128)),
+            );
+            ()
+        };
+
+        // OK because we have a compile time assert above that ensures our
+        // nanoseconds are in the valid range of a `SignedDuration`.
+        SignedDuration::from_hours32(self.get_hours())
             + SignedDuration::from_mins(self.get_minutes())
             + SignedDuration::from_secs(self.get_seconds())
             + SignedDuration::from_millis(self.get_milliseconds())
@@ -3454,7 +3490,7 @@ impl TryFrom<Span> for SignedDuration {
     fn try_from(sp: Span) -> Result<SignedDuration, Error> {
         requires_relative_date_err(sp.largest_unit())
             .context(E::ConvertSpanToSignedDuration)?;
-        Ok(sp.to_duration_invariant())
+        Ok(sp.to_invariant_duration())
     }
 }
 

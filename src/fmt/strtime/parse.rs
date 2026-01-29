@@ -1935,11 +1935,11 @@ mod tests {
 
         insta::assert_snapshot!(
             p("%m/%d/%y", "6/31/24"),
-            @"invalid date: parameter 'day' with value 31 is not in the required range of 1..=30",
+            @"invalid date: parameter 'day' for `2024-06` is invalid, must be in range `1..=30`",
         );
         insta::assert_snapshot!(
             p("%m/%d/%y", "2/29/23"),
-            @"invalid date: parameter 'day' with value 29 is not in the required range of 1..=28",
+            @"invalid date: parameter 'day' for `2023-02` is invalid, must be in range `1..=28`",
         );
         insta::assert_snapshot!(
             p("%a %m/%d/%y", "Mon 7/14/24"),

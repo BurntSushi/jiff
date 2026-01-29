@@ -1607,11 +1607,11 @@ mod tests {
         );
         insta::assert_snapshot!(
             p("Wed, 29 Feb 2023 05:34:45 -0500"),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: invalid date: parameter 'day' with value 29 is not in the required range of 1..=28",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: invalid date: parameter 'day' for `2023-02` is invalid, must be in range `1..=28`",
         );
         insta::assert_snapshot!(
             p("Mon, 31 Jun 2024 05:34:45 -0500"),
-            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: invalid date: parameter 'day' with value 31 is not in the required range of 1..=30",
+            @"failed to parse RFC 2822 datetime into Jiff zoned datetime: invalid date: parameter 'day' for `2024-06` is invalid, must be in range `1..=30`",
         );
         insta::assert_snapshot!(
             p("Tue, 32 Jun 2024 05:34:45 -0500"),

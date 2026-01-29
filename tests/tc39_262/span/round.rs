@@ -218,14 +218,14 @@ fn duration_out_of_range_added_to_relative() -> Result {
     let relative = SpanRound::new().relative(d);
     insta::assert_snapshot!(
         sp.round(relative.smallest(Unit::Year)).unwrap_err(),
-        @"failed to add overflowing span: parameter 'days' with value 7083333 is not in the required range of -4371587..=2932896",
+        @"failed to add overflowing span: parameter 'Unix epoch days' is not in the required range of -4371587..=2932896",
     );
 
     let sp = -2_000_000.days().hours(170_000_000);
     let relative = SpanRound::new().relative(d);
     insta::assert_snapshot!(
         sp.round(relative.smallest(Unit::Year)).unwrap_err(),
-        @"failed to add overflowing span: parameter 'days' with value -7083334 is not in the required range of -4371587..=2932896",
+        @"failed to add overflowing span: parameter 'Unix epoch days' is not in the required range of -4371587..=2932896",
     );
 
     Ok(())

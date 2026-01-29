@@ -1107,7 +1107,7 @@ impl Time {
             return Err(err);
         }
 
-        let span = span.to_duration_invariant().as_nanos();
+        let span = span.to_invariant_duration().as_nanos();
         let time = i128::from(self.to_nanosecond());
         let sum = span + time;
         let days = sum.div_euclid(i128::from(b::NANOS_PER_CIVIL_DAY)) as i64;

@@ -31,20 +31,6 @@ pub(crate) type NoUnits96 = ri128<{ -(1 << 95) }, { (1 << 95) - 1 }>;
 /// values to what can be represented by an `i128`.
 pub(crate) type NoUnits128 = ri128<{ i128::MIN }, { i128::MAX }>;
 
-/// A type alias for a ranged 16-bit integer with no units.
-///
-/// This is like `NoUnits`, but useful in contexts where one wants to limit
-/// values to what can be represented by an `i16`.
-pub(crate) type NoUnits16 = ri16<{ i16::MIN as i128 }, { i16::MAX as i128 }>;
-
-/*
-/// A type alias for a ranged 8-bit integer with no units.
-///
-/// This is like `NoUnits`, but useful in contexts where one wants to limit
-/// values to what can be represented by an `i8`.
-pub(crate) type NoUnits8 = ri8<{ i8::MIN as i128 }, { i8::MAX as i128 }>;
-*/
-
 /// The range of years supported by jiff.
 ///
 /// This is ultimately where some of the other ranges (like `UnixSeconds`)
@@ -53,12 +39,6 @@ pub(crate) type NoUnits8 = ri8<{ i8::MIN as i128 }, { i8::MAX as i128 }>;
 /// to expand this range, you'd need to change it here and then compute the
 /// corresponding min/max values for `UnixSeconds`.
 pub(crate) type Year = ri16<-9999, 9999>;
-
-/// The range of CE years supported by jiff.
-pub(crate) type YearCE = ri16<1, { Year::MAX }>;
-
-/// The range of BCE years supported by jiff.
-pub(crate) type YearBCE = ri16<1, { Year::MAX + 1 }>;
 
 /// The range of Unix seconds supported by Jiff.
 ///
@@ -97,9 +77,6 @@ pub(crate) type UnixSeconds = ri64<
     { -377705116800 - SpanZoneOffset::MIN },
     { 253402300799 - SpanZoneOffset::MAX },
 >;
-
-/// The range of possible month values.
-pub(crate) type Month = ri8<1, 12>;
 
 /// The range of possible day values.
 ///

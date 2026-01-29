@@ -698,7 +698,7 @@ impl core::fmt::Display for RangeError {
             ),
             DateInvalidDays { year, month } => write!(
                 f,
-                "number of days for `{year:04}-{month:02}` is invalid, \
+                "parameter 'day' for `{year:04}-{month:02}` is invalid, \
                  must be in range `1..={max_day}`",
                 max_day = days_in_month(year, month),
             ),

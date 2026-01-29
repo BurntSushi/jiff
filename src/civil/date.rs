@@ -10,11 +10,7 @@ use crate::{
     },
     shared::util::itime::{self, IDate, IEpochDay},
     tz::TimeZone,
-    util::{
-        b,
-        rangeint::{self, Composite, RFrom, RInto, TryRFrom},
-        t::{self, Day, Month, Sign, UnixEpochDay, Year, C},
-    },
+    util::{b, constant},
     RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
 };
 
@@ -170,11 +166,11 @@ use crate::{
 /// please participate in the [issue tracking its support][add-date-rounding].
 ///
 /// [add-date-rounding]: https://github.com/BurntSushi/jiff/issues/1
-#[derive(Clone, Copy, Hash)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct Date {
-    year: Year,
-    month: Month,
-    day: Day,
+    year: i16,
+    month: i8,
+    day: i8,
 }
 
 impl Date {
@@ -248,10 +244,54 @@ impl Date {
     /// ```
     #[inline]
     pub fn new(year: i16, month: i8, day: i8) -> Result<Date, Error> {
-        let year = Year::try_new("year", year)?;
-        let month = Month::try_new("month", month)?;
-        let day = Day::try_new("day", day)?;
-        Date::new_ranged(year, month, day)
+        let year = b::Year::check(year)?;
+        let month = b::Month::check(month)?;
+        if day > 28 && day > itime::days_in_month(year, month) {
+            return Err(Error::itime_range(
+                crate::shared::util::itime::RangeError::DateInvalidDays {
+                    year,
+                    month,
+                },
+            ));
+        }
+        Ok(Date::new_unchecked(year, month, day))
+    }
+
+    /// Like `Date::new`, but constrains the day value to the last day of
+    /// `month`.
+    ///
+    /// This still returns an error when `day < 1` or when `year` or `month`
+    /// are invalid.
+    #[inline]
+    fn new_constrain(year: i16, month: i8, day: i8) -> Result<Date, Error> {
+        let year = b::Year::check(year)?;
+        let month = b::Month::check(month)?;
+        let day = if day < 1 {
+            return Err(b::Day::error().into());
+        } else if day > 28 {
+            day.min(itime::days_in_month(year, month))
+        } else {
+            day
+        };
+        Ok(Date::new_unchecked(year, month, day))
+    }
+
+    /// Like `Date::new`, but does not checking on the values given when
+    /// `debug_assertions` aren't enabled.
+    ///
+    /// This is useful in contexts where the values are known to be valid.
+    ///
+    /// NOTE: It's important that this is not made public without careful
+    /// consideration. In particular, if it's public, it probably shouldn't
+    /// be safe to call so that callers can rely on the ranges of methods
+    /// like `Date::{year,month,day}`.
+    #[inline]
+    const fn new_unchecked(year: i16, month: i8, day: i8) -> Date {
+        debug_assert!(b::Year::checkc(year as i64).is_ok());
+        debug_assert!(b::Month::checkc(month as i64).is_ok());
+        debug_assert!(b::Day::checkc(day as i64).is_ok());
+        debug_assert!(day <= itime::days_in_month(year, month));
+        Date { year, month, day }
     }
 
     /// Creates a new `Date` value in a `const` context.
@@ -280,19 +320,16 @@ impl Date {
     /// ```
     #[inline]
     pub const fn constant(year: i16, month: i8, day: i8) -> Date {
-        if !Year::contains(year) {
-            panic!("invalid year");
-        }
-        if !Month::contains(month) {
-            panic!("invalid month");
-        }
+        let year =
+            constant::unwrapr!(b::Year::checkc(year as i64), "invalid year");
+        let month = constant::unwrapr!(
+            b::Month::checkc(month as i64),
+            "invalid month"
+        );
         if day > itime::days_in_month(year, month) {
-            panic!("invalid day");
+            panic!("invalid month/day combination");
         }
-        let year = Year::new_unchecked(year);
-        let month = Month::new_unchecked(month);
-        let day = Day::new_unchecked(day);
-        Date { year, month, day }
+        Date::new_unchecked(year, month, day)
     }
 
     /// Construct a Gregorian date from an [ISO 8601 week date].
@@ -340,39 +377,11 @@ impl Date {
     /// ```
     #[inline]
     pub fn from_iso_week_date(weekdate: ISOWeekDate) -> Date {
-        let mut days =
-            UnixEpochDay::borked(iso_week_start_from_year(weekdate.year()));
-        let year = t::NoUnits16::borked(weekdate.year());
-        let week = t::NoUnits16::borked(i16::from(weekdate.week()));
-        let weekday = t::NoUnits16::borked(i16::from(
-            weekdate.weekday().to_monday_zero_offset(),
-        ));
-        let [week, weekday] = t::NoUnits16::vary_many(
-            [year, week, weekday],
-            |[year, week, weekday]| {
-                // This is weird, but because the max ISO week date is actually
-                // 9999-W52-4, we need to explicitly cap our maximum computed
-                // values here. This is only required because the maximums of
-                // each component of an ISO week date combine to represent an
-                // out-of-bounds Gregorian date.
-                //
-                // Note that this is purely done at the service of ranged
-                // integers. Otherwise, our ranged integers will compute a
-                // max value bigger than what can really occur, and then panic.
-                // So we use these caps to say, "no range integer, it truly
-                // won't exceed 9999-W52-4."
-                if year == C(9999) {
-                    if week >= C(52) {
-                        [week.min(C(52)), weekday.min(C(4))]
-                    } else {
-                        [week, weekday]
-                    }
-                } else {
-                    [week, weekday]
-                }
-            },
-        );
-        days += (UnixEpochDay::rfrom(week) - C(1)) * C(7);
+        let mut days = iso_week_start_from_year(weekdate.year());
+        let week = i32::from(weekdate.week());
+        let weekday = i32::from(weekdate.weekday().to_monday_zero_offset());
+
+        days += (week - 1) * 7;
         days += weekday;
         Date::from_unix_epoch_day(days)
     }
@@ -432,7 +441,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn year(self) -> i16 {
-        self.year_ranged().get()
+        self.year
     }
 
     /// Returns the year and its era.
@@ -473,16 +482,15 @@ impl Date {
     /// ```
     #[inline]
     pub fn era_year(self) -> (i16, Era) {
-        let year = self.year_ranged();
-        if year >= C(1) {
-            (year.get(), Era::CE)
+        let year = self.year();
+        if year >= 1 {
+            (year, Era::CE)
         } else {
             // We specifically ensure our min/max bounds on `Year` always leave
             // room in its representation to add or subtract 1, so this will
             // never fail.
-            let year = -t::YearBCE::rfrom(year.min(C(0)));
-            let era_year = year + C(1);
-            (era_year.get(), Era::BCE)
+            let era_year = -year + 1;
+            (era_year, Era::BCE)
         }
     }
 
@@ -500,7 +508,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn month(self) -> i8 {
-        self.month_ranged().get()
+        self.month
     }
 
     /// Returns the day for this date.
@@ -517,7 +525,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn day(self) -> i8 {
-        self.day_ranged().get()
+        self.day
     }
 
     /// Returns the weekday corresponding to this date.
@@ -625,11 +633,8 @@ impl Date {
     /// ```
     #[inline]
     pub fn first_of_month(self) -> Date {
-        Date::new_ranged_unchecked(
-            self.year_ranged(),
-            self.month_ranged(),
-            C(1).rinto(),
-        )
+        // OK because the first day of the month is always valid.
+        Date::new_unchecked(self.year(), self.month(), 1)
     }
 
     /// Returns the last date of the month that this date resides in.
@@ -644,12 +649,8 @@ impl Date {
     /// ```
     #[inline]
     pub fn last_of_month(self) -> Date {
-        let max_day = self.days_in_month_ranged();
-        Date::new_ranged_unchecked(
-            self.year_ranged(),
-            self.month_ranged(),
-            max_day,
-        )
+        // OK because the last day of the month is always valid.
+        Date::new_unchecked(self.year(), self.month(), self.days_in_month())
     }
 
     /// Returns the total number of days in the the month in which this date
@@ -674,7 +675,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn days_in_month(self) -> i8 {
-        self.days_in_month_ranged().get()
+        itime::days_in_month(self.year(), self.month())
     }
 
     /// Returns the first date of the year that this date resides in.
@@ -689,11 +690,8 @@ impl Date {
     /// ```
     #[inline]
     pub fn first_of_year(self) -> Date {
-        Date::new_ranged_unchecked(
-            self.year_ranged(),
-            C(1).rinto(),
-            C(1).rinto(),
-        )
+        // OK because Jan 1 for all years is valid.
+        Date::new_unchecked(self.year(), 1, 1)
     }
 
     /// Returns the last date of the year that this date resides in.
@@ -708,11 +706,8 @@ impl Date {
     /// ```
     #[inline]
     pub fn last_of_year(self) -> Date {
-        Date::new_ranged_unchecked(
-            self.year_ranged(),
-            C(12).rinto(),
-            C(31).rinto(),
-        )
+        // OK because Dec 31 for all years is valid.
+        Date::new_unchecked(self.year(), 12, 31)
     }
 
     /// Returns the total number of days in the the year in which this date
@@ -753,7 +748,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn in_leap_year(self) -> bool {
-        itime::is_leap_year(self.year_ranged().get())
+        itime::is_leap_year(self.year())
     }
 
     /// Returns the date immediately following this one.
@@ -779,20 +774,19 @@ impl Date {
     pub fn tomorrow(self) -> Result<Date, Error> {
         if self.day() >= 28 && self.day() == self.days_in_month() {
             if self.month() == 12 {
-                let year = self.year_ranged().try_checked_add("year", C(1))?;
-                let month = Month::new_unchecked(1);
-                let day = Day::new_unchecked(1);
-                return Ok(Date::new_ranged_unchecked(year, month, day));
+                let year = b::Year::checked_add(self.year(), 1)?;
+                // OK because Jan 1 is valid for all valid years.
+                return Ok(Date::new_unchecked(year, 1, 1));
             }
-            let year = self.year_ranged();
-            let month = Month::new_unchecked(self.month() + 1);
-            let day = Day::new_unchecked(1);
-            return Ok(Date::new_ranged_unchecked(year, month, day));
+            // OK because the first of every month for a valid year is valid.
+            // Also, `month + 1` is OK because we know `month` must be less
+            // than `12`.
+            return Ok(Date::new_unchecked(self.year(), self.month() + 1, 1));
         }
-        let year = self.year_ranged();
-        let month = self.month_ranged();
-        let day = Day::new_unchecked(self.day() + 1);
-        Ok(Date::new_ranged_unchecked(year, month, day))
+        // OK because we know `self.day() + 1 <= 28` because of the condition
+        // checked above. Moreover, `28` is a valid day for all valid years
+        // and months.
+        Ok(Date::new_unchecked(self.year(), self.month(), self.day() + 1))
     }
 
     /// Returns the date immediately preceding this one.
@@ -818,20 +812,25 @@ impl Date {
     pub fn yesterday(self) -> Result<Date, Error> {
         if self.day() == 1 {
             if self.month() == 1 {
-                let year = self.year_ranged().try_checked_sub("year", C(1))?;
-                let month = Month::new_unchecked(12);
-                let day = Day::new_unchecked(31);
-                return Ok(Date::new_ranged_unchecked(year, month, day));
+                let year = b::Year::checked_sub(self.year(), 1)?;
+                // OK because Dec 31 is valid for all valid years.
+                return Ok(Date::new_unchecked(year, 12, 31));
             }
-            let year = self.year_ranged();
-            let month = Month::new_unchecked(self.month() - 1);
-            let day = days_in_month(year, month);
-            return Ok(Date::new_ranged_unchecked(year, month, day));
+            let month = self.month() - 1;
+            // OK because the last of every month for a valid year is valid.
+            // Also, `month - 1` is OK because we know `month` must be greater
+            // than `1`.
+            return Ok(Date::new_unchecked(
+                self.year(),
+                month,
+                itime::days_in_month(self.year(), month),
+            ));
         }
-        let year = self.year_ranged();
-        let month = self.month_ranged();
-        let day = Day::new_unchecked(self.day() - 1);
-        Ok(Date::new_ranged_unchecked(year, month, day))
+        // OK because we know `self.day() - 1 >= 1` because of the condition
+        // checked above. Moreover, since the year/month don't change (since
+        // `self.day() > 1`), subtracting 1 always leads to a valid day for
+        // this month.
+        Ok(Date::new_unchecked(self.year(), self.month(), self.day() - 1))
     }
 
     /// Returns the "nth" weekday from the beginning or end of the month in
@@ -1063,21 +1062,20 @@ impl Date {
         if nth == 0 {
             Err(b::NthWeekday::error().into())
         } else if nth > 0 {
-            let nth = nth.max(1);
             let weekday_diff = i32::from(weekday.since(self.weekday().next()));
             let diff = (nth - 1) * 7 + weekday_diff;
-            let start = self.tomorrow()?.to_unix_epoch_day().get();
+            let start = self.tomorrow()?.to_unix_epoch_day();
             let end = b::UnixEpochDays::checked_add(start, diff)?;
-            Ok(Date::from_unix_epoch_day(t::UnixEpochDay::borked(end)))
+            Ok(Date::from_unix_epoch_day(end))
         } else {
-            // OK because of the range on `NthWeekday`.
-            let nth = nth.min(-1).abs();
             let weekday_diff =
                 i32::from(self.weekday().previous().since(weekday));
+            // OK because of the range on `NthWeekday`.
+            let nth = nth.abs();
             let diff = (nth - 1) * 7 + weekday_diff;
-            let start = self.yesterday()?.to_unix_epoch_day().get();
+            let start = self.yesterday()?.to_unix_epoch_day();
             let end = b::UnixEpochDays::checked_sub(start, diff)?;
-            Ok(Date::from_unix_epoch_day(t::UnixEpochDay::borked(end)))
+            Ok(Date::from_unix_epoch_day(end))
         }
     }
 
@@ -1135,7 +1133,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn iso_week_date(self) -> ISOWeekDate {
-        let days = self.to_unix_epoch_day().get();
+        let days = self.to_unix_epoch_day();
         let year = self.year();
         let mut week_start = iso_week_start_from_year(year);
         if days < week_start {
@@ -1153,9 +1151,7 @@ impl Date {
 
         let unix_epoch_day =
             week_start + i32::from(Weekday::Thursday.since(Weekday::Monday));
-        let year =
-            Date::from_unix_epoch_day(UnixEpochDay::borked(unix_epoch_day))
-                .year();
+        let year = Date::from_unix_epoch_day(unix_epoch_day).year();
         ISOWeekDate::new(year, week, weekday)
             .expect("all Dates infallibly convert to ISOWeekDates")
     }
@@ -1471,44 +1467,34 @@ impl Date {
             return Ok(self);
         }
         if span.units().contains_only(Unit::Day) {
-            let span_days = span.get_days_ranged();
-            return if span_days == C(-1) {
+            let days = span.get_days();
+            return if days == -1 {
                 self.yesterday()
-            } else if span_days == C(1) {
+            } else if days == 1 {
                 self.tomorrow()
             } else {
                 let epoch_days = self.to_unix_epoch_day();
-                let days = epoch_days.try_checked_add(
-                    "days",
-                    UnixEpochDay::rfrom(span.get_days_ranged()),
-                )?;
+                let days = b::UnixEpochDays::checked_add(epoch_days, days)?;
                 Ok(Date::from_unix_epoch_day(days))
             };
         }
 
         let (month, years) =
-            month_add_overflowing(self.month, span.get_months_ranged());
-        let year = self
-            .year
-            .try_checked_add("years", years)?
-            .try_checked_add("years", span.get_years_ranged())?;
-        let date = Date::constrain_ranged(year, month, self.day);
+            month_add_overflowing(self.month(), span.get_months());
+        let year = b::Year::checked_add(self.year(), years)
+            .and_then(|years| b::Year::checked_add(years, span.get_years()))?;
+        let date = Date::new_constrain(year, month, self.day())?;
         let epoch_days = date.to_unix_epoch_day();
-        let mut days = epoch_days
-            .try_checked_add(
-                "days",
-                C(7) * UnixEpochDay::rfrom(span.get_weeks_ranged()),
-            )?
-            .try_checked_add(
-                "days",
-                UnixEpochDay::rfrom(span.get_days_ranged()),
-            )?;
+        let mut days =
+            b::UnixEpochDays::checked_add(epoch_days, 7 * span.get_weeks())
+                .and_then(|days| {
+                    b::UnixEpochDays::checked_add(days, span.get_days())
+                })?;
         if !span.units().only_time().is_empty() {
-            let time_days = span
-                .only_lower(Unit::Day)
-                .to_invariant_nanoseconds()
-                .div_ceil(t::NANOS_PER_CIVIL_DAY);
-            days = days.try_checked_add("time", time_days)?;
+            let time_days = b::UnixEpochDays::check(
+                span.to_invariant_duration_time_only().as_civil_days(),
+            )?;
+            days = b::UnixEpochDays::checked_add(days, time_days)?;
         }
         Ok(Date::from_unix_epoch_day(days))
     }
@@ -1518,16 +1504,17 @@ impl Date {
         self,
         duration: SignedDuration,
     ) -> Result<Date, Error> {
-        // OK because 24!={-1,0}.
-        match duration.as_hours() / 24 {
+        match duration.as_civil_days() {
             0 => Ok(self),
             -1 => self.yesterday(),
             1 => self.tomorrow(),
             days => {
-                let days = UnixEpochDay::try_new("days", days)
+                let days = b::UnixEpochDays::check(days)
                     .context(E::OverflowDaysDuration)?;
-                let days =
-                    self.to_unix_epoch_day().try_checked_add("days", days)?;
+                let days = b::UnixEpochDays::checked_add(
+                    days,
+                    self.to_unix_epoch_day(),
+                )?;
                 Ok(Date::from_unix_epoch_day(days))
             }
         }
@@ -2106,151 +2093,36 @@ impl Date {
     }
 }
 
-/// Internal APIs using ranged integers.
+/// Internal APIs.
 impl Date {
     #[inline]
-    pub(crate) fn new_ranged(
-        year: Year,
-        month: Month,
-        day: Day,
-    ) -> Result<Date, Error> {
-        if day > C(28) {
-            let max_day = days_in_month(year, month);
-            if day > max_day {
-                return Err(day.to_error_with_bounds("day", 1, max_day));
-            }
-        }
-        Ok(Date::new_ranged_unchecked(year, month, day))
-    }
-
-    #[inline]
-    pub(crate) fn new_ranged_unchecked(
-        year: Year,
-        month: Month,
-        day: Day,
-    ) -> Date {
-        Date { year, month, day }
-    }
-
-    #[inline]
-    fn constrain_ranged(year: Year, month: Month, day: Day) -> Date {
-        let (year, month, mut day) =
-            (year.rinto(), month.rinto(), day.rinto());
-        day = saturate_day_in_month(year, month, day);
-        Date { year, month, day }
-    }
-
-    #[inline]
-    pub(crate) fn year_ranged(self) -> Year {
-        self.year
-    }
-
-    #[inline]
-    pub(crate) fn month_ranged(self) -> Month {
-        self.month
-    }
-
-    #[inline]
-    pub(crate) fn day_ranged(self) -> Day {
-        self.day
-    }
-
-    #[inline]
-    pub(crate) fn days_in_month_ranged(self) -> Day {
-        days_in_month(self.year_ranged(), self.month_ranged())
-    }
-
-    #[inline]
-    pub(crate) fn until_days_ranged(self, other: Date) -> t::SpanDays {
+    pub(crate) fn until_days(self, other: Date) -> i32 {
         if self == other {
-            return C(0).rinto();
+            return 0;
         }
         let start = self.to_unix_epoch_day();
         let end = other.to_unix_epoch_day();
-        (end - start).rinto()
+        end - start
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn to_unix_epoch_day(self) -> UnixEpochDay {
-        self.to_idate().map(|x| x.to_epoch_day().epoch_day).to_rint()
+    pub(crate) fn to_unix_epoch_day(self) -> i32 {
+        self.to_idate_const().to_epoch_day().epoch_day
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn from_unix_epoch_day(epoch_day: UnixEpochDay) -> Date {
-        let epoch_day = rangeint::composite!((epoch_day) => {
-            IEpochDay { epoch_day }
-        });
-        Date::from_idate(epoch_day.map(|x| x.to_date()))
-    }
-
-    #[inline]
-    pub(crate) fn to_idate(&self) -> Composite<IDate> {
-        rangeint::composite! {
-            (year = self.year, month = self.month, day = self.day) => {
-                IDate { year, month, day }
-            }
-        }
-    }
-
-    #[inline]
-    pub(crate) fn from_idate(idate: Composite<IDate>) -> Date {
-        let (year, month, day) =
-            rangeint::uncomposite!(idate, c => (c.year, c.month, c.day));
-        Date {
-            year: year.to_rint(),
-            month: month.to_rint(),
-            day: day.to_rint(),
-        }
+    pub(crate) fn from_unix_epoch_day(epoch_day: i32) -> Date {
+        Date::from_idate_const(IEpochDay { epoch_day }.to_date())
     }
 
     #[inline]
     pub(crate) const fn to_idate_const(self) -> IDate {
-        IDate {
-            year: self.year.get_unchecked(),
-            month: self.month.get_unchecked(),
-            day: self.day.get_unchecked(),
-        }
+        IDate { year: self.year, month: self.month, day: self.day }
     }
 
     #[inline]
     pub(crate) const fn from_idate_const(idate: IDate) -> Date {
-        Date {
-            year: Year::new_unchecked(idate.year),
-            month: Month::new_unchecked(idate.month),
-            day: Day::new_unchecked(idate.day),
-        }
-    }
-}
-
-impl Eq for Date {}
-
-impl PartialEq for Date {
-    #[inline]
-    fn eq(&self, other: &Date) -> bool {
-        // We roll our own PartialEq impl so that we call 'get' on the
-        // underlying ranged integer. This forces bugs in boundary conditions
-        // to result in panics when 'debug_assertions' is enabled.
-        self.day.get() == other.day.get()
-            && self.month.get() == other.month.get()
-            && self.year.get() == other.year.get()
-    }
-}
-
-impl Ord for Date {
-    #[inline]
-    fn cmp(&self, other: &Date) -> core::cmp::Ordering {
-        (self.year.get(), self.month.get(), self.day.get()).cmp(&(
-            other.year.get(),
-            other.month.get(),
-            other.day.get(),
-        ))
-    }
-}
-
-impl PartialOrd for Date {
-    #[inline]
-    fn partial_cmp(&self, other: &Date) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(other))
+        Date { year: idate.year, month: idate.month, day: idate.day }
     }
 }
 
@@ -2532,19 +2404,19 @@ impl<'de> serde_core::Deserialize<'de> for Date {
 #[cfg(test)]
 impl quickcheck::Arbitrary for Date {
     fn arbitrary(g: &mut quickcheck::Gen) -> Date {
-        let year = Year::arbitrary(g);
-        let month = Month::arbitrary(g);
-        let day = Day::arbitrary(g);
-        Date::constrain_ranged(year, month, day)
+        let year = b::Year::arbitrary(g);
+        let month = b::Month::arbitrary(g);
+        let day = b::Day::arbitrary(g);
+        Date::new_constrain(year, month, day).unwrap()
     }
 
     fn shrink(&self) -> alloc::boxed::Box<dyn Iterator<Item = Date>> {
         alloc::boxed::Box::new(
-            (self.year_ranged(), self.month_ranged(), self.day_ranged())
-                .shrink()
-                .map(|(year, month, day)| {
-                    Date::constrain_ranged(year, month, day)
-                }),
+            (self.year(), self.month(), self.day()).shrink().filter_map(
+                |(year, month, day)| {
+                    Date::new_constrain(year, month, day).ok()
+                },
+            ),
         )
     }
 }
@@ -2922,6 +2794,13 @@ impl DateDifference {
     /// `largest` settings, but defaults to `Unit::Day`.
     #[inline]
     fn since_with_largest_unit(&self, d1: Date) -> Result<Span, Error> {
+        // N.B. A logical (but inefficient yet easier to understand)
+        // description of the behavior here can be found in the Temporal spec:
+        // https://tc39.es/proposal-temporal/#sec-temporal-calendardateuntil
+        //
+        // Immense discussion discussing and justifying this behavior:
+        // https://github.com/tc39/proposal-temporal/issues/2535
+
         let d2 = self.date;
         let largest = self
             .round
@@ -2949,87 +2828,83 @@ impl DateDifference {
             }));
         }
         if largest <= Unit::Week {
-            let mut weeks = t::SpanWeeks::rfrom(C(0));
-            let mut days = d1.until_days_ranged(d2);
+            let mut weeks: i32 = 0;
+            let mut days = d1.until_days(d2);
             if largest == Unit::Week {
-                weeks = days.div_ceil(C(7)).rinto();
-                days = days.rem_ceil(C(7));
+                weeks = days / 7;
+                days %= 7;
             }
-            return Ok(Span::new().weeks_ranged(weeks).days_ranged(days));
+            return Ok(Span::new().weeks(weeks).days(days));
         }
 
-        let year1 = d1.year_ranged();
-        let month1 = d1.month_ranged();
-        let day1 = d1.day_ranged();
-        let mut year2 = d2.year_ranged();
-        let mut month2 = d2.month_ranged();
-        let day2 = d2.day_ranged();
+        let year1 = d1.year();
+        let month1 = d1.month();
+        let day1 = d1.day();
+        let mut year2 = d2.year();
+        let mut month2 = d2.month();
+        let day2 = d2.day();
 
-        let mut years =
-            t::SpanYears::rfrom(year2) - t::SpanYears::rfrom(year1);
-        let mut months =
-            t::SpanMonths::rfrom(month2) - t::SpanMonths::rfrom(month1);
-        let mut days = t::SpanDays::rfrom(day2) - t::SpanMonths::rfrom(day1);
-        if years != C(0) || months != C(0) {
-            let sign = if years != C(0) {
-                Sign::rfrom(years.signum())
+        let mut years = year2 - year1;
+        let mut months = i32::from(month2 - month1);
+        let mut days = i32::from(day2 - day1);
+        if years != 0 || months != 0 {
+            let sign = if years != 0 {
+                b::Sign::from(years)
             } else {
-                Sign::rfrom(months.signum())
+                b::Sign::from(months)
             };
-            let mut days_in_month2 =
-                t::SpanDays::rfrom(days_in_month(year2, month2));
-            let mut day_correct = t::SpanDays::N::<0>();
-            if days.signum() == -sign {
-                let original_days_in_month1 = days_in_month2;
+            let mut days_in_month2 = d2.days_in_month();
+            let mut day_correct = 0;
+            if b::Sign::from(days) == -sign {
+                // Justifying this operation as infallible is quite tricky.
+                // It can only fail in two cases: year2=9999, month2=12 and
+                // sign=Negative or year2=-9999, month2=1 and sign=Positive. In
+                // both of those cases, year will overflow its boundaries.
+                //
+                // However, neither case is possible. Namely, whenever
+                // sign=Negative, it follows that either `year1 > year2` or
+                // `month1 > month2`. But there are no such values of `year1`
+                // or `month1` that satisfy `year1 > 9999 or month1 > 12`
+                // because `9999` is the maximum legal year value.
+                //
+                // A similar argument follows for sign=Positive and
+                // `year2=-9999` and `month2=1`. Therefore, this `unwrap()` is
+                // okay.
                 let (y, m) = month_add_one(year2, month2, -sign).unwrap();
                 year2 = y;
                 month2 = m;
 
-                years =
-                    t::SpanYears::rfrom(year2) - t::SpanYears::rfrom(year1);
-                months = t::SpanMonths::rfrom(month2)
-                    - t::SpanMonths::rfrom(month1);
-                days_in_month2 = days_in_month(year2, month2).rinto();
-                day_correct = if sign < C(0) {
+                years = year2 - year1;
+                months = i32::from(month2 - month1);
+                let original_days_in_month1 = days_in_month2;
+                days_in_month2 = itime::days_in_month(year2, month2);
+                day_correct = if sign.is_negative() {
                     -original_days_in_month1
                 } else {
                     days_in_month2
                 };
             }
 
-            let day0_trunc = t::SpanDays::rfrom(day1.min(days_in_month2));
-            days = t::SpanDays::rfrom(day2) - day0_trunc + day_correct;
+            let day0_trunc = i32::from(day1.min(days_in_month2));
+            days = i32::from(day2) - day0_trunc + i32::from(day_correct);
 
-            if years != C(0) {
-                months = t::SpanMonths::rfrom(month2)
-                    - t::SpanMonths::rfrom(month1);
-                if months.signum() == -sign {
-                    let month_correct = if sign < C(0) {
-                        -t::MONTHS_PER_YEAR
-                    } else {
-                        t::MONTHS_PER_YEAR
-                    };
-                    year2 -= sign;
-                    years = t::SpanYears::rfrom(year2)
-                        - t::SpanYears::rfrom(year1);
+            if years != 0 {
+                months = i32::from(month2 - month1);
+                if b::Sign::from(months) == -sign {
+                    let month_correct = sign * 12;
+                    year2 -= sign.as_i16();
+                    years = year2 - year1;
 
-                    months = t::SpanMonths::rfrom(month2)
-                        - t::SpanMonths::rfrom(month1)
-                        + month_correct;
+                    months = i32::from(month2 - month1) + month_correct;
                 }
             }
         }
-        if largest == Unit::Month && years != C(0) {
-            months = months.try_checked_add(
-                "months",
-                t::SpanMonths::rfrom(years) * t::MONTHS_PER_YEAR,
-            )?;
-            years = C(0).rinto();
+        if largest == Unit::Month && years != 0 {
+            months =
+                b::SpanMonths::checked_add(months, i32::from(years) * 12)?;
+            years = 0;
         }
-        Ok(Span::new()
-            .years_ranged(years)
-            .months_ranged(months)
-            .days_ranged(days))
+        Ok(Span::new().years(years).months(months).days(days))
     }
 }
 
@@ -3177,38 +3052,35 @@ impl DateWith {
     #[inline]
     pub fn build(self) -> Result<Date, Error> {
         let year = match self.year {
-            None => self.original.year_ranged(),
-            Some(DateWithYear::Jiff(year)) => Year::try_new("year", year)?,
+            None => self.original.year(),
+            Some(DateWithYear::Jiff(year)) => b::Year::check(year)?,
             Some(DateWithYear::EraYear(year, Era::CE)) => {
-                let year_ce = t::YearCE::try_new("CE year", year)?;
-                t::Year::try_rfrom("CE year", year_ce)?
+                b::YearCE::check(year)?
             }
             Some(DateWithYear::EraYear(year, Era::BCE)) => {
-                let year_bce = t::YearBCE::try_new("BCE year", year)?;
-                t::Year::try_rfrom("BCE year", -year_bce + C(1))?
+                let year_bce = b::YearBCE::check(year)?;
+                -year_bce + 1
             }
         };
         let month = match self.month {
-            None => self.original.month_ranged(),
-            Some(month) => Month::try_new("month", month)?,
+            None => self.original.month(),
+            Some(month) => b::Month::check(month)?,
         };
         let day = match self.day {
-            None => self.original.day_ranged(),
-            Some(DateWithDay::OfMonth(day)) => Day::try_new("day", day)?,
+            None => self.original.day(),
+            Some(DateWithDay::OfMonth(day)) => b::Day::check(day)?,
             Some(DateWithDay::OfYear(day)) => {
-                let year = year.get_unchecked();
                 let idate = IDate::from_day_of_year(year, day)
                     .map_err(Error::itime_range)?;
                 return Ok(Date::from_idate_const(idate));
             }
             Some(DateWithDay::OfYearNoLeap(day)) => {
-                let year = year.get_unchecked();
                 let idate = IDate::from_day_of_year_no_leap(year, day)
                     .map_err(Error::itime_range)?;
                 return Ok(Date::from_idate_const(idate));
             }
         };
-        Date::new_ranged(year, month, day)
+        Date::new(year, month, day)
     }
 
     /// Set the year field on a [`Date`].
@@ -3603,13 +3475,12 @@ fn iso_week_start_from_year(year: i16) -> i32 {
     // A week's year always corresponds to the Gregorian year in which the
     // Thursday of that week falls. Therefore, Jan 4 is *always* in the first
     // week of any ISO week year.
-    let date_in_first_week =
-        Date::new(year, 1, 4).expect("Jan 4 is valid for all valid years");
+    let date_in_first_week = Date::new_unchecked(year, 1, 4);
     // The start of the first week is a Monday, so find the number of days
     // since Monday from a date that we know is in the first ISO week of
     // `year`.
     let diff_from_monday = date_in_first_week.weekday().since(Weekday::Monday);
-    date_in_first_week.to_unix_epoch_day().get() - i32::from(diff_from_monday)
+    date_in_first_week.to_unix_epoch_day() - i32::from(diff_from_monday)
 }
 
 /// Adds or subtracts `sign` from the given `year`/`month`.
@@ -3617,20 +3488,19 @@ fn iso_week_start_from_year(year: i16) -> i32 {
 /// If month overflows in either direction, then the `year` returned is
 /// adjusted as appropriate.
 fn month_add_one(
-    mut year: Year,
-    mut month: Month,
-    delta: Sign,
-) -> Result<(Year, Month), Error> {
-    month += delta;
-    if month < C(1) {
-        year -= C(1);
-        month += t::MONTHS_PER_YEAR;
-    } else if month > t::MONTHS_PER_YEAR {
-        year += C(1);
-        month -= t::MONTHS_PER_YEAR;
+    mut year: i16,
+    mut month: i8,
+    delta: b::Sign,
+) -> Result<(i16, i8), Error> {
+    month += delta.as_i8();
+    if month < 1 {
+        year -= 1;
+        month += 12;
+    } else if month > 12 {
+        year += 1;
+        month -= 12;
     }
-    let year = Year::try_rfrom("year", year)?;
-    let month = Month::try_rfrom("year", month)?;
+    let year = b::Year::check(year)?;
     Ok((year, month))
 }
 
@@ -3640,37 +3510,21 @@ fn month_add_one(
 /// then the amount by which it overflowed, in units of years, is returned. For
 /// example, adding 14 months to the month `3` (March) will result in returning
 /// the month `5` (May) with `1` year of overflow.
-fn month_add_overflowing(
-    month: t::Month,
-    span: t::SpanMonths,
-) -> (t::Month, t::SpanYears) {
-    let month = t::SpanMonths::rfrom(month);
-    let total = month - C(1) + span;
-    let years = total.div_floor(C(12));
-    let month = total.rem_floor(C(12)) + C(1);
-    (month.rinto(), years.rinto())
-}
-
-/// Saturates the given day in the month.
 ///
-/// That is, if the day exceeds the maximum number of days in the given year
-/// and month, then this returns the maximum. Otherwise, it returns the day
-/// given.
-#[inline]
-fn saturate_day_in_month(year: Year, month: Month, day: Day) -> Day {
-    day.min(days_in_month(year, month))
-}
-
-/// Returns the number of days in the given year and month.
+/// # Preconditions
 ///
-/// This correctly returns `29` when the year is a leap year and the month is
-/// February.
-#[inline]
-fn days_in_month(year: Year, month: Month) -> Day {
-    let c = rangeint::composite!((year, month) => {
-        itime::days_in_month(year, month)
-    });
-    c.to_rint()
+/// Callers must ensure that `span` is in bounds for `b::SpanMonths`.
+fn month_add_overflowing(month: i8, span: i32) -> (i8, i16) {
+    debug_assert!(b::SpanMonths::check(span).is_ok());
+    let month = i32::from(month);
+    let total = month - 1 + span;
+    let years = total.div_euclid(12);
+    let month = total.rem_euclid(12) + 1;
+    // OK because `month` is derived from `% 12`, so must fit into an `i8`. And
+    // becuase `years` is derived from `([1-12] - 1 + SpanMonths) / 12` where
+    // the maximum `SpanMonths` is `239976`. Thus, the result is guaranteed to
+    // fit into an `i16`.
+    (month as i8, years as i16)
 }
 
 #[cfg(test)]
@@ -3706,13 +3560,13 @@ mod tests {
         assert_eq!(
             date(-9999, 1, 2),
             date_from_timestamp(
-                Timestamp::new(t::UnixSeconds::MIN_REPR, 0).unwrap()
+                Timestamp::new(b::UnixSeconds::MIN, 0).unwrap()
             ),
         );
         assert_eq!(
             date(9999, 12, 30),
             date_from_timestamp(
-                Timestamp::new(t::UnixSeconds::MAX_REPR, 0).unwrap()
+                Timestamp::new(b::UnixSeconds::MAX, 0).unwrap()
             ),
         );
     }
@@ -3721,7 +3575,6 @@ mod tests {
     #[cfg(not(miri))]
     fn all_days_to_date_roundtrip() {
         for rd in -100_000..=100_000 {
-            let rd = UnixEpochDay::new(rd).unwrap();
             let date = Date::from_unix_epoch_day(rd);
             let got = date.to_unix_epoch_day();
             assert_eq!(rd, got, "for date {date:?}");
@@ -3734,11 +3587,9 @@ mod tests {
         let year_range = 2000..=2500;
         // let year_range = -9999..=9999;
         for year in year_range {
-            let year = Year::new(year).unwrap();
-            for month in Month::MIN_REPR..=Month::MAX_REPR {
-                let month = Month::new(month).unwrap();
-                for day in 1..=days_in_month(year, month).get() {
-                    let date = date(year.get(), month.get(), day);
+            for month in b::Month::MIN..=b::Month::MAX {
+                for day in 1..=itime::days_in_month(year, month) {
+                    let date = date(year, month, day);
                     let rd = date.to_unix_epoch_day();
                     let got = Date::from_unix_epoch_day(rd);
                     assert_eq!(date, got, "for date {date:?}");
@@ -3752,11 +3603,9 @@ mod tests {
     fn all_date_to_iso_week_date_roundtrip() {
         let year_range = 2000..=2500;
         for year in year_range {
-            let year = Year::new(year).unwrap();
             for month in [1, 2, 4] {
-                let month = Month::new(month).unwrap();
-                for day in 20..=days_in_month(year, month).get() {
-                    let date = date(year.get(), month.get(), day);
+                for day in 20..=itime::days_in_month(year, month) {
+                    let date = date(year, month, day);
                     let wd = date.iso_week_date();
                     let got = wd.date();
                     assert_eq!(
@@ -3769,11 +3618,9 @@ mod tests {
 
         let year_range = -9999..=-9500;
         for year in year_range {
-            let year = Year::new(year).unwrap();
             for month in [1, 2, 4] {
-                let month = Month::new(month).unwrap();
-                for day in 20..=days_in_month(year, month).get() {
-                    let date = date(year.get(), month.get(), day);
+                for day in 20..=itime::days_in_month(year, month) {
+                    let date = date(year, month, day);
                     let wd = date.iso_week_date();
                     let got = wd.date();
                     assert_eq!(
@@ -3927,7 +3774,19 @@ mod tests {
     // This test checks current behavior, but I think it's wrong. I think the
     // results below should be 11 months and 1 month.
     //
+    // 2026-02-01: No, actually, the results here match what Temporal does:
+    //
+    // >> date = Temporal.PlainDate.from("2023-05-31")
+    // >> date.until("2024-04-30", {largestUnit: 'month'}).toString()
+    // "P10M30D"
+    // >> date.until("2023-06-30", {largestUnit: 'month'}).toString()
+    // "P30D"
+    //
+    // The specific reasoning here has to do with a trade-off where alternative
+    // algorithms result in even less intuitive results. See 2535 linked below.
+    //
     // Ref: https://github.com/tc39/proposal-temporal/issues/2919
+    // Ref: https://github.com/tc39/proposal-temporal/issues/2535
     #[test]
     fn until_months_no_balance() {
         let sp =
@@ -3940,14 +3799,21 @@ mod tests {
     }
 
     #[test]
+    fn until_extremes() {
+        let d1 = date(-9999, 12, 1);
+        let d2 = date(-9999, 1, 2);
+        span_eq!(d1.until((Unit::Month, d2)).unwrap(), -10.months().days(30));
+
+        let d1 = date(9999, 1, 2);
+        let d2 = date(9999, 12, 1);
+        span_eq!(d1.until((Unit::Month, d2)).unwrap(), 10.months().days(29));
+    }
+
+    #[test]
     fn test_month_add() {
         let add =
             |year: i16, month: i8, delta: i8| -> Result<(i16, i8), Error> {
-                let year = Year::new(year).unwrap();
-                let month = Month::new(month).unwrap();
-                let delta = Sign::new(delta).unwrap();
-                let (year, month) = month_add_one(year, month, delta)?;
-                Ok((year.get(), month.get()))
+                month_add_one(year, month, b::Sign::from(delta))
             };
 
         assert_eq!(add(2024, 1, 1).unwrap(), (2024, 2));
@@ -3962,19 +3828,14 @@ mod tests {
 
     #[test]
     fn test_month_add_overflowing() {
-        let month_add = |month, span| {
-            let month = t::Month::new(month).unwrap();
-            let span = t::SpanMonths::new(span).unwrap();
-            let (month, years) = month_add_overflowing(month, span);
-            (month.get(), years.get())
-        };
+        let month_add = |month, span| month_add_overflowing(month, span);
 
         assert_eq!((1, 0), month_add(1, 0));
         assert_eq!((12, 0), month_add(1, 11));
         assert_eq!((1, 1), month_add(1, 12));
         assert_eq!((2, 1), month_add(1, 13));
         assert_eq!((9, 1), month_add(1, 20));
-        assert_eq!((12, 19998), month_add(12, t::SpanMonths::MAX_REPR));
+        assert_eq!((12, 19998), month_add(12, b::SpanMonths::MAX));
 
         assert_eq!((12, -1), month_add(1, -1));
         assert_eq!((11, -1), month_add(1, -2));
@@ -3986,7 +3847,7 @@ mod tests {
     fn date_size() {
         #[cfg(debug_assertions)]
         {
-            assert_eq!(12, core::mem::size_of::<Date>());
+            assert_eq!(4, core::mem::size_of::<Date>());
         }
         #[cfg(not(debug_assertions))]
         {
@@ -4084,5 +3945,21 @@ mod tests {
         let d1 = date(1998, 1, 1);
         let d2 = d1.nth_weekday_of_month(5, Weekday::Saturday).unwrap();
         assert_eq!(d2, date(1998, 1, 31));
+    }
+
+    /// Tests some extreme values for `Date::nth_weekday`.
+    #[test]
+    fn nth_weekday_extreme() {
+        let weeks = 1043497;
+
+        let d1 = date(-9999, 1, 1);
+        let d2 = d1.nth_weekday(weeks, Weekday::Monday).unwrap();
+        assert_eq!(d2, date(9999, 12, 27));
+        assert!(d1.nth_weekday(weeks + 1, Weekday::Monday).is_err());
+
+        let d1 = date(9999, 12, 31);
+        let d2 = d1.nth_weekday(-weeks, Weekday::Friday).unwrap();
+        assert_eq!(d2, date(-9999, 1, 5));
+        assert!(d1.nth_weekday(weeks - 1, Weekday::Friday).is_err());
     }
 }

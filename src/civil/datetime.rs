@@ -2368,7 +2368,8 @@ impl DateTime {
     /// zone offset and where all days are exactly 24 hours long.
     #[inline]
     fn to_nanosecond(self) -> t::NoUnits128 {
-        let day_nano = self.date().to_unix_epoch_day();
+        let day_nano =
+            t::UnixEpochDay::borked(self.date().to_unix_epoch_day());
         let time_nano =
             t::CivilDayNanosecond::borked(self.time().to_nanosecond());
         (t::NoUnits128::rfrom(day_nano) * t::NANOS_PER_CIVIL_DAY) + time_nano
@@ -3547,7 +3548,8 @@ impl DateTimeRound {
 
         let time_nanos =
             t::CivilDayNanosecond::borked(dt.time().to_nanosecond());
-        let sign = t::NoUnits128::rfrom(dt.date().year_ranged().signum());
+        let sign =
+            t::NoUnits128::rfrom(t::Year::borked(dt.date().year()).signum());
         let time_rounded = self.mode.round_by_unit_in_nanoseconds_ranged(
             time_nanos,
             self.smallest,
@@ -3560,7 +3562,7 @@ impl DateTimeRound {
                 .unwrap();
         let time = Time::from_nanosecond_unchecked(time_nanos);
 
-        let date_days = t::SpanDays::rfrom(dt.date().day_ranged());
+        let date_days = t::SpanDays::rfrom(t::Day::borked(dt.date().day()));
         // OK because days is limited by the fact that the length of a day
         // can't be any smaller than 1 second, and the number of nanoseconds in
         // a civil day is capped.
@@ -4519,7 +4521,7 @@ mod tests {
     fn datetime_size() {
         #[cfg(debug_assertions)]
         {
-            assert_eq!(20, core::mem::size_of::<DateTime>());
+            assert_eq!(12, core::mem::size_of::<DateTime>());
         }
         #[cfg(not(debug_assertions))]
         {

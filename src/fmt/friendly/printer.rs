@@ -1390,7 +1390,7 @@ impl SpanPrinter {
         self.print_span_designators_non_fraction(&non_fractional, wtr);
         wtr.write_fractional_duration(
             unit,
-            &fractional.to_duration_invariant().unsigned_abs(),
+            &fractional.to_invariant_duration().unsigned_abs(),
         );
     }
 
@@ -1852,7 +1852,7 @@ impl FractionalPrinter {
         precision: Option<u8>,
     ) -> FractionalPrinter {
         FractionalPrinter::from_duration_seconds(
-            &span.to_duration_invariant().unsigned_abs(),
+            &span.to_invariant_duration().unsigned_abs(),
             padding,
             precision,
         )

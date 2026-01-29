@@ -1509,7 +1509,7 @@ impl Timestamp {
         }
         let sum = self
             .as_duration()
-            .checked_add(span.to_duration_invariant())
+            .checked_add(span.to_invariant_duration())
             .ok_or(E::OverflowAddSpan)?;
         Timestamp::from_duration(sum)
     }
