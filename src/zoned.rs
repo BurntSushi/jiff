@@ -5883,7 +5883,7 @@ mod tests {
         {
             #[cfg(feature = "alloc")]
             {
-                assert_eq!(48, core::mem::size_of::<Zoned>());
+                assert_eq!(40, core::mem::size_of::<Zoned>());
             }
             #[cfg(all(target_pointer_width = "64", not(feature = "alloc")))]
             {

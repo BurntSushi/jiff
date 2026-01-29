@@ -94,8 +94,8 @@ macro_rules! define_bounds {
                 const LEN: i128 = Self::MAX as i128 - Self::MIN as i128 + 1;
 
                 #[cold]
-                pub(crate) fn error() -> BoundsError {
-                    <$name as Bounds>::error()
+                pub(crate) const fn error() -> BoundsError {
+                    BoundsError::$name(RawBoundsError::new())
                 }
 
                 #[cfg_attr(feature = "perf-inline", inline(always))]
@@ -357,6 +357,8 @@ define_bounds! {
     // things... Increasing the supported Jiff range is far more complicated
     // than just changing some ranges here.)
     (Year, i16, "year", -9999, 9999),
+    (YearCE, i16, "CE year", 1, Year::MAX),
+    (YearBCE, i16, "BCE year", 1, Year::MAX + 1),
     (YearTwoDigit, i16, "year (2 digits)", 0, 99),
 }
 
@@ -726,6 +728,18 @@ impl Sign {
 
     pub(crate) fn as_i128(self) -> i128 {
         i128::from(self.as_i8())
+    }
+}
+
+impl core::ops::Neg for Sign {
+    type Output = Sign;
+
+    fn neg(self) -> Sign {
+        match self {
+            Sign::Positive => Sign::Negative,
+            Sign::Zero => Sign::Zero,
+            Sign::Negative => Sign::Positive,
+        }
     }
 }
 

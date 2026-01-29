@@ -626,7 +626,7 @@ impl Offset {
         }
 
         let span = b::OffsetTotalSeconds::check(
-            span.to_duration_invariant().as_secs(),
+            span.to_invariant_duration().as_secs(),
         )?;
         // No overflow is possible here because even `Offset::MIN +
         // Offset::MIN` fits into an `i32`. And note that the number of seconds

@@ -2075,10 +2075,10 @@ impl SignedDuration {
     }
 
     pub(crate) fn date_until(date1: Date, date2: Date) -> SignedDuration {
-        let days = date1.until_days_ranged(date2);
+        let days = date1.until_days(date2);
         // OK because difference in days fits in an i32, and multiplying an
         // i32 by 24 will never overflow an i64.
-        let hours = 24 * i64::from(days.get());
+        let hours = 24 * i64::from(days);
         SignedDuration::from_hours(hours)
     }
 
