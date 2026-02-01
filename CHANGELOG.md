@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.2.19 (TBD)
+============
+TODO
+
+Enhancements:
+
+* [#491](https://github.com/BurntSushi/jiff/issues/491):
+Avoid cloning `TimeZone` for consuming operations on `Zoned`.
+
+
 0.2.18 (2026-01-05)
 ===================
 This release ships a sizeable refactor to the RFC 2822, RFC 9110, RC
