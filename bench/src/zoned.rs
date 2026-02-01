@@ -10,9 +10,41 @@ use jiff::{
 use crate::{benchmark, convert::ConvertFrom};
 
 pub(super) fn define(c: &mut Criterion) {
+    default(c);
     fixed_offset_add_time(c);
     fixed_offset_to_civil_datetime(c);
     fixed_offset_to_timestamp(c);
+}
+
+/// Measures the time that `Zoned::default()` takes.
+///
+/// This is a little weird in that it usually doesn't matter how fast this
+/// runs. But default values are used often as throw-away values[1] and perf
+/// can matter.
+///
+/// Previously, `Zoned::default()` went through `Zoned::new()`, which does
+/// offset lookup and a translation to a civil datetime. This benchmarks tests
+/// that we do something smarter: just fix everything to the expected values.
+///
+/// [1]: https://github.com/BurntSushi/jiff/pull/492#discussion_r2751601292
+fn default(c: &mut Criterion) {
+    const NAME: &str = "zoned/default";
+
+    {
+        benchmark(
+            c,
+            format!("{NAME}/jiff"),
+            #[inline(never)]
+            |b| {
+                b.iter(|| {
+                    for _ in 0..50 {
+                        let got = bb(jiff::Zoned::default());
+                        assert_eq!(got.timestamp().as_second(), bb(0));
+                    }
+                })
+            },
+        );
+    }
 }
 
 /// Measures how long it takes to add 24 hours to a fixed offset datetime.

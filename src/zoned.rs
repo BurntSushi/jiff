@@ -381,14 +381,18 @@ struct ZonedInner {
 }
 
 impl Zoned {
-    /// A dummy `Zoned` value used in some temporary contexts.
+    /// The default `Zoned` value.
     ///
-    /// Note that it is nonsense. i.e., Its timestamp, datetime and offset
-    /// are not consistent.
-    const DUMMY: Zoned = Zoned {
+    /// This is pre-computed as a constant instead of just doing
+    /// `Zoned::new(Timestamp::default(), TimeZone::UTC)`. I had
+    /// thought the compiler wouldn't be able to optimized away that
+    /// `Zoned::new` call, but it looks like it did. However, this is a
+    /// more robust way to guarantee that `Zoned::default()` is always
+    /// fast.
+    const DEFAULT: Zoned = Zoned {
         inner: ZonedInner {
             timestamp: Timestamp::UNIX_EPOCH,
-            datetime: DateTime::ZERO,
+            datetime: DateTime::constant(1970, 1, 1, 0, 0, 0, 0),
             offset: Offset::UTC,
             time_zone: TimeZone::UTC,
         },
@@ -3347,7 +3351,7 @@ impl Zoned {
 impl Default for Zoned {
     #[inline]
     fn default() -> Zoned {
-        Zoned::new(Timestamp::default(), TimeZone::UTC)
+        Zoned::DEFAULT
     }
 }
 
@@ -3581,8 +3585,7 @@ impl<'a> core::ops::Add<Span> for &'a Zoned {
 impl core::ops::AddAssign<Span> for Zoned {
     #[inline]
     fn add_assign(&mut self, rhs: Span) {
-        let lhs = core::mem::replace(self, Zoned::DUMMY);
-        *self = lhs + rhs
+        *self = core::mem::take(self) + rhs;
     }
 }
 
@@ -3626,8 +3629,7 @@ impl<'a> core::ops::Sub<Span> for &'a Zoned {
 impl core::ops::SubAssign<Span> for Zoned {
     #[inline]
     fn sub_assign(&mut self, rhs: Span) {
-        let lhs = core::mem::replace(self, Zoned::DUMMY);
-        *self = lhs - rhs
+        *self = core::mem::take(self) - rhs;
     }
 }
 
@@ -3716,8 +3718,7 @@ impl<'a> core::ops::Add<SignedDuration> for &'a Zoned {
 impl core::ops::AddAssign<SignedDuration> for Zoned {
     #[inline]
     fn add_assign(&mut self, rhs: SignedDuration) {
-        let lhs = core::mem::replace(self, Zoned::DUMMY);
-        *self = lhs + rhs
+        *self = core::mem::take(self) + rhs;
     }
 }
 
@@ -3763,8 +3764,7 @@ impl<'a> core::ops::Sub<SignedDuration> for &'a Zoned {
 impl core::ops::SubAssign<SignedDuration> for Zoned {
     #[inline]
     fn sub_assign(&mut self, rhs: SignedDuration) {
-        let lhs = core::mem::replace(self, Zoned::DUMMY);
-        *self = lhs - rhs
+        *self = core::mem::take(self) - rhs;
     }
 }
 
@@ -3808,8 +3808,7 @@ impl<'a> core::ops::Add<UnsignedDuration> for &'a Zoned {
 impl core::ops::AddAssign<UnsignedDuration> for Zoned {
     #[inline]
     fn add_assign(&mut self, rhs: UnsignedDuration) {
-        let lhs = core::mem::replace(self, Zoned::DUMMY);
-        *self = lhs + rhs
+        *self = core::mem::take(self) + rhs;
     }
 }
 
@@ -3855,8 +3854,7 @@ impl<'a> core::ops::Sub<UnsignedDuration> for &'a Zoned {
 impl core::ops::SubAssign<UnsignedDuration> for Zoned {
     #[inline]
     fn sub_assign(&mut self, rhs: UnsignedDuration) {
-        let lhs = core::mem::replace(self, Zoned::DUMMY);
-        *self = lhs - rhs
+        *self = core::mem::take(self) - rhs;
     }
 }
 
