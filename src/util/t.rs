@@ -78,26 +78,6 @@ pub(crate) type UnixSeconds = ri64<
     { 253402300799 - SpanZoneOffset::MAX },
 >;
 
-/// The number of seconds permitted in a single day.
-///
-/// This is mostly just a "sensible" cap on what is possible. We allow one day
-/// to span up to 7 civil days.
-///
-/// It must also be at least 1 second long.
-pub(crate) type ZonedDaySeconds =
-    ri64<1, { 7 * SECONDS_PER_CIVIL_DAY.bound() }>;
-
-/// The number of nanoseconds permitted in a single day.
-///
-/// This is mostly just a "sensible" cap on what is possible. We allow one day
-/// to span up to 7 civil days.
-///
-/// It must also be at least 1 second long.
-pub(crate) type ZonedDayNanoseconds = ri64<
-    { ZonedDaySeconds::MIN * NANOS_PER_SECOND.bound() },
-    { ZonedDaySeconds::MAX * NANOS_PER_SECOND.bound() },
->;
-
 /// A precise min/max of the allowed range of a duration in years.
 pub(crate) type SpanYears = ri16<{ -(Year::LEN - 1) }, { Year::LEN - 1 }>;
 
@@ -287,15 +267,6 @@ pub(crate) const NANOS_PER_MILLI: Constant = Constant(1_000_000);
 
 /// The number of nanoseconds in a single microsecond.
 pub(crate) const NANOS_PER_MICRO: Constant = Constant(1_000);
-
-pub(crate) fn sign<T: Ord>(t1: T, t2: T) -> Sign {
-    use core::cmp::Ordering::*;
-    match t1.cmp(&t2) {
-        Less => Sign::N::<-1>(),
-        Equal => Sign::N::<0>(),
-        Greater => Sign::N::<1>(),
-    }
-}
 
 /// A constant value for use in arithmetic in this crate.
 ///

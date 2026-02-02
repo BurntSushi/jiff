@@ -51,15 +51,6 @@ pub(crate) fn for_span(unit: Unit, increment: i64) -> Result<i64, Error> {
 ///
 /// This validation ensures the rounding increment is valid for rounding
 /// datetimes (both civil and time zone aware).
-pub(crate) fn for_datetime_ranged(
-    unit: Unit,
-    increment: i64,
-) -> Result<t::NoUnits128, Error> {
-    for_datetime(unit, increment)
-        .map(t::NoUnits::borked)
-        .map(t::NoUnits128::rfrom)
-}
-
 pub(crate) fn for_datetime(unit: Unit, increment: i64) -> Result<i64, Error> {
     // Indexed by `Unit`.
     static LIMIT: &[i64] = &[

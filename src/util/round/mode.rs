@@ -124,23 +124,6 @@ impl RoundMode {
     }
 
     /// Rounds `quantity` to the nearest `increment` in units of nanoseconds.
-    pub(crate) fn round_ranged(
-        self,
-        quantity: impl RInto<NoUnits128>,
-        increment: impl RInto<NoUnits128>,
-    ) -> NoUnits128 {
-        // ref: https://tc39.es/proposal-temporal/#sec-temporal-roundnumbertoincrement
-        fn inner(
-            mode: RoundMode,
-            quantity: NoUnits128,
-            increment: NoUnits128,
-        ) -> NoUnits128 {
-            NoUnits128::borked(mode.round(quantity.get(), increment.get()))
-        }
-        inner(self, quantity.rinto(), increment.rinto())
-    }
-
-    /// Rounds `quantity` to the nearest `increment` in units of nanoseconds.
     pub(crate) fn round(self, quantity: i128, increment: i128) -> i128 {
         // ref: https://tc39.es/proposal-temporal/#sec-temporal-roundnumbertoincrement
         let mode = self;

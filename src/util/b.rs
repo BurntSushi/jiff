@@ -360,6 +360,26 @@ define_bounds! {
     (YearCE, i16, "CE year", 1, Year::MAX),
     (YearBCE, i16, "BCE year", 1, Year::MAX + 1),
     (YearTwoDigit, i16, "year (2 digits)", 0, 99),
+    (
+        ZonedDayNanoseconds,
+        i64,
+        "nanoseconds (in one zoned datetime day)",
+        ZonedDaySeconds::MIN as i64 * NANOS_PER_SEC,
+        ZonedDaySeconds::MAX as i64 * NANOS_PER_SEC,
+    ),
+    // The number of seconds permitted in a single day.
+    //
+    // This is mostly just a "sensible" cap on what is possible. We allow one
+    // day to span up to 7 civil days.
+    //
+    // It must also be at least 1 second long.
+    (
+        ZonedDaySeconds,
+        i32,
+        "seconds (in one zoned datetime day)",
+        1,
+        7 * SECS_PER_CIVIL_DAY_32,
+    ),
 }
 
 /// An interface for defining boundaries on integer values.
@@ -696,11 +716,9 @@ pub(crate) enum Sign {
 }
 
 impl Sign {
-    /*
     pub(crate) fn is_zero(self) -> bool {
-        matches!(*self, Sign::Zero)
+        matches!(self, Sign::Zero)
     }
-    */
 
     pub(crate) fn is_positive(self) -> bool {
         matches!(self, Sign::Positive)
