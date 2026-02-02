@@ -700,11 +700,11 @@ impl Sign {
     pub(crate) fn is_zero(self) -> bool {
         matches!(*self, Sign::Zero)
     }
+    */
 
     pub(crate) fn is_positive(self) -> bool {
-        matches!(*self, Sign::Positive)
+        matches!(self, Sign::Positive)
     }
-    */
 
     pub(crate) fn is_negative(self) -> bool {
         matches!(self, Sign::Negative)
@@ -728,6 +728,15 @@ impl Sign {
 
     pub(crate) fn as_i128(self) -> i128 {
         i128::from(self.as_i8())
+    }
+
+    pub(crate) fn from_ordinals<T: Ord>(t1: T, t2: T) -> Sign {
+        use core::cmp::Ordering::*;
+        match t1.cmp(&t2) {
+            Less => Sign::Negative,
+            Equal => Sign::Zero,
+            Greater => Sign::Positive,
+        }
     }
 }
 

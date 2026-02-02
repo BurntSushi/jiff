@@ -12,11 +12,7 @@ use crate::{
     },
     shared::util::itime::IDateTime,
     tz::TimeZone,
-    util::{
-        rangeint::{RFrom, RInto},
-        round::increment,
-        t::{self, C},
-    },
+    util::{b, round::increment},
     zoned::Zoned,
     RoundMode, SignedDuration, Span, SpanRound, Unit,
 };
@@ -2367,12 +2363,11 @@ impl DateTime {
     /// Converts this datetime to a nanosecond timestamp assuming a Zulu time
     /// zone offset and where all days are exactly 24 hours long.
     #[inline]
-    fn to_nanosecond(self) -> t::NoUnits128 {
-        let day_nano =
-            t::UnixEpochDay::borked(self.date().to_unix_epoch_day());
-        let time_nano =
-            t::CivilDayNanosecond::borked(self.time().to_nanosecond());
-        (t::NoUnits128::rfrom(day_nano) * t::NANOS_PER_CIVIL_DAY) + time_nano
+    fn to_nanosecond(self) -> SignedDuration {
+        let mut dur =
+            SignedDuration::from_civil_days32(self.date().to_unix_epoch_day());
+        dur += self.time().to_duration();
+        dur
     }
 
     #[inline]
@@ -3240,41 +3235,43 @@ impl DateTimeDifference {
             //
             // This is only true for nanoseconds. A single i64 in units of
             // microseconds can represent the interval between all valid
-            // datetimes. (At time of writing.)
-            return Span::from_invariant_nanoseconds(largest, diff);
+            // datetimes.
+            return Span::from_invariant_duration(largest, diff);
         }
 
         let (d1, mut d2) = (dt1.date(), dt2.date());
         let (t1, t2) = (dt1.time(), dt2.time());
-        let sign = t::sign(d2, d1);
-        let mut time_diff =
-            t::SpanNanoseconds::borked(t1.until_nanoseconds(t2));
-        if time_diff.signum() == -sign {
+        let sign = b::Sign::from_ordinals(d2, d1);
+        let mut time_diff = t1.until_nanoseconds(t2);
+        if b::Sign::from(time_diff) == -sign {
             // These unwraps will always succeed, but the argument for why is
             // subtle. The key here is that the only way, e.g., d2.tomorrow()
             // can fail is when d2 is the max date. But, if d2 is the max date,
             // then it's impossible for `sign < 0` since the max date is at
             // least as big as every other date. And thus, d2.tomorrow() is
             // never reached in cases where it would fail.
-            if sign > C(0) {
+            if sign.is_positive() {
                 d2 = d2.yesterday().unwrap();
-            } else if sign < C(0) {
+            } else if sign.is_negative() {
                 d2 = d2.tomorrow().unwrap();
             }
-            time_diff +=
-                t::SpanNanoseconds::rfrom(t::NANOS_PER_CIVIL_DAY) * sign;
+            time_diff += b::NANOS_PER_CIVIL_DAY * sign;
         }
         let date_span = d1.until((largest, d2))?;
-        Ok(Span::from_invariant_nanoseconds(largest, time_diff.rinto())
-            // Unlike in the <=Unit::Day case, this always succeeds because
-            // every unit except for nanoseconds (which is not used here) can
-            // represent all possible spans of time between any two civil
-            // datetimes.
-            .expect("difference between time always fits in span")
-            .years_ranged(date_span.get_years_ranged())
-            .months_ranged(date_span.get_months_ranged())
-            .weeks_ranged(date_span.get_weeks_ranged())
-            .days_ranged(date_span.get_days_ranged()))
+        // Unlike in the <=Unit::Day case, this always succeeds because
+        // every unit except for nanoseconds (which is not used here) can
+        // represent all possible spans of time between any two civil
+        // datetimes.
+        let time_span = Span::from_invariant_duration(
+            largest,
+            SignedDuration::from_nanos(time_diff),
+        )
+        .expect("difference between time always fits in span");
+        Ok(time_span
+            .years(date_span.get_years())
+            .months(date_span.get_months())
+            .weeks(date_span.get_weeks())
+            .days(date_span.get_days()))
     }
 }
 
@@ -3526,7 +3523,7 @@ impl DateTimeRound {
         // ref: https://tc39.es/proposal-temporal/#sec-temporal.plaindatetime.prototype.round
 
         let increment =
-            increment::for_datetime_ranged(self.smallest, self.increment)?;
+            increment::for_datetime(self.smallest, self.increment)?;
         // We permit rounding to any time unit and days, but nothing else.
         // We should support this, but Temporal doesn't. So for now, we're
         // sticking to what Temporal does because they're probably not doing
@@ -3540,47 +3537,42 @@ impl DateTimeRound {
                 ));
             }
             // We don't do any rounding in this case, so just bail now.
-            Unit::Nanosecond if increment == C(1) => {
+            Unit::Nanosecond if increment == 1 => {
                 return Ok(dt);
             }
             _ => {}
         }
 
-        let time_nanos =
-            t::CivilDayNanosecond::borked(dt.time().to_nanosecond());
-        let sign =
-            t::NoUnits128::rfrom(t::Year::borked(dt.date().year()).signum());
-        let time_rounded = self.mode.round_by_unit_in_nanoseconds_ranged(
-            time_nanos,
+        let time_nanos = dt.time().to_nanosecond();
+        let sign = b::Sign::from(dt.date().year());
+        let time_rounded = self.mode.round_by_unit(
+            i128::from(time_nanos),
             self.smallest,
             increment,
         );
-        let days = sign * time_rounded.div_ceil(t::NANOS_PER_CIVIL_DAY);
+        // OK because `abs(days)` here can never be greater than 1. Namely,
+        // rounding time increments are limited to values that divide evenly
+        // into the corresponding maximal value. And a `day` increment is
+        // limited to `1`. So even starting with the maximal `dt.time()` value
+        // (the last nanosecond in a civil day), we can never round past 1 day.
+        let days =
+            ((sign * time_rounded) / (b::NANOS_PER_CIVIL_DAY as i128)) as i32;
         // OK because `NANOS_PER_CIVIL_DAY` is guaranteed to fit into an `i64`.
         let time_nanos =
-            i64::try_from(time_rounded.rem_ceil(t::NANOS_PER_CIVIL_DAY).get())
-                .unwrap();
+            (time_rounded % (b::NANOS_PER_CIVIL_DAY as i128)) as i64;
         let time = Time::from_nanosecond_unchecked(time_nanos);
 
-        let date_days = t::SpanDays::rfrom(t::Day::borked(dt.date().day()));
-        // OK because days is limited by the fact that the length of a day
-        // can't be any smaller than 1 second, and the number of nanoseconds in
-        // a civil day is capped.
-        let days_len = (date_days - C(1)) + days;
-        // OK because the first day of any month is always valid.
+        // OK because `abs(days) <= 1` (see above comment) and `dt.date().day()`
+        // can never exceed `31`. So the result always fits into an `i32`.
+        let days_len = (i32::from(dt.date().day()) - 1) + days;
         let start = dt.date().first_of_month();
-        // `days` should basically always be <= 1, and so `days_len` should
-        // always be at most 1 greater (or less) than where we started. But
-        // what if there is a time zone transition that makes 9999-12-31
-        // shorter than 24 hours? And we are rounding 9999-12-31? Well, then
-        // I guess this could overflow and fail. I suppose it could also fail
-        // for really weird time zone data that made the length of a day really
-        // short. But even then, you'd need to be close to the boundary of
-        // supported datetimes.
-        let end = start
-            .checked_add(Span::new().days_ranged(days_len))
+        // `abs(days)` is always <= 1, and so `days_len` should
+        // always be at most 1 greater (or less) than where we started. If we
+        // started at, e.g., `DateTime::MAX`, then this could overflow.
+        let date = start
+            .checked_add(Span::new().days(days_len))
             .context(E::FailedAddDays)?;
-        Ok(DateTime::from_parts(end, time))
+        Ok(DateTime::from_parts(date, time))
     }
 
     pub(crate) fn get_smallest(&self) -> Unit {

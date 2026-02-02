@@ -78,17 +78,6 @@ pub(crate) type UnixSeconds = ri64<
     { 253402300799 - SpanZoneOffset::MAX },
 >;
 
-/// The range of possible day values.
-///
-/// Obviously this range is not valid for every month. Therefore, code working
-/// with days needs to be careful to check that it is valid for whatever month
-/// is being used.
-pub(crate) type Day = ri8<1, 31>;
-
-/// A range representing each possible nanosecond in a single civil day.
-pub(crate) type CivilDayNanosecond =
-    ri64<0, { NANOS_PER_CIVIL_DAY.bound() - 1 }>;
-
 /// The number of seconds permitted in a single day.
 ///
 /// This is mostly just a "sensible" cap on what is possible. We allow one day
@@ -107,28 +96,6 @@ pub(crate) type ZonedDaySeconds =
 pub(crate) type ZonedDayNanoseconds = ri64<
     { ZonedDaySeconds::MIN * NANOS_PER_SECOND.bound() },
     { ZonedDaySeconds::MAX * NANOS_PER_SECOND.bound() },
->;
-
-/// The number of days from the Unix epoch for the Gregorian calendar.
-///
-/// The range supported is based on the range of Unix timestamps that we
-/// support.
-///
-/// While I had originally used the "rate die" concept from Calendrical
-/// Calculations, I found [Howard Hinnant's formulation][date-algorithms]
-/// much more straight-forward. And while I didn't benchmark them, it also
-/// appears faster.
-///
-/// [date-algorithms]: http://howardhinnant.github.io/date_algorithms.html
-pub(crate) type UnixEpochDay = ri32<
-    {
-        (UnixSeconds::MIN + SpanZoneOffset::MIN)
-            .div_euclid(SECONDS_PER_CIVIL_DAY.bound())
-    },
-    {
-        (UnixSeconds::MAX + SpanZoneOffset::MAX)
-            .div_euclid(SECONDS_PER_CIVIL_DAY.bound())
-    },
 >;
 
 /// A precise min/max of the allowed range of a duration in years.
