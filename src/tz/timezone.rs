@@ -2073,7 +2073,7 @@ mod repr {
                 seconds.checked_shl(4),
                 "offset small enough for left shift by 4 bits",
             );
-            assert!(usize::MAX >= 4_294_967_295);
+            assert!(core::mem::size_of::<usize>() >= 4);
             // usize cast is okay because Jiff requires 32-bit.
             let ptr = without_provenance((shifted as usize) | Repr::FIXED);
             Repr { ptr }

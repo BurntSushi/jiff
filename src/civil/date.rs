@@ -170,6 +170,7 @@ use crate::{
 ///
 /// [add-date-rounding]: https://github.com/BurntSushi/jiff/issues/1
 #[derive(Clone, Copy, Hash)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 pub struct Date {
     year: Year,
     month: Month,

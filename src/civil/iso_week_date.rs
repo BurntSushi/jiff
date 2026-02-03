@@ -156,6 +156,7 @@ use crate::{
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[derive(Clone, Copy, Hash)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 pub struct ISOWeekDate {
     year: ISOYear,
     week: ISOWeek,
