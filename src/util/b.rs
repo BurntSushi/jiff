@@ -230,8 +230,8 @@ define_bounds! {
     (SpanYears, i16, "years", -Self::MAX, (Year::LEN - 1) as i16),
     (SpanMonths, i32, "months", -Self::MAX, SpanYears::MAX as i32 * 12),
     (SpanWeeks, i32, "weeks", -Self::MAX, SpanDays::MAX / DAYS_PER_WEEK_32),
-    (SpanDays, i32, "days", -Self::MAX, (SpanHours::MAX / HOURS_PER_CIVIL_DAY) as i32),
-    (SpanHours, i64, "hours", -Self::MAX, SpanMinutes::MAX / MINS_PER_HOUR),
+    (SpanDays, i32, "days", -Self::MAX, SpanHours::MAX / HOURS_PER_CIVIL_DAY_32),
+    (SpanHours, i32, "hours", -Self::MAX, (SpanMinutes::MAX / MINS_PER_HOUR) as i32),
     (SpanMinutes, i64, "minutes", -Self::MAX, SpanSeconds::MAX / SECS_PER_MIN),
     // The maximum number of seconds that can be expressed with a span.
     //
@@ -286,6 +286,7 @@ define_bounds! {
         -Self::MAX,
         SpanMilliseconds::MAX * MICROS_PER_MILLI,
     ),
+    (SpanMultiple, i64, "span multiple", i64::MIN  + 1, i64::MAX),
     // A range of the allowed number of nanoseconds.
     //
     // For this, we cannot cover the full span of supported time instants since
@@ -335,6 +336,40 @@ define_bounds! {
         UnixMilliseconds::MIN * MICROS_PER_MILLI,
         UnixMilliseconds::MAX * MICROS_PER_MILLI,
     ),
+    // The range of Unix seconds supported by Jiff.
+    //
+    // This range should correspond to the first second of `Year::MIN` up
+    // through (and including) the last second of `Year::MAX`. Actually
+    // computing that is non-trivial, however, it can be computed easily enough
+    // using Unix programs like `date`:
+    //
+    // ```text
+    // $ TZ=0 date -d 'Mon Jan  1 12:00:00 AM  -9999' +'%s'
+    // date: invalid date ‘Mon Jan  1 12:00:00 AM  -9999’
+    // $ TZ=0 date -d 'Fri Dec 31 23:59:59  9999' +'%s'
+    // 253402300799
+    // ```
+    //
+    // Well, almost easily enough. `date` apparently doesn't support negative
+    // years. But it does support negative timestamps:
+    //
+    // ```text
+    // $ TZ=0 date -d '@-377705116800'
+    // Mon Jan  1 12:00:00 AM  -9999
+    // $ TZ=0 date -d '@253402300799'
+    // Fri Dec 31 11:59:59 PM  9999
+    // ```
+    //
+    // With that said, we actually end up restricting the range a bit more
+    // than what's above. Namely, what's above is what we support for civil
+    // datetimes. Because of time zones, we need to choose whether all
+    // `Timestamp` values can be infallibly converted to `civil::DateTime`
+    // values, or whether all `civil::DateTime` values can be infallibly
+    // converted to `Timestamp` values. I chose the former because getting
+    // a civil datetime is important for formatting. If I didn't choose the
+    // former, there would be some instants that could not be formatted. Thus,
+    // we make room by shrinking the range of allowed instants by precisely the
+    // maximum supported time zone offset.
     (
         UnixSeconds,
         i64,
@@ -728,6 +763,10 @@ impl Sign {
         matches!(self, Sign::Negative)
     }
 
+    pub(crate) fn signum(self) -> i8 {
+        self.as_i8().signum()
+    }
+
     pub(crate) fn as_i8(self) -> i8 {
         self as i8
     }
@@ -796,6 +835,31 @@ impl From<i64> for Sign {
             Sign::Positive
         } else {
             Sign::Negative
+        }
+    }
+}
+
+impl From<i128> for Sign {
+    fn from(n: i128) -> Sign {
+        if n == 0 {
+            Sign::Zero
+        } else if n > 0 {
+            Sign::Positive
+        } else {
+            Sign::Negative
+        }
+    }
+}
+
+impl core::ops::Mul<Sign> for Sign {
+    type Output = Sign;
+    fn mul(self, rhs: Sign) -> Sign {
+        match (self, rhs) {
+            (Sign::Zero, _) | (_, Sign::Zero) => Sign::Zero,
+            (Sign::Positive, Sign::Positive) => Sign::Positive,
+            (Sign::Negative, Sign::Negative) => Sign::Positive,
+            (Sign::Positive, Sign::Negative) => Sign::Negative,
+            (Sign::Negative, Sign::Positive) => Sign::Negative,
         }
     }
 }

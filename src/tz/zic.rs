@@ -801,10 +801,7 @@ impl RuleSaveP {
     fn to_offset(&self) -> Result<Offset, Error> {
         // TODO: I think `zic` rounds to the nearest second, breaking ties to
         // the nearest even second?
-        let seconds = self.dur.as_secs();
-        let seconds = i32::try_from(seconds).map_err(|_| {
-            Error::range("SAVE seconds", seconds, i32::MIN, i32::MAX)
-        })?;
+        let seconds = b::OffsetTotalSeconds::check(self.dur.as_secs())?;
         Offset::from_seconds(seconds)
     }
 
@@ -1186,7 +1183,7 @@ fn parse_duration(span: &str) -> Result<SignedDuration, Error> {
     }
     let hours = b::SpanHours::parse(hour_digits.as_bytes())
         .context(E::FailedParseHour)?;
-    dur += SignedDuration::from_hours(sign * hours);
+    dur += SignedDuration::from_hours(sign * i64::from(hours));
     if rest.is_empty() {
         return Ok(dur);
     }

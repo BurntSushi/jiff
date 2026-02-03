@@ -116,11 +116,7 @@ impl Error {
         use self::ErrorKind::*;
         matches!(
             *self.root().kind(),
-            Bounds(_)
-                | SpecialBounds(_)
-                | Range(_)
-                | SlimRange(_)
-                | ITimeRange(_)
+            Bounds(_) | SpecialBounds(_) | SlimRange(_) | ITimeRange(_)
         )
     }
 
@@ -215,21 +211,6 @@ impl Error {
 }
 
 impl Error {
-    /// Creates a new error indicating that a `given` value is out of the
-    /// specified `min..=max` range. The given `what` label is used in the
-    /// error message as a human readable description of what exactly is out
-    /// of range. (e.g., "seconds")
-    #[inline(never)]
-    #[cold]
-    pub(crate) fn range(
-        what: &'static str,
-        given: impl Into<i128>,
-        min: impl Into<i128>,
-        max: impl Into<i128>,
-    ) -> Error {
-        Error::from(ErrorKind::Range(RangeError::new(what, given, min, max)))
-    }
-
     /// Creates a new error indicating that a `given` value is out of the
     /// allowed range.
     ///
@@ -466,7 +447,6 @@ enum ErrorKind {
     ParseInt(self::util::ParseIntError),
     ParseFraction(self::util::ParseFractionError),
     PosixTz(crate::shared::posix::PosixTimeZoneError),
-    Range(RangeError),
     RoundingIncrement(self::util::RoundingIncrementError),
     SignedDuration(self::signed_duration::Error),
     SlimRange(SlimRangeError),
@@ -515,7 +495,6 @@ impl core::fmt::Display for ErrorKind {
             ParseInt(ref err) => err.fmt(f),
             ParseFraction(ref err) => err.fmt(f),
             PosixTz(ref err) => err.fmt(f),
-            Range(ref err) => err.fmt(f),
             RoundingIncrement(ref err) => err.fmt(f),
             SignedDuration(ref err) => err.fmt(f),
             SlimRange(ref err) => err.fmt(f),
@@ -597,64 +576,6 @@ impl core::fmt::Display for AdhocError {
 impl core::fmt::Debug for AdhocError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         core::fmt::Debug::fmt(&self.message, f)
-    }
-}
-
-/// An error that occurs when an input value is out of bounds.
-///
-/// The error message produced by this type will include a name describing
-/// which input was out of bounds, the value given and its minimum and maximum
-/// allowed values.
-#[derive(Debug)]
-#[cfg_attr(not(feature = "alloc"), derive(Clone))]
-struct RangeError {
-    what: &'static str,
-    #[cfg(feature = "alloc")]
-    given: i128,
-    #[cfg(feature = "alloc")]
-    min: i128,
-    #[cfg(feature = "alloc")]
-    max: i128,
-}
-
-impl RangeError {
-    fn new(
-        what: &'static str,
-        _given: impl Into<i128>,
-        _min: impl Into<i128>,
-        _max: impl Into<i128>,
-    ) -> RangeError {
-        RangeError {
-            what,
-            #[cfg(feature = "alloc")]
-            given: _given.into(),
-            #[cfg(feature = "alloc")]
-            min: _min.into(),
-            #[cfg(feature = "alloc")]
-            max: _max.into(),
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for RangeError {}
-
-impl core::fmt::Display for RangeError {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        #[cfg(feature = "alloc")]
-        {
-            let RangeError { what, given, min, max } = *self;
-            write!(
-                f,
-                "parameter '{what}' with value {given} \
-                 is not in the required range of {min}..={max}",
-            )
-        }
-        #[cfg(not(feature = "alloc"))]
-        {
-            let RangeError { what } = *self;
-            write!(f, "parameter '{what}' is not in the required range")
-        }
     }
 }
 

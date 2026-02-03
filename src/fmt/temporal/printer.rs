@@ -793,19 +793,19 @@ impl SpanPrinter {
 
         let units = span.units();
         if units.contains(Unit::Year) {
-            bbuf.write_int(span.get_years_unsigned().get().unsigned_abs());
+            bbuf.write_int(span.get_years_unsigned());
             bbuf.write_ascii_char(self.label(Unit::Year));
         }
         if units.contains(Unit::Month) {
-            bbuf.write_int(span.get_months_unsigned().get().unsigned_abs());
+            bbuf.write_int(span.get_months_unsigned());
             bbuf.write_ascii_char(self.label(Unit::Month));
         }
         if units.contains(Unit::Week) {
-            bbuf.write_int(span.get_weeks_unsigned().get().unsigned_abs());
+            bbuf.write_int(span.get_weeks_unsigned());
             bbuf.write_ascii_char(self.label(Unit::Week));
         }
         if units.contains(Unit::Day) {
-            bbuf.write_int(span.get_days_unsigned().get().unsigned_abs());
+            bbuf.write_int(span.get_days_unsigned());
             bbuf.write_ascii_char(self.label(Unit::Day));
         }
 
@@ -821,11 +821,11 @@ impl SpanPrinter {
         bbuf.write_ascii_char(b'T');
 
         if units.contains(Unit::Hour) {
-            bbuf.write_int(span.get_hours_unsigned().get().unsigned_abs());
+            bbuf.write_int(span.get_hours_unsigned());
             bbuf.write_ascii_char(self.label(Unit::Hour));
         }
         if units.contains(Unit::Minute) {
-            bbuf.write_int(span.get_minutes_unsigned().get().unsigned_abs());
+            bbuf.write_int(span.get_minutes_unsigned());
             bbuf.write_ascii_char(self.label(Unit::Minute));
         }
 
@@ -835,7 +835,7 @@ impl SpanPrinter {
         // seconds. But we only want to do that work if we need to.
         let has_subsecond = !units.intersection(SUBSECOND).is_empty();
         if units.contains(Unit::Second) && !has_subsecond {
-            bbuf.write_int(span.get_seconds_unsigned().get().unsigned_abs());
+            bbuf.write_int(span.get_seconds_unsigned());
             bbuf.write_ascii_char(self.label(Unit::Second));
         } else if has_subsecond {
             // We want to combine our seconds, milliseconds, microseconds and
@@ -844,18 +844,10 @@ impl SpanPrinter {
             // and a number of nanoseconds not greater than 1 second. (Which is
             // our fraction.)
             let (seconds, millis, micros, nanos) = (
-                Duration::from_secs(
-                    span.get_seconds_unsigned().get().unsigned_abs(),
-                ),
-                Duration::from_millis(
-                    span.get_milliseconds_unsigned().get().unsigned_abs(),
-                ),
-                Duration::from_micros(
-                    span.get_microseconds_unsigned().get().unsigned_abs(),
-                ),
-                Duration::from_nanos(
-                    span.get_nanoseconds_unsigned().get().unsigned_abs(),
-                ),
+                Duration::from_secs(span.get_seconds_unsigned()),
+                Duration::from_millis(span.get_milliseconds_unsigned()),
+                Duration::from_micros(span.get_microseconds_unsigned()),
+                Duration::from_nanos(span.get_nanoseconds_unsigned()),
             );
             // OK because the maximums for a span's seconds, millis, micros
             // and nanos combined all fit into a 96-bit integer. (This is
