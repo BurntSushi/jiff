@@ -3340,10 +3340,10 @@ impl Zoned {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn strftime<'f, F: 'f + ?Sized + AsRef<[u8]>>(
-        &self,
+    pub fn strftime<'tz, 'f, F: 'f + ?Sized + AsRef<[u8]>>(
+        &'tz self,
         format: &'f F,
-    ) -> fmt::strtime::Display<'f> {
+    ) -> fmt::strtime::Display<'f, 'tz> {
         fmt::strtime::Display { fmt: format.as_ref(), tm: self.into() }
     }
 }

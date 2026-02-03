@@ -17,7 +17,7 @@ use crate::{
 pub(super) struct Parser<'f, 'i, 't> {
     pub(super) fmt: &'f [u8],
     pub(super) inp: &'i [u8],
-    pub(super) tm: &'t mut BrokenDownTime,
+    pub(super) tm: &'t mut BrokenDownTime<'static>,
 }
 
 impl<'f, 'i, 't> Parser<'f, 'i, 't> {

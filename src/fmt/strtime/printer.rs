@@ -79,16 +79,17 @@ pub(super) struct Formatter<
     'buffer,
     'data,
     'write,
+    'tz,
     L,
 > {
     pub(super) config: &'config Config<L>,
     pub(super) fmt: &'fmt [u8],
-    pub(super) tm: &'tm BrokenDownTime,
+    pub(super) tm: &'tm BrokenDownTime<'tz>,
     pub(super) wtr: &'writer mut BorrowedWriter<'buffer, 'data, 'write>,
 }
 
-impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
-    Formatter<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L>
+impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, 'tz, L: Custom>
+    Formatter<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, 'tz, L>
 {
     #[inline(never)]
     pub(super) fn format(&mut self) -> Result<(), Error> {
@@ -1574,9 +1575,9 @@ mod tests {
 
     #[test]
     fn lenient() {
-        fn f(
+        fn f<'a>(
             fmt: impl AsRef<[u8]>,
-            tm: impl Into<BrokenDownTime>,
+            tm: impl Into<BrokenDownTime<'a>>,
         ) -> alloc::string::String {
             let config = Config::new().lenient(true);
             tm.into().to_string_with_config(&config, fmt).unwrap()

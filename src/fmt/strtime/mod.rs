@@ -349,7 +349,7 @@ mod printer;
 pub fn parse(
     format: impl AsRef<[u8]>,
     input: impl AsRef<[u8]>,
-) -> Result<BrokenDownTime, Error> {
+) -> Result<BrokenDownTime<'static>, Error> {
     BrokenDownTime::parse(format, input)
 }
 
@@ -423,9 +423,9 @@ pub fn parse(
 /// ```
 #[cfg(any(test, feature = "alloc"))]
 #[inline]
-pub fn format(
+pub fn format<'a>(
     format: impl AsRef<[u8]>,
-    broken_down_time: impl Into<BrokenDownTime>,
+    broken_down_time: impl Into<BrokenDownTime<'a>>,
 ) -> Result<alloc::string::String, Error> {
     let broken_down_time: BrokenDownTime = broken_down_time.into();
 
@@ -872,7 +872,7 @@ impl Custom for PosixCustom {
 // unit. For example, only `%M` doesn't fly. If you want to parse minutes, you
 // also have to parse hours.
 #[derive(Debug, Default)]
-pub struct BrokenDownTime {
+pub struct BrokenDownTime<'a> {
     year: Option<i16>,
     month: Option<i8>,
     day: Option<i8>,
@@ -900,14 +900,14 @@ pub struct BrokenDownTime {
     timestamp: Option<Timestamp>,
     // The time zone. Currently used only when
     // formatting a `Zoned`.
-    tz: Option<TimeZone>,
+    tz: Option<&'a TimeZone>,
     // The IANA time zone identifier. Used only when
     // formatting a `Zoned`.
     #[cfg(feature = "alloc")]
     iana: Option<alloc::string::String>,
 }
 
-impl BrokenDownTime {
+impl<'a> BrokenDownTime<'a> {
     /// Parse the given `input` according to the given `format` string.
     ///
     /// See the [module documentation](self) for details on what's supported.
@@ -936,12 +936,15 @@ impl BrokenDownTime {
     pub fn parse(
         format: impl AsRef<[u8]>,
         input: impl AsRef<[u8]>,
-    ) -> Result<BrokenDownTime, Error> {
+    ) -> Result<BrokenDownTime<'static>, Error> {
         BrokenDownTime::parse_mono(format.as_ref(), input.as_ref())
     }
 
     #[inline]
-    fn parse_mono(fmt: &[u8], inp: &[u8]) -> Result<BrokenDownTime, Error> {
+    fn parse_mono(
+        fmt: &[u8],
+        inp: &[u8],
+    ) -> Result<BrokenDownTime<'static>, Error> {
         let mut pieces = BrokenDownTime::default();
         let mut p = Parser { fmt, inp, tm: &mut pieces };
         p.parse().context(E::FailedStrptime)?;
@@ -1037,7 +1040,7 @@ impl BrokenDownTime {
     pub fn parse_prefix(
         format: impl AsRef<[u8]>,
         input: impl AsRef<[u8]>,
-    ) -> Result<(BrokenDownTime, usize), Error> {
+    ) -> Result<(BrokenDownTime<'static>, usize), Error> {
         BrokenDownTime::parse_prefix_mono(format.as_ref(), input.as_ref())
     }
 
@@ -1045,7 +1048,7 @@ impl BrokenDownTime {
     fn parse_prefix_mono(
         fmt: &[u8],
         inp: &[u8],
-    ) -> Result<(BrokenDownTime, usize), Error> {
+    ) -> Result<(BrokenDownTime<'static>, usize), Error> {
         let mkoffset = util::parse::offseter(inp);
         let mut pieces = BrokenDownTime::default();
         let mut p = Parser { fmt, inp, tm: &mut pieces };
@@ -3168,8 +3171,8 @@ impl BrokenDownTime {
     }
 }
 
-impl<'a> From<&'a Zoned> for BrokenDownTime {
-    fn from(zdt: &'a Zoned) -> BrokenDownTime {
+impl<'a> From<&'a Zoned> for BrokenDownTime<'a> {
+    fn from(zdt: &'a Zoned) -> BrokenDownTime<'a> {
         // let offset_info = zdt.time_zone().to_offset_info(zdt.timestamp());
         #[cfg(feature = "alloc")]
         let iana = {
@@ -3179,7 +3182,7 @@ impl<'a> From<&'a Zoned> for BrokenDownTime {
         BrokenDownTime {
             offset: Some(zdt.offset()),
             timestamp: Some(zdt.timestamp()),
-            tz: Some(zdt.time_zone().clone()),
+            tz: Some(zdt.time_zone()),
             #[cfg(feature = "alloc")]
             iana,
             ..BrokenDownTime::from(zdt.datetime())
@@ -3187,8 +3190,8 @@ impl<'a> From<&'a Zoned> for BrokenDownTime {
     }
 }
 
-impl From<Timestamp> for BrokenDownTime {
-    fn from(ts: Timestamp) -> BrokenDownTime {
+impl From<Timestamp> for BrokenDownTime<'static> {
+    fn from(ts: Timestamp) -> BrokenDownTime<'static> {
         let dt = Offset::UTC.to_datetime(ts);
         BrokenDownTime {
             offset: Some(Offset::UTC),
@@ -3198,8 +3201,8 @@ impl From<Timestamp> for BrokenDownTime {
     }
 }
 
-impl From<DateTime> for BrokenDownTime {
-    fn from(dt: DateTime) -> BrokenDownTime {
+impl From<DateTime> for BrokenDownTime<'static> {
+    fn from(dt: DateTime) -> BrokenDownTime<'static> {
         let (d, t) = (dt.date(), dt.time());
         BrokenDownTime {
             year: Some(d.year()),
@@ -3215,8 +3218,8 @@ impl From<DateTime> for BrokenDownTime {
     }
 }
 
-impl From<Date> for BrokenDownTime {
-    fn from(d: Date) -> BrokenDownTime {
+impl From<Date> for BrokenDownTime<'static> {
+    fn from(d: Date) -> BrokenDownTime<'static> {
         BrokenDownTime {
             year: Some(d.year()),
             month: Some(d.month()),
@@ -3226,8 +3229,8 @@ impl From<Date> for BrokenDownTime {
     }
 }
 
-impl From<ISOWeekDate> for BrokenDownTime {
-    fn from(wd: ISOWeekDate) -> BrokenDownTime {
+impl From<ISOWeekDate> for BrokenDownTime<'static> {
+    fn from(wd: ISOWeekDate) -> BrokenDownTime<'static> {
         BrokenDownTime {
             iso_week_year: Some(wd.year()),
             iso_week: Some(wd.week()),
@@ -3237,8 +3240,8 @@ impl From<ISOWeekDate> for BrokenDownTime {
     }
 }
 
-impl From<Time> for BrokenDownTime {
-    fn from(t: Time) -> BrokenDownTime {
+impl From<Time> for BrokenDownTime<'static> {
+    fn from(t: Time) -> BrokenDownTime<'static> {
         BrokenDownTime {
             hour: Some(t.hour()),
             minute: Some(t.minute()),
@@ -3309,12 +3312,12 @@ impl From<Time> for BrokenDownTime {
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-pub struct Display<'f> {
+pub struct Display<'f, 'tm> {
     pub(crate) fmt: &'f [u8],
-    pub(crate) tm: BrokenDownTime,
+    pub(crate) tm: BrokenDownTime<'tm>,
 }
 
-impl<'f> core::fmt::Display for Display<'f> {
+impl<'f, 'tm> core::fmt::Display for Display<'f, 'tm> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         use crate::fmt::StdFmtWrite;
 
@@ -3322,7 +3325,7 @@ impl<'f> core::fmt::Display for Display<'f> {
     }
 }
 
-impl<'f> core::fmt::Debug for Display<'f> {
+impl<'f, 'tm> core::fmt::Debug for Display<'f, 'tm> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         f.debug_struct("Display")
             .field("fmt", &escape::Bytes(self.fmt))

@@ -2464,7 +2464,7 @@ impl DateTime {
     pub fn strftime<'f, F: 'f + ?Sized + AsRef<[u8]>>(
         &self,
         format: &'f F,
-    ) -> fmt::strtime::Display<'f> {
+    ) -> fmt::strtime::Display<'f, 'static> {
         fmt::strtime::Display { fmt: format.as_ref(), tm: (*self).into() }
     }
 }
