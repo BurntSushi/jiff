@@ -10,20 +10,13 @@ for time units must divide evenly into 1 unit of the next highest unit.
 
 use crate::{
     error::{util::RoundingIncrementError as E, Error, ErrorContext},
-    util::{b, rangeint::RFrom, t},
+    util::b,
     Unit,
 };
 
 /// Validates the given rounding increment for the given unit.
 ///
 /// This validation ensures the rounding increment is valid for rounding spans.
-pub(crate) fn for_span_ranged(
-    unit: Unit,
-    increment: i64,
-) -> Result<t::NoUnits128, Error> {
-    for_span(unit, increment).map(t::NoUnits::borked).map(t::NoUnits128::rfrom)
-}
-
 pub(crate) fn for_span(unit: Unit, increment: i64) -> Result<i64, Error> {
     // Indexed by `Unit`.
     static LIMIT: &[i64] = &[

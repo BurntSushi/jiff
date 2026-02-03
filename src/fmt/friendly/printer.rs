@@ -1281,64 +1281,34 @@ impl SpanPrinter {
         let units = span.units();
 
         if units.contains(Unit::Year) {
-            wtr.write(
-                Unit::Year,
-                span.get_years_unsigned().get().unsigned_abs().into(),
-            );
+            wtr.write(Unit::Year, span.get_years_unsigned().into());
         }
         if units.contains(Unit::Month) {
-            wtr.write(
-                Unit::Month,
-                span.get_months_unsigned().get().unsigned_abs().into(),
-            );
+            wtr.write(Unit::Month, span.get_months_unsigned().into());
         }
         if units.contains(Unit::Week) {
-            wtr.write(
-                Unit::Week,
-                span.get_weeks_unsigned().get().unsigned_abs().into(),
-            );
+            wtr.write(Unit::Week, span.get_weeks_unsigned().into());
         }
         if units.contains(Unit::Day) {
-            wtr.write(
-                Unit::Day,
-                span.get_days_unsigned().get().unsigned_abs().into(),
-            );
+            wtr.write(Unit::Day, span.get_days_unsigned().into());
         }
         if units.contains(Unit::Hour) {
-            wtr.write(
-                Unit::Hour,
-                span.get_hours_unsigned().get().unsigned_abs().into(),
-            );
+            wtr.write(Unit::Hour, span.get_hours_unsigned().into());
         }
         if units.contains(Unit::Minute) {
-            wtr.write(
-                Unit::Minute,
-                span.get_minutes_unsigned().get().unsigned_abs(),
-            );
+            wtr.write(Unit::Minute, span.get_minutes_unsigned());
         }
         if units.contains(Unit::Second) {
-            wtr.write(
-                Unit::Second,
-                span.get_seconds_unsigned().get().unsigned_abs(),
-            );
+            wtr.write(Unit::Second, span.get_seconds_unsigned());
         }
         if units.contains(Unit::Millisecond) {
-            wtr.write(
-                Unit::Millisecond,
-                span.get_milliseconds_unsigned().get().unsigned_abs(),
-            );
+            wtr.write(Unit::Millisecond, span.get_milliseconds_unsigned());
         }
         if units.contains(Unit::Microsecond) {
-            wtr.write(
-                Unit::Microsecond,
-                span.get_microseconds_unsigned().get().unsigned_abs(),
-            );
+            wtr.write(Unit::Microsecond, span.get_microseconds_unsigned());
         }
         if units.contains(Unit::Nanosecond) {
-            wtr.write(
-                Unit::Nanosecond,
-                span.get_nanoseconds_unsigned().get().unsigned_abs(),
-            );
+            wtr.write(Unit::Nanosecond, span.get_nanoseconds_unsigned());
         }
     }
 
@@ -1350,28 +1320,16 @@ impl SpanPrinter {
         let units = span.units();
 
         if units.contains(Unit::Year) {
-            wtr.write(
-                Unit::Year,
-                span.get_years_unsigned().get().unsigned_abs().into(),
-            );
+            wtr.write(Unit::Year, span.get_years_unsigned().into());
         }
         if units.contains(Unit::Month) {
-            wtr.write(
-                Unit::Month,
-                span.get_months_unsigned().get().unsigned_abs().into(),
-            );
+            wtr.write(Unit::Month, span.get_months_unsigned().into());
         }
         if units.contains(Unit::Week) {
-            wtr.write(
-                Unit::Week,
-                span.get_weeks_unsigned().get().unsigned_abs().into(),
-            );
+            wtr.write(Unit::Week, span.get_weeks_unsigned().into());
         }
         if units.contains(Unit::Day) {
-            wtr.write(
-                Unit::Day,
-                span.get_days_unsigned().get().unsigned_abs().into(),
-            );
+            wtr.write(Unit::Day, span.get_days_unsigned().into());
         }
     }
 
@@ -1414,17 +1372,9 @@ impl SpanPrinter {
         }
 
         let padding = self.padding.unwrap_or(2);
-        wtr.bbuf.write_int_pad(
-            span.get_hours_ranged().get().unsigned_abs(),
-            b'0',
-            padding,
-        );
+        wtr.bbuf.write_int_pad(span.get_hours_unsigned(), b'0', padding);
         wtr.bbuf.write_ascii_char(b':');
-        wtr.bbuf.write_int_pad(
-            span.get_minutes_ranged().get().unsigned_abs(),
-            b'0',
-            padding,
-        );
+        wtr.bbuf.write_int_pad(span.get_minutes_unsigned(), b'0', padding);
         wtr.bbuf.write_ascii_char(b':');
         // You'd think we could do better here from a code size
         // perspective. But when I tried to inline the logic to

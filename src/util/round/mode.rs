@@ -1,7 +1,4 @@
-use crate::{
-    util::{rangeint::RInto, t::NoUnits128},
-    Unit,
-};
+use crate::Unit;
 
 /// The mode for dealing with the remainder when rounding datetimes or spans.
 ///
@@ -95,19 +92,6 @@ impl RoundMode {
     /// Given a `quantity` in nanoseconds and an `increment` in units of
     /// `unit`, this rounds it according to this mode and returns the result
     /// in nanoseconds.
-    pub(crate) fn round_by_unit_in_nanoseconds_ranged(
-        self,
-        quantity: impl RInto<NoUnits128>,
-        unit: Unit,
-        increment: impl RInto<NoUnits128>,
-    ) -> NoUnits128 {
-        NoUnits128::borked(self.round_by_unit(
-            quantity.rinto().get(),
-            unit,
-            i64::try_from(increment.rinto().get()).unwrap(),
-        ))
-    }
-
     pub(crate) fn round_by_unit(
         self,
         quantity: i128,
@@ -117,8 +101,7 @@ impl RoundMode {
         // OK because the max for the number of nanoseconds in a unit
         // is weeks at `604_800_000_000_000` and `increment` could be
         // `i64::MAX`. This can overflow a `SignedDuration` but not an `i128`.
-        let increment =
-            i128::from(unit.nanoseconds_unranged()) * i128::from(increment);
+        let increment = i128::from(unit.nanoseconds()) * i128::from(increment);
         let rounded = self.round(quantity, increment);
         rounded
     }
@@ -184,14 +167,6 @@ impl RoundMode {
         // correct, but I think the only alternative is to return an error,
         // and I'm not sure that's ideal either.
         quotient.saturating_mul(increment)
-    }
-
-    pub(crate) fn round_float_ranged(
-        self,
-        quantity: f64,
-        increment: NoUnits128,
-    ) -> NoUnits128 {
-        NoUnits128::borked(self.round_float(quantity, increment.get()))
     }
 
     pub(crate) fn round_float(self, quantity: f64, increment: i128) -> i128 {

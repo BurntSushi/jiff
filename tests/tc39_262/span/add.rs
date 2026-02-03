@@ -197,7 +197,7 @@ fn result_out_of_range() -> Result {
     let sp = MAX_SPAN_SECONDS.seconds();
     insta::assert_snapshot!(
         sp.checked_add(sp).unwrap_err(),
-        @"parameter 'seconds' with value 1262214835200 is not in the required range of -631107417600..=631107417600",
+        @"parameter 'seconds' is not in the required range of -631107417600..=631107417600",
     );
 
     Ok(())

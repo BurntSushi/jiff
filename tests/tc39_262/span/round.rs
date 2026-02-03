@@ -842,7 +842,7 @@ fn result_out_of_range() -> Result {
     let sp = MAX_SPAN_SECONDS.seconds().nanoseconds(999_999_999);
     insta::assert_snapshot!(
         sp.round(Unit::Second).unwrap_err(),
-        @"failed to convert rounded nanoseconds to span for largest unit set to 'seconds': parameter 'seconds' with value 631107417601 is not in the required range of -631107417600..=631107417600",
+        @"failed to convert rounded nanoseconds to span for largest unit set to 'seconds': parameter 'seconds' is not in the required range of -631107417600..=631107417600",
     );
 
     Ok(())
