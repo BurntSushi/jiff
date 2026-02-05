@@ -1,6 +1,7 @@
 use jiff::{
-    civil::date, tz::TimeZone, RoundMode, Span, SpanRelativeTo, SpanRound,
-    Timestamp, ToSpan, Unit,
+    civil::date,
+    tz::{Offset, TimeZone},
+    RoundMode, Span, SpanRelativeTo, SpanRound, Timestamp, ToSpan, Unit,
 };
 
 use crate::tc39_262::Result;
@@ -917,6 +918,216 @@ fn roundingincrement_non_integer() -> Result {
 
     let result = sp.round(options.increment(1_000_000))?;
     span_eq!(result, 1_000_000.days());
+
+    Ok(())
+}
+
+#[test]
+fn roundingincrement_extreme_day() -> Result {
+    let sp = 1.day();
+    let max = 7_304_484;
+    let options = SpanRound::new()
+        .smallest(Unit::Day)
+        .mode(RoundMode::Expand)
+        .days_are_24_hours();
+
+    span_eq!(sp.round(options.increment(max))?, max.days());
+    insta::assert_snapshot!(
+        sp.round(options.increment(max + 1)).unwrap_err(),
+        @"failed to convert rounded nanoseconds to span for largest unit set to 'days': parameter 'days' is not in the required range of -7304484..=7304484",
+    );
+
+    span_eq!((-sp).round(options.increment(max))?, -max.days());
+    insta::assert_snapshot!(
+        sp.round(options.increment(max + 1)).unwrap_err(),
+        @"failed to convert rounded nanoseconds to span for largest unit set to 'days': parameter 'days' is not in the required range of -7304484..=7304484",
+    );
+
+    // But note that it is fine to use an increment
+    // larger than the max as long as the result does
+    // not overflow!
+    let options = options.mode(RoundMode::HalfExpand);
+    span_eq!(sp.round(options.increment(max))?, 0.days());
+    span_eq!((-sp).round(options.increment(max))?, 0.days());
+
+    Ok(())
+}
+
+#[test]
+fn roundingincrement_extreme_week_civil() -> Result {
+    let sp = 1.week();
+    let max = 1_043_497;
+    let options = SpanRound::new()
+        .smallest(Unit::Week)
+        .mode(RoundMode::Expand)
+        .days_are_24_hours();
+
+    span_eq!(sp.round(options.increment(max))?, max.weeks());
+    insta::assert_snapshot!(
+        sp.round(options.increment(max + 1)).unwrap_err(),
+        @"failed to convert rounded nanoseconds to span for largest unit set to 'weeks': parameter 'weeks' is not in the required range of -1043497..=1043497",
+    );
+
+    span_eq!((-sp).round(options.increment(max))?, -max.weeks());
+    insta::assert_snapshot!(
+        sp.round(options.increment(max + 1)).unwrap_err(),
+        @"failed to convert rounded nanoseconds to span for largest unit set to 'weeks': parameter 'weeks' is not in the required range of -1043497..=1043497",
+    );
+
+    // But note that it is fine to use an increment
+    // larger than the max as long as the result does
+    // not overflow!
+    let options = options.mode(RoundMode::HalfExpand);
+    span_eq!(sp.round(options.increment(max))?, 0.weeks());
+    span_eq!((-sp).round(options.increment(max))?, 0.weeks());
+
+    Ok(())
+}
+
+#[test]
+fn roundingincrement_extreme_week_zoned1() -> Result {
+    let min_zdt = Timestamp::MIN.to_zoned(TimeZone::fixed(Offset::MIN));
+    let max_zdt = Timestamp::MAX.to_zoned(TimeZone::fixed(Offset::MAX));
+    let sp = 1.week();
+    let max = 1_043_497;
+    let options = SpanRound::new()
+        .smallest(Unit::Week)
+        .mode(RoundMode::Expand)
+        .relative(&min_zdt);
+
+    span_eq!(sp.round(options.increment(max))?, max.weeks());
+    insta::assert_snapshot!(
+        sp.round(options.increment(max + 1)).unwrap_err(),
+        @"parameter 'weeks' is not in the required range of -1043497..=1043497",
+    );
+
+    // But note that it is fine to use an increment
+    // larger than the max as long as the result does
+    // not overflow!
+    let options = options.mode(RoundMode::HalfExpand);
+    span_eq!(sp.round(options.increment(max))?, 0.weeks());
+
+    // Now use a negative span. This requires a maximal
+    // relative date so that we can do arithmetic on it
+    // during rounding.
+    let options = SpanRound::new()
+        .smallest(Unit::Week)
+        .mode(RoundMode::Expand)
+        .relative(&max_zdt);
+    span_eq!((-sp).round(options.increment(max))?, -max.weeks());
+    insta::assert_snapshot!(
+        (-sp).round(options.increment(max + 1)).unwrap_err(),
+        @"parameter 'weeks' is not in the required range of -1043497..=1043497",
+    );
+
+    let options = options.mode(RoundMode::HalfExpand);
+    span_eq!((-sp).round(options.increment(max))?, 0.weeks());
+
+    Ok(())
+}
+
+#[test]
+fn roundingincrement_extreme_week_zoned2() -> Result {
+    let min_zdt = Timestamp::MIN.to_zoned(TimeZone::fixed(Offset::MIN));
+    let max = 1_043_497;
+    let sp = 1_043_496.week().days(1);
+    let options = SpanRound::new()
+        .smallest(Unit::Week)
+        .mode(RoundMode::Expand)
+        .increment(1)
+        .relative(&min_zdt);
+
+    span_eq!(sp.round(options)?, max.weeks());
+    insta::assert_snapshot!(
+        sp.round(options.increment(2)).unwrap_err(),
+        @"parameter 'weeks' is not in the required range of -1043497..=1043497",
+    );
+
+    Ok(())
+}
+
+#[test]
+fn roundingincrement_extreme_month() -> Result {
+    let min_zdt = Timestamp::MIN.to_zoned(TimeZone::fixed(Offset::MIN));
+    let max_zdt = Timestamp::MAX.to_zoned(TimeZone::fixed(Offset::MAX));
+    let sp = 1.month();
+    let max = 239_976;
+
+    let options = SpanRound::new()
+        .smallest(Unit::Month)
+        .mode(RoundMode::Expand)
+        .relative(&min_zdt);
+
+    span_eq!(sp.round(options.increment(max))?, max.months());
+    insta::assert_snapshot!(
+        sp.round(options.increment(max + 1)).unwrap_err(),
+        @"parameter 'months' is not in the required range of -239976..=239976",
+    );
+
+    // But note that it is fine to use an increment
+    // larger than the max as long as the result does
+    // not overflow!
+    let options = options.mode(RoundMode::HalfExpand);
+    span_eq!(sp.round(options.increment(max))?, 0.months());
+
+    // Now use a negative span. This requires a maximal
+    // relative date so that we can do arithmetic on it
+    // during rounding.
+    let options = SpanRound::new()
+        .smallest(Unit::Month)
+        .mode(RoundMode::Expand)
+        .relative(&max_zdt);
+    span_eq!((-sp).round(options.increment(max))?, -max.months());
+    insta::assert_snapshot!(
+        (-sp).round(options.increment(max + 1)).unwrap_err(),
+        @"parameter 'months' is not in the required range of -239976..=239976",
+    );
+
+    let options = options.mode(RoundMode::HalfExpand);
+    span_eq!((-sp).round(options.increment(max))?, 0.months());
+
+    Ok(())
+}
+
+#[test]
+fn roundingincrement_extreme_year() -> Result {
+    let min_zdt = Timestamp::MIN.to_zoned(TimeZone::fixed(Offset::MIN));
+    let max_zdt = Timestamp::MAX.to_zoned(TimeZone::fixed(Offset::MAX));
+    let sp = 1.year();
+    let max = 19_998;
+
+    let options = SpanRound::new()
+        .smallest(Unit::Year)
+        .mode(RoundMode::Expand)
+        .relative(&min_zdt);
+
+    span_eq!(sp.round(options.increment(max))?, max.years());
+    insta::assert_snapshot!(
+        sp.round(options.increment(max + 1)).unwrap_err(),
+        @"parameter 'years' is not in the required range of -19998..=19998",
+    );
+
+    // But note that it is fine to use an increment
+    // larger than the max as long as the result does
+    // not overflow!
+    let options = options.mode(RoundMode::HalfExpand);
+    span_eq!(sp.round(options.increment(max))?, 0.years());
+
+    // Now use a negative span. This requires a maximal
+    // relative date so that we can do arithmetic on it
+    // during rounding.
+    let options = SpanRound::new()
+        .smallest(Unit::Year)
+        .mode(RoundMode::Expand)
+        .relative(&max_zdt);
+    span_eq!((-sp).round(options.increment(max))?, -max.years());
+    insta::assert_snapshot!(
+        (-sp).round(options.increment(max + 1)).unwrap_err(),
+        @"parameter 'years' is not in the required range of -19998..=19998",
+    );
+
+    let options = options.mode(RoundMode::HalfExpand);
+    span_eq!((-sp).round(options.increment(max))?, 0.years());
 
     Ok(())
 }

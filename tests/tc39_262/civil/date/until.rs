@@ -72,6 +72,32 @@ fn round_cross_unit_boundary() -> Result {
         .smallest(Unit::Month)
         .mode(RoundMode::Expand);
     span_eq!(d1.until(args)?, 2.years());
+
+    Ok(())
+}
+
+#[test]
+fn round_not_cross_unit_boundary1() -> Result {
+    let d1 = date(2022, 1, 1);
+    let d2 = date(2023, 12, 1);
+    let args = DateDifference::new(d2)
+        .largest(Unit::Year)
+        .smallest(Unit::Month)
+        .mode(RoundMode::Expand);
+    span_eq!(d1.until(args)?, 1.year().months(11));
+
+    Ok(())
+}
+
+#[test]
+fn round_not_cross_unit_boundary2() -> Result {
+    let d1 = date(2022, 1, 1);
+    let d2 = date(2023, 11, 30);
+    let args = DateDifference::new(d2)
+        .largest(Unit::Year)
+        .smallest(Unit::Month)
+        .mode(RoundMode::Expand);
+    span_eq!(d1.until(args)?, 1.year().months(11));
     Ok(())
 }
 

@@ -10,6 +10,7 @@ pub(crate) mod signed_duration;
 pub(crate) mod span;
 pub(crate) mod timestamp;
 pub(crate) mod tz;
+pub(crate) mod unit;
 pub(crate) mod util;
 pub(crate) mod zoned;
 
@@ -116,7 +117,7 @@ impl Error {
         use self::ErrorKind::*;
         matches!(
             *self.root().kind(),
-            Bounds(_) | SpecialBounds(_) | SlimRange(_) | ITimeRange(_)
+            Bounds(_) | SpecialBounds(_) | ITimeRange(_)
         )
     }
 
@@ -166,31 +167,17 @@ impl Error {
     /// assert!(err.is_invalid_parameter());
     /// ```
     pub fn is_invalid_parameter(&self) -> bool {
+        use self::civil::Error as CivilError;
         use self::ErrorKind::*;
-        use self::{
-            civil::Error as CivilError, span::Error as SpanError,
-            tz::offset::Error as OffsetError, util::RoundingIncrementError,
-        };
 
         matches!(
             *self.root().kind(),
-            RoundingIncrement(
-                RoundingIncrementError::GreaterThanZero { .. }
-                    | RoundingIncrementError::InvalidDivide { .. }
-                    | RoundingIncrementError::Unsupported { .. }
-            ) | Span(
-                SpanError::NotAllowedCalendarUnits { .. }
-                    | SpanError::NotAllowedLargestSmallerThanSmallest { .. }
-                    | SpanError::RequiresRelativeWeekOrDay { .. }
-                    | SpanError::RequiresRelativeYearOrMonth { .. }
-                    | SpanError::RequiresRelativeYearOrMonthGivenDaysAre24Hours { .. }
-            ) | Civil(
-                CivilError::IllegalTimeWithMicrosecond
-                | CivilError::IllegalTimeWithMillisecond
-                | CivilError::IllegalTimeWithNanosecond
-                | CivilError::RoundMustUseDaysOrBigger { .. }
-                | CivilError::RoundMustUseHoursOrSmaller { .. }
-            ) | TzOffset(OffsetError::RoundInvalidUnit { .. })
+            UnitConfig(_)
+                | Civil(
+                    CivilError::IllegalTimeWithMicrosecond
+                        | CivilError::IllegalTimeWithMillisecond
+                        | CivilError::IllegalTimeWithNanosecond
+                )
         )
     }
 
@@ -211,18 +198,6 @@ impl Error {
 }
 
 impl Error {
-    /// Creates a new error indicating that a `given` value is out of the
-    /// allowed range.
-    ///
-    /// This is similar to `Error::range`, but the error message doesn't
-    /// include the illegal value or the allowed range. This is useful for
-    /// ad hoc range errors but should generally be used sparingly.
-    #[inline(never)]
-    #[cold]
-    pub(crate) fn slim_range(what: &'static str) -> Error {
-        Error::from(ErrorKind::SlimRange(SlimRangeError::new(what)))
-    }
-
     #[inline(never)]
     #[cold]
     pub(crate) fn bounds(err: BoundsError) -> Error {
@@ -449,8 +424,8 @@ enum ErrorKind {
     PosixTz(crate::shared::posix::PosixTimeZoneError),
     RoundingIncrement(self::util::RoundingIncrementError),
     SignedDuration(self::signed_duration::Error),
-    SlimRange(SlimRangeError),
     Span(self::span::Error),
+    UnitConfig(self::unit::UnitConfigError),
     SpecialBounds(SpecialBoundsError),
     Timestamp(self::timestamp::Error),
     TzAmbiguous(self::tz::ambiguous::Error),
@@ -497,8 +472,8 @@ impl core::fmt::Display for ErrorKind {
             PosixTz(ref err) => err.fmt(f),
             RoundingIncrement(ref err) => err.fmt(f),
             SignedDuration(ref err) => err.fmt(f),
-            SlimRange(ref err) => err.fmt(f),
             Span(ref err) => err.fmt(f),
+            UnitConfig(ref err) => err.fmt(f),
             SpecialBounds(ref msg) => msg.fmt(f),
             Timestamp(ref err) => err.fmt(f),
             TzAmbiguous(ref err) => err.fmt(f),
@@ -576,32 +551,6 @@ impl core::fmt::Display for AdhocError {
 impl core::fmt::Debug for AdhocError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         core::fmt::Debug::fmt(&self.message, f)
-    }
-}
-
-/// A slim error that occurs when an input value is out of bounds.
-///
-/// Unlike `RangeError`, this only includes a static description of the
-/// value that is out of bounds. It doesn't include the out-of-range value
-/// or the min/max values.
-#[derive(Clone, Debug)]
-struct SlimRangeError {
-    what: &'static str,
-}
-
-impl SlimRangeError {
-    fn new(what: &'static str) -> SlimRangeError {
-        SlimRangeError { what }
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for SlimRangeError {}
-
-impl core::fmt::Display for SlimRangeError {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        let SlimRangeError { what } = *self;
-        write!(f, "parameter '{what}' is not in the required range")
     }
 }
 

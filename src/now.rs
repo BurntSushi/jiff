@@ -71,14 +71,11 @@ mod sys {
     pub(crate) fn system_time() -> std::time::SystemTime {
         use std::time::{Duration, SystemTime};
 
-        #[cfg(not(feature = "std"))]
-        use crate::util::libm::Float;
-
         let millis = js_sys::Date::new_0().get_time();
-        let sign = millis.signum();
+        let is_positive = millis.is_sign_positive();
         let millis = millis.abs() as u64;
         let duration = Duration::from_millis(millis);
-        let result = if sign >= 0.0 {
+        let result = if is_positive {
             SystemTime::UNIX_EPOCH.checked_add(duration)
         } else {
             SystemTime::UNIX_EPOCH.checked_sub(duration)

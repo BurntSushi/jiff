@@ -1,5 +1,8 @@
 // See: https://github.com/rust-lang/rust/pull/121364
 #![allow(unknown_lints, ambiguous_negative_literals)]
+// This logger isn't used in every feature configuration and it's otherwise
+// annoying and not worth it to try and get the cfg gates correct.
+#![allow(dead_code)]
 
 mod init;
 mod procmacro;

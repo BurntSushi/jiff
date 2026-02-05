@@ -759,7 +759,7 @@ pub use crate::{
         Timestamp, TimestampArithmetic, TimestampDifference,
         TimestampDisplayWithOffset, TimestampRound, TimestampSeries,
     },
-    util::round::mode::RoundMode,
+    util::round::RoundMode,
     zoned::{
         Zoned, ZonedArithmetic, ZonedDifference, ZonedRound, ZonedSeries,
         ZonedWith,

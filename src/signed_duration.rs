@@ -5,11 +5,12 @@ use crate::{
     error::{signed_duration::Error as E, ErrorContext},
     fmt::{friendly, temporal},
     tz::Offset,
+    util::{
+        b::{self, SpecialBoundsError},
+        round::Increment,
+    },
     Error, RoundMode, Timestamp, Unit, Zoned,
 };
-
-#[cfg(not(feature = "std"))]
-use crate::util::libm::Float;
 
 const NANOS_PER_SEC: i32 = 1_000_000_000;
 const NANOS_PER_MILLI: i32 = 1_000_000;
@@ -1455,14 +1456,16 @@ impl SignedDuration {
     /// ```
     #[inline]
     pub fn try_from_secs_f64(secs: f64) -> Result<SignedDuration, Error> {
+        #[cfg(not(feature = "std"))]
+        use crate::util::libm::Float;
+
         if !secs.is_finite() {
             return Err(Error::from(E::ConvertNonFinite));
         }
-        if secs < (i64::MIN as f64) {
-            return Err(Error::slim_range("floating point seconds"));
-        }
-        if secs > (i64::MAX as f64) {
-            return Err(Error::slim_range("floating point seconds"));
+        if !((i64::MIN as f64) <= secs && secs <= (i64::MAX as f64)) {
+            return Err(
+                SpecialBoundsError::SignedDurationFloatOutOfRangeF64.into()
+            );
         }
 
         let mut int_secs = secs.trunc() as i64;
@@ -1472,7 +1475,7 @@ impl SignedDuration {
             let increment = i64::from(int_nanos.signum());
             int_secs = int_secs
                 .checked_add(increment)
-                .ok_or_else(|| Error::slim_range("floating point seconds"))?;
+                .ok_or_else(b::SignedDurationSeconds::error)?;
             int_nanos = 0;
         }
         Ok(SignedDuration::new_unchecked(int_secs, int_nanos))
@@ -1510,15 +1513,18 @@ impl SignedDuration {
     /// ```
     #[inline]
     pub fn try_from_secs_f32(secs: f32) -> Result<SignedDuration, Error> {
+        #[cfg(not(feature = "std"))]
+        use crate::util::libm::Float;
+
         if !secs.is_finite() {
             return Err(Error::from(E::ConvertNonFinite));
         }
-        if secs < (i64::MIN as f32) {
-            return Err(Error::slim_range("floating point seconds"));
+        if !((i64::MIN as f32) <= secs && secs <= (i64::MAX as f32)) {
+            return Err(
+                SpecialBoundsError::SignedDurationFloatOutOfRangeF32.into()
+            );
         }
-        if secs > (i64::MAX as f32) {
-            return Err(Error::slim_range("floating point seconds"));
-        }
+
         let mut int_nanos =
             (secs.fract() * (NANOS_PER_SEC as f32)).round() as i32;
         let mut int_secs = secs.trunc() as i64;
@@ -1527,7 +1533,7 @@ impl SignedDuration {
             // N.B. I haven't found a way to trigger this error path in tests.
             int_secs = int_secs
                 .checked_add(increment)
-                .ok_or_else(|| Error::slim_range("floating point seconds"))?;
+                .ok_or_else(b::SignedDurationSeconds::error)?;
             int_nanos = 0;
         }
         Ok(SignedDuration::new_unchecked(int_secs, int_nanos))
@@ -2136,9 +2142,7 @@ impl SignedDuration {
                 let dur = SignedDuration::try_from(dur)
                     .context(E::ConvertSystemTime)?;
                 dur.checked_neg()
-                    .ok_or_else(|| {
-                        Error::slim_range("signed duration seconds")
-                    })
+                    .ok_or_else(b::SignedDurationSeconds::error)
                     .context(E::ConvertSystemTime)
             }
         }
@@ -2253,15 +2257,17 @@ impl SignedDuration {
     ///
     /// assert_eq!(
     ///     SignedDuration::MAX.round(Unit::Hour).unwrap_err().to_string(),
-    ///     "rounding signed duration to nearest hour \
-    ///      resulted in a value outside the supported \
-    ///      range of a `jiff::SignedDuration`",
+    ///     "rounding signed duration to nearest hour resulted in a value \
+    ///      outside the supported range of a `jiff::SignedDuration`: \
+    ///      parameter 'signed duration seconds' is not in the \
+    ///      required range of -9223372036854775808..=9223372036854775807",
     /// );
     /// assert_eq!(
     ///     SignedDuration::MIN.round(Unit::Hour).unwrap_err().to_string(),
-    ///     "rounding signed duration to nearest hour \
-    ///      resulted in a value outside the supported \
-    ///      range of a `jiff::SignedDuration`",
+    ///     "rounding signed duration to nearest hour resulted in a value \
+    ///      outside the supported range of a `jiff::SignedDuration`: \
+    ///      parameter 'signed duration seconds' is not in the \
+    ///      required range of -9223372036854775808..=9223372036854775807",
     /// );
     /// ```
     ///
@@ -2273,7 +2279,8 @@ impl SignedDuration {
     /// assert_eq!(
     ///     SignedDuration::ZERO.round(Unit::Day).unwrap_err().to_string(),
     ///     "rounding `jiff::SignedDuration` failed \
-    ///      because a calendar unit of 'days' was provided \
+    ///      because the smallest unit provided, 'days', \
+    ///      is a calendar unit \
     ///      (to round by calendar units, you must use a `jiff::Span`)",
     /// );
     /// ```
@@ -2493,7 +2500,7 @@ impl TryFrom<Duration> for SignedDuration {
 
     fn try_from(d: Duration) -> Result<SignedDuration, Error> {
         let secs = i64::try_from(d.as_secs())
-            .map_err(|_| Error::slim_range("unsigned duration seconds"))?;
+            .map_err(|_| b::SignedDurationSeconds::error())?;
         // Guaranteed to succeed since 0<=nanos<=999,999,999.
         let nanos = i32::try_from(d.subsec_nanos()).unwrap();
         Ok(SignedDuration::new_unchecked(secs, nanos))
@@ -2504,12 +2511,8 @@ impl TryFrom<SignedDuration> for Duration {
     type Error = Error;
 
     fn try_from(sd: SignedDuration) -> Result<Duration, Error> {
-        // This isn't needed, but improves error messages.
-        if sd.is_negative() {
-            return Err(Error::slim_range("negative duration seconds"));
-        }
         let secs = u64::try_from(sd.as_secs())
-            .map_err(|_| Error::slim_range("signed duration seconds"))?;
+            .map_err(|_| SpecialBoundsError::UnsignedDurationSeconds)?;
         // Guaranteed to succeed because the above only succeeds
         // when `sd` is non-negative. And when `sd` is non-negative,
         // we are guaranteed that 0<=nanos<=999,999,999.
@@ -2808,13 +2811,10 @@ impl SignedDurationRound {
     ///
     /// # Errors
     ///
-    /// The rounding increment must divide evenly into the next highest unit
-    /// after the smallest unit configured (and must not be equivalent to it).
-    /// For example, if the smallest unit is [`Unit::Nanosecond`], then *some*
-    /// of the valid values for the rounding increment are `1`, `2`, `4`, `5`,
-    /// `100` and `500`. Namely, any integer that divides evenly into `1,000`
-    /// nanoseconds since there are `1,000` nanoseconds in the next highest
-    /// unit (microseconds).
+    /// Unlike rounding a [`Span`](crate::Span), the increment does not need
+    /// to divide evenly into the next largest unit. Callers can round a
+    /// signed duration to any increment value so long as it is greater than
+    /// zero and less than or equal to `1_000_000_000`.
     ///
     /// # Example
     ///
@@ -2836,23 +2836,13 @@ impl SignedDurationRound {
         SignedDurationRound { increment, ..self }
     }
 
-    /// Returns the `smallest` unit configuration.
-    pub(crate) fn get_smallest(&self) -> Unit {
-        self.smallest
-    }
-
     /// Does the actual duration rounding.
     fn round(&self, dur: SignedDuration) -> Result<SignedDuration, Error> {
-        if self.smallest > Unit::Hour {
-            return Err(Error::from(E::RoundCalendarUnit {
-                unit: self.smallest,
-            }));
-        }
-        let nanos = dur.as_nanos();
-        let increment = self.increment;
-        let rounded = self.mode.round_by_unit(nanos, self.smallest, increment);
-        Ok(SignedDuration::try_from_nanos_i128(rounded)
-            .ok_or_else(|| E::RoundOverflowed { unit: self.smallest })?)
+        let increment =
+            Increment::for_signed_duration(self.smallest, self.increment)?;
+        increment
+            .round(self.mode, dur)
+            .with_context(|| E::RoundOverflowed { unit: self.smallest })
     }
 }
 

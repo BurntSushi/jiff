@@ -3,13 +3,13 @@ use core::time::Duration as UnsignedDuration;
 use crate::{
     civil::{Date, DateTime},
     duration::{Duration, SDuration},
-    error::{civil::Error as E, Error},
+    error::{civil::Error as E, unit::UnitConfigError, Error},
     fmt::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
     },
     shared::util::itime::{ITime, ITimeNanosecond, ITimeSecond},
-    util::{b, constant, round::increment},
+    util::{b, constant, round::Increment},
     RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
 };
 
@@ -944,8 +944,8 @@ impl Time {
     #[inline]
     fn checked_add_span(self, span: &Span) -> Result<Time, Error> {
         let (time, span) = self.overflowing_add(span)?;
-        if let Some(err) = span.smallest_non_time_non_zero_unit_error() {
-            return Err(err);
+        if span.smallest_non_time_non_zero_unit_error().is_some() {
+            return Err(Error::from(E::OverflowTimeNanoseconds));
         }
         Ok(time)
     }
@@ -955,7 +955,7 @@ impl Time {
         self,
         duration: SignedDuration,
     ) -> Result<Time, Error> {
-        // BREADCRUMBS: Every approach here just seems so circuitous...
+        // NOTE: Every approach here just seems so circuitous...
         // Checking when we convert to the same primitive representation.
         // Checking when we add.
         // Checking that the result is in bounds.
@@ -966,7 +966,7 @@ impl Time {
         let end =
             start.checked_add(duration).ok_or(E::OverflowTimeNanoseconds)?;
         let end = b::CivilDayNanosecond::check(end)?;
-        // BREADCRUMBS: Should this constructor be fallible? I don't think
+        // NOTE: Should this constructor be fallible? I don't think
         // so. I think this is the only place we want to check the bounds?
         Ok(Time::from_nanosecond_unchecked(end))
     }
@@ -1751,16 +1751,15 @@ impl Time {
         Time::from_itime_const(ITimeNanosecond { nanosecond }.to_time())
     }
 
-    /*
+    /// Like `from_nanosecond_unchecked`, but for a signed duration.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn from_duration_unchecked(dur: SignedDuration) -> Time {
+    pub(crate) fn from_duration_unchecked(dur: SignedDuration) -> Time {
         let second = dur.as_secs();
         debug_assert!(b::CivilDaySecond::check(second).is_ok());
         let mut time = ITimeSecond { second: second as i32 }.to_time();
         time.subsec_nanosecond = dur.subsec_nanos();
         Time::from_itime_const(time)
     }
-    */
 
     #[inline]
     pub(crate) const fn to_itime_const(&self) -> ITime {
@@ -2378,6 +2377,8 @@ impl TimeDifference {
     /// is violated, then computing a span with this configuration will result
     /// in an error.
     ///
+    /// The smallest unit must be no bigger than `Unit::Hour`.
+    ///
     /// # Example
     ///
     /// This shows how to round a span between two times to units no less than
@@ -2412,6 +2413,8 @@ impl TimeDifference {
     /// The largest units, when set, must be at least as big as the smallest
     /// units (which defaults to [`Unit::Nanosecond`]). If this is violated,
     /// then computing a span with this configuration will result in an error.
+    ///
+    /// The largest unit must be no bigger than `Unit::Hour`.
     ///
     /// # Example
     ///
@@ -2492,6 +2495,9 @@ impl TimeDifference {
     /// nanoseconds since there are `1,000` nanoseconds in the next highest
     /// unit (microseconds).
     ///
+    /// In all cases, the increment must be greater than zero and less than
+    /// or equal to `1_000_000_000`.
+    ///
     /// The error will occur when computing the span, and not when setting
     /// the increment here.
     ///
@@ -2524,7 +2530,7 @@ impl TimeDifference {
     /// via rounding.
     #[inline]
     fn rounding_may_change_span(&self) -> bool {
-        self.round.rounding_may_change_span_ignore_largest()
+        self.round.rounding_may_change_span()
     }
 
     /// Returns the span of time from `t1` to the time in this configuration.
@@ -2532,15 +2538,22 @@ impl TimeDifference {
     /// `largest` settings, but defaults to `Unit::Hour`.
     #[inline]
     fn until_with_largest_unit(&self, t1: Time) -> Result<Span, Error> {
+        if self.round.get_smallest() >= Unit::Day {
+            return Err(Error::from(UnitConfigError::CivilTime {
+                given: self.round.get_smallest(),
+            }));
+        }
+
+        let largest = self.round.get_largest().unwrap_or(Unit::Hour);
+        if largest >= Unit::Day {
+            return Err(Error::from(UnitConfigError::CivilTime {
+                given: largest,
+            }));
+        }
+
         let t2 = self.time;
         if t1 == t2 {
             return Ok(Span::new());
-        }
-        let largest = self.round.get_largest().unwrap_or(Unit::Hour);
-        if largest > Unit::Hour {
-            return Err(Error::from(E::RoundMustUseHoursOrSmaller {
-                unit: largest,
-            }));
         }
         let start = t1.to_duration();
         let end = t2.to_duration();
@@ -2757,6 +2770,9 @@ impl TimeRound {
     /// Namely, any integer that divides evenly into `1,000` nanoseconds since
     /// there are `1,000` nanoseconds in the next highest unit (microseconds).
     ///
+    /// In all cases, the increment must be greater than zero and less than or
+    /// equal to `1_000_000_000`.
+    ///
     /// # Example
     ///
     /// This example shows how to round a time to the nearest 10 minute
@@ -2776,19 +2792,19 @@ impl TimeRound {
     }
 
     /// Does the actual rounding.
-    pub(crate) fn round(&self, t: Time) -> Result<Time, Error> {
-        let increment = increment::for_time(self.smallest, self.increment)?;
-        let nanos = t.to_nanosecond();
-        let rounded = self.mode.round_by_unit(
-            i128::from(nanos),
-            self.smallest,
-            increment,
-        );
-        let limit = b::CivilDayNanosecond::MAX + 1;
-        // OK because `limit` fits into an `i64` and thus `rounded % limit`
-        // must also fit into an `i64`.
-        let rounded = i64::try_from(rounded % i128::from(limit)).unwrap();
-        Ok(Time::from_nanosecond_unchecked(rounded))
+    fn round(&self, t: Time) -> Result<Time, Error> {
+        let increment = Increment::for_time(self.smallest, self.increment)?;
+        let rounded = increment.round(self.mode, t.to_duration())?;
+        if rounded.as_secs() == i64::from(b::CivilDaySecond::MAX + 1) {
+            return Ok(Time::MIN);
+        }
+        // OK because the maximum value for `rounded` is the number of
+        // nanoseconds in a civil day. In which case, that wraps around to
+        // `Time::MIN` and we handle that case above. `rounded` can't be any
+        // bigger because of the requirement that the rounding increment divide
+        // evenly into the next biggest unit (and thus all such increments must
+        // divide evenly into a single civil day).
+        Ok(Time::from_duration_unchecked(rounded))
     }
 }
 

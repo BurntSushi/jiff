@@ -12,7 +12,7 @@ use crate::{
         temporal::{self, DEFAULT_DATETIME_PARSER},
     },
     tz::{AmbiguousOffset, Disambiguation, Offset, OffsetConflict, TimeZone},
-    util::{b, round::increment},
+    util::{b, round::Increment},
     RoundMode, SignedDuration, Span, SpanRound, Timestamp, Unit,
 };
 
@@ -4297,6 +4297,9 @@ impl<'a> ZonedDifference<'a> {
     /// Namely, any integer that divides evenly into `1,000` nanoseconds since
     /// there are `1,000` nanoseconds in the next highest unit (microseconds).
     ///
+    /// In all cases, the increment must be greater than zero and less than
+    /// or equal to `1_000_000_000`.
+    ///
     /// The error will occur when computing the span, and not when setting
     /// the increment here.
     ///
@@ -4329,7 +4332,7 @@ impl<'a> ZonedDifference<'a> {
     /// via rounding.
     #[inline]
     fn rounding_may_change_span(&self) -> bool {
-        self.round.rounding_may_change_span_ignore_largest()
+        self.round.rounding_may_change_span()
     }
 
     /// Returns the span of time from `dt1` to the datetime in this
@@ -4576,6 +4579,9 @@ impl ZonedRound {
     /// Namely, any integer that divides evenly into `1,000` nanoseconds since
     /// there are `1,000` nanoseconds in the next highest unit (microseconds).
     ///
+    /// In all cases, the increment must be greater than zero and less than or
+    /// equal to `1_000_000_000`.
+    ///
     /// # Example
     ///
     /// This example shows how to round a zoned datetime to the nearest 10
@@ -4626,9 +4632,8 @@ impl ZonedRound {
         debug_assert_eq!(self.round.get_smallest(), Unit::Day);
 
         // Rounding by days requires an increment of 1. We just re-use the
-        // civil datetime rounding checks, which has the same constraint
-        // although it does check for other things that aren't relevant here.
-        increment::for_datetime(Unit::Day, self.round.get_increment())?;
+        // civil datetime rounding checks, which has the same constraint.
+        Increment::for_datetime(Unit::Day, self.round.get_increment())?;
 
         // FIXME: We should be doing this with a &TimeZone, but will need a
         // refactor so that we do zone-aware arithmetic using just a Timestamp
@@ -4637,26 +4642,30 @@ impl ZonedRound {
         // I'm not sure that's really worth it. ---AG
         let start = zdt.start_of_day().context(E::FailedStartOfDay)?;
         let end = start.tomorrow().context(E::FailedLengthOfDay)?;
+        // I don't believe this is actually possible, since adding 1 day should
+        // always advance the underlying timestamp by some amount. On the
+        // other hand, it's somewhat tricky to reason about this because of the
+        // impact of time zone transition data on the length of a day. So we
+        // conservatively report an error here.
+        //
+        // (The specific problem is that if `day_length` is zero, then our
+        // rounding API will panic because it doesn't know what to do with a
+        // zero increment.)
+        if start.timestamp() == end.timestamp() {
+            return Err(Error::from(E::FailedLengthOfDay));
+        }
         let day_length =
             end.timestamp().as_duration() - start.timestamp().as_duration();
-        let day_length_nanos = day_length
-            .as_nanos64()
-            .ok_or_else(|| b::ZonedDayNanoseconds::error())
-            .and_then(b::ZonedDayNanoseconds::check)
-            .context(E::FailedSpanNanoseconds)?;
         let progress =
             zdt.timestamp().as_duration() - start.timestamp().as_duration();
-        let rounded = self
-            .round
-            .get_mode()
-            .round(progress.as_nanos(), i128::from(day_length_nanos));
+        let rounded =
+            self.round.get_mode().round_by_duration(progress, day_length)?;
         let nanos = start
             .timestamp()
-            .as_nanosecond()
+            .as_duration()
             .checked_add(rounded)
             .ok_or(E::FailedSpanNanoseconds)?;
-        Ok(Timestamp::from_nanosecond(nanos)?
-            .to_zoned(zdt.time_zone().clone()))
+        Ok(Timestamp::from_duration(nanos)?.to_zoned(zdt.time_zone().clone()))
     }
 }
 
@@ -5870,7 +5879,7 @@ mod tests {
             }
             #[cfg(all(target_pointer_width = "64", not(feature = "alloc")))]
             {
-                assert_eq!(48, core::mem::size_of::<Zoned>());
+                assert_eq!(40, core::mem::size_of::<Zoned>());
             }
         }
         #[cfg(not(debug_assertions))]
@@ -6065,21 +6074,21 @@ mod tests {
 
         insta::assert_snapshot!(
             zdt.round(Unit::Year).unwrap_err(),
-            @"failed rounding datetime: rounding to years is not supported"
+            @"failed rounding datetime: rounding to 'years' is not supported"
         );
         insta::assert_snapshot!(
             zdt.round(Unit::Month).unwrap_err(),
-            @"failed rounding datetime: rounding to months is not supported"
+            @"failed rounding datetime: rounding to 'months' is not supported"
         );
         insta::assert_snapshot!(
             zdt.round(Unit::Week).unwrap_err(),
-            @"failed rounding datetime: rounding to weeks is not supported"
+            @"failed rounding datetime: rounding to 'weeks' is not supported"
         );
 
         let options = ZonedRound::new().smallest(Unit::Day).increment(2);
         insta::assert_snapshot!(
             zdt.round(options).unwrap_err(),
-            @"failed rounding datetime: increment for rounding to days must be 1) less than 2, 2) divide into it evenly and 3) greater than zero"
+            @"failed rounding datetime: increment for rounding to 'days' must be equal to `1`"
         );
     }
 
@@ -6147,6 +6156,46 @@ mod tests {
         assert_eq!(
             sod.to_string(),
             "2000-10-08T01:00:00-03:00[America/Boa_Vista]",
+        );
+    }
+
+    // An interesting test from the Temporal issue tracker, where one doesn't
+    // get a rejection during a fold when the offset is included in the
+    // datetime string.
+    //
+    // See: https://github.com/tc39/proposal-temporal/issues/2892#issuecomment-3863293014
+    #[test]
+    fn no_reject_in_fold_when_using_with() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let zdt1: Zoned =
+            "2016-09-30T02:01+02:00[Europe/Amsterdam]".parse().unwrap();
+        let zdt2 = zdt1
+            .with()
+            .month(10)
+            .disambiguation(Disambiguation::Reject)
+            .offset_conflict(OffsetConflict::Reject)
+            .build()
+            .unwrap();
+        assert_eq!(
+            zdt2.to_string(),
+            "2016-10-30T02:01:00+02:00[Europe/Amsterdam]"
+        );
+
+        let zdt3: Zoned =
+            "2016-10-30T02:01+02:00[Europe/Amsterdam]".parse().unwrap();
+        assert_eq!(
+            zdt3.to_string(),
+            "2016-10-30T02:01:00+02:00[Europe/Amsterdam]"
+        );
+
+        let zdt4: Zoned =
+            "2016-10-30T02:01+01:00[Europe/Amsterdam]".parse().unwrap();
+        assert_eq!(
+            zdt4.to_string(),
+            "2016-10-30T02:01:00+01:00[Europe/Amsterdam]"
         );
     }
 }

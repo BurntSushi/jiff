@@ -3,7 +3,7 @@ use core::time::Duration as UnsignedDuration;
 use crate::{
     civil::{DateTime, Era, ISOWeekDate, Time, Weekday},
     duration::{Duration, SDuration},
-    error::{civil::Error as E, Error, ErrorContext},
+    error::{civil::Error as E, unit::UnitConfigError, Error, ErrorContext},
     fmt::{
         self,
         temporal::{DEFAULT_DATETIME_PARSER, DEFAULT_DATETIME_PRINTER},
@@ -2620,7 +2620,8 @@ impl DateDifference {
         // datetimes.
         //
         // See: https://github.com/tc39/proposal-temporal/issues/1122
-        let round = SpanRound::new().mode(RoundMode::Trunc);
+        let round =
+            SpanRound::new().mode(RoundMode::Trunc).smallest(Unit::Day);
         DateDifference { date, round }
     }
 
@@ -2629,11 +2630,16 @@ impl DateDifference {
     /// When a largest unit is not specified, then the largest unit is
     /// automatically set to be equal to the smallest unit.
     ///
+    /// This defaults to `Unit::Day`.
+    ///
     /// # Errors
     ///
     /// The smallest units must be no greater than the largest units. If this
     /// is violated, then computing a span with this configuration will result
     /// in an error.
+    ///
+    /// The unit set must also be a calendar unit. Using a time unit will
+    /// result in an error.
     ///
     /// # Example
     ///
@@ -2663,8 +2669,9 @@ impl DateDifference {
     /// Set the largest units allowed in the span returned.
     ///
     /// When a largest unit is not specified, then the largest unit is
-    /// automatically set to be equal to the smallest unit. Otherwise, when the
-    /// largest unit is not specified, it is set to days.
+    /// automatically set to be equal to the smallest unit or `Unit::Day`,
+    /// whichever is greater. Otherwise, when the largest unit is not
+    /// specified, it is set to days.
     ///
     /// Once a largest unit is set, there is no way to change this rounding
     /// configuration back to using the "automatic" default. Instead, callers
@@ -2675,6 +2682,9 @@ impl DateDifference {
     /// The largest units, when set, must be at least as big as the smallest
     /// units (which defaults to [`Unit::Day`]). If this is violated, then
     /// computing a span with this configuration will result in an error.
+    ///
+    /// The unit set must also be a calendar unit. Using a time unit will
+    /// result in an error.
     ///
     /// # Example
     ///
@@ -2746,6 +2756,14 @@ impl DateDifference {
     /// smallest unit is set to [`Unit::Month`], then a rounding increment of
     /// `2` would result in rounding in increments of every other month.
     ///
+    /// # Errors
+    ///
+    /// The increment must be greater than zero and less than or equal to
+    /// `1_000_000_000`.
+    ///
+    /// The error will occur when computing the span, and not when setting
+    /// the increment here.
+    ///
     /// # Example
     ///
     /// This shows how to round the span between two date to the nearest even
@@ -2786,7 +2804,7 @@ impl DateDifference {
     /// via rounding.
     #[inline]
     fn rounding_may_change_span(&self) -> bool {
-        self.round.rounding_may_change_span_ignore_largest()
+        self.round.rounding_calendar_only_may_change_span()
     }
 
     /// Returns the span of time since `d1` to the date in this configuration.
@@ -2801,31 +2819,23 @@ impl DateDifference {
         // Immense discussion discussing and justifying this behavior:
         // https://github.com/tc39/proposal-temporal/issues/2535
 
-        let d2 = self.date;
-        let largest = self
-            .round
-            .get_largest()
-            .unwrap_or_else(|| self.round.get_smallest().max(Unit::Day));
-        if largest < Unit::Day {
-            // This is the only error case when not rounding! Somewhat
-            // unfortunate. I did consider making this a panic instead, because
-            // we're so close to it being infallible (I think), but I decided
-            // that would be too inconsistent with how we handle invalid units
-            // in other places. (It's just that, in other places, invalid units
-            // are one of a few different kinds of possible errors.)
-            //
-            // Another option would be to just assume `largest` is `Unit::Day`
-            // when it's a smaller unit.
-            //
-            // Yet another option is to split `Unit` into `DateUnit` and
-            // `TimeUnit`, but I found that to be quite awkward (it was the
-            // design I started with).
-            //
-            // NOTE: I take the above back. It's actually possible for the
-            // months component to overflow when largest=month.
-            return Err(Error::from(E::RoundMustUseDaysOrBigger {
-                unit: largest,
+        let smallest = self.round.get_smallest();
+        if smallest < Unit::Day {
+            return Err(Error::from(UnitConfigError::CivilDate {
+                given: smallest,
             }));
+        }
+
+        let largest = self.round.get_largest().unwrap_or(smallest);
+        if largest < Unit::Day {
+            return Err(Error::from(UnitConfigError::CivilDate {
+                given: largest,
+            }));
+        }
+
+        let d2 = self.date;
+        if d1 == d2 {
+            return Ok(Span::new());
         }
         if largest <= Unit::Week {
             let mut weeks: i32 = 0;
