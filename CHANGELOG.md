@@ -1,8 +1,10 @@
 # CHANGELOG
 
-0.2.19 (TBD)
-============
-TODO
+0.2.19 (2026-02-05)
+===================
+This is a small release with a performance optimization (with respect to doing
+heavily contended arithmetic on `Zoned` values) and a bug fix for a panic
+that can occur when using `%2s` in `strftime`.
 
 Enhancements:
 
