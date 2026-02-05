@@ -1,4 +1,4 @@
-use crate::{error, Unit};
+use crate::error;
 
 #[derive(Clone, Debug)]
 pub(crate) enum Error {
@@ -12,8 +12,6 @@ pub(crate) enum Error {
     IllegalTimeWithNanosecond,
     OverflowDaysDuration,
     OverflowTimeNanoseconds,
-    RoundMustUseDaysOrBigger { unit: Unit },
-    RoundMustUseHoursOrSmaller { unit: Unit },
 }
 
 impl From<Error> for error::Error {
@@ -63,18 +61,6 @@ impl core::fmt::Display for Error {
             OverflowTimeNanoseconds => {
                 f.write_str("adding duration to time overflowed")
             }
-            RoundMustUseDaysOrBigger { unit } => write!(
-                f,
-                "rounding the span between two dates must use days \
-                 or bigger for its units, but found {unit}",
-                unit = unit.plural(),
-            ),
-            RoundMustUseHoursOrSmaller { unit } => write!(
-                f,
-                "rounding the span between two times must use hours \
-                 or smaller for its units, but found {unit}",
-                unit = unit.plural(),
-            ),
         }
     }
 }

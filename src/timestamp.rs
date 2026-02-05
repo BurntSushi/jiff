@@ -2,14 +2,16 @@ use core::time::Duration as UnsignedDuration;
 
 use crate::{
     duration::{Duration, SDuration},
-    error::{timestamp::Error as E, Error, ErrorContext},
+    error::{
+        timestamp::Error as E, unit::UnitConfigError, Error, ErrorContext,
+    },
     fmt::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
     },
     shared::util::itime::ITimestamp,
     tz::{Offset, TimeZone},
-    util::{b, constant, round::increment},
+    util::{b, constant, round::Increment},
     zoned::Zoned,
     RoundMode, SignedDuration, Span, SpanRound, Unit,
 };
@@ -1626,7 +1628,7 @@ impl Timestamp {
         duration: A,
     ) -> Result<Timestamp, Error> {
         let duration: TimestampArithmetic = duration.into();
-        duration.saturating_add(self).context(E::RequiresSaturatingTimeUnits)
+        duration.saturating_add(self)
     }
 
     /// This routine is identical to [`Timestamp::saturating_add`] with the
@@ -3033,6 +3035,8 @@ impl TimestampDifference {
     /// is violated, then computing a span with this configuration will result
     /// in an error.
     ///
+    /// The largest unit must also be no greater than `Unit::Hour`.
+    ///
     /// # Example
     ///
     /// This shows how to round a span between two timestamps to units no less
@@ -3079,6 +3083,8 @@ impl TimestampDifference {
     /// The largest units, when set, must be at least as big as the smallest
     /// units (which defaults to [`Unit::Nanosecond`]). If this is violated,
     /// then computing a span with this configuration will result in an error.
+    ///
+    /// The largest unit must also be no greater than `Unit::Hour`.
     ///
     /// # Example
     ///
@@ -3162,6 +3168,9 @@ impl TimestampDifference {
     /// nanoseconds since there are `1,000` nanoseconds in the next highest
     /// unit (microseconds).
     ///
+    /// In all cases, the increment must be greater than zero and less than or
+    /// equal to `1_000_000_000`.
+    ///
     /// The error will occur when computing the span, and not when setting
     /// the increment here.
     ///
@@ -3194,7 +3203,7 @@ impl TimestampDifference {
     /// via rounding.
     #[inline]
     fn rounding_may_change_span(&self) -> bool {
-        self.round.rounding_may_change_span_ignore_largest()
+        self.round.rounding_may_change_span()
     }
 
     /// Returns the span of time from `ts1` to the timestamp in this
@@ -3209,9 +3218,7 @@ impl TimestampDifference {
             .unwrap_or_else(|| self.round.get_smallest().max(Unit::Second));
         if largest >= Unit::Day {
             return Err(Error::from(
-                crate::error::util::RoundingIncrementError::Unsupported {
-                    unit: largest,
-                },
+                UnitConfigError::RoundToUnitUnsupported { unit: largest },
             ));
         }
 
@@ -3419,6 +3426,11 @@ impl TimestampRound {
     /// 45 seconds and 15 minutes are allowed, but 7 seconds and 25 minutes are
     /// both not allowed.
     ///
+    /// In all cases, the increment must be greater than zero and less than or
+    /// equal to `1_000_000_000`. Note that this means, for example, one
+    /// cannot round to the nearest `43_200_000_000_000` nanosecond, despite
+    /// the fact that it divides evenly into `86_400_000_000_000` seconds.
+    ///
     /// # Example
     ///
     /// This example shows how to round a timestamp to the nearest 10 minute
@@ -3446,12 +3458,10 @@ impl TimestampRound {
         timestamp: Timestamp,
     ) -> Result<Timestamp, Error> {
         let increment =
-            increment::for_timestamp(self.smallest, self.increment)?;
-        Timestamp::from_nanosecond(self.mode.round_by_unit(
-            timestamp.as_nanosecond(),
-            self.smallest,
-            increment,
-        ))
+            Increment::for_timestamp(self.smallest, self.increment)?;
+        Timestamp::from_duration(
+            increment.round(self.mode, timestamp.as_duration())?,
+        )
     }
 }
 
@@ -3630,7 +3640,7 @@ mod tests {
     fn timestamp_saturating_add() {
         insta::assert_snapshot!(
             Timestamp::MIN.saturating_add(Span::new().days(1)).unwrap_err(),
-            @"saturating timestamp arithmetic requires only time units: operation can only be performed with units of hours or smaller, but found non-zero 'day' units (operations on `jiff::Timestamp`, `jiff::tz::Offset` and `jiff::civil::Time` don't support calendar units in a `jiff::Span`)",
+            @"operation can only be performed with units of hours or smaller, but found non-zero 'day' units (operations on `jiff::Timestamp`, `jiff::tz::Offset` and `jiff::civil::Time` don't support calendar units in a `jiff::Span`)",
         )
     }
 
@@ -3638,7 +3648,7 @@ mod tests {
     fn timestamp_saturating_sub() {
         insta::assert_snapshot!(
             Timestamp::MAX.saturating_sub(Span::new().days(1)).unwrap_err(),
-            @"saturating timestamp arithmetic requires only time units: operation can only be performed with units of hours or smaller, but found non-zero 'day' units (operations on `jiff::Timestamp`, `jiff::tz::Offset` and `jiff::civil::Time` don't support calendar units in a `jiff::Span`)",
+            @"operation can only be performed with units of hours or smaller, but found non-zero 'day' units (operations on `jiff::Timestamp`, `jiff::tz::Offset` and `jiff::civil::Time` don't support calendar units in a `jiff::Span`)",
         )
     }
 

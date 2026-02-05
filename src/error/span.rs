@@ -8,14 +8,9 @@ pub(crate) enum Error {
     ConvertSpanToSignedDuration,
     FailedSpanBetweenDateTimes { unit: Unit },
     FailedSpanBetweenZonedDateTimes { unit: Unit },
-    NotAllowedCalendarUnits { unit: Unit },
-    NotAllowedLargestSmallerThanSmallest { smallest: Unit, largest: Unit },
     OptionLargest,
     OptionLargestInSpan,
     OptionSmallest,
-    RequiresRelativeWeekOrDay { unit: Unit },
-    RequiresRelativeYearOrMonth { unit: Unit },
-    RequiresRelativeYearOrMonthGivenDaysAre24Hours { unit: Unit },
     ToDurationCivil,
     ToDurationDaysAre24Hours,
     ToDurationZoned,
@@ -79,49 +74,6 @@ impl core::fmt::Display for Error {
             OptionSmallest => {
                 f.write_str("error with `smallest` rounding option")
             }
-            NotAllowedCalendarUnits { unit } => write!(
-                f,
-                "operation can only be performed with units of hours \
-                 or smaller, but found non-zero '{unit}' units \
-                 (operations on `jiff::Timestamp`, `jiff::tz::Offset` \
-                  and `jiff::civil::Time` don't support calendar \
-                  units in a `jiff::Span`)",
-                unit = unit.singular(),
-            ),
-            NotAllowedLargestSmallerThanSmallest { smallest, largest } => {
-                write!(
-                    f,
-                    "largest unit ('{largest}') cannot be smaller than \
-                 smallest unit ('{smallest}')",
-                    largest = largest.singular(),
-                    smallest = smallest.singular(),
-                )
-            }
-            RequiresRelativeWeekOrDay { unit } => write!(
-                f,
-                "using unit '{unit}' in a span or configuration \
-                 requires that either a relative reference time be given \
-                 or `jiff::SpanRelativeTo::days_are_24_hours()` is used to \
-                 indicate invariant 24-hour days, \
-                 but neither were provided",
-                unit = unit.singular(),
-            ),
-            RequiresRelativeYearOrMonth { unit } => write!(
-                f,
-                "using unit '{unit}' in a span or configuration \
-                 requires that a relative reference time be given, \
-                 but none was provided",
-                unit = unit.singular(),
-            ),
-            RequiresRelativeYearOrMonthGivenDaysAre24Hours { unit } => write!(
-                f,
-                "using unit '{unit}' in span or configuration \
-                 requires that a relative reference time be given \
-                 (`jiff::SpanRelativeTo::days_are_24_hours()` was given \
-                 but this only permits using days and weeks \
-                 without a relative reference time)",
-                unit = unit.singular(),
-            ),
             ToDurationCivil => f.write_str(
                 "could not compute normalized relative span \
                  from civil datetime",

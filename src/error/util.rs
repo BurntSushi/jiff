@@ -1,14 +1,13 @@
-use crate::{error, util::escape::Byte, Unit};
+use crate::{error, util::escape::Byte};
 
 #[derive(Clone, Debug)]
 pub(crate) enum RoundingIncrementError {
     ForDateTime,
+    ForOffset,
+    ForSignedDuration,
     ForSpan,
     ForTime,
     ForTimestamp,
-    GreaterThanZero { unit: Unit },
-    InvalidDivide { unit: Unit, must_divide: i64 },
-    Unsupported { unit: Unit },
 }
 
 impl From<RoundingIncrementError> for error::Error {
@@ -31,26 +30,13 @@ impl core::fmt::Display for RoundingIncrementError {
 
         match *self {
             ForDateTime => f.write_str("failed rounding datetime"),
+            ForOffset => f.write_str("failed rounding time zone offset"),
+            ForSignedDuration => {
+                f.write_str("failed rounding signed duration")
+            }
             ForSpan => f.write_str("failed rounding span"),
             ForTime => f.write_str("failed rounding time"),
             ForTimestamp => f.write_str("failed rounding timestamp"),
-            GreaterThanZero { unit } => write!(
-                f,
-                "rounding increment for {unit} must be greater than zero",
-                unit = unit.plural(),
-            ),
-            InvalidDivide { unit, must_divide } => write!(
-                f,
-                "increment for rounding to {unit} \
-                 must be 1) less than {must_divide}, 2) divide into \
-                 it evenly and 3) greater than zero",
-                unit = unit.plural(),
-            ),
-            Unsupported { unit } => write!(
-                f,
-                "rounding to {unit} is not supported",
-                unit = unit.plural(),
-            ),
         }
     }
 }

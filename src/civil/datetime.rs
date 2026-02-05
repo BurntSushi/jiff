@@ -12,7 +12,7 @@ use crate::{
     },
     shared::util::itime::IDateTime,
     tz::TimeZone,
-    util::{b, round::increment},
+    util::{b, round::Increment},
     zoned::Zoned,
     RoundMode, SignedDuration, Span, SpanRound, Unit,
 };
@@ -2363,7 +2363,7 @@ impl DateTime {
     /// Converts this datetime to a nanosecond timestamp assuming a Zulu time
     /// zone offset and where all days are exactly 24 hours long.
     #[inline]
-    fn to_nanosecond(self) -> SignedDuration {
+    fn to_duration(self) -> SignedDuration {
         let mut dur =
             SignedDuration::from_civil_days32(self.date().to_unix_epoch_day());
         dur += self.time().to_duration();
@@ -3179,6 +3179,9 @@ impl DateTimeDifference {
     /// Namely, any integer that divides evenly into `1,000` nanoseconds since
     /// there are `1,000` nanoseconds in the next highest unit (microseconds).
     ///
+    /// In all cases, the increment must be greater than zero and less than
+    /// or equal to `1_000_000_000`.
+    ///
     /// The error will occur when computing the span, and not when setting
     /// the increment here.
     ///
@@ -3214,7 +3217,7 @@ impl DateTimeDifference {
     /// via rounding.
     #[inline]
     fn rounding_may_change_span(&self) -> bool {
-        self.round.rounding_may_change_span_ignore_largest()
+        self.round.rounding_may_change_span()
     }
 
     /// Returns the span of time from `dt1` to the datetime in this
@@ -3228,7 +3231,7 @@ impl DateTimeDifference {
             .get_largest()
             .unwrap_or_else(|| self.round.get_smallest().max(Unit::Day));
         if largest <= Unit::Day {
-            let diff = dt2.to_nanosecond() - dt1.to_nanosecond();
+            let diff = dt2.to_duration() - dt1.to_duration();
             // Note that this can fail! If largest unit is nanoseconds and the
             // datetimes are far enough apart, a single i64 won't be able to
             // represent the time difference.
@@ -3492,6 +3495,9 @@ impl DateTimeRound {
     /// Namely, any integer that divides evenly into `1,000` nanoseconds since
     /// there are `1,000` nanoseconds in the next highest unit (microseconds).
     ///
+    /// In all cases, the increment must be greater than zero and less than or
+    /// equal to `1_000_000_000`.
+    ///
     /// # Example
     ///
     /// This example shows how to round a datetime to the nearest 10 minute
@@ -3522,49 +3528,30 @@ impl DateTimeRound {
     pub(crate) fn round(&self, dt: DateTime) -> Result<DateTime, Error> {
         // ref: https://tc39.es/proposal-temporal/#sec-temporal.plaindatetime.prototype.round
 
-        let increment =
-            increment::for_datetime(self.smallest, self.increment)?;
-        // We permit rounding to any time unit and days, but nothing else.
-        // We should support this, but Temporal doesn't. So for now, we're
-        // sticking to what Temporal does because they're probably not doing
-        // it for good reasons.
-        match self.smallest {
-            Unit::Year | Unit::Month | Unit::Week => {
-                return Err(Error::from(
-                    crate::error::util::RoundingIncrementError::Unsupported {
-                        unit: self.smallest,
-                    },
-                ));
-            }
-            // We don't do any rounding in this case, so just bail now.
-            Unit::Nanosecond if increment == 1 => {
-                return Ok(dt);
-            }
-            _ => {}
+        // We don't do any rounding in this case and there are no possible
+        // error conditions under this configuration. So just bail.
+        if self.smallest == Unit::Nanosecond && self.increment == 1 {
+            return Ok(dt);
         }
 
-        let time_nanos = dt.time().to_nanosecond();
+        let increment =
+            Increment::for_datetime(self.smallest, self.increment)?;
+        let time_nanos = dt.time().to_duration();
         let sign = b::Sign::from(dt.date().year());
-        let time_rounded = self.mode.round_by_unit(
-            i128::from(time_nanos),
-            self.smallest,
-            increment,
-        );
+        let time_rounded = increment.round(self.mode, time_nanos)?;
+        let (days, time_nanos) = time_rounded.as_civil_days_with_remainder();
         // OK because `abs(days)` here can never be greater than 1. Namely,
         // rounding time increments are limited to values that divide evenly
         // into the corresponding maximal value. And a `day` increment is
         // limited to `1`. So even starting with the maximal `dt.time()` value
         // (the last nanosecond in a civil day), we can never round past 1 day.
-        let days =
-            ((sign * time_rounded) / (b::NANOS_PER_CIVIL_DAY as i128)) as i32;
-        // OK because `NANOS_PER_CIVIL_DAY` is guaranteed to fit into an `i64`.
-        let time_nanos =
-            (time_rounded % (b::NANOS_PER_CIVIL_DAY as i128)) as i64;
-        let time = Time::from_nanosecond_unchecked(time_nanos);
+        let days = sign * days;
+        let time = Time::from_duration_unchecked(time_nanos);
 
-        // OK because `abs(days) <= 1` (see above comment) and `dt.date().day()`
-        // can never exceed `31`. So the result always fits into an `i32`.
-        let days_len = (i32::from(dt.date().day()) - 1) + days;
+        // OK because `abs(days) <= 1` (see above comment) and
+        // `dt.date().day()` can never exceed `31`. So the result always fits
+        // into an `i64`.
+        let days_len = (i64::from(dt.date().day()) - 1) + days;
         let start = dt.date().first_of_month();
         // `abs(days)` is always <= 1, and so `days_len` should
         // always be at most 1 greater (or less) than where we started. If we

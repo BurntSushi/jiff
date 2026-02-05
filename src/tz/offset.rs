@@ -11,8 +11,8 @@ use crate::{
     span::Span,
     timestamp::Timestamp,
     tz::{AmbiguousOffset, AmbiguousTimestamp, AmbiguousZoned, TimeZone},
-    util::{array_str::ArrayStr, b, constant},
-    RoundMode, SignedDuration, SignedDurationRound, Unit,
+    util::{array_str::ArrayStr, b, constant, round::Increment},
+    RoundMode, SignedDuration, Unit,
 };
 
 /// An enum indicating whether a particular datetime  is in DST or not.
@@ -948,7 +948,9 @@ impl Offset {
     /// assert_eq!(Offset::MAX.to_string(), "+25:59:59");
     /// assert_eq!(
     ///     Offset::MAX.round(Unit::Minute).unwrap_err().to_string(),
-    ///     "rounding time zone offset resulted in a duration that overflows",
+    ///     "rounding time zone offset resulted in a duration that overflows: \
+    ///      parameter 'time zone offset total seconds' is not \
+    ///      in the required range of -93599..=93599",
     /// );
     /// ```
     #[inline]
@@ -1480,7 +1482,11 @@ impl<'a> From<&'a UnsignedDuration> for OffsetArithmetic {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[derive(Clone, Copy, Debug)]
-pub struct OffsetRound(SignedDurationRound);
+pub struct OffsetRound {
+    smallest: Unit,
+    mode: RoundMode,
+    increment: i64,
+}
 
 impl OffsetRound {
     /// Create a new default configuration for rounding a time zone offset via
@@ -1489,7 +1495,11 @@ impl OffsetRound {
     /// The default configuration does no rounding.
     #[inline]
     pub fn new() -> OffsetRound {
-        OffsetRound(SignedDurationRound::new().smallest(Unit::Second))
+        OffsetRound {
+            smallest: Unit::Second,
+            mode: RoundMode::HalfExpand,
+            increment: 1,
+        }
     }
 
     /// Set the smallest units allowed in the offset returned. These are the
@@ -1513,7 +1523,7 @@ impl OffsetRound {
     /// ```
     #[inline]
     pub fn smallest(self, unit: Unit) -> OffsetRound {
-        OffsetRound(self.0.smallest(unit))
+        OffsetRound { smallest: unit, ..self }
     }
 
     /// Set the rounding mode.
@@ -1547,7 +1557,7 @@ impl OffsetRound {
     /// ```
     #[inline]
     pub fn mode(self, mode: RoundMode) -> OffsetRound {
-        OffsetRound(self.0.mode(mode))
+        OffsetRound { mode, ..self }
     }
 
     /// Set the rounding increment for the smallest unit.
@@ -1560,13 +1570,10 @@ impl OffsetRound {
     ///
     /// # Errors
     ///
-    /// The rounding increment must divide evenly into the next highest unit
-    /// after the smallest unit configured (and must not be equivalent to
-    /// it). For example, if the smallest unit is [`Unit::Second`], then
-    /// *some* of the valid values for the rounding increment are `1`, `2`,
-    /// `4`, `5`, `15` and `30`. Namely, any integer that divides evenly into
-    /// `60` seconds since there are `60` seconds in the next highest unit
-    /// (minutes).
+    /// Unlike rounding a [`Span`](crate::Span), the increment does not need to
+    /// divide evenly into the next largest unit. Callers can round an offset
+    /// to any increment value so long as it is greater than zero and less than
+    /// or equal to `1_000_000_000`.
     ///
     /// # Example
     ///
@@ -1585,18 +1592,19 @@ impl OffsetRound {
     /// ```
     #[inline]
     pub fn increment(self, increment: i64) -> OffsetRound {
-        OffsetRound(self.0.increment(increment))
+        OffsetRound { increment, ..self }
     }
 
     /// Does the actual offset rounding.
     fn round(&self, offset: Offset) -> Result<Offset, Error> {
-        let smallest = self.0.get_smallest();
-        if !(Unit::Second <= smallest && smallest <= Unit::Hour) {
-            return Err(Error::from(E::RoundInvalidUnit { unit: smallest }));
-        }
-        let rounded_sdur = SignedDuration::from(offset).round(self.0)?;
-        Offset::try_from(rounded_sdur)
-            .map_err(|_| Error::from(E::RoundOverflow))
+        let increment = Increment::for_offset(self.smallest, self.increment)?;
+        // let rounded_sdur = SignedDuration::from(offset).round(self.0)?;
+        let rounded = increment
+            .round(self.mode, SignedDuration::from(offset))
+            .context(E::RoundOverflow)?;
+        Offset::try_from(rounded)
+            .map_err(|_| b::OffsetTotalSeconds::error())
+            .context(E::RoundOverflow)
     }
 }
 

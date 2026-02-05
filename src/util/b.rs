@@ -7,7 +7,7 @@ ranged integers. I'm not quite sure where this will go.
 
 #![allow(dead_code)]
 
-use crate::Error;
+use crate::{Error, SignedDuration};
 
 pub(crate) const DAYS_PER_WEEK: i64 = 7;
 pub(crate) const HOURS_PER_CIVIL_DAY: i64 = 24;
@@ -186,6 +186,10 @@ define_bounds! {
     (Hour12, i8, "hour (12 hour clock)", 1, 12),
     (ISOWeek, i8, "iso-week", 1, 53),
     (ISOYear, i16, "iso-year", -9999, 9999),
+    // This matches Temporal's range.
+    // See: https://github.com/tc39/proposal-temporal/issues/2458#issuecomment-1380742911
+    (Increment, i64, "rounding increment", 1, 1_000_000_000),
+    (Increment32, i32, "rounding increment", 1, 1_000_000_000),
     // This is only used in parsing. A value of `60` gets clamped to `59`.
     (LeapSecond, i8, "second", 0, 60),
     (Microsecond, i16, "microsecond", 0, 999),
@@ -227,6 +231,7 @@ define_bounds! {
         + OffsetSeconds::MAX as i32,
     ),
     (Second, i8, "second", 0, 59),
+    (SignedDurationSeconds, i64, "signed duration seconds", i64::MIN, i64::MAX),
     (SpanYears, i16, "years", -Self::MAX, (Year::LEN - 1) as i16),
     (SpanMonths, i32, "months", -Self::MAX, SpanYears::MAX as i32 * 12),
     (SpanWeeks, i32, "weeks", -Self::MAX, SpanDays::MAX / DAYS_PER_WEEK_32),
@@ -703,6 +708,9 @@ where
 #[derive(Clone, Debug)]
 pub(crate) enum SpecialBoundsError {
     UnixNanoseconds,
+    SignedDurationFloatOutOfRangeF32,
+    SignedDurationFloatOutOfRangeF64,
+    UnsignedDurationSeconds,
 }
 
 impl core::fmt::Display for SpecialBoundsError {
@@ -715,6 +723,29 @@ impl core::fmt::Display for SpecialBoundsError {
                 UnixMicroseconds::MIN as i128 * (NANOS_PER_MICRO as i128),
                 UnixMicroseconds::MAX as i128 * (NANOS_PER_MICRO as i128),
             ),
+            UnsignedDurationSeconds => (
+                "unsigned duration seconds",
+                u64::MIN as i128,
+                u64::MAX as i128,
+            ),
+            SignedDurationFloatOutOfRangeF32 => {
+                return write!(
+                    f,
+                    "parameter 'floating point seconds' is not in \
+                     the required range of {min}..={max}",
+                    min = i64::MIN as f32,
+                    max = i64::MAX as f32,
+                );
+            }
+            SignedDurationFloatOutOfRangeF64 => {
+                return write!(
+                    f,
+                    "parameter 'floating point seconds' is not in \
+                     the required range of {min}..={max}",
+                    min = i64::MIN as f64,
+                    max = i64::MAX as f64,
+                );
+            }
         };
         write!(
             f,
@@ -764,7 +795,7 @@ impl Sign {
     }
 
     pub(crate) fn signum(self) -> i8 {
-        self.as_i8().signum()
+        self.as_i8()
     }
 
     pub(crate) fn as_i8(self) -> i8 {
@@ -844,6 +875,42 @@ impl From<i128> for Sign {
         if n == 0 {
             Sign::Zero
         } else if n > 0 {
+            Sign::Positive
+        } else {
+            Sign::Negative
+        }
+    }
+}
+
+impl From<f64> for Sign {
+    fn from(n: f64) -> Sign {
+        use core::num::FpCategory::*;
+
+        // This is a little odd, but we want +/- 0 to
+        // always have a sign of zero, so as to be consistent
+        // with how we deal with signed integers.
+        //
+        // As for NaN... It should generally be a bug if
+        // Jiff ever materializes a NaN. Notably, I do not
+        // believe there are any APIs in which a float is
+        // given from the caller. Jiff only ever uses them
+        // internally or returns them. So if we get a NaN,
+        // it's on us. If we do, just assign it a zero sign?
+        if matches!(n.classify(), Nan | Zero) {
+            Sign::Zero
+        } else if n.is_sign_positive() {
+            Sign::Positive
+        } else {
+            Sign::Negative
+        }
+    }
+}
+
+impl From<SignedDuration> for Sign {
+    fn from(n: SignedDuration) -> Sign {
+        if n.is_zero() {
+            Sign::Zero
+        } else if n.is_positive() {
             Sign::Positive
         } else {
             Sign::Negative
