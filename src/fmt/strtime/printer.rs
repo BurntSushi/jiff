@@ -1029,9 +1029,9 @@ impl Extension {
         }
         let number = number.unsigned_abs();
         match (pad_byte, pad_width) {
-            (b'0', 2) => wtr.write_int_pad2(number),
-            (b' ', 2) => wtr.write_int_pad2_space(number),
-            (b'0', 4) => wtr.write_int_pad4(number),
+            (b'0', 2) if number <= 99 => wtr.write_int_pad2(number),
+            (b' ', 2) if number <= 99 => wtr.write_int_pad2_space(number),
+            (b'0', 4) if number <= 9999 => wtr.write_int_pad4(number),
             _ => wtr.write_int_pad(number, pad_byte, pad_width),
         }
     }
@@ -1518,6 +1518,7 @@ mod tests {
         insta::assert_snapshot!(f("%s", ts), @"0");
         insta::assert_snapshot!(f("%3s", ts), @"  0");
         insta::assert_snapshot!(f("%03s", ts), @"000");
+        insta::assert_snapshot!(f("%2s", ts), @" 0");
 
         let ts = "2025-01-20T13:09-05[US/Eastern]".parse().unwrap();
         insta::assert_snapshot!(f("%s", ts), @"1737396540");
@@ -1609,5 +1610,27 @@ mod tests {
             f(b"%F\xFF\xFF\xFF%Y", date(2024, 7, 9)),
             @"2024-07-09���2024",
         );
+    }
+
+    // Regression test for a failed optimization where we would
+    // inappropriately call `write_int_pad2` without checking that
+    // the number to format was two digits.
+    //
+    // See: https://github.com/BurntSushi/jiff/issues/497
+    #[test]
+    fn regression_timestamp_2s() {
+        use alloc::string::ToString;
+
+        let ts: Timestamp = "2024-07-09T20:24:00Z".parse().unwrap();
+        assert_eq!(ts.strftime("%2s").to_string(), "1720556640");
+
+        let ts: Timestamp = "2024-07-09T20:24:00Z".parse().unwrap();
+        assert_eq!(ts.strftime("%_2s").to_string(), "1720556640");
+
+        let ts: Timestamp = "2024-07-09T20:24:00Z".parse().unwrap();
+        assert_eq!(ts.strftime("%02s").to_string(), "1720556640");
+
+        let ts: Timestamp = "2024-07-09T20:24:00Z".parse().unwrap();
+        assert_eq!(ts.strftime("%04s").to_string(), "1720556640");
     }
 }

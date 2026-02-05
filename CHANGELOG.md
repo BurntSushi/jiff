@@ -9,6 +9,11 @@ Enhancements:
 * [#491](https://github.com/BurntSushi/jiff/issues/491):
 Avoid cloning `TimeZone` for consuming operations on `Zoned`.
 
+Bug fixes:
+
+* [#497](https://github.com/BurntSushi/jiff/issues/497):
+Fix a panic in `timestamp.strftime("%2s")`.
+
 
 0.2.18 (2026-01-05)
 ===================
