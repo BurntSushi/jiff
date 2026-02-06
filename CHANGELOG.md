@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.2.20 (TBD)
+============
+TODO
+
+Enhancements:
+
+* [#500](https://github.com/BurntSushi/jiff/issues/500):
+Update comparison with the `time` crate in the Jiff documentation.
+
+
 0.2.19 (2026-02-05)
 ===================
 This is a small release with a performance optimization (with respect to doing
