@@ -153,29 +153,27 @@ rest of the datetime types in a consistent way.
 
 ### `time`
 
-My main gripe with the `time` crate is that it has no [IANA Time Zone Database]
-support at all. This means it cannot do DST safe arithmetic. Consequently, it
-emphasizes the use of "fixed offset" datetimes in a similar fashion as Chrono,
-except `time` does not provide any extension mechanism like a `TimeZone` trait.
-In my view, fixed offset datetimes are rarely the right thing to use. In my
-opinion, this makes writing correct datetime code with the `time` crate rather
-difficult. In contrast, Jiff provides full [IANA Time Zone Database] support,
-and it should be very rare to need fixed offset datetimes (although Jiff does
-support them via `TimeZone::fixed`).
+My main gripe with the `time` crate is that it has very limited
+[IANA Time Zone Database] support. This means it is difficult to do DST safe
+arithmetic. Consequently, it emphasizes the use of "fixed offset" datetimes
+in a similar fashion as Chrono, except `time` does not provide any extension
+mechanism like a `TimeZone` trait. In my view, fixed offset datetimes are
+rarely the right thing to use. In my opinion, this makes writing correct
+datetime code with the `time` crate rather difficult. In contrast, Jiff
+provides full [IANA Time Zone Database] support, and it should be very
+rare to need fixed offset datetimes (although Jiff does support them via
+`TimeZone::fixed`).
 
-The `time` crate also, at present, relies on unsound `libc` APIs for
-determining the current time zone offset, but makes them sound by requiring (by
-default) that `UtcOffset::current_local_offset` is only called when there is
-only 1 thread. This is a result of the `libc` APIs accessing the environment
-in a way that is unsynchronized with Rust's standard library access to the
-environment. This is likely a temporary limitation, but at time of writing,
-this state has persisted for quite some time already. In contrast, Jiff detects
-the current time zone of the platform on its own without use of `libc`, and
-thus sidesteps this issue. (This is also what Chrono does.)
+(Note that at time of writing, there does exist an unofficial [`time-tz`]
+crate that provides very limited support for time zones in concert with the
+`time` crate. However, there is no time zone aware datetime type and no way to
+distinguish between calendar arithmetic and time arithmetic across daylight
+saving time boundaries. The `time-tz` crate borrows the design of `chrono-tz`,
+and thus has all of its downsides as well.)
 
 I overall find the API of `time` to be easier to understand than Chrono, likely
 because there are fewer generics. But `time` is also supporting a lot less than
-Chrono and Jiff (because of the missing time zone support).
+Chrono and Jiff (because of the missing time zone support in `time` itself).
 
 As with Chrono, I've done a
 [more detailed comparison between Jiff and `time`][comparison-time].
@@ -634,5 +632,6 @@ serious confusion and conflicts in names when someone wants to use both an
 [`tzfile`]: https://docs.rs/tzfile
 [`chrono`]: https://docs.rs/chrono
 [`time`]: https://docs.rs/time
+[`time-tz`]: https://docs.rs/time-tz
 [`hifitime`]: https://docs.rs/hifitime
 [`icu`]: https://docs.rs/icu
