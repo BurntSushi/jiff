@@ -291,7 +291,7 @@ rustdoc-args = ["--cfg", "docsrs_jiff"]
 # Ref: https://github.com/BurntSushi/jiff/issues/502
 [package.metadata.playground]
 default-features = true
-features = ["logging", "serde", "static", "tzdb-bundle-always"]
+features = ["js", "logging", "serde", "static", "tzdb-bundle-always"]
 
 # This squashes the (AFAIK) erroneous warning that `docsrs_jiff` is not a
 # valid `cfg` knob.
