@@ -79,9 +79,9 @@ tz-system = ["std", "dep:windows-sys"]
 # find the offset for a timestamp in a particular time zone before 2037, you
 # just need to do one very fast binary search on the explicit transitions.
 #
-# However, these explicit transitions up through 2037 aren't, strictly speaking,
-# required. For example, the DST transition rule in the United States is
-# perfectly described by a single POSIX time zone string:
+# However, these explicit transitions up through 2037 aren't, strictly
+# speaking, required. For example, the DST transition rule in the United States
+# (as of 2026-02-07) is perfectly described by a single POSIX time zone string:
 #
 #     EST5EDT,M3.2.0,M11.1.0
 #
@@ -287,6 +287,11 @@ all-features = true
 # feature, they sometimes break. By using our "own" `cfg` knob, we are closer
 # to being masters of our own destiny.
 rustdoc-args = ["--cfg", "docsrs_jiff"]
+
+# Ref: https://github.com/BurntSushi/jiff/issues/502
+[package.metadata.playground]
+default-features = true
+features = ["logging", "serde", "static", "tzdb-bundle-always"]
 
 # This squashes the (AFAIK) erroneous warning that `docsrs_jiff` is not a
 # valid `cfg` knob.
