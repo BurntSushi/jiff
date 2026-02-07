@@ -8,6 +8,8 @@ Enhancements:
 
 * [#500](https://github.com/BurntSushi/jiff/issues/500):
 Update comparison with the `time` crate in the Jiff documentation.
+* [#502](https://github.com/BurntSushi/jiff/issues/502):
+Enable some non-default features for the Rust Playground deployment.
 
 
 0.2.19 (2026-02-05)
