@@ -6,6 +6,8 @@ TODO
 
 Enhancements:
 
+* [#11](https://github.com/BurntSushi/jiff/issues/11):
+Stop using ranged integers internally.
 * [#500](https://github.com/BurntSushi/jiff/issues/500):
 Update comparison with the `time` crate in the Jiff documentation.
 * [#502](https://github.com/BurntSushi/jiff/issues/502):
