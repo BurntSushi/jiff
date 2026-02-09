@@ -339,7 +339,7 @@ jobs:
     - name: Build jiff-tzdb-platform
       run: cargo build -p jiff-tzdb-platform --verbose
     - name: Build docs
-      run: cargo doc --features serde,static --verbose
+      run: cargo doc --verbose
     # NOTE: We currently don't track some ecosystem integration crates
     # like `jiff-icu`. They don't support Jiff's MSRV at time of writing
     # (2025-02-02), and I think these sorts of integration crates are at very
