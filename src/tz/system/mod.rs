@@ -8,7 +8,7 @@ use crate::{
     util::cache::Expiration,
 };
 
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "emscripten"))))]
 #[path = "unix.rs"]
 mod sys;
 
@@ -26,6 +26,10 @@ mod sys;
     target_os = "unknown"
 ))]
 #[path = "wasm_js.rs"]
+mod sys;
+
+#[cfg(all(target_family = "wasm", target_os = "emscripten"))]
+#[path = "wasm_emscripten.rs"]
 mod sys;
 
 #[cfg(not(any(
