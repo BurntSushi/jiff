@@ -8,6 +8,8 @@ Enhancements:
 
 * [#11](https://github.com/BurntSushi/jiff/issues/11):
 Stop using ranged integers internally.
+* [#490](https://github.com/BurntSushi/jiff/issues/490):
+Add support for retrieving the system time zone on emscripten targets.
 * [#500](https://github.com/BurntSushi/jiff/issues/500):
 Update comparison with the `time` crate in the Jiff documentation.
 * [#502](https://github.com/BurntSushi/jiff/issues/502):
