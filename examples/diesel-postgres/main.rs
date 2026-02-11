@@ -1,7 +1,6 @@
 use diesel::{
     connection::Connection, dsl::sql, pg::PgConnection,
-    query_dsl::RunQueryDsl, select, sql_query, sql_types, Insertable,
-    QueryableByName,
+    query_dsl::RunQueryDsl, select, sql_query, sql_types, QueryableByName,
 };
 use jiff::civil;
 use jiff_diesel::ToDiesel;
