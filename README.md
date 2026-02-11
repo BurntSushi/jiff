@@ -184,10 +184,26 @@ boundaries has a lot of overhead in my experience.)
 
 ### Minimum Rust version policy
 
-This crate's minimum supported `rustc` version is `1.70.0`.
+This crate's minimum supported `rustc` version (MSRV) is `1.70.0`. Jiff
+itself, and any dependencies of Jiff within this repository, will never use a
+Rust version that requires a Rust compiler released in the previous 1 year.
+(Dependents of Jiff in this repository, e.g., `jiff-icu`, may use a newer MSRV,
+but never one that is newer than the crate it is trying to integrate with.)
 
-The policy is that the minimum Rust version required to use this crate can be
-increased in minor version updates. For example, if jiff 1.0 requires Rust
-1.20.0, then jiff 1.0.z for all values of `z` will also require Rust 1.20.0 or
-newer. However, jiff 1.y for `y > 0` may require a newer minimum version of
-Rust.
+Jiff does have other dependencies whose MSRV is outside the control of Jiff
+(for example, `windows-sys` and `portable-atomic`), and it's possible there
+may be a choice between "upgrade and increase the MSRV for those targets where
+the dependency is used" and "don't upgrade, retain the MSRV but potentially
+introduce additional copies of crates into downstream dependency trees." While
+such instances should be quite rare because of Jiff's conservative dependency
+philosophy, it's possible it could happen. In which case, I reserve the right
+to make a judgment call that may, in practice, result in a newer-than-1-year
+Rust compiler for targets where that dependency is used.
+
+As is standard in the Rust ecosystem, Jiff does not consider an increase in
+its MSRV to be a semver incompatible change. However, Jiff will limit MSRV
+increases to minor version updates. For example, if Jiff `1.0` requires Rust
+`1.20.0`, then Jiff `1.0.z` for all values of `z` will also require Rust
+`1.20.0` or older. However, Jiff `1.y` for `y > 0` may require a newer minimum
+version of Rust. (During Jiff's pre-1.0 releases, MSRV bumps will only occur
+in semver incompatible releases.)
