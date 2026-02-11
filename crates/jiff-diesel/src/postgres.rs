@@ -36,6 +36,20 @@ impl ToSql<sql_types::Timestamptz, Pg> for Timestamp {
     }
 }
 
+impl FromSql<sql_types::Timestamp, Pg> for Timestamp {
+    fn from_sql(bytes: PgValue<'_>) -> deserialize::Result<Timestamp> {
+        // The encoding is the number of *microseconds* since
+        // POSTGRES_EPOCH_DATETIME.
+        let PgTimestamp(micros) =
+            FromSql::<sql_types::Timestamp, Pg>::from_sql(bytes)?;
+        let micros = jiff::SignedDuration::from_micros(micros);
+        // OK because the timestamp is known to be valid and in range.
+        let epoch =
+            jiff::Timestamp::from_second(POSTGRES_EPOCH_TIMESTAMP).unwrap();
+        Ok(epoch.checked_add(micros)?.to_diesel())
+    }
+}
+
 impl FromSql<sql_types::Timestamptz, Pg> for Timestamp {
     fn from_sql(bytes: PgValue<'_>) -> deserialize::Result<Timestamp> {
         // The encoding is the number of *microseconds* since

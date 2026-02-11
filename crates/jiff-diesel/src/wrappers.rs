@@ -43,6 +43,10 @@ pub trait ToDiesel {
 )]
 #[cfg_attr(
     feature = "postgres",
+    diesel(sql_type = diesel::sql_types::Timestamp),
+)]
+#[cfg_attr(
+    feature = "postgres",
     diesel(sql_type = diesel::sql_types::Timestamptz),
 )]
 #[cfg_attr(
