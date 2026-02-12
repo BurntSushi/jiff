@@ -2418,7 +2418,7 @@ impl Span {
         // that fits into a `i64`. This in turn implies that a `SignedDuration`
         // can represent all possible invariant positive spans.
         const _FITS_IN_U64: () = {
-            debug_assert!(
+            assert!(
                 i64::MAX as i128
                     > ((b::SpanWeeks::MAX as i128 * b::SECS_PER_WEEK as i128)
                         + (b::SpanDays::MAX as i128

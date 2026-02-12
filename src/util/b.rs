@@ -5,7 +5,7 @@ This module is a work-in-progress that may lead to helping us move off of
 ranged integers. I'm not quite sure where this will go.
 */
 
-#![allow(dead_code)]
+// #![allow(dead_code)]
 
 use crate::{Error, SignedDuration};
 
@@ -13,6 +13,7 @@ pub(crate) const DAYS_PER_WEEK: i64 = 7;
 pub(crate) const HOURS_PER_CIVIL_DAY: i64 = 24;
 pub(crate) const MINS_PER_CIVIL_DAY: i64 = HOURS_PER_CIVIL_DAY * MINS_PER_HOUR;
 pub(crate) const MINS_PER_HOUR: i64 = 60;
+#[allow(dead_code)]
 pub(crate) const SECS_PER_WEEK: i64 = DAYS_PER_WEEK * SECS_PER_CIVIL_DAY;
 pub(crate) const SECS_PER_CIVIL_DAY: i64 = HOURS_PER_CIVIL_DAY * SECS_PER_HOUR;
 pub(crate) const SECS_PER_HOUR: i64 = SECS_PER_MIN * MINS_PER_HOUR;
@@ -24,7 +25,6 @@ pub(crate) const MICROS_PER_CIVIL_DAY: i64 =
     SECS_PER_CIVIL_DAY * MICROS_PER_SEC;
 pub(crate) const MICROS_PER_SEC: i64 = MILLIS_PER_SEC * MICROS_PER_MILLI;
 pub(crate) const MICROS_PER_MILLI: i64 = 1_000;
-pub(crate) const NANOS_PER_WEEK: i64 = DAYS_PER_WEEK * NANOS_PER_CIVIL_DAY;
 pub(crate) const NANOS_PER_CIVIL_DAY: i64 =
     HOURS_PER_CIVIL_DAY * NANOS_PER_HOUR;
 pub(crate) const NANOS_PER_HOUR: i64 = MINS_PER_HOUR * NANOS_PER_MIN;
@@ -41,8 +41,6 @@ pub(crate) const SECS_PER_CIVIL_DAY_32: i32 =
 pub(crate) const SECS_PER_HOUR_32: i32 = SECS_PER_MIN_32 * MINS_PER_HOUR_32;
 pub(crate) const SECS_PER_MIN_32: i32 = 60;
 pub(crate) const MILLIS_PER_SEC_32: i32 = 1_000;
-pub(crate) const MICROS_PER_SEC_32: i32 =
-    MILLIS_PER_SEC_32 * MICROS_PER_MILLI_32;
 pub(crate) const MICROS_PER_MILLI_32: i32 = 1_000;
 pub(crate) const NANOS_PER_SEC_32: i32 =
     MILLIS_PER_SEC_32 * NANOS_PER_MILLI_32;
@@ -88,6 +86,7 @@ macro_rules! define_bounds {
                 }
             }
 
+            #[allow(dead_code)]
             impl $name {
                 pub(crate) const MIN: $ty = <$name as Bounds>::MIN;
                 pub(crate) const MAX: $ty = <$name as Bounds>::MAX;
@@ -112,11 +111,6 @@ macro_rules! define_bounds {
                 }
 
                 #[cfg_attr(feature = "perf-inline", inline(always))]
-                pub(crate) fn check128(n: impl Into<i128>) -> Result<$ty, BoundsError> {
-                    <$name as Bounds>::check128(n)
-                }
-
-                #[cfg_attr(feature = "perf-inline", inline(always))]
                 pub(crate) fn parse(bytes: &[u8]) -> Result<$ty, Error> {
                     <$name as Bounds>::parse(bytes)
                 }
@@ -124,11 +118,6 @@ macro_rules! define_bounds {
                 #[cfg_attr(feature = "perf-inline", inline(always))]
                 pub(crate) fn checked_add(n1: $ty, n2: $ty) -> Result<$ty, BoundsError> {
                     <$name as Bounds>::checked_add(n1, n2)
-                }
-
-                #[cfg_attr(feature = "perf-inline", inline(always))]
-                pub(crate) fn checked_sub(n1: $ty, n2: $ty) -> Result<$ty, BoundsError> {
-                    <$name as Bounds>::checked_sub(n1, n2)
                 }
 
                 #[cfg_attr(feature = "perf-inline", inline(always))]
@@ -325,7 +314,7 @@ define_bounds! {
         UnixEpochDays,
         i32,
         "Unix epoch days",
-        (UnixSeconds::MIN+ OffsetTotalSeconds::MIN as i64).div_euclid(SECS_PER_CIVIL_DAY) as i32,
+        (UnixSeconds::MIN + OffsetTotalSeconds::MIN as i64).div_euclid(SECS_PER_CIVIL_DAY) as i32,
         (UnixSeconds::MAX + OffsetTotalSeconds::MAX as i64).div_euclid(SECS_PER_CIVIL_DAY) as i32,
     ),
     (
@@ -446,14 +435,6 @@ pub(crate) trait Bounds: Sized {
     // between integers very easy.
     type Primitive: Primitive;
 
-    // We provide `check` and `check128` to avoid manifesting 128-bit integers
-    // in the vast majority of cases. While in theory the compiler should be
-    // able to see through it, this is such a primitive and common operation
-    // used throughout Jiff, that we specialize the overwhelmingly common case
-    // for 64-bit integers under the presumption that 64-bit integers (and
-    // smaller) are either always fast enough or are slower in environments
-    // where we care less about performance.
-
     /// Create an error when a value is outside the bounds for this type.
     fn error() -> BoundsError;
 
@@ -485,22 +466,6 @@ pub(crate) trait Bounds: Sized {
             return Err(Self::error());
         }
         Ok(Self::Primitive::from_i64(n))
-    }
-
-    /// Converts the 128-bit integer provided into the primitive representation
-    /// of these bounds.
-    ///
-    /// # Errors
-    ///
-    /// This returns an error if the given integer does not fit in the bounds
-    /// prescribed by this trait implementation.
-    #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn check128(n: impl Into<i128>) -> Result<Self::Primitive, BoundsError> {
-        let n = n.into();
-        if !(Self::MIN.as_i128() <= n && n <= Self::MAX.as_i128()) {
-            return Err(Self::error());
-        }
-        Ok(Self::Primitive::from_i128(n))
     }
 
     /// Checks whether the given integer, in the same primitive representation
@@ -552,21 +517,6 @@ pub(crate) trait Bounds: Sized {
         Self::check_self(n1.checked_add(n2).ok_or_else(Self::error)?)
     }
 
-    /// Performs checked subtraction using this boundary type's primitive
-    /// representation.
-    ///
-    /// # Errors
-    ///
-    /// If the result exceeds the boundaries of the primitive type or of the
-    /// declared range for this type, then an error is returned.
-    #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn checked_sub(
-        n1: Self::Primitive,
-        n2: Self::Primitive,
-    ) -> Result<Self::Primitive, BoundsError> {
-        Self::check_self(n1.checked_sub(n2).ok_or_else(Self::error)?)
-    }
-
     /// Performs checked multiplication using this boundary type's primitive
     /// representation.
     ///
@@ -586,6 +536,7 @@ pub(crate) trait Bounds: Sized {
 /// A simple trait for making `int as int` usable in a generic context.
 ///
 /// All of these methods require callers to ensure the cast is correct.
+#[allow(dead_code)]
 pub(crate) trait Primitive:
     Clone
     + Copy
@@ -609,7 +560,6 @@ pub(crate) trait Primitive:
     fn from_i128(n: i128) -> Self;
 
     fn checked_add(self, n: Self) -> Option<Self>;
-    fn checked_sub(self, n: Self) -> Option<Self>;
     fn checked_mul(self, n: Self) -> Option<Self>;
 }
 
@@ -631,10 +581,6 @@ macro_rules! impl_primitive {
 
                 fn checked_add(self, n: $intty) -> Option<$intty> {
                     <$intty>::checked_add(self, n)
-                }
-
-                fn checked_sub(self, n: $intty) -> Option<$intty> {
-                    <$intty>::checked_sub(self, n)
                 }
 
                 fn checked_mul(self, n: $intty) -> Option<$intty> {

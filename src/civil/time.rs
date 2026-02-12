@@ -1159,9 +1159,10 @@ impl Time {
         // 96-bit integer, and adding any 96-bit integer to any 64-bit
         // integer can never overflow a 128-bit integer.
         let sum = start + duration;
-        let days = b::SpanDays::check128(
-            sum.div_euclid(i128::from(b::NANOS_PER_CIVIL_DAY)),
-        )?;
+        let days =
+            i64::try_from(sum.div_euclid(i128::from(b::NANOS_PER_CIVIL_DAY)))
+                .map_err(|_| b::SpanDays::error())?;
+        let days = b::SpanDays::check(days)?;
         let rem = sum.rem_euclid(i128::from(b::NANOS_PER_CIVIL_DAY)) as i64;
         let time = Time::from_nanosecond_unchecked(rem);
         Ok((time, SignedDuration::from_civil_days32(days)))
