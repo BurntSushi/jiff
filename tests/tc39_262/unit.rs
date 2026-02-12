@@ -370,19 +370,6 @@ fn civil_date_roundingincrement_day() -> Result {
     )?;
     span_eq!(sp, 7_304_484.days());
 
-    // BREADCRUMBS: Notice that the increment value doesn't necessarily lead
-    // to an error unless it specifically causes overflow. Hmmmm.
-    //
-    // Justification for increment being limited to 1e9:
-    // https://github.com/tc39/proposal-temporal/issues/2458#issuecomment-1380742911
-    //
-    // i.e., Fits into a 32-bit integer.
-    //
-    // So should I do what we do now and only report an error if rounding
-    // actually results in overflow and otherwise just forbid anything over
-    // 1e9? Or should I be more strict and enforce unit-specific limits?
-    // I feel like doing the former... Seems easier to explain.
-
     let result = D1.until(
         civil::DateDifference::new(D2)
             .mode(jiff::RoundMode::Expand)

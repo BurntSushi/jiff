@@ -175,18 +175,18 @@ pub enum Era {
 /// # Example
 ///
 /// ```
-/// use jiff::civil::DateTime;
+/// use jiff::civil::datetime;
 ///
-/// let d = DateTime::constant(2024, 2, 29, 21, 30, 5, 123_456_789);
-/// assert_eq!(d.date().year(), 2024);
-/// assert_eq!(d.date().month(), 2);
-/// assert_eq!(d.date().day(), 29);
-/// assert_eq!(d.time().hour(), 21);
-/// assert_eq!(d.time().minute(), 30);
-/// assert_eq!(d.time().second(), 5);
-/// assert_eq!(d.time().millisecond(), 123);
-/// assert_eq!(d.time().microsecond(), 456);
-/// assert_eq!(d.time().nanosecond(), 789);
+/// let dt = datetime(2024, 2, 29, 21, 30, 5, 123_456_789);
+/// assert_eq!(dt.date().year(), 2024);
+/// assert_eq!(dt.date().month(), 2);
+/// assert_eq!(dt.date().day(), 29);
+/// assert_eq!(dt.time().hour(), 21);
+/// assert_eq!(dt.time().minute(), 30);
+/// assert_eq!(dt.time().second(), 5);
+/// assert_eq!(dt.time().millisecond(), 123);
+/// assert_eq!(dt.time().microsecond(), 456);
+/// assert_eq!(dt.time().nanosecond(), 789);
 /// ```
 #[inline]
 pub const fn datetime(
@@ -269,16 +269,16 @@ pub const fn date(year: i16, month: i8, day: i8) -> Date {
 /// This shows an example of a valid time in a `const` context:
 ///
 /// ```
-/// use jiff::civil::Time;
+/// use jiff::civil::time;
 ///
-/// const BEDTIME: Time = Time::constant(21, 30, 5, 123_456_789);
-/// assert_eq!(BEDTIME.hour(), 21);
-/// assert_eq!(BEDTIME.minute(), 30);
-/// assert_eq!(BEDTIME.second(), 5);
-/// assert_eq!(BEDTIME.millisecond(), 123);
-/// assert_eq!(BEDTIME.microsecond(), 456);
-/// assert_eq!(BEDTIME.nanosecond(), 789);
-/// assert_eq!(BEDTIME.subsec_nanosecond(), 123_456_789);
+/// let t = time(21, 30, 5, 123_456_789);
+/// assert_eq!(t.hour(), 21);
+/// assert_eq!(t.minute(), 30);
+/// assert_eq!(t.second(), 5);
+/// assert_eq!(t.millisecond(), 123);
+/// assert_eq!(t.microsecond(), 456);
+/// assert_eq!(t.nanosecond(), 789);
+/// assert_eq!(t.subsec_nanosecond(), 123_456_789);
 /// ```
 #[inline]
 pub const fn time(

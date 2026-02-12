@@ -1,5 +1,7 @@
 use core::time::Duration;
 
+use jcore::tz::posix;
+
 use crate::{
     civil::{Date, DateTime, ISOWeekDate, Time},
     error::{fmt::temporal::Error as E, Error},
@@ -7,10 +9,6 @@ use crate::{
         buffer::{ArrayBuffer, BorrowedBuffer, BorrowedWriter},
         temporal::{Pieces, PiecesOffset, TimeZoneAnnotationKind},
         Write,
-    },
-    shared::{
-        PosixDay, PosixDayTime, PosixDst, PosixOffset, PosixRule, PosixTime,
-        PosixTimeZone,
     },
     span::{Span, UnitSet},
     tz::{Offset, TimeZone},
@@ -78,7 +76,7 @@ const REASONABLE_PIECES_LEN: usize = 73;
 /// where "max" is not a strict upper bound but an expected upper bound based
 /// on common or "reasonable" values. For example, a valid POSIX time zone
 /// string can have 30 byte abbreviations for both standard and daylight saving
-/// time. If that happens, we'll just
+/// time.
 const REASONABLE_TIME_ZONE_LEN: usize = 32;
 
 /// Defines the "maximum" possible length (in bytes) of a POSIX time zone
@@ -488,7 +486,7 @@ impl DateTimePrinter {
             return self.print_offset_full_precision(&offset, wtr);
         }
         if let Some(posix_tz) = tz.posix_tz() {
-            return self.print_posix_time_zone(posix_tz.shared(), wtr);
+            return self.print_posix_time_zone(posix_tz, wtr);
         }
         // Ideally this never actually happens, but it can, and there
         // are likely system configurations out there in which it does.
@@ -502,9 +500,9 @@ impl DateTimePrinter {
         Err(Error::from(E::PrintTimeZoneFailure))
     }
 
-    pub(super) fn print_posix_time_zone<ABBREV: AsRef<str>>(
+    pub(super) fn print_posix_time_zone(
         &self,
-        posix_tz: &PosixTimeZone<ABBREV>,
+        posix_tz: &posix::TimeZone,
         wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         let mut buf = ArrayBuffer::<REASONABLE_POSIX_TIME_ZONE_LEN>::default();
@@ -514,12 +512,12 @@ impl DateTimePrinter {
         wtr.finish()
     }
 
-    fn print_posix_time_zone_wtr<ABBREV: AsRef<str>>(
+    fn print_posix_time_zone_wtr(
         &self,
-        tz: &PosixTimeZone<ABBREV>,
+        tz: &posix::TimeZone,
         wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
-        self.print_posix_abbreviation_wtr(tz.std_abbrev.as_ref(), wtr)?;
+        self.print_posix_abbreviation_wtr(tz.std_abbrev.as_str(), wtr)?;
         self.print_posix_offset_wtr(&tz.std_offset, wtr)?;
         if let Some(ref dst) = tz.dst {
             self.print_posix_dst_wtr(dst, &tz.std_offset, wtr)?;
@@ -527,18 +525,17 @@ impl DateTimePrinter {
         Ok(())
     }
 
-    fn print_posix_dst_wtr<ABBREV: AsRef<str>>(
+    fn print_posix_dst_wtr(
         &self,
-        dst: &PosixDst<ABBREV>,
-        std_offset: &PosixOffset,
+        dst: &posix::Dst,
+        std_offset: &jcore::tz::Offset,
         wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
         self.print_posix_abbreviation_wtr(dst.abbrev.as_ref(), wtr)?;
         // The overwhelmingly common case is that DST is exactly one hour
         // ahead of standard time. So common that this is the default. So
         // don't write the offset if we don't need to.
-        let default = PosixOffset { second: std_offset.second + 3600 };
-        if dst.offset != default {
+        if Some(dst.offset) != std_offset.checked_add(3600).ok() {
             self.print_posix_offset_wtr(&dst.offset, wtr)?;
         }
         wtr.write_ascii_char(b',')?;
@@ -548,7 +545,7 @@ impl DateTimePrinter {
 
     fn print_posix_rule_wtr(
         &self,
-        rule: &PosixRule,
+        rule: &posix::Rule,
         wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
         self.print_posix_day_time_wtr(&rule.start, wtr)?;
@@ -559,12 +556,12 @@ impl DateTimePrinter {
 
     fn print_posix_day_time_wtr(
         &self,
-        day_time: &PosixDayTime,
+        day_time: &posix::DayTime,
         wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
         self.print_posix_day_wtr(&day_time.date, wtr)?;
         // This is the default time, so don't write it if we don't need to.
-        if day_time.time != PosixTime::DEFAULT {
+        if day_time.time != posix::TransitionCivilTime::DEFAULT {
             wtr.write_ascii_char(b'/')?;
             self.print_posix_time_wtr(&day_time.time, wtr)?;
         }
@@ -573,23 +570,25 @@ impl DateTimePrinter {
 
     fn print_posix_day_wtr(
         &self,
-        day: &PosixDay,
+        day: &posix::Day,
         wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
         match *day {
-            PosixDay::JulianOne(n) => {
+            posix::Day::JulianOne(n) => {
                 wtr.write_ascii_char(b'J')?;
                 wtr.write_int(n.unsigned_abs())?;
                 Ok(())
             }
-            PosixDay::JulianZero(n) => wtr.write_int(n.unsigned_abs()),
-            PosixDay::WeekdayOfMonth { month, week, weekday } => {
+            posix::Day::JulianZero(n) => wtr.write_int(n.unsigned_abs()),
+            posix::Day::WeekdayOfMonth { month, week, weekday } => {
                 wtr.write_ascii_char(b'M')?;
                 wtr.write_int(month.unsigned_abs())?;
                 wtr.write_ascii_char(b'.')?;
                 wtr.write_int1(week.unsigned_abs())?;
                 wtr.write_ascii_char(b'.')?;
-                wtr.write_int1(weekday.unsigned_abs())?;
+                wtr.write_int1(
+                    weekday.to_sunday_zero_offset().unsigned_abs(),
+                )?;
                 Ok(())
             }
         }
@@ -597,7 +596,7 @@ impl DateTimePrinter {
 
     fn print_posix_time_wtr(
         &self,
-        time: &PosixTime,
+        time: &posix::TransitionCivilTime,
         wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
         if time.second.is_negative() {
@@ -610,16 +609,16 @@ impl DateTimePrinter {
 
     fn print_posix_offset_wtr(
         &self,
-        offset: &PosixOffset,
+        offset: &jcore::tz::Offset,
         wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
         // Yes, this is backwards. Blame POSIX.
         // N.B. `+` is the default, so we don't
         // need to write that out.
-        if offset.second > 0 {
+        if offset.seconds() > 0 {
             wtr.write_ascii_char(b'-')?;
         }
-        self.print_posix_time_offset_seconds_wtr(offset.second, wtr)
+        self.print_posix_time_offset_seconds_wtr(offset.seconds(), wtr)
     }
 
     fn print_posix_time_offset_seconds_wtr(

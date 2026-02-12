@@ -1,3 +1,5 @@
+use jcore::constants as c;
+
 use crate::{
     fmt::{
         buffer::{ArrayBuffer, BorrowedBuffer},
@@ -6,15 +8,13 @@ use crate::{
     Error, SignedDuration, Span, Unit,
 };
 
-const SECS_PER_HOUR: u64 = MINS_PER_HOUR * SECS_PER_MIN;
-const SECS_PER_MIN: u64 = 60;
-const MINS_PER_HOUR: u64 = 60;
-const NANOS_PER_HOUR: u128 =
-    (SECS_PER_MIN * MINS_PER_HOUR * NANOS_PER_SEC) as u128;
-const NANOS_PER_MIN: u128 = (SECS_PER_MIN * NANOS_PER_SEC) as u128;
-const NANOS_PER_SEC: u64 = 1_000_000_000;
-const NANOS_PER_MILLI: u32 = 1_000_000;
-const NANOS_PER_MICRO: u32 = 1_000;
+const SECS_PER_HOUR: u64 = c::SECS_PER_HOUR as u64;
+const SECS_PER_MIN: u64 = c::SECS_PER_MIN as u64;
+const MINS_PER_HOUR: u64 = c::MINS_PER_HOUR as u64;
+const NANOS_PER_HOUR: u128 = c::NANOS_PER_HOUR as u128;
+const NANOS_PER_MIN: u128 = c::NANOS_PER_MIN as u128;
+const NANOS_PER_MILLI: u32 = c::NANOS_PER_MILLI_32 as u32;
+const NANOS_PER_MICRO: u32 = c::NANOS_PER_MICRO_32 as u32;
 
 /// Defines the maximum possible length (in bytes) of a `Span` printed in the
 /// friendly format.

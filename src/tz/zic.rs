@@ -109,6 +109,8 @@ use alloc::{
     vec::Vec,
 };
 
+use jcore::bounds::Sign;
+
 use crate::{
     civil::{Date, DateTime, Time, Weekday},
     error::{
@@ -1138,11 +1140,12 @@ impl ZoneUntilP {
 /// This ensures the year is within the range supported by Jiff.
 fn parse_year(year: &str) -> Result<i16, Error> {
     let (sign, rest) = if year.starts_with("-") {
-        (b::Sign::Negative, &year[1..])
+        (Sign::Negative, &year[1..])
     } else {
-        (b::Sign::Positive, year)
+        (Sign::Positive, year)
     };
-    let year = b::Year::parse(rest.as_bytes()).context(E::FailedParseYear)?;
+    let year =
+        parse::bi64::<b::Year>(rest.as_bytes()).context(E::FailedParseYear)?;
     Ok(sign * year)
 }
 
@@ -1169,9 +1172,9 @@ fn parse_duration(span: &str) -> Result<SignedDuration, Error> {
         if span.len() == 1 {
             return Ok(SignedDuration::ZERO);
         }
-        (b::Sign::Negative, &rest[1..])
+        (Sign::Negative, &rest[1..])
     } else {
-        (b::Sign::Positive, rest)
+        (Sign::Positive, rest)
     };
     let mut dur = SignedDuration::ZERO;
 
@@ -1181,7 +1184,7 @@ fn parse_duration(span: &str) -> Result<SignedDuration, Error> {
     if hour_digits.is_empty() {
         return Err(Error::from(E::ExpectedTimeOneHour));
     }
-    let hours = b::SpanHours::parse(hour_digits.as_bytes())
+    let hours = parse::bi64::<b::SpanHours>(hour_digits.as_bytes())
         .context(E::FailedParseHour)?;
     dur += SignedDuration::from_hours(sign * i64::from(hours));
     if rest.is_empty() {
@@ -1198,7 +1201,7 @@ fn parse_duration(span: &str) -> Result<SignedDuration, Error> {
     if minute_digits.is_empty() {
         return Err(Error::from(E::ExpectedMinuteAfterHours));
     }
-    let minutes = b::Minute::parse(minute_digits.as_bytes())
+    let minutes = parse::bi64::<b::Minute>(minute_digits.as_bytes())
         .context(E::FailedParseMinute)?;
     dur += SignedDuration::from_mins(sign * i64::from(minutes));
     if rest.is_empty() {
@@ -1215,7 +1218,7 @@ fn parse_duration(span: &str) -> Result<SignedDuration, Error> {
     if second_digits.is_empty() {
         return Err(Error::from(E::ExpectedSecondAfterMinutes));
     }
-    let seconds = b::Second::parse(second_digits.as_bytes())
+    let seconds = parse::bi64::<b::Second>(second_digits.as_bytes())
         .context(E::FailedParseSecond)?;
     dur += SignedDuration::from_secs(sign * i64::from(seconds));
     if rest.is_empty() {
@@ -1251,7 +1254,7 @@ fn parse_duration(span: &str) -> Result<SignedDuration, Error> {
 /// This checks that the day is in the range 1-31, but otherwise doesn't
 /// check that it is valid for a particular month.
 fn parse_day(string: &str) -> Result<i8, Error> {
-    b::Day::parse(string.as_bytes()).context(E::FailedParseDay)
+    parse::bi64::<b::Day>(string.as_bytes()).context(E::FailedParseDay)
 }
 
 /// Parses a possibly abbreviated weekday from the given string.

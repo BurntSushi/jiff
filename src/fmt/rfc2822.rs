@@ -41,6 +41,8 @@ example, when dealing with email). But you should not choose it as a
 general interchange format for new applications.
 */
 
+use jcore::bounds::Sign;
+
 use crate::{
     civil::{Date, DateTime, Time, Weekday},
     error::{fmt::rfc2822::Error as E, ErrorContext},
@@ -559,7 +561,7 @@ impl DateTimeParser {
             digits = 2;
         }
         let (day, input) = input.split_at(digits);
-        let day = b::Day::parse(day).context(E::ParseDay)?;
+        let day = parse::bi64::<b::Day>(day).context(E::ParseDay)?;
         let Parsed { input, .. } =
             self.parse_whitespace(input).context(E::WhitespaceAfterDay)?;
         Ok(Parsed { value: day, input })
@@ -644,7 +646,7 @@ impl DateTimeParser {
             }
         }
         let (year, input) = input.split_at(digits);
-        let year = b::Year::parse(year).context(E::ParseYear)?;
+        let year = parse::bi64::<b::Year>(year).context(E::ParseYear)?;
         let year = match digits {
             2 if year <= 49 => year + 2000,
             2 | 3 => year + 1900,
@@ -667,7 +669,7 @@ impl DateTimeParser {
         input: &'i [u8],
     ) -> Result<Parsed<'i, i8>, Error> {
         let (hour, input) = parse::split(input, 2).ok_or(E::EndOfInputHour)?;
-        let hour = b::Hour::parse(hour).context(E::ParseHour)?;
+        let hour = parse::bi64::<b::Hour>(hour).context(E::ParseHour)?;
         Ok(Parsed { value: hour, input })
     }
 
@@ -680,7 +682,8 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, i8>, Error> {
         let (minute, input) =
             parse::split(input, 2).ok_or(E::EndOfInputMinute)?;
-        let minute = b::Minute::parse(minute).context(E::ParseMinute)?;
+        let minute =
+            parse::bi64::<b::Minute>(minute).context(E::ParseMinute)?;
         Ok(Parsed { value: minute, input })
     }
 
@@ -694,7 +697,7 @@ impl DateTimeParser {
         let (second, input) =
             parse::split(input, 2).ok_or(E::EndOfInputSecond)?;
         let mut second =
-            b::LeapSecond::parse(second).context(E::ParseSecond)?;
+            parse::bi64::<b::LeapSecond>(second).context(E::ParseSecond)?;
         if second == 60 {
             second = 59;
         }
@@ -712,18 +715,18 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, Offset>, Error> {
         let sign = input.get(0).copied().ok_or(E::EndOfInputOffset)?;
         let sign = if sign == b'+' {
-            b::Sign::Positive
+            Sign::Positive
         } else if sign == b'-' {
-            b::Sign::Negative
+            Sign::Negative
         } else {
             return self.parse_offset_obsolete(input);
         };
         let input = &input[1..];
         let (hhmm, input) = parse::split(input, 4).ok_or(E::TooShortOffset)?;
 
-        let hh =
-            b::OffsetHours::parse(&hhmm[0..2]).context(E::ParseOffsetHour)?;
-        let mm = b::OffsetMinutes::parse(&hhmm[2..4])
+        let hh = parse::bi64::<b::OffsetHours>(&hhmm[0..2])
+            .context(E::ParseOffsetHour)?;
+        let mm = parse::bi64::<b::OffsetMinutes>(&hhmm[2..4])
             .context(E::ParseOffsetMinute)?;
 
         let seconds = sign * (i32::from(hh) * 3_600 + i32::from(mm) * 60);

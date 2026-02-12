@@ -1,10 +1,9 @@
+use jcore::{bounds::Sign, constants as c};
+
 use crate::{
     error::{fmt::util::Error as E, ErrorContext},
     fmt::Parsed,
-    util::{
-        b::{self, Sign},
-        parse,
-    },
+    util::{b, parse},
     Error, SignedDuration, Span, Unit,
 };
 
@@ -400,8 +399,7 @@ impl DurationUnits {
 
         let total_secs = (hours * 3600) + (mins * 60) + secs;
         let total_nanos = (millis * 1_000_000) + (micros * 1_000) + nanos;
-        let mut sdur =
-            SignedDuration::new_without_nano_overflow(total_secs, total_nanos);
+        let mut sdur = SignedDuration::new_unchecked(total_secs, total_nanos);
         if self.get_sign().is_negative() {
             sdur = -sdur;
         }
@@ -952,11 +950,11 @@ fn fractional_duration(
 ) -> Result<SignedDuration, Error> {
     let fraction = i64::from(fraction);
     let nanos = match unit {
-        Unit::Hour => fraction * b::SECS_PER_HOUR,
-        Unit::Minute => fraction * b::SECS_PER_MIN,
+        Unit::Hour => fraction * c::SECS_PER_HOUR,
+        Unit::Minute => fraction * c::SECS_PER_MIN,
         Unit::Second => fraction,
-        Unit::Millisecond => fraction / b::NANOS_PER_MICRO,
-        Unit::Microsecond => fraction / b::NANOS_PER_MILLI,
+        Unit::Millisecond => fraction / c::NANOS_PER_MICRO,
+        Unit::Microsecond => fraction / c::NANOS_PER_MILLI,
         unit => {
             return Err(Error::from(E::NotAllowedFractionalUnit {
                 found: unit,
@@ -984,13 +982,13 @@ fn duration_unit_value(
     let sdur = match unit {
         Unit::Hour => {
             let seconds = value
-                .checked_mul(b::SECS_PER_HOUR)
+                .checked_mul(c::SECS_PER_HOUR)
                 .ok_or(E::ConversionToSecondsFailed { unit: Unit::Hour })?;
             SignedDuration::from_secs(seconds)
         }
         Unit::Minute => {
             let seconds = value
-                .checked_mul(b::SECS_PER_MIN)
+                .checked_mul(c::SECS_PER_MIN)
                 .ok_or(E::ConversionToSecondsFailed { unit: Unit::Minute })?;
             SignedDuration::from_secs(seconds)
         }

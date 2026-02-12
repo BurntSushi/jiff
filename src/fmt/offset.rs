@@ -101,6 +101,8 @@ from [Temporal's hybrid grammar].
 // seconds to a `i64` representation in nanoseconds. (Since it only needs to
 // support a span of time of about 52 hours or so.)
 
+use jcore::{bounds::Sign, constants as c};
+
 use crate::{
     error::{fmt::offset::Error as E, Error, ErrorContext},
     fmt::{
@@ -206,7 +208,7 @@ enum ParsedOffsetKind {
 struct Numeric {
     /// The sign that was parsed from the numeric UTC offset. This is always
     /// either `1` or `-1`, never `0`.
-    sign: b::Sign,
+    sign: Sign,
     /// The hours component. This is non-optional because every UTC offset must
     /// have at least hours.
     hours: i8,
@@ -227,9 +229,9 @@ impl Numeric {
     /// result, if the parsed value would be rounded to a value not in bounds
     /// for a Jiff offset, this returns an error.
     fn to_offset(&self) -> Result<Offset, Error> {
-        let mut seconds = i32::from(self.hours) * b::SECS_PER_HOUR_32;
+        let mut seconds = i32::from(self.hours) * c::SECS_PER_HOUR_32;
         if let Some(part_minutes) = self.minutes {
-            seconds += i32::from(part_minutes) * b::SECS_PER_MIN_32;
+            seconds += i32::from(part_minutes) * c::SECS_PER_MIN_32;
         }
         if let Some(part_seconds) = self.seconds {
             seconds += i32::from(part_seconds);
@@ -573,12 +575,12 @@ impl Parser {
     fn parse_sign<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, b::Sign>, Error> {
+    ) -> Result<Parsed<'i, Sign>, Error> {
         let sign = input.get(0).copied().ok_or(E::EndOfInputNumeric)?;
         let sign = if sign == b'+' {
-            b::Sign::Positive
+            Sign::Positive
         } else if sign == b'-' {
-            b::Sign::Negative
+            Sign::Negative
         } else {
             return Err(Error::from(E::InvalidSignPlusOrMinus));
         };
@@ -592,7 +594,8 @@ impl Parser {
     ) -> Result<Parsed<'i, i8>, Error> {
         let (hours, input) =
             parse::split(input, 2).ok_or(E::EndOfInputHour)?;
-        let hours = b::OffsetHours::parse(hours).context(E::ParseHours)?;
+        let hours =
+            parse::bi64::<b::OffsetHours>(hours).context(E::ParseHours)?;
         Ok(Parsed { value: hours, input })
     }
 
@@ -603,8 +606,8 @@ impl Parser {
     ) -> Result<Parsed<'i, i8>, Error> {
         let (minutes, input) =
             parse::split(input, 2).ok_or(E::EndOfInputMinute)?;
-        let minutes =
-            b::OffsetMinutes::parse(minutes).context(E::ParseMinutes)?;
+        let minutes = parse::bi64::<b::OffsetMinutes>(minutes)
+            .context(E::ParseMinutes)?;
         Ok(Parsed { value: minutes, input })
     }
 
@@ -615,8 +618,8 @@ impl Parser {
     ) -> Result<Parsed<'i, i8>, Error> {
         let (seconds, input) =
             parse::split(input, 2).ok_or(E::EndOfInputSecond)?;
-        let seconds =
-            b::OffsetSeconds::parse(seconds).context(E::ParseSeconds)?;
+        let seconds = parse::bi64::<b::OffsetSeconds>(seconds)
+            .context(E::ParseSeconds)?;
         Ok(Parsed { value: seconds, input })
     }
 
@@ -1015,7 +1018,7 @@ mod tests {
     #[test]
     fn err_numeric_too_big_for_offset() {
         let numeric = Numeric {
-            sign: b::Sign::Positive,
+            sign: Sign::Positive,
             hours: b::OffsetHours::MAX,
             minutes: Some(b::OffsetMinutes::MAX),
             seconds: Some(b::OffsetSeconds::MAX),
@@ -1024,7 +1027,7 @@ mod tests {
         assert_eq!(numeric.to_offset().unwrap(), Offset::MAX);
 
         let numeric = Numeric {
-            sign: b::Sign::Positive,
+            sign: Sign::Positive,
             hours: b::OffsetHours::MAX,
             minutes: Some(b::OffsetMinutes::MAX),
             seconds: Some(b::OffsetSeconds::MAX),
@@ -1040,7 +1043,7 @@ mod tests {
     #[test]
     fn err_numeric_too_small_for_offset() {
         let numeric = Numeric {
-            sign: b::Sign::Negative,
+            sign: Sign::Negative,
             hours: b::OffsetHours::MAX,
             minutes: Some(b::OffsetMinutes::MAX),
             seconds: Some(b::OffsetSeconds::MAX),
@@ -1049,7 +1052,7 @@ mod tests {
         assert_eq!(numeric.to_offset().unwrap(), Offset::MIN);
 
         let numeric = Numeric {
-            sign: b::Sign::Negative,
+            sign: Sign::Negative,
             hours: b::OffsetHours::MAX,
             minutes: Some(b::OffsetMinutes::MAX),
             seconds: Some(b::OffsetSeconds::MAX),

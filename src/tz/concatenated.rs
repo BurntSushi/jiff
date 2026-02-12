@@ -3,13 +3,15 @@ use alloc::{
     vec::Vec,
 };
 
+use jcore::util::ArrayStr;
+
 use crate::{
     error::{
         tz::concatenated::{Error as E, ALLOC_LIMIT},
         Error, ErrorContext,
     },
     tz::TimeZone,
-    util::{array_str::ArrayStr, escape, utf8},
+    util::{escape, utf8},
 };
 
 /// An abstraction for reading data from Android's concatenated TZif data file.

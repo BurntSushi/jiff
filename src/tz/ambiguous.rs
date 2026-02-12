@@ -1,7 +1,8 @@
+use jcore::tz::AmbiguousOffset as JAmbiguousOffset;
+
 use crate::{
     civil::DateTime,
     error::{tz::ambiguous::Error as E, Error, ErrorContext},
-    shared::util::itime::IAmbiguousOffset,
     tz::{Offset, TimeZone},
     Timestamp, Zoned,
 };
@@ -206,22 +207,22 @@ pub enum AmbiguousOffset {
 
 impl AmbiguousOffset {
     #[inline]
-    pub(crate) const fn from_iambiguous_offset_const(
-        iaoff: IAmbiguousOffset,
+    pub(crate) const fn from_jcore(
+        offset: JAmbiguousOffset,
     ) -> AmbiguousOffset {
-        match iaoff {
-            IAmbiguousOffset::Unambiguous { offset } => {
-                let offset = Offset::from_ioffset_const(offset);
+        match offset {
+            JAmbiguousOffset::Unambiguous { offset } => {
+                let offset = Offset::from_jcore(offset);
                 AmbiguousOffset::Unambiguous { offset }
             }
-            IAmbiguousOffset::Gap { before, after } => {
-                let before = Offset::from_ioffset_const(before);
-                let after = Offset::from_ioffset_const(after);
+            JAmbiguousOffset::Gap { before, after } => {
+                let before = Offset::from_jcore(before);
+                let after = Offset::from_jcore(after);
                 AmbiguousOffset::Gap { before, after }
             }
-            IAmbiguousOffset::Fold { before, after } => {
-                let before = Offset::from_ioffset_const(before);
-                let after = Offset::from_ioffset_const(after);
+            JAmbiguousOffset::Fold { before, after } => {
+                let before = Offset::from_jcore(before);
+                let after = Offset::from_jcore(after);
                 AmbiguousOffset::Fold { before, after }
             }
         }

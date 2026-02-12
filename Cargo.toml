@@ -31,6 +31,7 @@ include = [
 [workspace]
 members = [
   "crates/jiff-cli",
+  "crates/jiff-core",
   "crates/jiff-static",
   "crates/jiff-tzdb",
   "crates/jiff-tzdb-platform",
@@ -48,8 +49,13 @@ default = [
   "tzdb-concatenated",
   "perf-inline",
 ]
-std = ["alloc", "log?/std", "serde_core?/std"]
-alloc = ["serde_core?/alloc", "portable-atomic-util/alloc", "defmt?/alloc"]
+std = ["alloc", "jcore/std", "log?/std", "serde_core?/std"]
+alloc = [
+  "jcore/alloc",
+  "serde_core?/alloc",
+  "portable-atomic-util/alloc",
+  "defmt?/alloc",
+]
 
 # Enables integration with `serde`. This provides implementations of
 # `Serialize` and `Deserialize` for many of Jiff's core primitives.
@@ -57,13 +63,13 @@ serde = ["dep:serde_core"]
 
 # Enables integration with the `log` crate. Without this enabled, Jiff will
 # never emit any logs.
-logging = ["dep:log"]
+logging = ["dep:log", "jcore/logging"]
 
 # Enables support for formatting Jiff types with `defmt` by providing
 # `defmt::Format` trait implementations for many of Jiff's core primitives.
 # (`defmt` is a compact logging framework commonly used in embedded
 # environments.)
-defmt = ["dep:defmt"]
+defmt = ["dep:defmt", "jcore/defmt"]
 
 # When enabled, Jiff will include code that attempts to determine the "system"
 # time zone. For example, on Unix systems, this is usually determined by
@@ -103,7 +109,7 @@ tz-system = ["std", "dep:windows-link"]
 #
 # Thus, the TZif data files for the IANA Time Zone Database can _also_ be
 # generated in a "slim" fashion, where only the historical transitions are
-# included. Some platforms use the slim data by default, while others uses
+# included. Some platforms use the slim data by default, while others use
 # the fat data.
 #
 # The problem is that determining the offset from a POSIX time zone can
@@ -116,7 +122,7 @@ tz-system = ["std", "dep:windows-link"]
 # Users may want to disable this if they are sensitive to the extra memory
 # used. But generally speaking, the extra memory used is no more than what
 # would be used by "fat" TZif data files from `/usr/share/zoneinfo`.
-tz-fat = ["jiff-static?/tz-fat"]
+tz-fat = ["jcore/tz-fat", "jiff-static?/tz-fat"]
 
 # When enabled, the `jiff::tz::get` and `jiff::tz::include` proc-macros
 # become available. These proc macros enable creating `TimeZone` values in a
@@ -191,6 +197,13 @@ perf-inline = []
 
 [dependencies]
 defmt = { version = "1.0.0", optional = true }
+# Jiff's only required dependency. The `jiff-core` crate just contains stuff
+# that used to be inside `jiff`, so while it shows up as an additional
+# dependency, it's not extra code that Jiff otherwise wouldn't have. Moreover,
+# splitting this out into a separate crate lets `jiff` and `jiff-static` share
+# it. (Previously, I was essentially vendoring a small part of `jiff` into
+# `jiff-static`.)
+jcore = { version = "0.1.0", package = "jiff-core", path = "crates/jiff-core", default-features = false }
 jiff-static = { version = "0.2", path = "crates/jiff-static", optional = true }
 jiff-tzdb = { version = "0.1.8", path = "crates/jiff-tzdb", optional = true }
 log = { version = "0.4.21", optional = true, default-features = false }
@@ -281,6 +294,12 @@ name = "integration"
 [profile.testrelease]
 inherits = "test"
 debug-assertions = false
+
+[profile.test]
+# Some of our tests can take a while without some optimizations enabled. In
+# particular, tests that check the validity of every date. It seems just
+# `opt-level = 1` is enough to make those pretty snappy.
+opt-level = 1
 
 [package.metadata.docs.rs]
 # We want to document all features.

@@ -1950,9 +1950,9 @@ impl DateTimePrinter {
     /// probably never will be, but this is used by tests in the POSIX time
     /// zone parser to ensure our printing round-trips correctly. It is also
     /// used by way of the internal `Display` impl for `PosixTimeZone`.
-    pub(crate) fn print_posix_time_zone<ABBREV: AsRef<str>, W: Write>(
+    pub(crate) fn print_posix_time_zone<W: Write>(
         &self,
-        tz: &crate::shared::PosixTimeZone<ABBREV>,
+        tz: &jcore::tz::posix::TimeZone,
         mut wtr: W,
     ) -> Result<(), Error> {
         self.p.print_posix_time_zone(tz, &mut wtr)

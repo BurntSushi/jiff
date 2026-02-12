@@ -25,6 +25,11 @@ case $crate in
     tagit "$current"
     tagit "jiff-static-$current"
     ;;
+  jiff-core)
+    current="$("$release_dir"/get-version ./crates/jiff-core/Cargo.toml)"
+    cargo publish --manifest-path ./crates/jiff-core/Cargo.toml
+    tagit "jiff-core-$current"
+    ;;
   jiff-tzdb)
     current="$("$release_dir"/get-version ./crates/jiff-tzdb/Cargo.toml)"
     cargo publish --manifest-path ./crates/jiff-tzdb/Cargo.toml

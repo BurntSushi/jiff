@@ -15,10 +15,7 @@ use std::{
 use crate::{
     error::{tz::db::Error as E, Error},
     timestamp::Timestamp,
-    tz::{
-        db::special_time_zone, tzif::is_possibly_tzif, TimeZone,
-        TimeZoneNameIter,
-    },
+    tz::{db::special_time_zone, TimeZone, TimeZoneNameIter},
     util::{self, cache::Expiration, parse, utf8},
 };
 
@@ -639,7 +636,7 @@ impl ZoneInfoName {
             );
             return false;
         }
-        if !is_possibly_tzif(&buf) {
+        if !jcore::tz::tzif::is_possibly_tzif(&buf) {
             // This is a trace because it's perfectly normal for a
             // non-TZif file to be in a zoneinfo directory. But it could
             // still be potentially useful debugging info.

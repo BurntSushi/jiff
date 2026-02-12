@@ -117,7 +117,7 @@ impl Error {
         use self::ErrorKind::*;
         matches!(
             *self.root().kind(),
-            Bounds(_) | SpecialBounds(_) | ITimeRange(_)
+            Bounds(_) | SpecialBounds(_) | JcoreRange(_)
         )
     }
 
@@ -204,30 +204,43 @@ impl Error {
         Error::from(ErrorKind::Bounds(err))
     }
 
+    /// Builds a `jiff::Error` from a `jcore::tz::posix::ParseError`.
+    ///
+    /// This very much cannot be added as a `From` impl because that would
+    /// introduce a public dependency on `jcore`.
+    #[inline(never)]
+    #[cold]
+    pub(crate) fn jcore_posix_parse(
+        err: jcore::tz::posix::ParseError,
+    ) -> Error {
+        Error::from(ErrorKind::JcorePosixParse(err))
+    }
+
+    /// Builds a `jiff::Error` from a `jcore::tz::tzif::ParseError`.
+    ///
+    /// This very much cannot be added as a `From` impl because that would
+    /// introduce a public dependency on `jcore`.
+    #[cfg(feature = "alloc")]
+    #[inline(never)]
+    #[cold]
+    pub(crate) fn jcore_tzif_parse(err: jcore::tz::tzif::ParseError) -> Error {
+        Error::from(ErrorKind::JcoreTzifParse(err))
+    }
+
+    /// Builds a `jiff::Error` from a `jcore::bounds::RangeError`.
+    ///
+    /// This very much cannot be added as a `From` impl because that would
+    /// introduce a public dependency on `jcore`.
+    #[inline(never)]
+    #[cold]
+    pub(crate) fn jcore_range(err: jcore::bounds::RangeError) -> Error {
+        Error::from(ErrorKind::JcoreRange(err))
+    }
+
     #[inline(never)]
     #[cold]
     pub(crate) fn special_bounds(err: SpecialBoundsError) -> Error {
         Error::from(ErrorKind::SpecialBounds(err))
-    }
-
-    /// Creates a new error from the special "shared" error type.
-    pub(crate) fn itime_range(
-        err: crate::shared::util::itime::RangeError,
-    ) -> Error {
-        Error::from(ErrorKind::ITimeRange(err))
-    }
-
-    /// Creates a new error from the special TZif error type.
-    #[cfg(feature = "alloc")]
-    pub(crate) fn tzif(err: crate::shared::tzif::TzifError) -> Error {
-        Error::from(ErrorKind::Tzif(err))
-    }
-
-    /// Creates a new error from the special `PosixTimeZoneError` type.
-    pub(crate) fn posix_tz(
-        err: crate::shared::posix::PosixTimeZoneError,
-    ) -> Error {
-        Error::from(ErrorKind::PosixTz(err))
     }
 
     /// A convenience constructor for building an I/O error.
@@ -440,11 +453,13 @@ enum ErrorKind {
     FmtStrtimeParse(self::fmt::strtime::ParseError),
     #[allow(dead_code)] // not used in some feature configs
     IO(IOError),
-    ITimeRange(crate::shared::util::itime::RangeError),
+    JcorePosixParse(jcore::tz::posix::ParseError),
+    #[cfg(feature = "alloc")]
+    JcoreTzifParse(jcore::tz::tzif::ParseError),
+    JcoreRange(jcore::bounds::RangeError),
     OsStrUtf8(self::util::OsStrUtf8Error),
     ParseInt(self::util::ParseIntError),
     ParseFraction(self::util::ParseFractionError),
-    PosixTz(crate::shared::posix::PosixTimeZoneError),
     RoundingIncrement(self::util::RoundingIncrementError),
     SignedDuration(self::signed_duration::Error),
     Span(self::span::Error),
@@ -455,13 +470,10 @@ enum ErrorKind {
     TzDb(self::tz::db::Error),
     TzConcatenated(self::tz::concatenated::Error),
     TzOffset(self::tz::offset::Error),
-    TzPosix(self::tz::posix::Error),
     TzSystem(self::tz::system::Error),
     TzTimeZone(self::tz::timezone::Error),
     #[allow(dead_code)]
     TzZic(self::tz::zic::Error),
-    #[cfg(feature = "alloc")]
-    Tzif(crate::shared::tzif::TzifError),
     Unknown,
     Zoned(self::zoned::Error),
 }
@@ -473,6 +485,10 @@ impl core::fmt::Display for ErrorKind {
         match *self {
             Adhoc(ref msg) => msg.fmt(f),
             Bounds(ref msg) => msg.fmt(f),
+            JcorePosixParse(ref msg) => msg.fmt(f),
+            #[cfg(feature = "alloc")]
+            JcoreTzifParse(ref msg) => msg.fmt(f),
+            JcoreRange(ref msg) => msg.fmt(f),
             Civil(ref err) => err.fmt(f),
             CrateFeature(ref err) => err.fmt(f),
             Duration(ref err) => err.fmt(f),
@@ -488,11 +504,9 @@ impl core::fmt::Display for ErrorKind {
             FmtStrtimeParse(ref err) => err.fmt(f),
             FmtTemporal(ref err) => err.fmt(f),
             IO(ref err) => err.fmt(f),
-            ITimeRange(ref err) => err.fmt(f),
             OsStrUtf8(ref err) => err.fmt(f),
             ParseInt(ref err) => err.fmt(f),
             ParseFraction(ref err) => err.fmt(f),
-            PosixTz(ref err) => err.fmt(f),
             RoundingIncrement(ref err) => err.fmt(f),
             SignedDuration(ref err) => err.fmt(f),
             Span(ref err) => err.fmt(f),
@@ -503,12 +517,9 @@ impl core::fmt::Display for ErrorKind {
             TzDb(ref err) => err.fmt(f),
             TzConcatenated(ref err) => err.fmt(f),
             TzOffset(ref err) => err.fmt(f),
-            TzPosix(ref err) => err.fmt(f),
             TzSystem(ref err) => err.fmt(f),
             TzTimeZone(ref err) => err.fmt(f),
             TzZic(ref err) => err.fmt(f),
-            #[cfg(feature = "alloc")]
-            Tzif(ref err) => err.fmt(f),
             Unknown => f.write_str("unknown Jiff error"),
             Zoned(ref err) => err.fmt(f),
         }
@@ -746,6 +757,15 @@ impl IntoError for Error {
     #[inline(always)]
     fn into_error(self) -> Error {
         self
+    }
+}
+
+// This trait impl is okay because `IntoError` is a crate-internal trait. So
+// this impl will not cause a public dependency on `jcore`.
+impl IntoError for jcore::bounds::RangeError {
+    #[inline(always)]
+    fn into_error(self) -> Error {
+        Error::jcore_range(self)
     }
 }
 
