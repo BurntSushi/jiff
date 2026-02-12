@@ -1,8 +1,10 @@
 # CHANGELOG
 
-0.2.20 (TBD)
-============
-TODO
+0.2.20 (2026-02-11)
+===================
+This release contains a major internal refactor that moves off of using ranged
+integers internally. There are also some small bug fixes and added support for
+finding the system time zone on emscripten targets.
 
 Enhancements:
 
