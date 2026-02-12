@@ -755,6 +755,12 @@ extern crate std;
 #[cfg(any(test, feature = "alloc"))]
 extern crate alloc;
 
+/// This is NOT part of Jiff's public API.
+///
+/// This is exported for use by `jiff-static`'s procedural macro.
+#[doc(hidden)]
+pub use jcore as __jcore;
+
 pub use crate::{
     error::Error,
     signed_duration::{SignedDuration, SignedDurationRound},
@@ -782,8 +788,6 @@ mod error;
 pub mod fmt;
 #[cfg(feature = "std")]
 mod now;
-#[doc(hidden)]
-pub mod shared;
 mod signed_duration;
 mod span;
 mod timestamp;
@@ -831,7 +835,7 @@ mod tests {
         dbg!((b::SpanMilliseconds::MIN, b::SpanMilliseconds::MAX));
         dbg!((b::SpanMicroseconds::MIN, b::SpanMicroseconds::MAX));
         dbg!((b::SpanNanoseconds::MIN, b::SpanNanoseconds::MAX));
-        dbg!((b::UnixSeconds::MIN, b::UnixSeconds::MAX));
+        dbg!((b::UnixEpochSeconds::MIN, b::UnixEpochSeconds::MAX));
         dbg!((b::UnixEpochDays::MIN, b::UnixEpochDays::MAX));
     }
 

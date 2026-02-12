@@ -15,12 +15,15 @@ if ! [ -f ./crates/jiff-cli/Cargo.toml ]; then
 fi
 
 crate="$1"
-shift
+next_version="$2"
+shift 2
 
 release_dir="$(dirname "$0")"
 case $crate in
   jiff)
-    next_version="$("$release_dir"/get-next-version ./Cargo.toml)"
+    if [ -z "$next_version" ]; then
+      next_version="$("$release_dir"/get-next-version ./Cargo.toml)"
+    fi
     "$release_dir"/update-version ./Cargo.toml "$next_version"
     "$release_dir"/update-version ./crates/jiff-static/Cargo.toml "$next_version"
     sed -i 's/^\(jiff-static = { version = \)"=[0-9.]\+"/\1"='$next_version'"/g' ./Cargo.toml
@@ -28,8 +31,20 @@ case $crate in
 $next_version
 EOF
     ;;
+  jiff-core)
+    if [ -z "$next_version" ]; then
+      next_version="$("$release_dir"/get-next-version ./crates/jiff-core/Cargo.toml)"
+    fi
+    "$release_dir"/update-version ./crates/jiff-core/Cargo.toml "$next_version"
+    sed -i 's/^\(jcore = { version = \)"[0-9.]\+"/\1"'$next_version'"/g' ./Cargo.toml
+    git commit --quiet --all --file - <<EOF
+jiff-core-$next_version
+EOF
+    ;;
   jiff-tzdb)
-    next_version="$("$release_dir"/get-next-version ./crates/jiff-tzdb/Cargo.toml)"
+    if [ -z "$next_version" ]; then
+      next_version="$("$release_dir"/get-next-version ./crates/jiff-tzdb/Cargo.toml)"
+    fi
     "$release_dir"/update-version ./crates/jiff-tzdb/Cargo.toml "$next_version"
     sed -i 's/^\(jiff-tzdb = { version = \)"[0-9.]\+"/\1"'$next_version'"/g' ./Cargo.toml
     git commit --quiet --all --file - <<EOF

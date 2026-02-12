@@ -12,6 +12,8 @@ use std::{
     time::Duration,
 };
 
+use jcore::util::ArrayStr;
+
 use crate::{
     error::{tz::db::Error as E, Error},
     timestamp::Timestamp,
@@ -19,7 +21,7 @@ use crate::{
         concatenated::ConcatenatedTzif, db::special_time_zone, TimeZone,
         TimeZoneNameIter,
     },
-    util::{self, array_str::ArrayStr, cache::Expiration, utf8},
+    util::{self, cache::Expiration, utf8},
 };
 
 const DEFAULT_TTL: Duration = Duration::new(5 * 60, 0);

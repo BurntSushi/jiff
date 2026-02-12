@@ -1,4 +1,4 @@
-use crate::{error::Error, shared::util::itime::IWeekday, util::b};
+use crate::error::Error;
 
 /// A representation for the day of the week.
 ///
@@ -120,23 +120,9 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn from_monday_zero_offset(offset: i8) -> Result<Weekday, Error> {
-        Ok(Weekday::from_monday_zero_offset_unchecked(
-            b::WeekdayMondayZero::check(offset)?,
-        ))
-    }
-
-    #[inline]
-    fn from_monday_zero_offset_unchecked(offset: impl Into<i64>) -> Weekday {
-        match offset.into() {
-            0 => Weekday::Monday,
-            1 => Weekday::Tuesday,
-            2 => Weekday::Wednesday,
-            3 => Weekday::Thursday,
-            4 => Weekday::Friday,
-            5 => Weekday::Saturday,
-            6 => Weekday::Sunday,
-            _ => unreachable!(),
-        }
+        jcore::civil::Weekday::from_monday_zero_offset(offset)
+            .map_err(Error::jcore_range)
+            .map(Weekday::from_jcore)
     }
 
     /// Convert an offset to a structured `Weekday`.
@@ -164,8 +150,9 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn from_monday_one_offset(offset: i8) -> Result<Weekday, Error> {
-        let offset = b::WeekdayMondayOne::check(offset)?;
-        Weekday::from_monday_zero_offset(offset - 1)
+        jcore::civil::Weekday::from_monday_one_offset(offset)
+            .map_err(Error::jcore_range)
+            .map(Weekday::from_jcore)
     }
 
     /// Convert an offset to a structured `Weekday`.
@@ -195,8 +182,9 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn from_sunday_zero_offset(offset: i8) -> Result<Weekday, Error> {
-        let offset = b::WeekdaySundayZero::check(offset)?;
-        Weekday::from_monday_zero_offset((offset - 1).rem_euclid(7))
+        jcore::civil::Weekday::from_sunday_zero_offset(offset)
+            .map_err(Error::jcore_range)
+            .map(Weekday::from_jcore)
     }
 
     /// Convert an offset to a structured `Weekday`.
@@ -224,8 +212,9 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn from_sunday_one_offset(offset: i8) -> Result<Weekday, Error> {
-        let offset = b::WeekdaySundayOne::check(offset)?;
-        Weekday::from_monday_zero_offset((offset - 2).rem_euclid(7))
+        jcore::civil::Weekday::from_sunday_one_offset(offset)
+            .map_err(Error::jcore_range)
+            .map(Weekday::from_jcore)
     }
 
     /// Returns this weekday as an offset.
@@ -244,7 +233,7 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn to_monday_zero_offset(self) -> i8 {
-        self.to_monday_one_offset() - 1
+        self.to_jcore().to_monday_zero_offset()
     }
 
     /// Returns this weekday as an offset.
@@ -263,7 +252,7 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn to_monday_one_offset(self) -> i8 {
-        self as i8
+        self.to_jcore().to_monday_one_offset()
     }
 
     /// Returns this weekday as an offset.
@@ -282,12 +271,7 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn to_sunday_zero_offset(self) -> i8 {
-        let offset = self.to_monday_one_offset();
-        if offset == 7 {
-            0
-        } else {
-            offset
-        }
+        self.to_jcore().to_sunday_zero_offset()
     }
 
     /// Returns this weekday as an offset.
@@ -306,7 +290,7 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn to_sunday_one_offset(self) -> i8 {
-        self.to_sunday_zero_offset() + 1
+        self.to_jcore().to_sunday_one_offset()
     }
 
     /// Returns the next weekday, wrapping around at the end of week to the
@@ -367,8 +351,7 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn since(self, other: Weekday) -> i8 {
-        (self.to_monday_zero_offset() - other.to_monday_zero_offset())
-            .rem_euclid(7)
+        self.to_jcore().since(other.to_jcore())
     }
 
     /// Returns the number of days until `other` from this weekday.
@@ -389,7 +372,7 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn until(self, other: Weekday) -> i8 {
-        other.since(self)
+        self.to_jcore().until(other.to_jcore())
     }
 
     /// Add the given number of days to this weekday, using wrapping arithmetic,
@@ -427,11 +410,7 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn wrapping_add<D: Into<i64>>(self, days: D) -> Weekday {
-        let start = i64::from(self.to_monday_zero_offset());
-        let rhs = days.into();
-        let end = start.wrapping_add(rhs).rem_euclid(7);
-        // Always valid because of the mod 7 above.
-        Weekday::from_monday_zero_offset_unchecked(end)
+        Weekday::from_jcore(self.to_jcore().wrapping_add(days.into()))
     }
 
     /// Subtract the given number of days from this weekday, using wrapping
@@ -471,7 +450,7 @@ impl Weekday {
     /// hand side of the `-` operator.
     #[inline]
     pub fn wrapping_sub<D: Into<i64>>(self, days: D) -> Weekday {
-        self.wrapping_add(-days.into())
+        Weekday::from_jcore(self.to_jcore().wrapping_sub(days.into()))
     }
 
     /// Starting with this weekday, this returns an unending iterator that
@@ -494,16 +473,7 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn cycle_forward(self) -> WeekdaysForward {
-        let nexts = [
-            self,
-            self.wrapping_add(1),
-            self.wrapping_add(2),
-            self.wrapping_add(3),
-            self.wrapping_add(4),
-            self.wrapping_add(5),
-            self.wrapping_add(6),
-        ];
-        WeekdaysForward { it: nexts.into_iter().cycle() }
+        WeekdaysForward { it: self.to_jcore().cycle_forward() }
     }
 
     /// Starting with this weekday, this returns an unending iterator that
@@ -526,37 +496,35 @@ impl Weekday {
     /// ```
     #[inline]
     pub fn cycle_reverse(self) -> WeekdaysReverse {
-        let nexts = [
-            self,
-            self.wrapping_sub(1),
-            self.wrapping_sub(2),
-            self.wrapping_sub(3),
-            self.wrapping_sub(4),
-            self.wrapping_sub(5),
-            self.wrapping_sub(6),
-        ];
-        WeekdaysReverse { it: nexts.into_iter().cycle() }
+        WeekdaysReverse { it: self.to_jcore().cycle_reverse() }
     }
 }
 
 impl Weekday {
     #[inline]
-    pub(crate) fn from_iweekday(iweekday: IWeekday) -> Weekday {
-        match iweekday.to_monday_one_offset() {
-            1 => Weekday::Monday,
-            2 => Weekday::Tuesday,
-            3 => Weekday::Wednesday,
-            4 => Weekday::Thursday,
-            5 => Weekday::Friday,
-            6 => Weekday::Saturday,
-            7 => Weekday::Sunday,
-            _ => unreachable!(),
+    pub(crate) const fn from_jcore(weekday: jcore::civil::Weekday) -> Weekday {
+        match weekday {
+            jcore::civil::Weekday::Monday => Weekday::Monday,
+            jcore::civil::Weekday::Tuesday => Weekday::Tuesday,
+            jcore::civil::Weekday::Wednesday => Weekday::Wednesday,
+            jcore::civil::Weekday::Thursday => Weekday::Thursday,
+            jcore::civil::Weekday::Friday => Weekday::Friday,
+            jcore::civil::Weekday::Saturday => Weekday::Saturday,
+            jcore::civil::Weekday::Sunday => Weekday::Sunday,
         }
     }
 
     #[inline]
-    pub(crate) fn to_iweekday(self) -> IWeekday {
-        IWeekday::from_monday_one_offset(self.to_monday_one_offset())
+    pub(crate) const fn to_jcore(self) -> jcore::civil::Weekday {
+        match self {
+            Weekday::Monday => jcore::civil::Weekday::Monday,
+            Weekday::Tuesday => jcore::civil::Weekday::Tuesday,
+            Weekday::Wednesday => jcore::civil::Weekday::Wednesday,
+            Weekday::Thursday => jcore::civil::Weekday::Thursday,
+            Weekday::Friday => jcore::civil::Weekday::Friday,
+            Weekday::Saturday => jcore::civil::Weekday::Saturday,
+            Weekday::Sunday => jcore::civil::Weekday::Sunday,
+        }
     }
 }
 
@@ -596,7 +564,7 @@ impl core::ops::Add<i64> for Weekday {
     }
 }
 
-// Since addition is commutative, we don't might if users write `n + weekday`
+// Since addition is commutative, we don't care if users write `n + weekday`
 // or `weekday + n`.
 
 impl core::ops::Add<Weekday> for i8 {
@@ -734,7 +702,7 @@ impl core::ops::SubAssign<i64> for Weekday {
 #[cfg(test)]
 impl quickcheck::Arbitrary for Weekday {
     fn arbitrary(g: &mut quickcheck::Gen) -> Weekday {
-        let offset = b::WeekdayMondayZero::arbitrary(g);
+        let offset = crate::util::b::WeekdayMondayZero::arbitrary(g);
         Weekday::from_monday_zero_offset(offset).unwrap()
     }
 
@@ -752,7 +720,7 @@ impl quickcheck::Arbitrary for Weekday {
 /// This iterator is created by calling [`Weekday::cycle_forward`].
 #[derive(Clone, Debug)]
 pub struct WeekdaysForward {
-    it: core::iter::Cycle<core::array::IntoIter<Weekday, 7>>,
+    it: jcore::civil::WeekdaysForward,
 }
 
 impl Iterator for WeekdaysForward {
@@ -760,7 +728,7 @@ impl Iterator for WeekdaysForward {
 
     #[inline]
     fn next(&mut self) -> Option<Weekday> {
-        self.it.next()
+        self.it.next().map(Weekday::from_jcore)
     }
 }
 
@@ -771,7 +739,7 @@ impl core::iter::FusedIterator for WeekdaysForward {}
 /// This iterator is created by calling [`Weekday::cycle_reverse`].
 #[derive(Clone, Debug)]
 pub struct WeekdaysReverse {
-    it: core::iter::Cycle<core::array::IntoIter<Weekday, 7>>,
+    it: jcore::civil::WeekdaysReverse,
 }
 
 impl Iterator for WeekdaysReverse {
@@ -779,25 +747,8 @@ impl Iterator for WeekdaysReverse {
 
     #[inline]
     fn next(&mut self) -> Option<Weekday> {
-        self.it.next()
+        self.it.next().map(Weekday::from_jcore)
     }
 }
 
 impl core::iter::FusedIterator for WeekdaysReverse {}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    quickcheck::quickcheck! {
-        fn prop_since_add_equals_self(wd1: Weekday, wd2: Weekday) -> bool {
-            let days = wd1.since(wd2);
-            wd2.wrapping_add(days) == wd1
-        }
-
-        fn prop_until_add_equals_other(wd1: Weekday, wd2: Weekday) -> bool {
-            let days = wd1.until(wd2);
-            wd1.wrapping_add(days) == wd2
-        }
-    }
-}

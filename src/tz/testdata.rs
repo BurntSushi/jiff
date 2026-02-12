@@ -1,5 +1,5 @@
 #[cfg(not(miri))]
-use crate::tz::tzif::TzifOwned;
+use jcore::tz::tzif;
 
 /// A concatenated list of TZif data with a header and an index block.
 ///
@@ -111,24 +111,20 @@ impl TzifTestFile {
 
     /// Parse this test TZif data into a structured representation.
     #[cfg(not(miri))]
-    pub(crate) fn parse(self) -> TzifOwned {
-        use alloc::string::ToString;
-
-        let name = Some(self.name.to_string());
-        TzifOwned::parse(name, self.data).unwrap_or_else(|err| {
+    pub(crate) fn parse(self) -> tzif::TimeZone {
+        let name = Some(jcore::tz::TimeZoneId::statik(self.name));
+        tzif::TimeZone::parse(name, self.data).unwrap_or_else(|err| {
             panic!("failed to parse TZif test file for {:?}: {err}", self.name)
         })
     }
 
     /// Parse this test TZif data as if it were V1.
     #[cfg(not(miri))]
-    pub(crate) fn parse_v1(self) -> TzifOwned {
-        use alloc::string::ToString;
-
-        let name = Some(self.name.to_string());
+    pub(crate) fn parse_v1(self) -> tzif::TimeZone {
+        let name = Some(jcore::tz::TimeZoneId::statik(self.name));
         let mut data = self.data.to_vec();
         data[4] = 0;
-        TzifOwned::parse(name, &data).unwrap_or_else(|err| {
+        tzif::TimeZone::parse(name, &data).unwrap_or_else(|err| {
             panic!(
                 "failed to parse V1 TZif test file for {:?}: {err}",
                 self.name

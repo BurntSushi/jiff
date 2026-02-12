@@ -1,4 +1,6 @@
-use crate::{error, util::b, Unit};
+use jcore::constants as c;
+
+use crate::{error, Unit};
 
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -147,17 +149,17 @@ impl MustDivide {
         use self::MustDivide::*;
 
         match *self {
-            NanosPerCivilDay => b::NANOS_PER_CIVIL_DAY,
-            MicrosPerCivilDay => b::MICROS_PER_CIVIL_DAY,
-            MillisPerCivilDay => b::MILLIS_PER_CIVIL_DAY,
-            SecsPerCivilDay => b::SECS_PER_CIVIL_DAY,
-            MinsPerCivilDay => b::MINS_PER_CIVIL_DAY,
-            HoursPerCivilDay => b::HOURS_PER_CIVIL_DAY,
-            NanosPerMicro => b::NANOS_PER_MICRO,
-            MicrosPerMilli => b::MICROS_PER_MILLI,
-            MillisPerSec => b::MILLIS_PER_SEC,
-            SecsPerMin => b::SECS_PER_MIN,
-            MinsPerHour => b::MINS_PER_HOUR,
+            NanosPerCivilDay => c::NANOS_PER_CIVIL_DAY,
+            MicrosPerCivilDay => c::MICROS_PER_CIVIL_DAY,
+            MillisPerCivilDay => c::MILLIS_PER_CIVIL_DAY,
+            SecsPerCivilDay => c::SECS_PER_CIVIL_DAY,
+            MinsPerCivilDay => c::MINS_PER_CIVIL_DAY,
+            HoursPerCivilDay => c::HOURS_PER_CIVIL_DAY,
+            NanosPerMicro => c::NANOS_PER_MICRO,
+            MicrosPerMilli => c::MICROS_PER_MILLI,
+            MillisPerSec => c::MILLIS_PER_SEC,
+            SecsPerMin => c::SECS_PER_MIN,
+            MinsPerHour => c::MINS_PER_HOUR,
             Days => 2,
         }
     }

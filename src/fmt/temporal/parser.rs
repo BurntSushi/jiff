@@ -1,3 +1,5 @@
+use jcore::{bounds::Sign, constants as c};
+
 use crate::{
     civil::{Date, DateTime, ISOWeekDate, Time, Weekday},
     error::{fmt::temporal::Error as E, Error, ErrorContext},
@@ -13,10 +15,7 @@ use crate::{
         AmbiguousZoned, Disambiguation, Offset, OffsetConflict, TimeZone,
         TimeZoneDatabase,
     },
-    util::{
-        b::{self, Sign},
-        escape, parse,
-    },
+    util::{b, escape, parse},
     SignedDuration, Timestamp, Unit, Zoned,
 };
 
@@ -114,7 +113,7 @@ impl<'i> ParsedDateTime<'i> {
             // is stupidly rare, so I'm not sure it's worth the effort to
             // improve the error message. I'd be open to a simple patch
             // though.)
-            if candidate.seconds() % b::SECS_PER_MIN_32 == 0
+            if candidate.seconds() % c::SECS_PER_MIN_32 == 0
                 || parsed_offset.has_subminute()
             {
                 return parsed == candidate;
@@ -235,7 +234,7 @@ pub(super) enum ParsedTimeZoneKind<'i> {
     Named(&'i str),
     Offset(ParsedOffset),
     #[cfg(feature = "alloc")]
-    Posix(crate::tz::posix::PosixTimeZoneOwned),
+    Posix(jcore::tz::posix::TimeZone),
 }
 
 impl<'i> ParsedTimeZone<'i> {
@@ -428,8 +427,8 @@ impl DateTimeParser {
             Ok(Parsed { value, input: remaining })
         };
         // This part get tricky. The common case is absolutely an IANA time
-        // zone identifier. So we try to parse something that looks like an IANA
-        // tz id.
+        // zone identifier. So we try to parse something that looks like an
+        // IANA tz id.
         //
         // In theory, IANA tz ids can never be valid POSIX TZ strings, since
         // POSIX TZ strings minimally require an offset in them (e.g., `EST5`)
@@ -459,13 +458,13 @@ impl DateTimeParser {
         }
         #[cfg(feature = "alloc")]
         {
-            use crate::tz::posix::PosixTimeZone;
+            use jcore::tz::posix;
 
-            match PosixTimeZone::parse_prefix(consumed) {
-                Ok((posix_tz, input)) => {
+            match posix::TimeZone::parse_prefix(consumed) {
+                Ok((posix_tz, len)) => {
                     let kind = ParsedTimeZoneKind::Posix(posix_tz);
                     let value = ParsedTimeZone { input: original, kind };
-                    Ok(Parsed { value, input })
+                    Ok(Parsed { value, input: &consumed[len..] })
                 }
                 // We get here for invalid POSIX tz strings, or even if
                 // they are technically valid according to POSIX but not
@@ -715,7 +714,8 @@ impl DateTimeParser {
 
         let (year, input) =
             parse::split(input, 4).ok_or(E::ExpectedFourDigitYear)?;
-        let year = b::Year::parse(year).context(E::ParseYearFourDigit)?;
+        let year =
+            parse::bi64::<b::Year>(year).context(E::ParseYearFourDigit)?;
         Ok(Parsed { value: year, input })
     }
 
@@ -728,7 +728,8 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, i16>, Error> {
         let (year, input) =
             parse::split(input, 6).ok_or(E::ExpectedSixDigitYear)?;
-        let year = b::Year::parse(year).context(E::ParseYearSixDigit)?;
+        let year =
+            parse::bi64::<b::Year>(year).context(E::ParseYearSixDigit)?;
         if year == 0 && sign.is_negative() {
             return Err(Error::from(E::InvalidYearZero));
         }
@@ -747,7 +748,8 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, i8>, Error> {
         let (month, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitMonth)?;
-        let month = b::Month::parse(month).context(E::ParseMonthTwoDigit)?;
+        let month =
+            parse::bi64::<b::Month>(month).context(E::ParseMonthTwoDigit)?;
         Ok(Parsed { value: month, input })
     }
 
@@ -761,7 +763,7 @@ impl DateTimeParser {
     fn parse_day<'i>(&self, input: &'i [u8]) -> Result<Parsed<'i, i8>, Error> {
         let (day, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitDay)?;
-        let day = b::Day::parse(day).context(E::ParseDayTwoDigit)?;
+        let day = parse::bi64::<b::Day>(day).context(E::ParseDayTwoDigit)?;
         Ok(Parsed { value: day, input })
     }
 
@@ -782,7 +784,8 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, i8>, Error> {
         let (hour, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitHour)?;
-        let hour = b::Hour::parse(hour).context(E::ParseHourTwoDigit)?;
+        let hour =
+            parse::bi64::<b::Hour>(hour).context(E::ParseHourTwoDigit)?;
         Ok(Parsed { value: hour, input })
     }
 
@@ -803,8 +806,8 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, i8>, Error> {
         let (minute, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitMinute)?;
-        let minute =
-            b::Minute::parse(minute).context(E::ParseMinuteTwoDigit)?;
+        let minute = parse::bi64::<b::Minute>(minute)
+            .context(E::ParseMinuteTwoDigit)?;
         Ok(Parsed { value: minute, input })
     }
 
@@ -826,8 +829,8 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, i8>, Error> {
         let (second, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitSecond)?;
-        let mut second =
-            b::LeapSecond::parse(second).context(E::ParseSecondTwoDigit)?;
+        let mut second = parse::bi64::<b::LeapSecond>(second)
+            .context(E::ParseSecondTwoDigit)?;
         // NOTE: I believe Temporal allows one to make this configurable. That
         // is, to reject it. But for now, we just always clamp a leap second.
         if second == 60 {
@@ -974,8 +977,8 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, i8>, Error> {
         let (week_num, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitWeekNumber)?;
-        let week_num =
-            b::ISOWeek::parse(week_num).context(E::ParseWeekNumberTwoDigit)?;
+        let week_num = parse::bi64::<b::ISOWeek>(week_num)
+            .context(E::ParseWeekNumberTwoDigit)?;
         Ok(Parsed { value: week_num, input })
     }
 
@@ -988,7 +991,7 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, Weekday>, Error> {
         let (weekday, input) =
             parse::split(input, 1).ok_or(E::ExpectedOneDigitWeekday)?;
-        let weekday = b::WeekdayMondayOne::parse(weekday)
+        let weekday = parse::bi64::<b::WeekdayMondayOne>(weekday)
             .context(E::ParseWeekdayOneDigit)?;
         // OK because we know `weekday` is in bounds from above.
         let weekday = Weekday::from_monday_one_offset(weekday).unwrap();

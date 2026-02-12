@@ -3,7 +3,6 @@ use anyhow::Context;
 use crate::args;
 
 mod crc32;
-mod shared;
 mod tzdb;
 mod unit_designator_match;
 mod windows_zones;
@@ -19,7 +18,6 @@ USAGE:
 COMMANDS:
     crc32                  Generate CRC32 data tables.
     jiff-tzdb              Generate Rust source code from TZif data for jiff-tzdb
-    shared                 Copy shared code from Jiff to jiff-static proc macro
     unit-designator-match  Generate Rust `match` expression for parsing unit labels
     windows-zones          Generate mapping Windows TZ names to IANA names.
     zoneinfo               Generate TZif data for jiff-tzdb
@@ -29,7 +27,6 @@ pub fn run(p: &mut lexopt::Parser) -> anyhow::Result<()> {
     match &*args::next_as_command(USAGE, p)? {
         "crc32" => crc32::run(p),
         "jiff-tzdb" => tzdb::run(p),
-        "shared" => shared::run(p),
         "unit-designator-match" => unit_designator_match::run(p),
         "windows-zones" => windows_zones::run(p),
         "zoneinfo" => zoneinfo::run(p),
@@ -42,6 +39,7 @@ pub fn run(p: &mut lexopt::Parser) -> anyhow::Result<()> {
 /// I'm not sure why, but running `rustfmt` on files directly sometimes
 /// produces different output than running `cargo fmt`. Maybe `rustfmt`
 /// isn't respecting the configuration somehow?
+#[allow(dead_code)]
 fn cargo_fmt(krate: &str) -> anyhow::Result<()> {
     use std::process::Command;
 

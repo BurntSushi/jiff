@@ -1,4 +1,9 @@
-use crate::error::util::{ParseFractionError, ParseIntError};
+use jcore::bounds::Bounds;
+
+use crate::{
+    error::util::{ParseFractionError, ParseIntError},
+    Error,
+};
 
 /// Parses an `i64` number from the beginning to the end of the given slice of
 /// ASCII digit characters.
@@ -26,6 +31,25 @@ pub(crate) fn i64(bytes: &[u8]) -> Result<i64, ParseIntError> {
             .ok_or(ParseIntError::TooBig)?;
     }
     Ok(n)
+}
+
+/// Like `self::i64`, but also does a boundary check for the given type.
+///
+/// # Errors
+///
+/// If the given slice is not a valid integer (i.e., overflow or contains
+/// anything other than `[0-9]`) or is not in the bounds for the given `Bounds`
+/// implementation, then an error is returned.
+///
+/// Note that the error can either be a parsing error or it can be a
+/// boundary error.
+#[cfg_attr(feature = "perf-inline", inline(always))]
+pub(crate) fn bi64<B>(bytes: &[u8]) -> Result<B::Primitive, Error>
+where
+    B: Bounds,
+    Error: From<B::Error>,
+{
+    Ok(B::check(self::i64(bytes)?)?)
 }
 
 /// Parsed an optional `u64` that is a prefix of `bytes`.
@@ -127,36 +151,6 @@ where
     os_str
         .to_str()
         .ok_or_else(|| crate::error::util::OsStrUtf8Error::from(os_str))
-}
-
-/// Parses an `OsStr` into a `&str` when `&[u8]` isn't easily available.
-///
-/// The main difference between this and `OsStr::to_str` is that this will
-/// be a zero-cost conversion on Unix platforms to `&[u8]`. On Windows, this
-/// will do UTF-8 validation and return an error if it's invalid UTF-8.
-#[cfg(feature = "tz-system")]
-pub(crate) fn os_str_bytes<'o, O>(
-    os_str: &'o O,
-) -> Result<&'o [u8], crate::error::util::OsStrUtf8Error>
-where
-    O: ?Sized + AsRef<std::ffi::OsStr>,
-{
-    let os_str = os_str.as_ref();
-    #[cfg(unix)]
-    {
-        use std::os::unix::ffi::OsStrExt;
-        Ok(os_str.as_bytes())
-    }
-    #[cfg(not(unix))]
-    {
-        // It is suspect that we're doing UTF-8 validation and then throwing
-        // away the fact that we did UTF-8 validation. So this could lead
-        // to an extra UTF-8 check if the caller ultimately needs UTF-8. If
-        // that's important, we can add a new API that returns a `&str`. But it
-        // probably won't matter because an `OsStr` in this crate is usually
-        // just an environment variable.
-        Ok(os_str_utf8(os_str)?.as_bytes())
-    }
 }
 
 /// Splits the given input into two slices at the given position.

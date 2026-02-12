@@ -146,7 +146,7 @@ mod system;
 #[cfg(all(test, feature = "alloc"))]
 pub(crate) mod testdata;
 mod timezone;
-pub(crate) mod tzif;
+mod tzif;
 // See module comment for WIP status. :-(
 #[cfg(all(test, feature = "alloc"))]
 mod zic;

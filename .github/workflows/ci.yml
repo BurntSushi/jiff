@@ -330,6 +330,10 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: 1.70.0
+    # quickcheck 1.1.0 requires Rust 1.85+. But we still work with older
+    # versions of quickcheck, so downgrade it.
+    - name: Downgrade quickcheck
+      run: cargo update -p quickcheck --precise 1.0.3
     # We would use `cargo build --all` here, but `jiff-cli` doesn't really
     # track an MSRV and I don't want it to.
     - name: Build jiff
@@ -629,9 +633,6 @@ jobs:
         cargo fmt --all -- --check
 
   # Check that some `jiff-cli generate` commands don't produce a diff.
-  #
-  # This is useful for ensuring that, e.g., changes to `src/shared` are
-  # propagated to `crates/jiff-static/shared`.
   generated:
     runs-on: ubuntu-latest
     steps:
@@ -644,25 +645,18 @@ jobs:
         components: rustfmt
     - name: Install jiff-cli
       run: cargo install -f --path crates/jiff-cli
-    - name: Generate code shared between jiff and jiff-static
-      run: |
-        jiff-cli generate shared
-        if ! git diff --exit-code; then
-          echo 'Please run `jiff-cli generate shared`'
-          exit 1
-        fi
     - name: Generate crc32 code
       run: |
         jiff-cli generate crc32
         if ! git diff --exit-code; then
-          echo 'Please run `jiff-cli generate crc32`'
+          echo 'Please run `cargo run -p jiff-cli -- generate crc32`'
           exit 1
         fi
     - name: Generate unit designator match expression
       run: |
         jiff-cli generate unit-designator-match
         if ! git diff --exit-code; then
-          echo 'Please run `jiff-cli generate unit-designator-match`'
+          echo 'Please run `cargo run -p jiff-cli -- generate unit-designator-match`'
           exit 1
         fi
     - name: Generate mapping from Windows zones to IANA time zone identifiers
@@ -672,13 +666,6 @@ jobs:
         if ! git diff --exit-code; then
           echo 'In a separate PR, please download windowsZones.xml'
           echo 'from github.com/unicode-org/cldr and run'
-          echo '`jiff-cli generate windows-zones`'
-          exit 1
-        fi
-    - name: Generate shared code used in both `jiff` and `jiff-static`
-      run: |
-        jiff-cli generate shared
-        if ! git diff --exit-code; then
-          echo 'Please run `jiff-cli generate shared`'
+          echo '`cargo run -p jiff-cli -- generate windows-zones`'
           exit 1
         fi

@@ -1,5 +1,7 @@
 use core::time::Duration as UnsignedDuration;
 
+use jcore::{bounds::Sign, civil::DateTime as JDateTime, constants as c};
+
 use crate::{
     civil::{
         datetime, Date, DateWith, Era, ISOWeekDate, Time, TimeWith, Weekday,
@@ -10,9 +12,8 @@ use crate::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
     },
-    shared::util::itime::IDateTime,
     tz::TimeZone,
-    util::{b, round::Increment},
+    util::round::Increment,
     zoned::Zoned,
     RoundMode, SignedDuration, Span, SpanRound, Unit,
 };
@@ -2364,26 +2365,24 @@ impl DateTime {
     /// zone offset and where all days are exactly 24 hours long.
     #[inline]
     fn to_duration(self) -> SignedDuration {
-        let mut dur =
-            SignedDuration::from_civil_days32(self.date().to_unix_epoch_day());
+        let mut dur = SignedDuration::from_civil_days32(
+            self.date().to_unix_epoch_day().day(),
+        );
         dur += self.time().to_duration();
         dur
     }
 
     #[inline]
-    pub(crate) const fn to_idatetime_const(&self) -> IDateTime {
-        IDateTime {
-            date: self.date.to_idate_const(),
-            time: self.time.to_itime_const(),
-        }
+    pub(crate) const fn from_jcore(dt: JDateTime) -> DateTime {
+        DateTime::from_parts(
+            Date::from_jcore(dt.date()),
+            Time::from_jcore(dt.time()),
+        )
     }
 
     #[inline]
-    pub(crate) const fn from_idatetime_const(idt: IDateTime) -> DateTime {
-        DateTime::from_parts(
-            Date::from_idate_const(idt.date),
-            Time::from_itime_const(idt.time),
-        )
+    pub(crate) const fn to_jcore(&self) -> JDateTime {
+        JDateTime::from_parts(self.date.to_jcore(), self.time.to_jcore())
     }
 }
 
@@ -3255,9 +3254,9 @@ impl DateTimeDifference {
 
         let (d1, mut d2) = (dt1.date(), dt2.date());
         let (t1, t2) = (dt1.time(), dt2.time());
-        let sign = b::Sign::from_ordinals(d2, d1);
+        let sign = Sign::from_ordinals(d2, d1);
         let mut time_diff = t1.until_nanoseconds(t2);
-        if b::Sign::from(time_diff) == -sign {
+        if Sign::from(time_diff) == -sign {
             // These unwraps will always succeed, but the argument for why is
             // subtle. The key here is that the only way, e.g., d2.tomorrow()
             // can fail is when d2 is the max date. But, if d2 is the max date,
@@ -3269,7 +3268,7 @@ impl DateTimeDifference {
             } else if sign.is_negative() {
                 d2 = d2.tomorrow().unwrap();
             }
-            time_diff += b::NANOS_PER_CIVIL_DAY * sign;
+            time_diff += c::NANOS_PER_CIVIL_DAY * sign;
         }
         let date_span = d1.until((largest, d2))?;
         // Unlike in the <=Unit::Day case, this always succeeds because
@@ -3548,7 +3547,7 @@ impl DateTimeRound {
         let increment =
             Increment::for_datetime(self.smallest, self.increment)?;
         let time_nanos = dt.time().to_duration();
-        let sign = b::Sign::from(dt.date().year());
+        let sign = Sign::from(dt.date().year());
         let time_rounded = increment.round(self.mode, time_nanos)?;
         let (days, time_nanos) = time_rounded.as_civil_days_with_remainder();
         // OK because `abs(days)` here can never be greater than 1. Namely,
@@ -3557,7 +3556,9 @@ impl DateTimeRound {
         // limited to `1`. So even starting with the maximal `dt.time()` value
         // (the last nanosecond in a civil day), we can never round past 1 day.
         let days = sign * days;
-        let time = Time::from_duration_unchecked(time_nanos);
+        // OK because `time_nanos` is guaranteed to be less than a single full
+        // civil day.
+        let time = Time::from_duration(time_nanos).unwrap();
 
         // OK because `abs(days) <= 1` (see above comment) and
         // `dt.date().day()` can never exceed `31`. So the result always fits
