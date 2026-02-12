@@ -812,7 +812,7 @@ impl Date {
     pub fn yesterday(self) -> Result<Date, Error> {
         if self.day() == 1 {
             if self.month() == 1 {
-                let year = b::Year::checked_sub(self.year(), 1)?;
+                let year = b::Year::checked_add(self.year(), -1)?;
                 // OK because Dec 31 is valid for all valid years.
                 return Ok(Date::new_unchecked(year, 12, 31));
             }
@@ -1072,9 +1072,11 @@ impl Date {
                 i32::from(self.weekday().previous().since(weekday));
             // OK because of the range on `NthWeekday`.
             let nth = nth.abs();
-            let diff = (nth - 1) * 7 + weekday_diff;
+            let diff = ((nth - 1) * 7 + weekday_diff)
+                .checked_neg()
+                .ok_or_else(b::UnixEpochDays::error)?;
             let start = self.yesterday()?.to_unix_epoch_day();
-            let end = b::UnixEpochDays::checked_sub(start, diff)?;
+            let end = b::UnixEpochDays::checked_add(start, diff)?;
             Ok(Date::from_unix_epoch_day(end))
         }
     }
