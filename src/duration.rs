@@ -74,7 +74,7 @@ impl Duration {
                 // i64::MIN, but we need to handle it specially since
                 // i64::MIN.unsigned_abs() exceeds i64::MAX.
                 let sdur = if udur.as_secs() == i64::MIN.unsigned_abs() {
-                    SignedDuration::new_without_nano_overflow(
+                    SignedDuration::new_unchecked(
                         i64::MIN,
                         // OK because `udur.subsec_nanos()` < 999_999_999.
                         -i32::try_from(udur.subsec_nanos()).unwrap(),

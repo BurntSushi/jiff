@@ -1,3 +1,5 @@
+use jcore::bounds::Sign;
+
 use crate::{
     error::{fmt::friendly::Error as E, ErrorContext},
     fmt::{
@@ -5,7 +7,7 @@ use crate::{
         util::{parse_temporal_fraction, DurationUnits},
         Parsed,
     },
-    util::{b::Sign, parse},
+    util::parse,
     Error, SignedDuration, Span, Unit,
 };
 

@@ -831,7 +831,7 @@ mod tests {
         dbg!((b::SpanMilliseconds::MIN, b::SpanMilliseconds::MAX));
         dbg!((b::SpanMicroseconds::MIN, b::SpanMicroseconds::MAX));
         dbg!((b::SpanNanoseconds::MIN, b::SpanNanoseconds::MAX));
-        dbg!((b::UnixSeconds::MIN, b::UnixSeconds::MAX));
+        dbg!((b::UnixEpochSeconds::MIN, b::UnixEpochSeconds::MAX));
         dbg!((b::UnixEpochDays::MIN, b::UnixEpochDays::MAX));
     }
 

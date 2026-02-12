@@ -1,4 +1,9 @@
-use crate::error::util::{ParseFractionError, ParseIntError};
+use jcore::bounds::Bounds;
+
+use crate::{
+    error::util::{ParseFractionError, ParseIntError},
+    Error,
+};
 
 /// Parses an `i64` number from the beginning to the end of the given slice of
 /// ASCII digit characters.
@@ -26,6 +31,25 @@ pub(crate) fn i64(bytes: &[u8]) -> Result<i64, ParseIntError> {
             .ok_or(ParseIntError::TooBig)?;
     }
     Ok(n)
+}
+
+/// Like `self::i64`, but also does a boundary check for the given type.
+///
+/// # Errors
+///
+/// If the given slice is not a valid integer (i.e., overflow or contains
+/// anything other than `[0-9]`) or is not in the bounds for the given `Bounds`
+/// implementation, then an error is returned.
+///
+/// Note that the error can either be a parsing error or it can be a
+/// boundary error.
+#[cfg_attr(feature = "perf-inline", inline(always))]
+pub(crate) fn bi64<B>(bytes: &[u8]) -> Result<B::Primitive, Error>
+where
+    B: Bounds,
+    Error: From<B::Error>,
+{
+    Ok(B::check(self::i64(bytes)?)?)
 }
 
 /// Parsed an optional `u64` that is a prefix of `bytes`.

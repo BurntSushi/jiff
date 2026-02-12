@@ -1,5 +1,7 @@
 use core::time::Duration as UnsignedDuration;
 
+use jcore::bounds::Sign;
+
 use crate::{
     civil::{
         Date, DateTime, DateTimeRound, DateTimeWith, Era, ISOWeekDate, Time,
@@ -12,7 +14,7 @@ use crate::{
         temporal::{self, DEFAULT_DATETIME_PARSER},
     },
     tz::{AmbiguousOffset, Disambiguation, Offset, OffsetConflict, TimeZone},
-    util::{b, round::Increment},
+    util::round::Increment,
     RoundMode, SignedDuration, Span, SpanRound, Timestamp, Unit,
 };
 
@@ -4362,7 +4364,7 @@ impl<'a> ZonedDifference<'a> {
     fn until_with_largest_unit(&self, zdt1: &Zoned) -> Result<Span, Error> {
         let zdt2 = self.zoned;
 
-        let sign = b::Sign::from_ordinals(zdt2, zdt1);
+        let sign = Sign::from_ordinals(zdt2, zdt1);
         if sign.is_zero() {
             return Ok(Span::new());
         }
@@ -4382,7 +4384,7 @@ impl<'a> ZonedDifference<'a> {
         let (dt1, mut dt2) = (zdt1.datetime(), zdt2.datetime());
 
         let mut day_correct: i32 = 0;
-        if b::Sign::from_ordinals(dt1.time(), dt2.time()) == sign {
+        if Sign::from_ordinals(dt1.time(), dt2.time()) == sign {
             day_correct += 1;
         }
 
@@ -4394,7 +4396,7 @@ impl<'a> ZonedDifference<'a> {
         let mut zmid: Zoned = mid
             .to_zoned(tz.clone())
             .context(E::ConvertIntermediateDatetime)?;
-        if b::Sign::from_ordinals(zdt2, &zmid) == -sign {
+        if Sign::from_ordinals(zdt2, &zmid) == -sign {
             if sign.is_negative() {
                 // FIXME
                 panic!("this should be an error");
@@ -4408,7 +4410,7 @@ impl<'a> ZonedDifference<'a> {
             zmid = mid
                 .to_zoned(tz.clone())
                 .context(E::ConvertIntermediateDatetime)?;
-            if b::Sign::from_ordinals(zdt2, &zmid) == -sign {
+            if Sign::from_ordinals(zdt2, &zmid) == -sign {
                 // FIXME
                 panic!("this should be an error too");
             }

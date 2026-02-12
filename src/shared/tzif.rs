@@ -1,13 +1,11 @@
 use alloc::{string::String, vec};
 
+use jcore::{Offset as JOffset, Timestamp as JTimestamp};
+
 use super::{
-    util::{
-        array_str::Abbreviation,
-        itime::{IOffset, ITimestamp},
-    },
-    PosixTimeZone, TzifDateTime, TzifFixed, TzifIndicator, TzifLocalTimeType,
-    TzifOwned, TzifTransitionInfo, TzifTransitionKind, TzifTransitions,
-    TzifTransitionsOwned,
+    util::array_str::Abbreviation, PosixTimeZone, TzifDateTime, TzifFixed,
+    TzifIndicator, TzifLocalTimeType, TzifOwned, TzifTransitionInfo,
+    TzifTransitionKind, TzifTransitions, TzifTransitionsOwned,
 };
 
 // These are Jiff min and max timestamp (in seconds) values.
@@ -489,9 +487,9 @@ impl TzifOwned {
             .expect("last transition info")
             .type_index;
         let typ = &self.types[usize::from(type_index)];
-        let (ioff, abbrev, is_dst) =
-            tz.to_offset_info(ITimestamp::from_second(*last));
-        if ioff.second != typ.offset {
+        let (offset, abbrev, is_dst) =
+            tz.to_offset_info(JTimestamp::from_second(*last).unwrap());
+        if offset.second() != typ.offset {
             return Err(InconsistentPosixTimeZoneError::Offset);
         }
         if is_dst != typ.is_dst {
@@ -514,16 +512,20 @@ impl TzifOwned {
     /// and the timestamps in TZif data are, of course, all in UTC.)
     fn add_civil_datetimes_to_transitions(&mut self) {
         fn to_datetime(timestamp: i64, offset: i32) -> TzifDateTime {
-            let its = ITimestamp { second: timestamp, nanosecond: 0 };
-            let ioff = IOffset { second: offset };
-            let dt = its.to_datetime(ioff);
+            // TODO: Audit that these unwraps are correct in all cases.
+            // Probably what we want to do is use JTimestamp and JOffset in the
+            // TZif data structure itself. We couldn't do that before because
+            // those types weren't shared between `jiff` and `jiff-static`.
+            let timestamp = JTimestamp::from_second(timestamp).unwrap();
+            let offset = JOffset::new(offset).unwrap();
+            let dt = timestamp.to_datetime(offset);
             TzifDateTime::new(
-                dt.date.year,
-                dt.date.month,
-                dt.date.day,
-                dt.time.hour,
-                dt.time.minute,
-                dt.time.second,
+                dt.date().year(),
+                dt.date().month(),
+                dt.date().day(),
+                dt.time().hour(),
+                dt.time().minute(),
+                dt.time().second(),
             )
         }
 
@@ -588,7 +590,7 @@ impl TzifOwned {
         let last =
             self.transitions.timestamps.last().expect("last transition");
         let mut i = 0;
-        let mut prev = ITimestamp::from_second(*last);
+        let mut next = JTimestamp::from_second(*last).unwrap();
         loop {
             if i > FATTEN_MAX_TRANSITIONS {
                 // only-jiff-start
@@ -603,7 +605,7 @@ impl TzifOwned {
                 return;
             }
             i += 1;
-            prev = match self.add_transition(&posix_tz, prev) {
+            next = match self.add_transition(&posix_tz, next) {
                 None => break,
                 Some(next) => next,
             };
@@ -615,16 +617,16 @@ impl TzifOwned {
     fn add_transition(
         &mut self,
         posix_tz: &PosixTimeZone<Abbreviation>,
-        prev: ITimestamp,
-    ) -> Option<ITimestamp> {
-        let (its, ioff, abbrev, is_dst) = posix_tz.next_transition(prev)?;
-        if its.to_datetime(IOffset::UTC).date.year >= FATTEN_UP_TO_YEAR {
+        prev: JTimestamp,
+    ) -> Option<JTimestamp> {
+        let (ts, offset, abbrev, is_dst) = posix_tz.next_transition(prev)?;
+        if ts.to_datetime(JOffset::UTC).date().year() >= FATTEN_UP_TO_YEAR {
             return None;
         }
         let type_index =
-            self.find_or_create_local_time_type(ioff, abbrev, is_dst)?;
-        self.transitions.add_with_type_index(its.second, type_index);
-        Some(its)
+            self.find_or_create_local_time_type(offset, abbrev, is_dst)?;
+        self.transitions.add_with_type_index(ts.as_second(), type_index);
+        Some(ts)
     }
 
     /// Look for a local time type matching the data given.
@@ -636,12 +638,12 @@ impl TzifOwned {
     /// would overflow `u8`), then `None` is returned.
     fn find_or_create_local_time_type(
         &mut self,
-        offset: IOffset,
+        offset: JOffset,
         abbrev: &str,
         is_dst: bool,
     ) -> Option<u8> {
         for (i, typ) in self.types.iter().enumerate() {
-            if offset.second == typ.offset
+            if offset.second() == typ.offset
                 && abbrev == self.designation(typ)
                 && is_dst == typ.is_dst
             {
@@ -651,7 +653,7 @@ impl TzifOwned {
         let i = u8::try_from(self.types.len()).ok()?;
         let designation = self.find_or_create_designation(abbrev)?;
         self.types.push(TzifLocalTimeType {
-            offset: offset.second,
+            offset: offset.second(),
             is_dst,
             designation,
             // Not really clear if this is correct, but Jiff

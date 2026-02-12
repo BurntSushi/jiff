@@ -3,11 +3,12 @@ use core::{
     time::Duration as UnsignedDuration,
 };
 
+use jcore::{bounds::Sign, constants as c, Offset as JOffset};
+
 use crate::{
     civil,
     duration::{Duration, SDuration},
     error::{tz::offset::Error as E, Error, ErrorContext},
-    shared::util::itime::IOffset,
     span::Span,
     timestamp::Timestamp,
     tz::{AmbiguousOffset, AmbiguousTimestamp, AmbiguousZoned, TimeZone},
@@ -263,7 +264,7 @@ impl Offset {
     /// ```
     #[inline]
     pub fn from_hours(hours: i8) -> Result<Offset, Error> {
-        Offset::from_seconds(i32::from(hours) * b::SECS_PER_HOUR_32)
+        Offset::from_seconds(i32::from(hours) * c::SECS_PER_HOUR_32)
     }
 
     /// Creates a new time zone offset in a `const` context from a given number
@@ -358,7 +359,7 @@ impl Offset {
     /// ```
     #[inline]
     pub fn signum(self) -> i8 {
-        b::Sign::from(self.seconds()).as_i8()
+        Sign::from(self.seconds()).as_i8()
     }
 
     /// Returns true if and only if this offset is positive.
@@ -444,10 +445,8 @@ impl Offset {
     /// ```
     #[inline]
     pub fn to_datetime(self, timestamp: Timestamp) -> civil::DateTime {
-        civil::DateTime::from_idatetime_const(
-            timestamp
-                .to_itimestamp_const()
-                .to_datetime(IOffset { second: self.seconds() }),
+        civil::DateTime::from_jcore(
+            timestamp.to_jcore().to_datetime(self.to_jcore()),
         )
     }
 
@@ -510,10 +509,11 @@ impl Offset {
         self,
         dt: civil::DateTime,
     ) -> Result<Timestamp, Error> {
-        let its =
-            dt.to_idatetime_const().to_timestamp(self.to_ioffset_const());
-        Timestamp::new(its.second, its.nanosecond)
-            .context(E::ConvertDateTimeToTimestamp { offset: self })
+        Ok(Timestamp::from_jcore(
+            dt.to_jcore()
+                .to_timestamp(self.to_jcore())
+                .context(E::ConvertDateTimeToTimestamp { offset: self })?,
+        ))
     }
 
     /// Adds the given span of time to this offset.
@@ -1001,35 +1001,36 @@ impl Offset {
             b::OffsetSeconds::checkc(seconds as i64),
             "invalid time zone offset seconds",
         );
-        let span = (hours as i32 * b::SECS_PER_HOUR_32)
-            + (minutes as i32 * b::SECS_PER_MIN_32)
+        let span = (hours as i32 * c::SECS_PER_HOUR_32)
+            + (minutes as i32 * c::SECS_PER_MIN_32)
             + (seconds as i32);
         Offset { span }
     }
 
     #[inline]
     pub(crate) fn part_hours(self) -> i8 {
-        (self.seconds() / b::SECS_PER_HOUR_32) as i8
+        (self.seconds() / c::SECS_PER_HOUR_32) as i8
     }
 
     #[inline]
     pub(crate) fn part_minutes(self) -> i8 {
-        ((self.seconds() / b::SECS_PER_MIN_32) % b::MINS_PER_HOUR_32) as i8
+        ((self.seconds() / c::SECS_PER_MIN_32) % c::MINS_PER_HOUR_32) as i8
     }
 
     #[inline]
     pub(crate) fn part_seconds(self) -> i8 {
-        (self.seconds() % b::SECS_PER_MIN_32) as i8
+        (self.seconds() % c::SECS_PER_MIN_32) as i8
     }
 
     #[inline]
-    const fn to_ioffset_const(self) -> IOffset {
-        IOffset { second: self.span }
+    pub(crate) const fn from_jcore(offset: JOffset) -> Offset {
+        Offset::from_seconds_unchecked(offset.second())
     }
 
     #[inline]
-    pub(crate) const fn from_ioffset_const(ioff: IOffset) -> Offset {
-        Offset::from_seconds_unchecked(ioff.second)
+    pub(crate) const fn to_jcore(self) -> JOffset {
+        // TODO: Fix this by using `JOffset` as the representation.
+        constant::unwrapr!(JOffset::new(self.seconds()), "valid offset")
     }
 
     #[inline]

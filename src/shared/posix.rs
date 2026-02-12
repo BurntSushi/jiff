@@ -1,13 +1,16 @@
 use core::fmt::Debug;
 
-use super::{
-    util::{
-        array_str::Abbreviation,
-        itime::{
-            IAmbiguousOffset, IDate, IDateTime, IOffset, ITime, ITimeSecond,
-            ITimestamp, IWeekday,
-        },
+use jcore::{
+    civil::{
+        Date as JDate, DateTime as JDateTime, Time as JTime,
+        TimeSecond as JTimeSecond, Weekday as JWeekday,
     },
+    AmbiguousOffset as JAmbiguousOffset, Offset as JOffset,
+    Timestamp as JTimestamp,
+};
+
+use super::{
+    util::{ array_str::Abbreviation},
     PosixDay, PosixDayTime, PosixDst, PosixOffset, PosixRule, PosixTime,
     PosixTimeZone,
 };
@@ -48,16 +51,16 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
     /// the time zone abbreviation, then use `PosixTimeZone::to_offset_info`.
     /// But that API may be more expensive to use, so only use it if you need
     /// the additional data.
-    pub(crate) fn to_offset(&self, timestamp: ITimestamp) -> IOffset {
-        let std_offset = self.std_offset.to_ioffset();
+    pub(crate) fn to_offset(&self, timestamp: JTimestamp) -> JOffset {
+        let std_offset = self.std_offset.to_offset();
         if self.dst.is_none() {
             return std_offset;
         }
 
-        let dt = timestamp.to_datetime(IOffset::UTC);
-        self.dst_info_utc(dt.date.year)
+        let dt = timestamp.to_datetime(JOffset::UTC);
+        self.dst_info_utc(dt.date().year())
             .filter(|dst_info| dst_info.in_dst(dt))
-            .map(|dst_info| dst_info.offset().to_ioffset())
+            .map(|dst_info| dst_info.offset().to_offset())
             .unwrap_or_else(|| std_offset)
     }
 
@@ -69,19 +72,19 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
     /// for standard time in New York, and EDT for DST in New York).
     pub(crate) fn to_offset_info(
         &self,
-        timestamp: ITimestamp,
-    ) -> (IOffset, &'_ str, bool) {
-        let std_offset = self.std_offset.to_ioffset();
+        timestamp: JTimestamp,
+    ) -> (JOffset, &'_ str, bool) {
+        let std_offset = self.std_offset.to_offset();
         if self.dst.is_none() {
             return (std_offset, self.std_abbrev.as_ref(), false);
         }
 
-        let dt = timestamp.to_datetime(IOffset::UTC);
-        self.dst_info_utc(dt.date.year)
+        let dt = timestamp.to_datetime(JOffset::UTC);
+        self.dst_info_utc(dt.date().year())
             .filter(|dst_info| dst_info.in_dst(dt))
             .map(|dst_info| {
                 (
-                    dst_info.offset().to_ioffset(),
+                    dst_info.offset().to_offset(),
                     dst_info.dst.abbrev.as_ref(),
                     true,
                 )
@@ -100,14 +103,14 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
     /// ambiguity can arise as a "fold" (when a particular wall clock time is
     /// repeated) or as a "gap" (when a particular wall clock time is skipped
     /// entirely).
-    pub(crate) fn to_ambiguous_kind(&self, dt: IDateTime) -> IAmbiguousOffset {
-        let year = dt.date.year;
-        let std_offset = self.std_offset.to_ioffset();
+    pub(crate) fn to_ambiguous_kind(&self, dt: JDateTime) -> JAmbiguousOffset {
+        let year = dt.date().year();
+        let std_offset = self.std_offset.to_offset();
         let Some(dst_info) = self.dst_info_wall(year) else {
-            return IAmbiguousOffset::Unambiguous { offset: std_offset };
+            return JAmbiguousOffset::Unambiguous { offset: std_offset };
         };
-        let dst_offset = dst_info.offset().to_ioffset();
-        let diff = dst_offset.second - std_offset.second;
+        let dst_offset = dst_info.offset().to_offset();
+        let diff = dst_offset.second() - std_offset.second();
         // When the difference between DST and standard is positive, that means
         // STD->DST results in a gap while DST->STD results in a fold. However,
         // when the difference is negative, that means STD->DST results in a
@@ -124,29 +127,29 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
         // clarity.)
         if diff == 0 {
             debug_assert_eq!(std_offset, dst_offset);
-            IAmbiguousOffset::Unambiguous { offset: std_offset }
+            JAmbiguousOffset::Unambiguous { offset: std_offset }
         } else if diff.is_negative() {
             // For DST transitions that always move behind one hour, ambiguous
             // timestamps only occur when the given civil datetime falls in the
             // standard time range.
             if dst_info.in_dst(dt) {
-                IAmbiguousOffset::Unambiguous { offset: dst_offset }
+                JAmbiguousOffset::Unambiguous { offset: dst_offset }
             } else {
                 let fold_start = dst_info.start.saturating_add_seconds(diff);
                 let gap_end =
                     dst_info.end.saturating_add_seconds(diff.saturating_neg());
                 if fold_start <= dt && dt < dst_info.start {
-                    IAmbiguousOffset::Fold {
+                    JAmbiguousOffset::Fold {
                         before: std_offset,
                         after: dst_offset,
                     }
                 } else if dst_info.end <= dt && dt < gap_end {
-                    IAmbiguousOffset::Gap {
+                    JAmbiguousOffset::Gap {
                         before: dst_offset,
                         after: std_offset,
                     }
                 } else {
-                    IAmbiguousOffset::Unambiguous { offset: std_offset }
+                    JAmbiguousOffset::Unambiguous { offset: std_offset }
                 }
             }
         } else {
@@ -154,7 +157,7 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
             // timestamps only occur when the given civil datetime falls in the
             // DST range.
             if !dst_info.in_dst(dt) {
-                IAmbiguousOffset::Unambiguous { offset: std_offset }
+                JAmbiguousOffset::Unambiguous { offset: std_offset }
             } else {
                 // PERF: I wonder if it makes sense to pre-compute these?
                 // Probably not, because we have to do it based on year of
@@ -164,17 +167,17 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
                 let fold_start =
                     dst_info.end.saturating_add_seconds(diff.saturating_neg());
                 if dst_info.start <= dt && dt < gap_end {
-                    IAmbiguousOffset::Gap {
+                    JAmbiguousOffset::Gap {
                         before: std_offset,
                         after: dst_offset,
                     }
                 } else if fold_start <= dt && dt < dst_info.end {
-                    IAmbiguousOffset::Fold {
+                    JAmbiguousOffset::Fold {
                         before: dst_offset,
                         after: std_offset,
                     }
                 } else {
-                    IAmbiguousOffset::Unambiguous { offset: dst_offset }
+                    JAmbiguousOffset::Unambiguous { offset: dst_offset }
                 }
             }
         }
@@ -184,60 +187,68 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
     /// to the timestamp given. If one doesn't exist, `None` is returned.
     pub(crate) fn previous_transition(
         &self,
-        timestamp: ITimestamp,
-    ) -> Option<(ITimestamp, IOffset, &'_ str, bool)> {
-        let dt = timestamp.to_datetime(IOffset::UTC);
-        let dst_info = self.dst_info_utc(dt.date.year)?;
+        timestamp: JTimestamp,
+    ) -> Option<(JTimestamp, JOffset, &'_ str, bool)> {
+        let dt = timestamp.to_datetime(jcore::Offset::UTC);
+        let dst_info = self.dst_info_utc(dt.date().year())?;
         let (earlier, later) = dst_info.ordered();
         let (prev, dst_info) = if dt > later {
             (later, dst_info)
         } else if dt > earlier {
             (earlier, dst_info)
         } else {
-            let prev_year = dt.date.prev_year().ok()?;
+            let prev_year = if dt.date().year() == JDate::MIN.year() {
+                return None;
+            } else {
+                dt.date().year() - 1
+            };
             let dst_info = self.dst_info_utc(prev_year)?;
             let (_, later) = dst_info.ordered();
             (later, dst_info)
         };
 
-        let timestamp = prev.to_timestamp_checked(IOffset::UTC)?;
-        let dt = timestamp.to_datetime(IOffset::UTC);
+        let timestamp = prev.to_timestamp(JOffset::UTC).ok()?;
+        let dt = timestamp.to_datetime(JOffset::UTC);
         let (offset, abbrev, dst) = if dst_info.in_dst(dt) {
             (dst_info.offset(), dst_info.dst.abbrev.as_ref(), true)
         } else {
             (&self.std_offset, self.std_abbrev.as_ref(), false)
         };
-        Some((timestamp, offset.to_ioffset(), abbrev, dst))
+        Some((timestamp, offset.to_offset(), abbrev, dst))
     }
 
     /// Returns the timestamp of the soonest time zone transition after the
     /// timestamp given. If one doesn't exist, `None` is returned.
     pub(crate) fn next_transition(
         &self,
-        timestamp: ITimestamp,
-    ) -> Option<(ITimestamp, IOffset, &'_ str, bool)> {
-        let dt = timestamp.to_datetime(IOffset::UTC);
-        let dst_info = self.dst_info_utc(dt.date.year)?;
+        timestamp: JTimestamp,
+    ) -> Option<(JTimestamp, JOffset, &'_ str, bool)> {
+        let dt = timestamp.to_datetime(JOffset::UTC);
+        let dst_info = self.dst_info_utc(dt.date().year())?;
         let (earlier, later) = dst_info.ordered();
         let (next, dst_info) = if dt < earlier {
             (earlier, dst_info)
         } else if dt < later {
             (later, dst_info)
         } else {
-            let next_year = dt.date.next_year().ok()?;
+            let next_year = if dt.date().year() == JDate::MAX.year() {
+                return None;
+            } else {
+                dt.date().year() + 1
+            };
             let dst_info = self.dst_info_utc(next_year)?;
             let (earlier, _) = dst_info.ordered();
             (earlier, dst_info)
         };
 
-        let timestamp = next.to_timestamp_checked(IOffset::UTC)?;
-        let dt = timestamp.to_datetime(IOffset::UTC);
+        let timestamp = next.to_timestamp(JOffset::UTC).ok()?;
+        let dt = timestamp.to_datetime(JOffset::UTC);
         let (offset, abbrev, dst) = if dst_info.in_dst(dt) {
             (dst_info.offset(), dst_info.dst.abbrev.as_ref(), true)
         } else {
             (&self.std_offset, self.std_abbrev.as_ref(), false)
         };
-        Some((timestamp, offset.to_ioffset(), abbrev, dst))
+        Some((timestamp, offset.to_offset(), abbrev, dst))
     }
 
     /// Returns the range in which DST occurs.
@@ -249,10 +260,10 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
         // DST time starts with respect to standard time, so offset it by the
         // standard offset.
         let start =
-            dst.rule.start.to_datetime(year, self.std_offset.to_ioffset());
+            dst.rule.start.to_datetime(year, self.std_offset.to_offset());
         // DST time ends with respect to DST time, so offset it by the DST
         // offset.
-        let mut end = dst.rule.end.to_datetime(year, dst.offset.to_ioffset());
+        let mut end = dst.rule.end.to_datetime(year, dst.offset.to_offset());
         // This is a whacky special case when DST is permanent, but the math
         // using to calculate the start/end datetimes ends up leaving a gap
         // for standard time to appear. In which case, it's possible for a
@@ -303,17 +314,18 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
         // By just ignoring them, I think it achieves the desired effect of
         // permanent DST. But I'm not 100% confident in my understanding of
         // the code.
-        if start.date.month == 1
-            && start.date.day == 1
-            && start.time == ITime::MIN
+        if start.date().month() == 1
+            && start.date().day() == 1
+            && start.time() == JTime::MIN
             // NOTE: This should come last because it is potentially expensive.
             && year
-                != end.saturating_add_seconds(self.std_offset.second).date.year
+                != end.saturating_add_seconds(self.std_offset.second).date().year()
         {
-            end = IDateTime {
-                date: IDate { year, month: 12, day: 31 },
-                time: ITime::MAX,
-            };
+            end = JDateTime::from_parts(
+                JDate::new(year, 12, 31)
+                    .expect("12/31 is valid for all valid years"),
+                JTime::MAX,
+            );
         }
         Some(DstInfo { dst, start, end })
     }
@@ -328,8 +340,8 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
         // POSIX time zones express their DST transitions in terms of wall
         // clock time. Since this method specifically is returning wall
         // clock times, we don't want to offset our datetimes at all.
-        let start = dst.rule.start.to_datetime(year, IOffset::UTC);
-        let end = dst.rule.end.to_datetime(year, IOffset::UTC);
+        let start = dst.rule.start.to_datetime(year, JOffset::UTC);
+        let end = dst.rule.end.to_datetime(year, JOffset::UTC);
         Some(DstInfo { dst, start, end })
     }
 
@@ -353,35 +365,37 @@ impl PosixDayTime {
     /// specification (combined with the offset) would extend past the end of
     /// the year (or before the start of the year). In this case, the maximal
     /// (or minimal) datetime for the given year is returned.
-    pub(crate) fn to_datetime(&self, year: i16, offset: IOffset) -> IDateTime {
-        let mkmin = || IDateTime {
-            date: IDate { year, month: 1, day: 1 },
-            time: ITime::MIN,
+    pub(crate) fn to_datetime(&self, year: i16, offset: JOffset) -> JDateTime {
+        let mkmin = || {
+            JDateTime::from_parts(JDate::new(year, 1, 1).unwrap(), JTime::MIN)
         };
-        let mkmax = || IDateTime {
-            date: IDate { year, month: 12, day: 31 },
-            time: ITime::MAX,
+        let mkmax = || {
+            JDateTime::from_parts(
+                JDate::new(year, 12, 31).unwrap(),
+                JTime::MAX,
+            )
         };
         let Some(date) = self.date.to_date(year) else { return mkmax() };
         // The range on `self.time` is `-604799..=604799`, and the range
         // on `offset.second` is `-93599..=93599`. Therefore, subtracting
         // them can never overflow an `i32`.
-        let offset = self.time.second - offset.second;
+        let offset = self.time.second - offset.second();
         // If the time goes negative or above 86400, then we might have
         // to adjust our date.
         let days = offset.div_euclid(86400);
         let second = offset.rem_euclid(86400);
 
-        let Ok(date) = date.checked_add_days(days) else {
+        let Ok(date) = date.checked_add(days) else {
             return if offset < 0 { mkmin() } else { mkmax() };
         };
-        if date.year < year {
+        if date.year() < year {
             mkmin()
-        } else if date.year > year {
+        } else if date.year() > year {
             mkmax()
         } else {
-            let time = ITimeSecond { second }.to_time();
-            IDateTime { date, time }
+            // OK because we just did modulo 86400 above.
+            let time = JTimeSecond::new(second).unwrap().to_time();
+            JDateTime::from_parts(date, time)
         }
     }
 }
@@ -393,14 +407,14 @@ impl PosixDay {
     /// given, then `None` is returned. This happens when `366` is given as
     /// a day, but the year given is not a leap year. In this case, callers may
     /// want to assume a datetime that is maximal for the year given.
-    fn to_date(&self, year: i16) -> Option<IDate> {
+    fn to_date(&self, year: i16) -> Option<JDate> {
         match *self {
             PosixDay::JulianOne(day) => {
                 // Parsing validates that our day is 1-365 which will always
                 // succeed for all possible year values. That is, every valid
                 // year has a December 31.
                 Some(
-                    IDate::from_day_of_year_no_leap(year, day)
+                    JDate::from_day_of_year_no_leap(year, day)
                         .expect("Julian `J day` should be in bounds"),
                 )
             }
@@ -414,11 +428,14 @@ impl PosixDay {
                 // caller to make a decision for how to deal with it. Why does
                 // POSIX go out of its way to specifically not specify behavior
                 // in error cases?
-                IDate::from_day_of_year(year, day + 1).ok()
+                JDate::from_day_of_year(year, day + 1).ok()
             }
             PosixDay::WeekdayOfMonth { month, week, weekday } => {
-                let weekday = IWeekday::from_sunday_zero_offset(weekday);
-                let first = IDate { year, month, day: 1 };
+                // TODO: Represent this as a `JWeekday` instead of an int.
+                let weekday =
+                    JWeekday::from_sunday_zero_offset(weekday).unwrap();
+                let first = JDate::new(year, month, 1)
+                    .expect("all valid year/month combinations support day 1");
                 let week = if week == 5 { -1 } else { week };
                 debug_assert!(week == -1 || (1..=4).contains(&week));
                 // This is maybe non-obvious, but this will always succeed
@@ -450,8 +467,9 @@ impl PosixTime {
 }
 
 impl PosixOffset {
-    fn to_ioffset(&self) -> IOffset {
-        IOffset { second: self.second }
+    fn to_offset(&self) -> JOffset {
+        // TODO: Use `Offset` as a representation inside of `PosixOffset`.
+        JOffset::new(self.second).unwrap()
     }
 }
 
@@ -469,7 +487,7 @@ struct DstInfo<'a, ABBREV> {
     /// Note also that this may be in UTC or in wall clock civil
     /// time. It depends on whether `PosixTimeZone::dst_info_utc` or
     /// `PosixTimeZone::dst_info_wall` was used.
-    start: IDateTime,
+    start: JDateTime,
     /// The end time (exclusive) that DST ends.
     ///
     /// Note that this may be less than `start`. This tends to happen in the
@@ -478,13 +496,13 @@ struct DstInfo<'a, ABBREV> {
     /// Note also that this may be in UTC or in wall clock civil
     /// time. It depends on whether `PosixTimeZone::dst_info_utc` or
     /// `PosixTimeZone::dst_info_wall` was used.
-    end: IDateTime,
+    end: JDateTime,
 }
 
 impl<'a, ABBREV> DstInfo<'a, ABBREV> {
     /// Returns true if and only if the given civil datetime ought to be
     /// considered in DST.
-    fn in_dst(&self, utc_dt: IDateTime) -> bool {
+    fn in_dst(&self, utc_dt: JDateTime) -> bool {
         if self.start <= self.end {
             self.start <= utc_dt && utc_dt < self.end
         } else {
@@ -493,7 +511,7 @@ impl<'a, ABBREV> DstInfo<'a, ABBREV> {
     }
 
     /// Returns the earlier and later times for this DST info.
-    fn ordered(&self) -> (IDateTime, IDateTime) {
+    fn ordered(&self) -> (JDateTime, JDateTime) {
         if self.start <= self.end {
             (self.start, self.end)
         } else {
@@ -2002,6 +2020,8 @@ impl core::fmt::Display for OptionalSignError {
 
 #[cfg(test)]
 mod tests {
+    use jcore::civil::date;
+
     use super::*;
 
     fn posix_time_zone(
@@ -2044,10 +2064,6 @@ mod tests {
 
     fn parser(s: &str) -> Parser<'_> {
         Parser::new(s.as_bytes())
-    }
-
-    fn date(year: i16, month: i8, day: i8) -> IDate {
-        IDate { year, month, day }
     }
 
     #[test]
@@ -3103,7 +3119,7 @@ mod tests {
         // For this test, we just keep the offset to zero to simplify things
         // a bit. We get coverage for non-zero offsets in higher level tests.
         let to_datetime = |daytime: &PosixDayTime, year: i16| {
-            daytime.to_datetime(year, IOffset::UTC)
+            daytime.to_datetime(year, JOffset::UTC)
         };
 
         let tz = posix_time_zone("EST5EDT,J1,J365/5:12:34");

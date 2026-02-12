@@ -31,6 +31,7 @@ include = [
 [workspace]
 members = [
   "crates/jiff-cli",
+  "crates/jiff-core",
   "crates/jiff-static",
   "crates/jiff-tzdb",
   "crates/jiff-tzdb-platform",
@@ -48,8 +49,13 @@ default = [
   "tzdb-concatenated",
   "perf-inline",
 ]
-std = ["alloc", "log?/std", "serde_core?/std"]
-alloc = ["serde_core?/alloc", "portable-atomic-util/alloc", "defmt?/alloc"]
+std = ["alloc", "jcore/std", "log?/std", "serde_core?/std"]
+alloc = [
+  "jcore/alloc",
+  "serde_core?/alloc",
+  "portable-atomic-util/alloc",
+  "defmt?/alloc",
+]
 
 # Enables integration with `serde`. This provides implementations of
 # `Serialize` and `Deserialize` for many of Jiff's core primitives.
@@ -191,6 +197,13 @@ perf-inline = []
 
 [dependencies]
 defmt = { version = "1.0.0", optional = true }
+# Jiff's only required dependency. The `jiff-core` crate just contains stuff
+# that used to be inside `jiff`, so while it shows up as an additional
+# dependency, it's not extra code that Jiff otherwise wouldn't have. Moreover,
+# splitting this out into a separate crate lets `jiff` and `jiff-static` share
+# it. (Previously, I was essentially vendoring a small part of `jiff` into
+# `jiff-static`.)
+jcore = { package = "jiff-core", version = "0.1", path = "crates/jiff-core" }
 jiff-static = { version = "0.2", path = "crates/jiff-static", optional = true }
 jiff-tzdb = { version = "0.1.6", path = "crates/jiff-tzdb", optional = true }
 log = { version = "0.4.21", optional = true, default-features = false }
@@ -281,6 +294,12 @@ name = "integration"
 [profile.testrelease]
 inherits = "test"
 debug-assertions = false
+
+[profile.test]
+# Some of our tests can take a while without some optimizations enabled. In
+# particular, tests that check the validity of every date. It seems just
+# `opt-level = 1` is enough to make those pretty snappy.
+opt-level = 1
 
 [package.metadata.docs.rs]
 # We want to document all features.

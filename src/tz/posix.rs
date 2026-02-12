@@ -268,9 +268,7 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
     /// But that API may be more expensive to use, so only use it if you need
     /// the additional data.
     pub(crate) fn to_offset(&self, timestamp: Timestamp) -> Offset {
-        Offset::from_ioffset_const(
-            self.inner.to_offset(timestamp.to_itimestamp_const()),
-        )
+        Offset::from_jcore(self.inner.to_offset(timestamp.to_jcore()))
     }
 
     /// Returns the appropriate time zone offset to use for the given
@@ -283,9 +281,9 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
         &self,
         timestamp: Timestamp,
     ) -> TimeZoneOffsetInfo<'_> {
-        let (ioff, abbrev, is_dst) =
-            self.inner.to_offset_info(timestamp.to_itimestamp_const());
-        let offset = Offset::from_ioffset_const(ioff);
+        let (offset, abbrev, is_dst) =
+            self.inner.to_offset_info(timestamp.to_jcore());
+        let offset = Offset::from_jcore(offset);
         let abbreviation = TimeZoneAbbreviation::Borrowed(abbrev);
         TimeZoneOffsetInfo { offset, dst: Dst::from(is_dst), abbreviation }
     }
@@ -302,8 +300,8 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
     /// repeated) or as a "gap" (when a particular wall clock time is skipped
     /// entirely).
     pub(crate) fn to_ambiguous_kind(&self, dt: DateTime) -> AmbiguousOffset {
-        let iamoff = self.inner.to_ambiguous_kind(dt.to_idatetime_const());
-        AmbiguousOffset::from_iambiguous_offset_const(iamoff)
+        let iamoff = self.inner.to_ambiguous_kind(dt.to_jcore());
+        AmbiguousOffset::from_jcore(iamoff)
     }
 
     /// Returns the timestamp of the most recent time zone transition prior
@@ -312,10 +310,10 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
         &'t self,
         timestamp: Timestamp,
     ) -> Option<TimeZoneTransition<'t>> {
-        let (its, ioff, abbrev, is_dst) =
-            self.inner.previous_transition(timestamp.to_itimestamp_const())?;
-        let timestamp = Timestamp::from_itimestamp_const(its);
-        let offset = Offset::from_ioffset_const(ioff);
+        let (prev, offset, abbrev, is_dst) =
+            self.inner.previous_transition(timestamp.to_jcore())?;
+        let timestamp = Timestamp::from_jcore(prev);
+        let offset = Offset::from_jcore(offset);
         let dst = Dst::from(is_dst);
         Some(TimeZoneTransition { timestamp, offset, abbrev, dst })
     }
@@ -326,10 +324,10 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
         &'t self,
         timestamp: Timestamp,
     ) -> Option<TimeZoneTransition<'t>> {
-        let (its, ioff, abbrev, is_dst) =
-            self.inner.next_transition(timestamp.to_itimestamp_const())?;
-        let timestamp = Timestamp::from_itimestamp_const(its);
-        let offset = Offset::from_ioffset_const(ioff);
+        let (next, offset, abbrev, is_dst) =
+            self.inner.next_transition(timestamp.to_jcore())?;
+        let timestamp = Timestamp::from_jcore(next);
+        let offset = Offset::from_jcore(offset);
         let dst = Dst::from(is_dst);
         Some(TimeZoneTransition { timestamp, offset, abbrev, dst })
     }

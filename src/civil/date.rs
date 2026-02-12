@@ -1,5 +1,7 @@
 use core::time::Duration as UnsignedDuration;
 
+use jcore::{bounds::Sign, civil::Date as JDate};
+
 use crate::{
     civil::{DateTime, Era, ISOWeekDate, Time, Weekday},
     duration::{Duration, SDuration},
@@ -8,7 +10,6 @@ use crate::{
         self,
         temporal::{DEFAULT_DATETIME_PARSER, DEFAULT_DATETIME_PRINTER},
     },
-    shared::util::itime::{self, IDate, IEpochDay},
     tz::TimeZone,
     util::{b, constant},
     RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
@@ -168,9 +169,7 @@ use crate::{
 /// [add-date-rounding]: https://github.com/BurntSushi/jiff/issues/1
 #[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct Date {
-    year: i16,
-    month: i8,
-    day: i8,
+    inner: JDate,
 }
 
 impl Date {
@@ -244,17 +243,9 @@ impl Date {
     /// ```
     #[inline]
     pub fn new(year: i16, month: i8, day: i8) -> Result<Date, Error> {
-        let year = b::Year::check(year)?;
-        let month = b::Month::check(month)?;
-        if day < 1 || day > 28 && day > itime::days_in_month(year, month) {
-            return Err(Error::itime_range(
-                crate::shared::util::itime::RangeError::DateInvalidDays {
-                    year,
-                    month,
-                },
-            ));
-        }
-        Ok(Date::new_unchecked(year, month, day))
+        JDate::new(year, month, day)
+            .map(Date::from_jcore)
+            .map_err(Error::jcore_range)
     }
 
     /// Like `Date::new`, but constrains the day value to the last day of
@@ -264,18 +255,12 @@ impl Date {
     /// are invalid.
     #[inline]
     fn new_constrain(year: i16, month: i8, day: i8) -> Result<Date, Error> {
-        let year = b::Year::check(year)?;
-        let month = b::Month::check(month)?;
-        let day = if day < 1 {
-            return Err(b::Day::error().into());
-        } else if day > 28 {
-            day.min(itime::days_in_month(year, month))
-        } else {
-            day
-        };
-        Ok(Date::new_unchecked(year, month, day))
+        JDate::new_constrain(year, month, day)
+            .map_err(Error::jcore_range)
+            .map(Date::from_jcore)
     }
 
+    /*
     /// Like `Date::new`, but does not checking on the values given when
     /// `debug_assertions` aren't enabled.
     ///
@@ -290,9 +275,10 @@ impl Date {
         debug_assert!(b::Year::checkc(year as i64).is_ok());
         debug_assert!(b::Month::checkc(month as i64).is_ok());
         debug_assert!(b::Day::checkc(day as i64).is_ok());
-        debug_assert!(day <= itime::days_in_month(year, month));
+        debug_assert!(day <= jcore::civil::days_in_month(year, month));
         Date { year, month, day }
     }
+    */
 
     /// Creates a new `Date` value in a `const` context.
     ///
@@ -320,16 +306,10 @@ impl Date {
     /// ```
     #[inline]
     pub const fn constant(year: i16, month: i8, day: i8) -> Date {
-        let year =
-            constant::unwrapr!(b::Year::checkc(year as i64), "invalid year");
-        let month = constant::unwrapr!(
-            b::Month::checkc(month as i64),
-            "invalid month"
-        );
-        if day > itime::days_in_month(year, month) {
-            panic!("invalid month/day combination");
-        }
-        Date::new_unchecked(year, month, day)
+        Date::from_jcore(constant::unwrapr!(
+            JDate::new(year, month, day),
+            "invalid date"
+        ))
     }
 
     /// Construct a Gregorian date from an [ISO 8601 week date].
@@ -377,13 +357,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn from_iso_week_date(weekdate: ISOWeekDate) -> Date {
-        let mut days = iso_week_start_from_year(weekdate.year());
-        let week = i32::from(weekdate.week());
-        let weekday = i32::from(weekdate.weekday().to_monday_zero_offset());
-
-        days += (week - 1) * 7;
-        days += weekday;
-        Date::from_unix_epoch_day(days)
+        Date::from_jcore(weekdate.to_jcore().to_date())
     }
 
     /// Create a builder for constructing a `Date` from the fields of this
@@ -441,7 +415,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn year(self) -> i16 {
-        self.year
+        self.inner.year()
     }
 
     /// Returns the year and its era.
@@ -508,7 +482,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn month(self) -> i8 {
-        self.month
+        self.inner.month()
     }
 
     /// Returns the day for this date.
@@ -525,7 +499,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn day(self) -> i8 {
-        self.day
+        self.inner.day()
     }
 
     /// Returns the weekday corresponding to this date.
@@ -546,7 +520,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn weekday(self) -> Weekday {
-        Weekday::from_iweekday(self.to_idate_const().weekday())
+        Weekday::from_jcore(self.inner.weekday())
     }
 
     /// Returns the ordinal day of the year that this date resides in.
@@ -570,14 +544,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn day_of_year(self) -> i16 {
-        static DAYS_BY_MONTH_NO_LEAP: [i16; 14] =
-            [0, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365];
-        static DAYS_BY_MONTH_LEAP: [i16; 14] =
-            [0, 0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366];
-        static TABLES: [[i16; 14]; 2] =
-            [DAYS_BY_MONTH_NO_LEAP, DAYS_BY_MONTH_LEAP];
-        TABLES[self.in_leap_year() as usize][self.month() as usize]
-            + i16::from(self.day())
+        self.inner.day_of_year()
     }
 
     /// Returns the ordinal day of the year that this date resides in, but
@@ -609,16 +576,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn day_of_year_no_leap(self) -> Option<i16> {
-        let mut days = self.day_of_year();
-        if self.in_leap_year() {
-            // day=60 is Feb 29
-            if days == 60 {
-                return None;
-            } else if days > 60 {
-                days -= 1;
-            }
-        }
-        Some(days)
+        self.inner.day_of_year_no_leap()
     }
 
     /// Returns the first date of the month that this date resides in.
@@ -633,8 +591,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn first_of_month(self) -> Date {
-        // OK because the first day of the month is always valid.
-        Date::new_unchecked(self.year(), self.month(), 1)
+        Date::from_jcore(self.inner.first_of_month())
     }
 
     /// Returns the last date of the month that this date resides in.
@@ -649,8 +606,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn last_of_month(self) -> Date {
-        // OK because the last day of the month is always valid.
-        Date::new_unchecked(self.year(), self.month(), self.days_in_month())
+        Date::from_jcore(self.inner.last_of_month())
     }
 
     /// Returns the total number of days in the the month in which this date
@@ -675,7 +631,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn days_in_month(self) -> i8 {
-        itime::days_in_month(self.year(), self.month())
+        self.inner.days_in_month()
     }
 
     /// Returns the first date of the year that this date resides in.
@@ -690,8 +646,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn first_of_year(self) -> Date {
-        // OK because Jan 1 for all years is valid.
-        Date::new_unchecked(self.year(), 1, 1)
+        Date::from_jcore(self.inner.first_of_year())
     }
 
     /// Returns the last date of the year that this date resides in.
@@ -706,8 +661,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn last_of_year(self) -> Date {
-        // OK because Dec 31 for all years is valid.
-        Date::new_unchecked(self.year(), 12, 31)
+        Date::from_jcore(self.inner.last_of_year())
     }
 
     /// Returns the total number of days in the the year in which this date
@@ -728,11 +682,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn days_in_year(self) -> i16 {
-        if self.in_leap_year() {
-            366
-        } else {
-            365
-        }
+        self.inner.days_in_year()
     }
 
     /// Returns true if and only if the year in which this date resides is a
@@ -748,7 +698,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn in_leap_year(self) -> bool {
-        itime::is_leap_year(self.year())
+        self.inner.in_leap_year()
     }
 
     /// Returns the date immediately following this one.
@@ -772,21 +722,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn tomorrow(self) -> Result<Date, Error> {
-        if self.day() >= 28 && self.day() == self.days_in_month() {
-            if self.month() == 12 {
-                let year = b::Year::checked_add(self.year(), 1)?;
-                // OK because Jan 1 is valid for all valid years.
-                return Ok(Date::new_unchecked(year, 1, 1));
-            }
-            // OK because the first of every month for a valid year is valid.
-            // Also, `month + 1` is OK because we know `month` must be less
-            // than `12`.
-            return Ok(Date::new_unchecked(self.year(), self.month() + 1, 1));
-        }
-        // OK because we know `self.day() + 1 <= 28` because of the condition
-        // checked above. Moreover, `28` is a valid day for all valid years
-        // and months.
-        Ok(Date::new_unchecked(self.year(), self.month(), self.day() + 1))
+        self.inner.tomorrow().map(Date::from_jcore).map_err(Error::jcore_range)
     }
 
     /// Returns the date immediately preceding this one.
@@ -810,27 +746,10 @@ impl Date {
     /// ```
     #[inline]
     pub fn yesterday(self) -> Result<Date, Error> {
-        if self.day() == 1 {
-            if self.month() == 1 {
-                let year = b::Year::checked_add(self.year(), -1)?;
-                // OK because Dec 31 is valid for all valid years.
-                return Ok(Date::new_unchecked(year, 12, 31));
-            }
-            let month = self.month() - 1;
-            // OK because the last of every month for a valid year is valid.
-            // Also, `month - 1` is OK because we know `month` must be greater
-            // than `1`.
-            return Ok(Date::new_unchecked(
-                self.year(),
-                month,
-                itime::days_in_month(self.year(), month),
-            ));
-        }
-        // OK because we know `self.day() - 1 >= 1` because of the condition
-        // checked above. Moreover, since the year/month don't change (since
-        // `self.day() > 1`), subtracting 1 always leads to a valid day for
-        // this month.
-        Ok(Date::new_unchecked(self.year(), self.month(), self.day() - 1))
+        self.inner
+            .yesterday()
+            .map(Date::from_jcore)
+            .map_err(Error::jcore_range)
     }
 
     /// Returns the "nth" weekday from the beginning or end of the month in
@@ -901,13 +820,10 @@ impl Date {
         nth: i8,
         weekday: Weekday,
     ) -> Result<Date, Error> {
-        let weekday = weekday.to_iweekday();
-        let idate = self.to_idate_const();
-        Ok(Date::from_idate_const(
-            idate
-                .nth_weekday_of_month(nth, weekday)
-                .map_err(Error::itime_range)?,
-        ))
+        self.inner
+            .nth_weekday_of_month(nth, weekday.to_jcore())
+            .map(Date::from_jcore)
+            .map_err(Error::jcore_range)
     }
 
     /// Returns the "nth" weekday from this date, not including itself.
@@ -1056,29 +972,10 @@ impl Date {
         nth: i32,
         weekday: Weekday,
     ) -> Result<Date, Error> {
-        // ref: http://howardhinnant.github.io/date_algorithms.html#next_weekday
-
-        let nth = b::NthWeekday::check(nth)?;
-        if nth == 0 {
-            Err(b::NthWeekday::error().into())
-        } else if nth > 0 {
-            let weekday_diff = i32::from(weekday.since(self.weekday().next()));
-            let diff = (nth - 1) * 7 + weekday_diff;
-            let start = self.tomorrow()?.to_unix_epoch_day();
-            let end = b::UnixEpochDays::checked_add(start, diff)?;
-            Ok(Date::from_unix_epoch_day(end))
-        } else {
-            let weekday_diff =
-                i32::from(self.weekday().previous().since(weekday));
-            // OK because of the range on `NthWeekday`.
-            let nth = nth.abs();
-            let diff = ((nth - 1) * 7 + weekday_diff)
-                .checked_neg()
-                .ok_or_else(b::UnixEpochDays::error)?;
-            let start = self.yesterday()?.to_unix_epoch_day();
-            let end = b::UnixEpochDays::checked_add(start, diff)?;
-            Ok(Date::from_unix_epoch_day(end))
-        }
+        self.inner
+            .nth_weekday(nth, weekday.to_jcore())
+            .map(Date::from_jcore)
+            .map_err(Error::jcore_range)
     }
 
     /// Construct an [ISO 8601 week date] from this Gregorian date.
@@ -1135,27 +1032,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn iso_week_date(self) -> ISOWeekDate {
-        let days = self.to_unix_epoch_day();
-        let year = self.year();
-        let mut week_start = iso_week_start_from_year(year);
-        if days < week_start {
-            week_start = iso_week_start_from_year(year - 1);
-        } else if year < b::Year::MAX {
-            let next_year_week_start = iso_week_start_from_year(year + 1);
-            if days >= next_year_week_start {
-                week_start = next_year_week_start;
-            }
-        }
-
-        let weekday =
-            Weekday::from_iweekday(IEpochDay { epoch_day: days }.weekday());
-        let week = i8::try_from(((days - week_start) / 7) + 1).unwrap();
-
-        let unix_epoch_day =
-            week_start + i32::from(Weekday::Thursday.since(Weekday::Monday));
-        let year = Date::from_unix_epoch_day(unix_epoch_day).year();
-        ISOWeekDate::new(year, week, weekday)
-            .expect("all Dates infallibly convert to ISOWeekDates")
+        ISOWeekDate::from_jcore(self.inner.to_iso_week_date())
     }
 
     /// Converts a civil date to a [`Zoned`] datetime by adding the given
@@ -1469,16 +1346,11 @@ impl Date {
             return Ok(self);
         }
         if span.units().contains_only(Unit::Day) {
-            let days = span.get_days();
-            return if days == -1 {
-                self.yesterday()
-            } else if days == 1 {
-                self.tomorrow()
-            } else {
-                let epoch_days = self.to_unix_epoch_day();
-                let days = b::UnixEpochDays::checked_add(epoch_days, days)?;
-                Ok(Date::from_unix_epoch_day(days))
-            };
+            return self
+                .inner
+                .checked_add(span.get_days())
+                .map(Date::from_jcore)
+                .map_err(Error::jcore_range);
         }
 
         let (month, years) =
@@ -1486,17 +1358,16 @@ impl Date {
         let year = b::Year::checked_add(self.year(), years)
             .and_then(|years| b::Year::checked_add(years, span.get_years()))?;
         let date = Date::new_constrain(year, month, self.day())?;
-        let epoch_days = date.to_unix_epoch_day();
-        let mut days =
-            b::UnixEpochDays::checked_add(epoch_days, 7 * span.get_weeks())
-                .and_then(|days| {
-                    b::UnixEpochDays::checked_add(days, span.get_days())
-                })?;
+        let mut days = date
+            .to_unix_epoch_day()
+            .checked_add(7 * span.get_weeks())
+            .and_then(|days| days.checked_add(span.get_days()))
+            .map_err(Error::jcore_range)?;
         if !span.units().only_time().is_empty() {
             let time_days = b::UnixEpochDays::check(
                 span.to_invariant_duration_time_only().as_civil_days(),
             )?;
-            days = b::UnixEpochDays::checked_add(days, time_days)?;
+            days = days.checked_add(time_days).map_err(Error::jcore_range)?;
         }
         Ok(Date::from_unix_epoch_day(days))
     }
@@ -1506,20 +1377,13 @@ impl Date {
         self,
         duration: SignedDuration,
     ) -> Result<Date, Error> {
-        match duration.as_civil_days() {
-            0 => Ok(self),
-            -1 => self.yesterday(),
-            1 => self.tomorrow(),
-            days => {
-                let days = b::UnixEpochDays::check(days)
-                    .context(E::OverflowDaysDuration)?;
-                let days = b::UnixEpochDays::checked_add(
-                    days,
-                    self.to_unix_epoch_day(),
-                )?;
-                Ok(Date::from_unix_epoch_day(days))
-            }
-        }
+        let days = b::UnixEpochDays::check(duration.as_civil_days())
+            .context(E::OverflowDaysDuration)?;
+        return self
+            .inner
+            .checked_add(days)
+            .map(Date::from_jcore)
+            .map_err(Error::jcore_range);
     }
 
     /// This routine is identical to [`Date::checked_add`] with the duration
@@ -2098,33 +1962,30 @@ impl Date {
 /// Internal APIs.
 impl Date {
     #[inline]
-    pub(crate) fn until_days(self, other: Date) -> i32 {
-        if self == other {
-            return 0;
-        }
-        let start = self.to_unix_epoch_day();
-        let end = other.to_unix_epoch_day();
-        end - start
+    pub(crate) const fn until_days(self, other: Date) -> i32 {
+        self.inner.until(other.inner)
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn to_unix_epoch_day(self) -> i32 {
-        self.to_idate_const().to_epoch_day().epoch_day
+    pub(crate) fn to_unix_epoch_day(self) -> jcore::civil::UnixEpochDay {
+        self.inner.to_unix_epoch_day()
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(crate) fn from_unix_epoch_day(epoch_day: i32) -> Date {
-        Date::from_idate_const(IEpochDay { epoch_day }.to_date())
+    pub(crate) fn from_unix_epoch_day(
+        day: jcore::civil::UnixEpochDay,
+    ) -> Date {
+        Date::from_jcore(day.to_date())
     }
 
     #[inline]
-    pub(crate) const fn to_idate_const(self) -> IDate {
-        IDate { year: self.year, month: self.month, day: self.day }
+    pub(crate) const fn to_jcore(self) -> JDate {
+        self.inner
     }
 
     #[inline]
-    pub(crate) const fn from_idate_const(idate: IDate) -> Date {
-        Date { year: idate.year, month: idate.month, day: idate.day }
+    pub(crate) const fn from_jcore(date: JDate) -> Date {
+        Date { inner: date }
     }
 }
 
@@ -2872,13 +2733,13 @@ impl DateDifference {
         let mut days = i32::from(day2 - day1);
         if years != 0 || months != 0 {
             let sign = if years != 0 {
-                b::Sign::from(years)
+                Sign::from(years)
             } else {
-                b::Sign::from(months)
+                Sign::from(months)
             };
             let mut days_in_month2 = d2.days_in_month();
             let mut day_correct = 0;
-            if b::Sign::from(days) == -sign {
+            if Sign::from(days) == -sign {
                 // Justifying this operation as infallible is quite tricky.
                 // It can only fail in two cases: year2=9999, month2=12 and
                 // sign=Negative or year2=-9999, month2=1 and sign=Positive. In
@@ -2900,7 +2761,7 @@ impl DateDifference {
                 years = year2 - year1;
                 months = i32::from(month2 - month1);
                 let original_days_in_month1 = days_in_month2;
-                days_in_month2 = itime::days_in_month(year2, month2);
+                days_in_month2 = jcore::civil::days_in_month(year2, month2);
                 day_correct = if sign.is_negative() {
                     -original_days_in_month1
                 } else {
@@ -2913,7 +2774,7 @@ impl DateDifference {
 
             if years != 0 {
                 months = i32::from(month2 - month1);
-                if b::Sign::from(months) == -sign {
+                if Sign::from(months) == -sign {
                     let month_correct = sign * 12;
                     year2 -= sign.as_i16();
                     years = year2 - year1;
@@ -3093,14 +2954,14 @@ impl DateWith {
             None => self.original.day(),
             Some(DateWithDay::OfMonth(day)) => b::Day::check(day)?,
             Some(DateWithDay::OfYear(day)) => {
-                let idate = IDate::from_day_of_year(year, day)
-                    .map_err(Error::itime_range)?;
-                return Ok(Date::from_idate_const(idate));
+                let jdate = JDate::from_day_of_year(year, day)
+                    .map_err(Error::jcore_range)?;
+                return Ok(Date::from_jcore(jdate));
             }
             Some(DateWithDay::OfYearNoLeap(day)) => {
-                let idate = IDate::from_day_of_year_no_leap(year, day)
-                    .map_err(Error::itime_range)?;
-                return Ok(Date::from_idate_const(idate));
+                let jdate = JDate::from_day_of_year_no_leap(year, day)
+                    .map_err(Error::jcore_range)?;
+                return Ok(Date::from_jcore(jdate));
             }
         };
         Date::new(year, month, day)
@@ -3490,22 +3351,6 @@ enum DateWithDay {
     OfYearNoLeap(i16),
 }
 
-/// Returns the Unix epoch day corresponding to the first day in the ISO 8601
-/// week year given.
-///
-/// Ref: http://howardhinnant.github.io/date_algorithms.html
-fn iso_week_start_from_year(year: i16) -> i32 {
-    // A week's year always corresponds to the Gregorian year in which the
-    // Thursday of that week falls. Therefore, Jan 4 is *always* in the first
-    // week of any ISO week year.
-    let date_in_first_week = Date::new_unchecked(year, 1, 4);
-    // The start of the first week is a Monday, so find the number of days
-    // since Monday from a date that we know is in the first ISO week of
-    // `year`.
-    let diff_from_monday = date_in_first_week.weekday().since(Weekday::Monday);
-    date_in_first_week.to_unix_epoch_day() - i32::from(diff_from_monday)
-}
-
 /// Adds or subtracts `sign` from the given `year`/`month`.
 ///
 /// If month overflows in either direction, then the `year` returned is
@@ -3513,7 +3358,7 @@ fn iso_week_start_from_year(year: i16) -> i32 {
 fn month_add_one(
     mut year: i16,
     mut month: i8,
-    delta: b::Sign,
+    delta: Sign,
 ) -> Result<(i16, i8), Error> {
     month += delta.as_i8();
     if month < 1 {
@@ -3583,13 +3428,13 @@ mod tests {
         assert_eq!(
             date(-9999, 1, 2),
             date_from_timestamp(
-                Timestamp::new(b::UnixSeconds::MIN, 0).unwrap()
+                Timestamp::new(b::UnixEpochSeconds::MIN, 0).unwrap()
             ),
         );
         assert_eq!(
             date(9999, 12, 30),
             date_from_timestamp(
-                Timestamp::new(b::UnixSeconds::MAX, 0).unwrap()
+                Timestamp::new(b::UnixEpochSeconds::MAX, 0).unwrap()
             ),
         );
     }
@@ -3598,9 +3443,10 @@ mod tests {
     #[cfg(not(miri))]
     fn all_days_to_date_roundtrip() {
         for rd in -100_000..=100_000 {
-            let date = Date::from_unix_epoch_day(rd);
+            let day = jcore::civil::UnixEpochDay::new(rd).unwrap();
+            let date = Date::from_unix_epoch_day(day);
             let got = date.to_unix_epoch_day();
-            assert_eq!(rd, got, "for date {date:?}");
+            assert_eq!(rd, got.day(), "for date {date:?}");
         }
     }
 
@@ -3611,7 +3457,7 @@ mod tests {
         // let year_range = -9999..=9999;
         for year in year_range {
             for month in b::Month::MIN..=b::Month::MAX {
-                for day in 1..=itime::days_in_month(year, month) {
+                for day in 1..=jcore::civil::days_in_month(year, month) {
                     let date = date(year, month, day);
                     let rd = date.to_unix_epoch_day();
                     let got = Date::from_unix_epoch_day(rd);
@@ -3627,7 +3473,7 @@ mod tests {
         let year_range = 2000..=2500;
         for year in year_range {
             for month in [1, 2, 4] {
-                for day in 20..=itime::days_in_month(year, month) {
+                for day in 20..=jcore::civil::days_in_month(year, month) {
                     let date = date(year, month, day);
                     let wd = date.iso_week_date();
                     let got = wd.date();
@@ -3642,7 +3488,7 @@ mod tests {
         let year_range = -9999..=-9500;
         for year in year_range {
             for month in [1, 2, 4] {
-                for day in 20..=itime::days_in_month(year, month) {
+                for day in 20..=jcore::civil::days_in_month(year, month) {
                     let date = date(year, month, day);
                     let wd = date.iso_week_date();
                     let got = wd.date();
@@ -3836,7 +3682,7 @@ mod tests {
     fn test_month_add() {
         let add =
             |year: i16, month: i8, delta: i8| -> Result<(i16, i8), Error> {
-                month_add_one(year, month, b::Sign::from(delta))
+                month_add_one(year, month, Sign::from(delta))
             };
 
         assert_eq!(add(2024, 1, 1).unwrap(), (2024, 2));
@@ -3986,19 +3832,13 @@ mod tests {
         assert!(d1.nth_weekday(weeks - 1, Weekday::Friday).is_err());
     }
 
-    /// Test some invocations of Date::new to test valid/invalid days.
     #[test]
-    fn days_of_month() {
-        let date = Date::new(1998, 1, 0);
-        assert!(date.is_err());
-
-        let date = Date::new(1998, 1, -1);
-        assert!(date.is_err());
-
-        let date = Date::new(1998, 2, 29);
-        assert!(date.is_err());
-
-        let date = Date::new(2004, 2, 29);
-        assert!(date.is_ok());
+    fn date_invalid_day() {
+        assert!(Date::new(1998, 1, 0).is_err());
+        assert!(Date::new(1998, 1, -1).is_err());
+        assert!(Date::new(1998, 2, 29).is_err());
+        assert!(Date::new(2004, 2, 29).is_ok());
+        assert!(Date::new(2026, 3, 0).is_err());
+        assert!(Date::new(2026, 3, -1).is_err());
     }
 }

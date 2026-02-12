@@ -117,7 +117,7 @@ impl Error {
         use self::ErrorKind::*;
         matches!(
             *self.root().kind(),
-            Bounds(_) | SpecialBounds(_) | ITimeRange(_)
+            Bounds(_) | SpecialBounds(_) | JcoreRange(_)
         )
     }
 
@@ -204,17 +204,20 @@ impl Error {
         Error::from(ErrorKind::Bounds(err))
     }
 
+    /// Builds a `jiff::Error` from a `jcore::bounds::RangeError`.
+    ///
+    /// This very much cannot be added as a `From` impl because that would
+    /// introduce a public dependency on `jcore`.
+    #[inline(never)]
+    #[cold]
+    pub(crate) fn jcore_range(err: jcore::bounds::RangeError) -> Error {
+        Error::from(ErrorKind::JcoreRange(RangeError(err)))
+    }
+
     #[inline(never)]
     #[cold]
     pub(crate) fn special_bounds(err: SpecialBoundsError) -> Error {
         Error::from(ErrorKind::SpecialBounds(err))
-    }
-
-    /// Creates a new error from the special "shared" error type.
-    pub(crate) fn itime_range(
-        err: crate::shared::util::itime::RangeError,
-    ) -> Error {
-        Error::from(ErrorKind::ITimeRange(err))
     }
 
     /// Creates a new error from the special TZif error type.
@@ -440,7 +443,7 @@ enum ErrorKind {
     FmtStrtimeParse(self::fmt::strtime::ParseError),
     #[allow(dead_code)] // not used in some feature configs
     IO(IOError),
-    ITimeRange(crate::shared::util::itime::RangeError),
+    JcoreRange(RangeError),
     OsStrUtf8(self::util::OsStrUtf8Error),
     ParseInt(self::util::ParseIntError),
     ParseFraction(self::util::ParseFractionError),
@@ -473,6 +476,7 @@ impl core::fmt::Display for ErrorKind {
         match *self {
             Adhoc(ref msg) => msg.fmt(f),
             Bounds(ref msg) => msg.fmt(f),
+            JcoreRange(ref msg) => msg.0.fmt(f),
             Civil(ref err) => err.fmt(f),
             CrateFeature(ref err) => err.fmt(f),
             Duration(ref err) => err.fmt(f),
@@ -488,7 +492,6 @@ impl core::fmt::Display for ErrorKind {
             FmtStrtimeParse(ref err) => err.fmt(f),
             FmtTemporal(ref err) => err.fmt(f),
             IO(ref err) => err.fmt(f),
-            ITimeRange(ref err) => err.fmt(f),
             OsStrUtf8(ref err) => err.fmt(f),
             ParseInt(ref err) => err.fmt(f),
             ParseFraction(ref err) => err.fmt(f),
@@ -749,6 +752,15 @@ impl IntoError for Error {
     }
 }
 
+// This trait impl is okay because `IntoError` is a crate-internal trait. So
+// this impl will not cause a public dependency on `jcore`.
+impl IntoError for jcore::bounds::RangeError {
+    #[inline(always)]
+    fn into_error(self) -> Error {
+        Error::jcore_range(self)
+    }
+}
+
 /// A trait for contextualizing error values.
 ///
 /// This makes it easy to contextualize either `Error` or `Result<T, Error>`.
@@ -801,6 +813,31 @@ where
         self.map_err(|err| {
             err.into_error().context_impl(consequent().into_error())
         })
+    }
+}
+
+/// A helper type to implement `defmt::Format` for `jcore::bounds::RangeError`.
+///
+/// This avoids implementing it in `jiff-core`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct RangeError(jcore::bounds::RangeError);
+
+impl core::ops::Deref for RangeError {
+    type Target = jcore::bounds::RangeError;
+
+    fn deref(&self) -> &jcore::bounds::RangeError {
+        &self.0
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for RangeError {
+    fn format(&self, f: defmt::Formatter) {
+        // This is a bit unfortunate and vague, but I did this to avoid pulling
+        // `defmt` into `jiff-core`, which I don't want to be infected by
+        // `defmt`'s dependency tree via `Cargo.lock` for probably irrational
+        // reasons, but is a very real perceptual problem. ---AG
+        defmt::write!(f, "range error");
     }
 }
 

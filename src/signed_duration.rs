@@ -1,5 +1,7 @@
 use core::time::Duration;
 
+use jcore::bounds::Sign;
+
 use crate::{
     civil::{Date, DateTime, Time},
     error::{signed_duration::Error as E, ErrorContext},
@@ -12,6 +14,9 @@ use crate::{
     Error, RoundMode, Timestamp, Unit, Zoned,
 };
 
+// We define our own constants here instead of using `jcore` to try and make
+// things a little more self-contained here. These values are also just never
+// going to change and pretty easy to get right.
 const NANOS_PER_SEC: i32 = 1_000_000_000;
 const NANOS_PER_MILLI: i32 = 1_000_000;
 const NANOS_PER_MICRO: i32 = 1_000;
@@ -20,7 +25,7 @@ const MICROS_PER_SEC: i64 = 1_000_000;
 const SECS_PER_MINUTE: i64 = 60;
 const MINS_PER_HOUR: i64 = 60;
 const HOURS_PER_CIVIL_DAY: i64 = 24;
-const DAYS_PER_WEEK: i64 = 7;
+const DAYS_PER_CIVIL_WEEK: i64 = 7;
 
 /// A signed duration of time represented as a 96-bit integer of nanoseconds.
 ///
@@ -447,38 +452,30 @@ impl SignedDuration {
         SignedDuration::new_unchecked(secs, nanos)
     }
 
-    /// Creates a new signed duration without handling nanosecond overflow.
+    /// Creates a new signed duration without handling nanosecond overflow or
+    /// sign differences.
     ///
     /// This might produce tighter code in some cases.
     ///
-    /// # Panics
-    ///
-    /// When `|nanos|` is greater than or equal to 1 second.
-    #[inline]
-    pub(crate) const fn new_without_nano_overflow(
-        secs: i64,
-        nanos: i32,
-    ) -> SignedDuration {
-        assert!(nanos <= 999_999_999);
-        assert!(nanos >= -999_999_999);
-        SignedDuration::new_unchecked(secs, nanos)
-    }
-
-    /// Creates a new signed duration without handling nanosecond overflow.
-    ///
-    /// This might produce tighter code in some cases.
+    /// Note that this should not be made public *and* safe.
     ///
     /// # Panics
     ///
     /// In debug mode only, when `|nanos|` is greater than or equal to 1
-    /// second.
-    ///
-    /// This is not exported so that code outside this module can rely on
-    /// `|nanos|` being less than a second for purposes of memory safety.
+    /// second. Or when both `secs` and `nanos` are non-zero and their signs
+    /// mismatch.
     #[inline]
-    const fn new_unchecked(secs: i64, nanos: i32) -> SignedDuration {
+    pub(crate) const fn new_unchecked(
+        secs: i64,
+        nanos: i32,
+    ) -> SignedDuration {
         debug_assert!(nanos <= 999_999_999);
         debug_assert!(nanos >= -999_999_999);
+        debug_assert!(
+            secs == 0
+                || nanos == 0
+                || secs.signum() == (nanos.signum() as i64)
+        );
         SignedDuration { secs, nanos }
     }
 
@@ -2016,6 +2013,22 @@ impl SignedDuration {
         }
     }
 
+    /// For internal use with Jiff.
+    ///
+    /// This returns a `jcore` type, so this can never be exported! Otherwise
+    /// it would create a public dependency on `jcore`.
+    #[inline]
+    pub(crate) const fn sign(self) -> Sign {
+        if self.is_zero() {
+            Sign::Zero
+        } else if self.is_positive() {
+            Sign::Positive
+        } else {
+            debug_assert!(self.is_negative());
+            Sign::Negative
+        }
+    }
+
     /// Returns true when this duration is positive. That is, greater than
     /// [`SignedDuration::ZERO`].
     ///
@@ -2308,7 +2321,7 @@ impl SignedDuration {
     pub(crate) const fn from_civil_weeks32(weeks: i32) -> SignedDuration {
         SignedDuration::from_secs(
             (weeks as i64)
-                * DAYS_PER_WEEK
+                * DAYS_PER_CIVIL_WEEK
                 * HOURS_PER_CIVIL_DAY
                 * MINS_PER_HOUR
                 * SECS_PER_MINUTE,
@@ -2350,7 +2363,7 @@ impl SignedDuration {
     #[inline]
     pub(crate) const fn as_civil_weeks(&self) -> i64 {
         self.as_secs()
-            / (DAYS_PER_WEEK
+            / (DAYS_PER_CIVIL_WEEK
                 * HOURS_PER_CIVIL_DAY
                 * MINS_PER_HOUR
                 * SECS_PER_MINUTE)
@@ -2372,7 +2385,7 @@ impl SignedDuration {
     ) -> (i64, SignedDuration) {
         let weeks = self.as_civil_weeks();
         let secs = self.as_secs()
-            % (DAYS_PER_WEEK
+            % (DAYS_PER_CIVIL_WEEK
                 * HOURS_PER_CIVIL_DAY
                 * MINS_PER_HOUR
                 * SECS_PER_MINUTE);

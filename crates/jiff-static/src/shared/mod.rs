@@ -349,7 +349,7 @@ pub enum TzifTransitionKind {
 
 /// The representation we use to represent a civil datetime.
 ///
-/// We don't use `shared::util::itime::IDateTime` here because we specifically
+/// We don't use `jcore::civil::DateTime` here because we specifically
 /// do not need to represent fractional seconds. This lets us easily represent
 /// what we need in 8 bytes instead of the 12 bytes used by `IDateTime`.
 ///
