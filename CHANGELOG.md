@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.2.21 (TBD)
+============
+TODO
+
+Performance:
+
+* [#518](https://github.com/BurntSushi/jiff/pull/518):
+Improve `Timestamp` to `civil::DateTime` conversion performance by ~15%.
+
+
 0.2.20 (2026-02-11)
 ===================
 This release contains a major internal refactor that moves off of using ranged
