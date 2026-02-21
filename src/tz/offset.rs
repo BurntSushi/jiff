@@ -961,14 +961,6 @@ impl Offset {
         let options: OffsetRound = options.into();
         options.round(self)
     }
-
-    /// Returns the heap memory usage, in bytes, of this offset.
-    ///
-    /// This does **not** include the stack size used up by this offset.
-    /// To compute that, use `std::mem::size_of::<Offset>()`.
-    pub fn memory_usage(&self) -> usize {
-        0
-    }
 }
 
 impl Offset {

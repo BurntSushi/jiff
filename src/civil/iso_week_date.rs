@@ -721,14 +721,6 @@ impl ISOWeekDate {
     pub fn date(self) -> Date {
         Date::from_iso_week_date(self)
     }
-
-    /// Returns the heap memory usage, in bytes, of this ISO week date.
-    ///
-    /// This does **not** include the stack size used up by this ISO week date.
-    /// To compute that, use `std::mem::size_of::<ISOWeekDate>()`.
-    pub fn memory_usage(&self) -> usize {
-        0
-    }
 }
 
 impl Default for ISOWeekDate {
