@@ -1408,12 +1408,12 @@ impl TimeZone {
             FIXED(_offset) => 0,
             STATIC_TZIF(_tzif) => 0,
             ARC_TZIF(_tzif) => {
-                std::mem::size_of::<crate::tz::tzif::TzifOwned>() +
-                (std::mem::size_of::<std::sync::atomic::AtomicUsize>() * 2)
+                core::mem::size_of::<crate::tz::tzif::TzifOwned>() +
+                (core::mem::size_of::<core::sync::atomic::AtomicUsize>() * 2)
             },
             ARC_POSIX(_posix) => {
-                std::mem::size_of::<crate::tz::posix::PosixTimeZoneOwned>() +
-                (std::mem::size_of::<std::sync::atomic::AtomicUsize>() * 2)
+                core::mem::size_of::<crate::tz::posix::PosixTimeZoneOwned>() +
+                (core::mem::size_of::<core::sync::atomic::AtomicUsize>() * 2)
             },
         }
     }
