@@ -3237,6 +3237,14 @@ impl Zoned {
         let ZonedInner { timestamp, datetime, offset, time_zone } = inner;
         (timestamp, datetime, offset, time_zone)
     }
+
+    /// Returns the heap memory usage, in bytes, of this zoned.
+    ///
+    /// This does **not** include the stack size used up by this zoned.
+    /// To compute that, use `std::mem::size_of::<Zoned>()`.
+    pub fn memory_usage(&self) -> usize {
+        self.inner.time_zone.memory_usage()
+    }
 }
 
 /// Parsing and formatting using a "printf"-style API.

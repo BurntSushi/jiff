@@ -2385,6 +2385,14 @@ impl DateTime {
             Time::from_itime_const(idt.time),
         )
     }
+
+    /// Returns the heap memory usage, in bytes, of this datetime.
+    ///
+    /// This does **not** include the stack size used up by this datetime.
+    /// To compute that, use `std::mem::size_of::<DateTime>()`.
+    pub fn memory_usage(&self) -> usize {
+        0
+    }
 }
 
 /// Parsing and formatting using a "printf"-style API.

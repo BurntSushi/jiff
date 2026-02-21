@@ -1574,6 +1574,14 @@ impl Time {
     pub fn series(self, period: Span) -> TimeSeries {
         TimeSeries { start: self, period, step: 0 }
     }
+
+    /// Returns the heap memory usage, in bytes, of this time.
+    ///
+    /// This does **not** include the stack size used up by this time.
+    /// To compute that, use `std::mem::size_of::<Time>()`.
+    pub fn memory_usage(&self) -> usize {
+        0
+    }
 }
 
 /// Parsing and formatting using a "printf"-style API.

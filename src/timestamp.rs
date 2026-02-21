@@ -2112,6 +2112,14 @@ impl Timestamp {
     pub fn series(self, period: Span) -> TimestampSeries {
         TimestampSeries::new(self, period)
     }
+
+    /// Returns the heap memory usage, in bytes, of this timestamp.
+    ///
+    /// This does **not** include the stack size used up by this timestamp.
+    /// To compute that, use `std::mem::size_of::<Timestamp>()`.
+    pub fn memory_usage(&self) -> usize {
+        0
+    }
 }
 
 /// Parsing and formatting APIs.

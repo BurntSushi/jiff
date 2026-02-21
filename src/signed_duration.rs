@@ -2292,6 +2292,14 @@ impl SignedDuration {
         let options: SignedDurationRound = options.into();
         options.round(self)
     }
+
+    /// Returns the heap memory usage, in bytes, of this signed duration.
+    ///
+    /// This does **not** include the stack size used up by this signed
+    /// duration. To compute that, use `std::mem::size_of::<SignedDuration>()`.
+    pub fn memory_usage(&self) -> usize {
+        0
+    }
 }
 
 /// Internal helpers used by Jiff.

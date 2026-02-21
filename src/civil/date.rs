@@ -2016,6 +2016,14 @@ impl Date {
     pub fn series(self, period: Span) -> DateSeries {
         DateSeries { start: self, period, step: 0 }
     }
+
+    /// Returns the heap memory usage, in bytes, of this date.
+    ///
+    /// This does **not** include the stack size used up by this date.
+    /// To compute that, use `std::mem::size_of::<Date>()`.
+    pub fn memory_usage(&self) -> usize {
+        0
+    }
 }
 
 /// Parsing and formatting using a "printf"-style API.

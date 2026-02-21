@@ -879,6 +879,14 @@ impl Span {
         self.try_nanoseconds(nanoseconds)
             .expect("value for nanoseconds is out of bounds")
     }
+
+    /// Returns the heap memory usage, in bytes, of this span.
+    ///
+    /// This does **not** include the stack size used up by this span.
+    /// To compute that, use `std::mem::size_of::<Span>()`.
+    pub fn memory_usage(&self) -> usize {
+        0
+    }
 }
 
 /// Fallible methods for setting units on a `Span`.
