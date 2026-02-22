@@ -246,7 +246,7 @@ impl Date {
     pub fn new(year: i16, month: i8, day: i8) -> Result<Date, Error> {
         let year = b::Year::check(year)?;
         let month = b::Month::check(month)?;
-        if day > 28 && day > itime::days_in_month(year, month) {
+        if day < 1 || day > 28 && day > itime::days_in_month(year, month) {
             return Err(Error::itime_range(
                 crate::shared::util::itime::RangeError::DateInvalidDays {
                     year,
@@ -3971,5 +3971,21 @@ mod tests {
         let d2 = d1.nth_weekday(-weeks, Weekday::Friday).unwrap();
         assert_eq!(d2, date(-9999, 1, 5));
         assert!(d1.nth_weekday(weeks - 1, Weekday::Friday).is_err());
+    }
+
+    /// Test some invocations of Date::new to test valid/invalid days.
+    #[test]
+    fn days_of_month() {
+        let date = Date::new(1998, 1, 0);
+        assert!(date.is_err());
+
+        let date = Date::new(1998, 1, -1);
+        assert!(date.is_err());
+
+        let date = Date::new(1998, 2, 29);
+        assert!(date.is_err());
+
+        let date = Date::new(2004, 2, 29);
+        assert!(date.is_ok());
     }
 }
