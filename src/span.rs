@@ -6932,17 +6932,17 @@ mod tests {
             .seconds(7);
 
         let deserialized: Span =
-            serde_yaml::from_str("P1y2m3w4dT5h6m7s").unwrap();
+            yaml_serde::from_str("P1y2m3w4dT5h6m7s").unwrap();
 
         span_eq!(deserialized, expected);
 
         let deserialized: Span =
-            serde_yaml::from_slice("P1y2m3w4dT5h6m7s".as_bytes()).unwrap();
+            yaml_serde::from_slice("P1y2m3w4dT5h6m7s".as_bytes()).unwrap();
 
         span_eq!(deserialized, expected);
 
         let cursor = Cursor::new(b"P1y2m3w4dT5h6m7s");
-        let deserialized: Span = serde_yaml::from_reader(cursor).unwrap();
+        let deserialized: Span = yaml_serde::from_reader(cursor).unwrap();
 
         span_eq!(deserialized, expected);
     }

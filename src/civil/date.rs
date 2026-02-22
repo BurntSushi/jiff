@@ -3933,17 +3933,17 @@ mod tests {
     fn civil_date_deserialize_yaml() {
         let expected = date(2024, 10, 31);
 
-        let deserialized: Date = serde_yaml::from_str("2024-10-31").unwrap();
+        let deserialized: Date = yaml_serde::from_str("2024-10-31").unwrap();
 
         assert_eq!(deserialized, expected);
 
         let deserialized: Date =
-            serde_yaml::from_slice("2024-10-31".as_bytes()).unwrap();
+            yaml_serde::from_slice("2024-10-31".as_bytes()).unwrap();
 
         assert_eq!(deserialized, expected);
 
         let cursor = Cursor::new(b"2024-10-31");
-        let deserialized: Date = serde_yaml::from_reader(cursor).unwrap();
+        let deserialized: Date = yaml_serde::from_reader(cursor).unwrap();
 
         assert_eq!(deserialized, expected);
     }
