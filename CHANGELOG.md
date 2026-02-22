@@ -2,7 +2,13 @@
 
 0.2.21 (TBD)
 ============
-TODO
+
+
+removes the dev-dependency on deprecated `serde_yaml`.
+It has been replaced with `yaml_serde`. See
+[company that now supports yaml-serde which is fork of serde-yaml](https://yaml.com/projects/yaml-serde/)
+for why this was done. Note that this was only a dev-dependency and thus doesn't
+impact folks using Jiff.
 
 Performance:
 

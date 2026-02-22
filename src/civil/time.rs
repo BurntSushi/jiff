@@ -3533,17 +3533,17 @@ mod tests {
         let expected = time(16, 35, 4, 987654321);
 
         let deserialized: Time =
-            serde_yaml::from_str("16:35:04.987654321").unwrap();
+            yaml_serde::from_str("16:35:04.987654321").unwrap();
 
         assert_eq!(deserialized, expected);
 
         let deserialized: Time =
-            serde_yaml::from_slice("16:35:04.987654321".as_bytes()).unwrap();
+            yaml_serde::from_slice("16:35:04.987654321".as_bytes()).unwrap();
 
         assert_eq!(deserialized, expected);
 
         let cursor = Cursor::new(b"16:35:04.987654321");
-        let deserialized: Time = serde_yaml::from_reader(cursor).unwrap();
+        let deserialized: Time = yaml_serde::from_reader(cursor).unwrap();
 
         assert_eq!(deserialized, expected);
     }
