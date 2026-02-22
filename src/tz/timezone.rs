@@ -1395,6 +1395,28 @@ impl TimeZone {
             ARC_POSIX(_posix) => "POSIX",
         }
     }
+
+    /// Returns the heap memory usage, in bytes, of this timezone.
+    ///
+    /// This does **not** include the stack size used up by this timezone.
+    /// To compute that, use `std::mem::size_of::<TimeZone>()`.
+    pub fn memory_usage(&self) -> usize {
+        repr::each! {
+            &self.repr,
+            UTC => 0,
+            UNKNOWN => 0,
+            FIXED(_offset) => 0,
+            STATIC_TZIF(_tzif) => 0,
+            ARC_TZIF(_tzif) => {
+                core::mem::size_of::<crate::tz::tzif::TzifOwned>() +
+                (core::mem::size_of::<core::sync::atomic::AtomicUsize>() * 2)
+            },
+            ARC_POSIX(_posix) => {
+                core::mem::size_of::<crate::tz::posix::PosixTimeZoneOwned>() +
+                (core::mem::size_of::<core::sync::atomic::AtomicUsize>() * 2)
+            },
+        }
+    }
 }
 
 // Exposed APIs for Jiff's time zone proc macro.
