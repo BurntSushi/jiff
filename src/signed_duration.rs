@@ -2495,6 +2495,33 @@ impl core::fmt::Debug for SignedDuration {
     }
 }
 
+/// Fallibly converts a [`std::time::Duration`] to a `SignedDuration`.
+///
+/// # Errors
+///
+/// This fails when the duration's second component exceeds `i64::MAX`.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::Duration;
+///
+/// use jiff::SignedDuration;
+///
+/// let dur = Duration::new(5, 123_000_000);
+/// let sdur = SignedDuration::try_from(dur)?;
+/// assert_eq!(sdur, SignedDuration::new(5, 123_000_000));
+///
+/// let dur = Duration::new(i64::MAX as u64, 999_999_999);
+/// let sdur = SignedDuration::try_from(dur)?;
+/// assert_eq!(sdur, SignedDuration::new(i64::MAX, 999_999_999));
+///
+/// // Some failure cases:
+/// assert!(SignedDuration::try_from(Duration::new(i64::MAX as u64 + 1, 0)).is_err());
+/// assert!(SignedDuration::try_from(Duration::new(u64::MAX, 0)).is_err());
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 impl TryFrom<Duration> for SignedDuration {
     type Error = Error;
 
@@ -2507,16 +2534,40 @@ impl TryFrom<Duration> for SignedDuration {
     }
 }
 
+/// Fallibly converts a `SignedDuration` to a [`std::time::Duration`].
+///
+/// # Errors
+///
+/// This fails when the signed duration is negative.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::Duration;
+///
+/// use jiff::SignedDuration;
+///
+/// let sdur = SignedDuration::new(5, 123_000_000);
+/// let dur = Duration::try_from(sdur)?;
+/// assert_eq!(dur, Duration::new(5, 123_000_000));
+///
+/// // Some failure cases:
+/// assert!(Duration::try_from(SignedDuration::new(-5, 0)).is_err());
+/// assert!(Duration::try_from(SignedDuration::new(-5, -1)).is_err());
+/// assert!(Duration::try_from(SignedDuration::new(0, -1)).is_err());
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 impl TryFrom<SignedDuration> for Duration {
     type Error = Error;
 
     fn try_from(sd: SignedDuration) -> Result<Duration, Error> {
         let secs = u64::try_from(sd.as_secs())
-            .map_err(|_| SpecialBoundsError::UnsignedDurationSeconds)?;
-        // Guaranteed to succeed because the above only succeeds
-        // when `sd` is non-negative. And when `sd` is non-negative,
-        // we are guaranteed that 0<=nanos<=999,999,999.
-        let nanos = u32::try_from(sd.subsec_nanos()).unwrap();
+            .map_err(|_| SpecialBoundsError::SignedToUnsignedDuration)?;
+        // This could still be negative in the case where
+        // `sd.as_secs()` is zero.
+        let nanos = u32::try_from(sd.subsec_nanos())
+            .map_err(|_| SpecialBoundsError::SignedToUnsignedDuration)?;
         Ok(Duration::new(secs, nanos))
     }
 }
