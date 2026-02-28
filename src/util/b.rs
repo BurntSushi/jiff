@@ -710,7 +710,7 @@ pub(crate) enum SpecialBoundsError {
     UnixNanoseconds,
     SignedDurationFloatOutOfRangeF32,
     SignedDurationFloatOutOfRangeF64,
-    UnsignedDurationSeconds,
+    SignedToUnsignedDuration,
 }
 
 impl core::fmt::Display for SpecialBoundsError {
@@ -723,11 +723,12 @@ impl core::fmt::Display for SpecialBoundsError {
                 UnixMicroseconds::MIN as i128 * (NANOS_PER_MICRO as i128),
                 UnixMicroseconds::MAX as i128 * (NANOS_PER_MICRO as i128),
             ),
-            UnsignedDurationSeconds => (
-                "unsigned duration seconds",
-                u64::MIN as i128,
-                u64::MAX as i128,
-            ),
+            SignedToUnsignedDuration => {
+                return f.write_str(
+                    "negative signed durations cannot be converted \
+                     to an unsigned duration",
+                );
+            }
             SignedDurationFloatOutOfRangeF32 => {
                 return write!(
                     f,
