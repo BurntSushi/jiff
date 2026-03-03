@@ -1,5 +1,12 @@
 # CHANGELOG
 
+0.2.23 (2026-03-03)
+===================
+This release updates Jiff's bundled copy of the [IANA Time Zone Database]
+to `2026a`. See the [`2026a` release announcement] for more details.
+
+[`2026a` release announcement]: https://lists.iana.org/hyperkitty/list/tz-announce@iana.org/thread/ASPLBE3A4BAEXIOQ3KZ6EJSJWBU6L53G/
+
 0.2.22 (2026-02-28)
 ===================
 This release includes a bug fix where fallible conversions from signed
