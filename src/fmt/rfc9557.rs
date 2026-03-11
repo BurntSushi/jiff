@@ -134,14 +134,14 @@ impl<'i> ParsedAnnotations<'i> {
         &self,
     ) -> Result<Option<TimeZoneAnnotation<'i>>, Error> {
         let Some(ref parsed) = self.time_zone else { return Ok(None) };
-        Ok(Some(parsed.to_time_zone_annotation()?))
+        Ok(Some(rtry!(parsed.to_time_zone_annotation())))
     }
 }
 
 impl<'i> core::fmt::Display for ParsedAnnotations<'i> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if let Some(ref tz) = self.time_zone {
-            core::fmt::Display::fmt(tz, f)?;
+            rtry!(core::fmt::Display::fmt(tz, f));
         }
         Ok(())
     }
@@ -183,7 +183,8 @@ impl<'i> ParsedTimeZone<'i> {
                 (kind, critical)
             }
             ParsedTimeZone::Offset { ref offset, critical } => {
-                let kind = TimeZoneAnnotationKind::Offset(offset.to_offset()?);
+                let kind =
+                    TimeZoneAnnotationKind::Offset(rtry!(offset.to_offset()));
                 (kind, critical)
             }
         };
@@ -195,19 +196,19 @@ impl<'i> core::fmt::Display for ParsedTimeZone<'i> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match *self {
             ParsedTimeZone::Named { critical, name } => {
-                f.write_str("[")?;
+                rtry!(f.write_str("["));
                 if critical {
-                    f.write_str("!")?;
+                    rtry!(f.write_str("!"));
                 }
-                f.write_str(name)?;
+                rtry!(f.write_str(name));
                 f.write_str("]")
             }
             ParsedTimeZone::Offset { critical, ref offset } => {
-                f.write_str("[")?;
+                rtry!(f.write_str("["));
                 if critical {
-                    f.write_str("!")?;
+                    rtry!(f.write_str("!"));
                 }
-                core::fmt::Display::fmt(offset, f)?;
+                rtry!(core::fmt::Display::fmt(offset, f));
                 f.write_str("]")
             }
         }
@@ -240,14 +241,14 @@ impl Parser {
         input: &'i [u8],
     ) -> Result<Parsed<'i, ParsedAnnotations<'i>>, Error> {
         let Parsed { value: time_zone, mut input } =
-            self.parse_time_zone_annotation(input)?;
+            rtry!(self.parse_time_zone_annotation(input));
         loop {
             // We don't actually do anything with any annotation that isn't
             // a time zone, but we do parse them to ensure validity and to
             // be able to fail when a critical flag is set. Otherwise, we know
             // we're done if parsing an annotation doesn't consume any input.
             let Parsed { value: did_consume, input: unconsumed } =
-                self.parse_annotation(input)?;
+                rtry!(self.parse_annotation(input));
             if !did_consume {
                 break;
             }
@@ -285,9 +286,9 @@ impl Parser {
             const P: offset::Parser =
                 offset::Parser::new().zulu(false).subminute(false);
 
-            let Parsed { value: offset, input } = P.parse(input)?;
+            let Parsed { value: offset, input } = rtry!(P.parse(input));
             let Parsed { input, .. } =
-                self.parse_tz_annotation_close(input)?;
+                rtry!(self.parse_tz_annotation_close(input));
             let value = Some(ParsedTimeZone::Offset { critical, offset });
             return Ok(Parsed { value, input });
         }
@@ -300,7 +301,7 @@ impl Parser {
         // Once we stop, we can check for an `=`.
         let mkiana = parse::slicer(input);
         let Parsed { mut input, .. } =
-            self.parse_tz_annotation_iana_name(input)?;
+            rtry!(self.parse_tz_annotation_iana_name(input));
         // Now that we've parsed the first IANA name component, if this were
         // actually a generic key/value annotation, the `=` *must* appear here.
         // Otherwise, we assume we are trying to parse an IANA annotation as it
@@ -313,7 +314,7 @@ impl Parser {
         while let Some(tail) = input.strip_prefix(b"/") {
             input = tail;
             let Parsed { input: unconsumed, .. } =
-                self.parse_tz_annotation_iana_name(input)?;
+                rtry!(self.parse_tz_annotation_iana_name(input));
             input = unconsumed;
         }
         // This is OK because all bytes in a IANA TZ annotation are guaranteed
@@ -324,7 +325,8 @@ impl Parser {
         let time_zone =
             Some(ParsedTimeZone::Named { critical, name: iana_name });
         // And finally, parse the closing bracket.
-        let Parsed { input, .. } = self.parse_tz_annotation_close(input)?;
+        let Parsed { input, .. } =
+            rtry!(self.parse_tz_annotation_close(input));
         Ok(Parsed { value: time_zone, input })
     }
 
@@ -346,10 +348,11 @@ impl Parser {
             input = tail;
         }
 
-        let Parsed { input, .. } = self.parse_annotation_key(input)?;
-        let Parsed { input, .. } = self.parse_annotation_separator(input)?;
-        let Parsed { input, .. } = self.parse_annotation_values(input)?;
-        let Parsed { input, .. } = self.parse_annotation_close(input)?;
+        let Parsed { input, .. } = rtry!(self.parse_annotation_key(input));
+        let Parsed { input, .. } =
+            rtry!(self.parse_annotation_separator(input));
+        let Parsed { input, .. } = rtry!(self.parse_annotation_values(input));
+        let Parsed { input, .. } = rtry!(self.parse_annotation_close(input));
 
         // If the critical flag is set, then we automatically return an error
         // because we don't support any non-time-zone annotations. When the
@@ -368,7 +371,7 @@ impl Parser {
     ) -> Result<Parsed<'i, &'i [u8]>, Error> {
         let mkname = parse::slicer(input);
         let Parsed { mut input, .. } =
-            self.parse_tz_annotation_leading_char(input)?;
+            rtry!(self.parse_tz_annotation_leading_char(input));
         loop {
             let Parsed { value: did_consume, input: unconsumed } =
                 self.parse_tz_annotation_char(input);
@@ -386,7 +389,7 @@ impl Parser {
     ) -> Result<Parsed<'i, &'i [u8]>, Error> {
         let mkkey = parse::slicer(input);
         let Parsed { mut input, .. } =
-            self.parse_annotation_key_leading_char(input)?;
+            rtry!(self.parse_annotation_key_leading_char(input));
         loop {
             let Parsed { value: did_consume, input: unconsumed } =
                 self.parse_annotation_key_char(input);
@@ -406,11 +409,12 @@ impl Parser {
         &self,
         input: &'i [u8],
     ) -> Result<Parsed<'i, ()>, Error> {
-        let Parsed { mut input, .. } = self.parse_annotation_value(input)?;
+        let Parsed { mut input, .. } =
+            rtry!(self.parse_annotation_value(input));
         while let Some(tail) = input.strip_prefix(b"-") {
             input = tail;
             let Parsed { input: unconsumed, .. } =
-                self.parse_annotation_value(input)?;
+                rtry!(self.parse_annotation_value(input));
             input = unconsumed;
         }
         Ok(Parsed { value: (), input })
@@ -422,7 +426,7 @@ impl Parser {
     ) -> Result<Parsed<'i, &'i [u8]>, Error> {
         let mkvalue = parse::slicer(input);
         let Parsed { mut input, .. } =
-            self.parse_annotation_value_leading_char(input)?;
+            rtry!(self.parse_annotation_value_leading_char(input));
         loop {
             let Parsed { value: did_consume, input: unconsumed } =
                 self.parse_annotation_value_char(input);

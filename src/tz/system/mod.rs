@@ -127,7 +127,7 @@ pub(crate) fn get(db: &TimeZoneDatabase) -> Result<TimeZone, Error> {
             }
         }
     }
-    let tz = get_force(db)?;
+    let tz = rtry!(get_force(db));
     {
         // It's okay that we race here. We basically assume that any
         // sufficiently close but approximately simultaneous detection of
@@ -278,10 +278,11 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
 /// perhaps have no other way to get a time zone name, we choose to support
 /// that use case. Although I cannot actually name such a platform...
 fn read_unnamed_tzif_file(path: &str) -> Result<TimeZone, Error> {
-    let data = std::fs::read(path)
+    let data = rtry!(std::fs::read(path)
         .map_err(Error::io)
-        .context(E::FailedUnnamedTzifRead)?;
-    let tz =
-        TimeZone::tzif_system(&data).context(E::FailedUnnamedTzifInvalid)?;
+        .context(E::FailedUnnamedTzifRead));
+    let tz = rtry!(
+        TimeZone::tzif_system(&data).context(E::FailedUnnamedTzifInvalid)
+    );
     Ok(tz)
 }

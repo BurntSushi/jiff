@@ -202,7 +202,7 @@ impl<'i, V> Parsed<'i, V> {
         map: impl FnOnce(V) -> Result<U, Error>,
     ) -> Result<Parsed<'i, U>, Error> {
         let Parsed { value, input } = self;
-        Ok(Parsed { value: map(value)?, input })
+        Ok(Parsed { value: rtry!(map(value)), input })
     }
 }
 

@@ -38,9 +38,9 @@ impl core::fmt::Display for Byte {
 impl core::fmt::Debug for Byte {
     #[inline(never)]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.write_str("\"")?;
-        core::fmt::Display::fmt(self, f)?;
-        f.write_str("\"")?;
+        rtry!(f.write_str("\""));
+        rtry!(core::fmt::Display::fmt(self, f));
+        rtry!(f.write_str("\""));
         Ok(())
     }
 }
@@ -63,19 +63,22 @@ impl<'a> core::fmt::Display for Bytes<'a> {
                 Ok(ch) => ch,
                 Err(err) => {
                     // The decode API guarantees `errant_bytes` is non-empty.
-                    write!(f, r"\x{:02x}", err.as_slice()[0])?;
+                    rtry!(write!(f, r"\x{:02x}", err.as_slice()[0]));
                     bytes = &bytes[1..];
                     continue;
                 }
             };
             bytes = &bytes[ch.len_utf8()..];
             match ch {
-                '\0' => f.write_str(r"\0")?,
+                '\0' => rtry!(f.write_str(r"\0")),
                 '\x01'..='\x7f' => {
-                    core::fmt::Display::fmt(&(ch as u8).escape_ascii(), f)?;
+                    rtry!(core::fmt::Display::fmt(
+                        &(ch as u8).escape_ascii(),
+                        f
+                    ));
                 }
                 _ => {
-                    core::fmt::Display::fmt(&ch.escape_debug(), f)?;
+                    rtry!(core::fmt::Display::fmt(&ch.escape_debug(), f));
                 }
             }
         }
@@ -86,9 +89,9 @@ impl<'a> core::fmt::Display for Bytes<'a> {
 impl<'a> core::fmt::Debug for Bytes<'a> {
     #[inline(never)]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.write_str("\"")?;
-        core::fmt::Display::fmt(self, f)?;
-        f.write_str("\"")?;
+        rtry!(f.write_str("\""));
+        rtry!(core::fmt::Display::fmt(self, f));
+        rtry!(f.write_str("\""));
         Ok(())
     }
 }
@@ -107,7 +110,7 @@ impl core::fmt::Display for RepeatByte {
     #[inline(never)]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         for _ in 0..self.count {
-            core::fmt::Display::fmt(&Byte(self.byte), f)?;
+            rtry!(core::fmt::Display::fmt(&Byte(self.byte), f));
         }
         Ok(())
     }
@@ -116,9 +119,9 @@ impl core::fmt::Display for RepeatByte {
 impl core::fmt::Debug for RepeatByte {
     #[inline(never)]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.write_str("\"")?;
-        core::fmt::Display::fmt(self, f)?;
-        f.write_str("\"")?;
+        rtry!(f.write_str("\""));
+        rtry!(core::fmt::Display::fmt(self, f));
+        rtry!(f.write_str("\""));
         Ok(())
     }
 }

@@ -24,8 +24,8 @@ impl Duration {
             Duration::Span(ref span) => Ok(SDuration::Span(span)),
             Duration::Signed(sdur) => Ok(SDuration::Absolute(sdur)),
             Duration::Unsigned(udur) => {
-                let sdur = SignedDuration::try_from(udur)
-                    .context(E::RangeUnsignedDuration)?;
+                let sdur = rtry!(SignedDuration::try_from(udur)
+                    .context(E::RangeUnsignedDuration));
                 Ok(SDuration::Absolute(sdur))
             }
         }
@@ -87,8 +87,8 @@ impl Duration {
                     // Otherwise, this is the only failure point in this entire
                     // routine. And specifically, we fail here in precisely
                     // the cases where `udur.as_secs() > |i64::MIN|`.
-                    -SignedDuration::try_from(udur)
-                        .context(E::FailedNegateUnsignedDuration)?
+                    -rtry!(SignedDuration::try_from(udur)
+                        .context(E::FailedNegateUnsignedDuration))
                 };
                 Ok(Duration::Signed(sdur))
             }

@@ -431,7 +431,7 @@ pub fn format(
 
     let format = format.as_ref();
     let mut buf = alloc::string::String::with_capacity(format.len());
-    broken_down_time.format(format, &mut buf)?;
+    rtry!(broken_down_time.format(format, &mut buf));
     Ok(buf)
 }
 
@@ -960,7 +960,7 @@ impl BrokenDownTime {
     fn parse_mono(fmt: &[u8], inp: &[u8]) -> Result<BrokenDownTime, Error> {
         let mut pieces = BrokenDownTime::default();
         let mut p = Parser { fmt, inp, tm: &mut pieces };
-        p.parse().context(E::FailedStrptime)?;
+        rtry!(p.parse().context(E::FailedStrptime));
         if !p.inp.is_empty() {
             return Err(Error::from(E::unconsumed(p.inp)));
         }
@@ -1065,7 +1065,7 @@ impl BrokenDownTime {
         let mkoffset = util::parse::offseter(inp);
         let mut pieces = BrokenDownTime::default();
         let mut p = Parser { fmt, inp, tm: &mut pieces };
-        p.parse().context(E::FailedStrptime)?;
+        rtry!(p.parse().context(E::FailedStrptime));
         let remainder = mkoffset(p.inp);
         Ok((pieces, remainder))
     }
@@ -1171,7 +1171,7 @@ impl BrokenDownTime {
         let mut bbuf = buf.as_borrowed();
         let mut wtr = BorrowedWriter::new(&mut bbuf, wtr);
         let mut formatter = Formatter { config, fmt, tm: self, wtr: &mut wtr };
-        formatter.format().context(E::FailedStrftime)?;
+        rtry!(formatter.format().context(E::FailedStrftime));
         wtr.finish()
     }
 
@@ -1218,7 +1218,7 @@ impl BrokenDownTime {
     ) -> Result<alloc::string::String, Error> {
         let format = format.as_ref();
         let mut buf = alloc::string::String::with_capacity(format.len());
-        self.format(format, &mut buf)?;
+        rtry!(self.format(format, &mut buf));
         Ok(buf)
     }
 
@@ -1271,7 +1271,7 @@ impl BrokenDownTime {
     ) -> Result<alloc::string::String, Error> {
         let format = format.as_ref();
         let mut buf = alloc::string::String::with_capacity(format.len());
-        self.format_with_config(config, format, &mut buf)?;
+        rtry!(self.format_with_config(config, format, &mut buf));
         Ok(buf)
     }
 
@@ -1455,31 +1455,31 @@ impl BrokenDownTime {
                 let ts = match self.timestamp {
                     Some(ts) => ts,
                     None => {
-                        let dt = self
+                        let dt = rtry!(self
                             .to_datetime()
-                            .context(E::RequiredDateTimeForZoned)?;
-                        let ts = offset
+                            .context(E::RequiredDateTimeForZoned));
+                        let ts = rtry!(offset
                             .to_timestamp(dt)
-                            .context(E::RangeTimestamp)?;
+                            .context(E::RangeTimestamp));
                         ts
                     }
                 };
                 Ok(ts.to_zoned(TimeZone::fixed(offset)))
             }
             (None, Some(iana)) => {
-                let tz = db.get(iana)?;
+                let tz = rtry!(db.get(iana));
                 match self.timestamp {
                     Some(ts) => Ok(ts.to_zoned(tz)),
                     None => {
-                        let dt = self
+                        let dt = rtry!(self
                             .to_datetime()
-                            .context(E::RequiredDateTimeForZoned)?;
-                        Ok(tz.to_zoned(dt)?)
+                            .context(E::RequiredDateTimeForZoned));
+                        Ok(rtry!(tz.to_zoned(dt)))
                     }
                 }
             }
             (Some(offset), Some(iana)) => {
-                let tz = db.get(iana)?;
+                let tz = rtry!(db.get(iana));
                 match self.timestamp {
                     Some(ts) => {
                         let zdt = ts.to_zoned(tz);
@@ -1492,11 +1492,12 @@ impl BrokenDownTime {
                         Ok(zdt)
                     }
                     None => {
-                        let dt = self
+                        let dt = rtry!(self
                             .to_datetime()
-                            .context(E::RequiredDateTimeForZoned)?;
-                        let azdt =
-                            OffsetConflict::Reject.resolve(dt, offset, tz)?;
+                            .context(E::RequiredDateTimeForZoned));
+                        let azdt = rtry!(
+                            OffsetConflict::Reject.resolve(dt, offset, tz)
+                        );
                         // Guaranteed that if OffsetConflict::Reject doesn't
                         // reject, then we get back an unambiguous zoned
                         // datetime.
@@ -1599,7 +1600,7 @@ impl BrokenDownTime {
             return Ok(timestamp);
         }
         let dt =
-            self.to_datetime().context(E::RequiredDateTimeForTimestamp)?;
+            rtry!(self.to_datetime().context(E::RequiredDateTimeForTimestamp));
         let offset = self.offset.ok_or(E::RequiredOffsetForTimestamp)?;
         offset.to_timestamp(dt).context(E::RangeTimestamp)
     }
@@ -1631,8 +1632,8 @@ impl BrokenDownTime {
     /// ```
     #[inline]
     pub fn to_datetime(&self) -> Result<DateTime, Error> {
-        let date = self.to_date().context(E::RequiredDateForDateTime)?;
-        let time = self.to_time().context(E::RequiredTimeForDateTime)?;
+        let date = rtry!(self.to_date().context(E::RequiredDateForDateTime));
+        let time = rtry!(self.to_time().context(E::RequiredTimeForDateTime));
         Ok(DateTime::from_parts(date, time))
     }
 
@@ -1684,23 +1685,23 @@ impl BrokenDownTime {
                 // separately. That is, they are two different fields. So if
                 // the Gregorian year is absent, we might still have an ISO
                 // 8601 week date.
-                if let Some(date) = tm.to_date_from_iso()? {
+                if let Some(date) = rtry!(tm.to_date_from_iso()) {
                     return Ok(date);
                 }
                 return Err(Error::from(E::RequiredYearForDate));
             };
-            let mut date = tm.to_date_from_gregorian(year)?;
+            let mut date = rtry!(tm.to_date_from_gregorian(year));
             if date.is_none() {
-                date = tm.to_date_from_iso()?;
+                date = rtry!(tm.to_date_from_iso());
             }
             if date.is_none() {
-                date = tm.to_date_from_day_of_year(year)?;
+                date = rtry!(tm.to_date_from_day_of_year(year));
             }
             if date.is_none() {
-                date = tm.to_date_from_week_sun(year)?;
+                date = rtry!(tm.to_date_from_week_sun(year));
             }
             if date.is_none() {
-                date = tm.to_date_from_week_mon(year)?;
+                date = rtry!(tm.to_date_from_week_mon(year));
             }
             let Some(date) = date else {
                 return Err(Error::from(E::RequiredSomeDayForDate));
@@ -1724,7 +1725,7 @@ impl BrokenDownTime {
         else {
             return to_date(self);
         };
-        let date = Date::new(year, month, day).context(E::InvalidDate)?;
+        let date = rtry!(Date::new(year, month, day).context(E::InvalidDate));
         if let Some(weekday) = self.weekday {
             if weekday != date.weekday() {
                 return Err(Error::from(E::MismatchWeekday {
@@ -1744,7 +1745,7 @@ impl BrokenDownTime {
         let (Some(month), Some(day)) = (self.month, self.day) else {
             return Ok(None);
         };
-        Ok(Some(Date::new(year, month, day).context(E::InvalidDate)?))
+        Ok(Some(rtry!(Date::new(year, month, day).context(E::InvalidDate))))
     }
 
     #[inline]
@@ -1755,7 +1756,11 @@ impl BrokenDownTime {
         let Some(doy) = self.day_of_year else { return Ok(None) };
         Ok(Some({
             let first = Date::new(year, 1, 1).unwrap();
-            first.with().day_of_year(doy).build().context(E::InvalidDate)?
+            rtry!(first
+                .with()
+                .day_of_year(doy)
+                .build()
+                .context(E::InvalidDate))
         }))
     }
 
@@ -1766,7 +1771,8 @@ impl BrokenDownTime {
         else {
             return Ok(None);
         };
-        let wd = ISOWeekDate::new(y, w, d).context(E::InvalidISOWeekDate)?;
+        let wd =
+            rtry!(ISOWeekDate::new(y, w, d).context(E::InvalidISOWeekDate));
         Ok(Some(wd.date()))
     }
 
@@ -1777,11 +1783,12 @@ impl BrokenDownTime {
         };
         let week = i16::from(week);
         let wday = i16::from(weekday.to_sunday_zero_offset());
-        let first_of_year = Date::new(year, 1, 1).context(E::InvalidDate)?;
-        let first_sunday = first_of_year
+        let first_of_year =
+            rtry!(Date::new(year, 1, 1).context(E::InvalidDate));
+        let first_sunday = rtry!(first_of_year
             .nth_weekday_of_month(1, Weekday::Sunday)
             .map(|d| d.day_of_year())
-            .context(E::InvalidDate)?;
+            .context(E::InvalidDate));
         let doy = if week == 0 {
             let days_before_first_sunday = 7 - wday;
             let doy = first_sunday
@@ -1798,11 +1805,11 @@ impl BrokenDownTime {
             let doy = first_sunday + days_since_first_sunday;
             doy
         };
-        let date = first_of_year
+        let date = rtry!(first_of_year
             .with()
             .day_of_year(doy)
             .build()
-            .context(E::InvalidDate)?;
+            .context(E::InvalidDate));
         Ok(Some(date))
     }
 
@@ -1813,11 +1820,12 @@ impl BrokenDownTime {
         };
         let week = i16::from(week);
         let wday = i16::from(weekday.to_monday_zero_offset());
-        let first_of_year = Date::new(year, 1, 1).context(E::InvalidDate)?;
-        let first_monday = first_of_year
+        let first_of_year =
+            rtry!(Date::new(year, 1, 1).context(E::InvalidDate));
+        let first_monday = rtry!(first_of_year
             .nth_weekday_of_month(1, Weekday::Monday)
             .map(|d| d.day_of_year())
-            .context(E::InvalidDate)?;
+            .context(E::InvalidDate));
         let doy = if week == 0 {
             let days_before_first_monday = 7 - wday;
             let doy = first_monday
@@ -1834,11 +1842,11 @@ impl BrokenDownTime {
             let doy = first_monday + days_since_first_monday;
             doy
         };
-        let date = first_of_year
+        let date = rtry!(first_of_year
             .with()
             .day_of_year(doy)
             .build()
-            .context(E::InvalidDate)?;
+            .context(E::InvalidDate));
         Ok(Some(date))
     }
 
@@ -3445,7 +3453,7 @@ impl Extension {
             return Ok((None, fmt));
         }
         let (digits, fmt) = fmt.split_at(digits);
-        let width = util::parse::i64(digits).context(E::FailedWidth)?;
+        let width = rtry!(util::parse::i64(digits).context(E::FailedWidth));
         let width = u8::try_from(width).map_err(|_| E::RangeWidth)?;
         if fmt.is_empty() {
             return Err(Error::from(E::ExpectedDirectiveAfterWidth));

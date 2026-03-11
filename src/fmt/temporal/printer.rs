@@ -206,7 +206,7 @@ impl DateTimePrinter {
         let mut buf = ArrayBuffer::<REASONABLE_ZONED_LEN>::default();
         let mut bbuf = buf.as_borrowed();
         let mut wtr = BorrowedWriter::new(&mut bbuf, wtr);
-        self.print_zoned_wtr(zdt, &mut wtr)?;
+        rtry!(self.print_zoned_wtr(zdt, &mut wtr));
         wtr.finish()
     }
 
@@ -226,13 +226,17 @@ impl DateTimePrinter {
         zdt: &Zoned,
         wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
-        self.print_datetime_wtr(&zdt.datetime(), wtr)?;
+        rtry!(self.print_datetime_wtr(&zdt.datetime(), wtr));
         let tz = zdt.time_zone();
         if tz.is_unknown() {
-            wtr.write_str("Z[Etc/Unknown]")?;
+            rtry!(wtr.write_str("Z[Etc/Unknown]"));
         } else {
-            self.print_offset_rounded_wtr(&zdt.offset(), wtr)?;
-            self.print_time_zone_annotation_wtr(&tz, &zdt.offset(), wtr)?;
+            rtry!(self.print_offset_rounded_wtr(&zdt.offset(), wtr));
+            rtry!(self.print_time_zone_annotation_wtr(
+                &tz,
+                &zdt.offset(),
+                wtr
+            ));
         }
         Ok(())
     }
@@ -332,13 +336,13 @@ impl DateTimePrinter {
         dt: &DateTime,
         wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
-        self.print_date_wtr(&dt.date(), wtr)?;
-        wtr.write_ascii_char(if self.lowercase {
+        rtry!(self.print_date_wtr(&dt.date(), wtr));
+        rtry!(wtr.write_ascii_char(if self.lowercase {
             self.separator.to_ascii_lowercase()
         } else {
             self.separator
-        })?;
-        self.print_time_wtr(&dt.time(), wtr)?;
+        }));
+        rtry!(self.print_time_wtr(&dt.time(), wtr));
         Ok(())
     }
 
@@ -373,13 +377,13 @@ impl DateTimePrinter {
     ) -> Result<(), Error> {
         let year = date.year();
         if year < 0 {
-            wtr.write_str("-00")?;
+            rtry!(wtr.write_str("-00"));
         }
-        wtr.write_int_pad4(year.unsigned_abs())?;
-        wtr.write_ascii_char(b'-')?;
-        wtr.write_int_pad2(date.month().unsigned_abs())?;
-        wtr.write_ascii_char(b'-')?;
-        wtr.write_int_pad2(date.day().unsigned_abs())?;
+        rtry!(wtr.write_int_pad4(year.unsigned_abs()));
+        rtry!(wtr.write_ascii_char(b'-'));
+        rtry!(wtr.write_int_pad2(date.month().unsigned_abs()));
+        rtry!(wtr.write_ascii_char(b'-'));
+        rtry!(wtr.write_int_pad2(date.day().unsigned_abs()));
         Ok(())
     }
 
@@ -421,18 +425,18 @@ impl DateTimePrinter {
         time: &Time,
         wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
-        wtr.write_int_pad2(time.hour().unsigned_abs())?;
-        wtr.write_ascii_char(b':')?;
-        wtr.write_int_pad2(time.minute().unsigned_abs())?;
-        wtr.write_ascii_char(b':')?;
-        wtr.write_int_pad2(time.second().unsigned_abs())?;
+        rtry!(wtr.write_int_pad2(time.hour().unsigned_abs()));
+        rtry!(wtr.write_ascii_char(b':'));
+        rtry!(wtr.write_int_pad2(time.minute().unsigned_abs()));
+        rtry!(wtr.write_ascii_char(b':'));
+        rtry!(wtr.write_int_pad2(time.second().unsigned_abs()));
         let fractional_nanosecond = time.subsec_nanosecond();
         if self.precision.map_or(fractional_nanosecond != 0, |p| p > 0) {
-            wtr.write_ascii_char(b'.')?;
-            wtr.write_fraction(
+            rtry!(wtr.write_ascii_char(b'.'));
+            rtry!(wtr.write_fraction(
                 self.precision,
                 fractional_nanosecond.unsigned_abs(),
-            )?;
+            ));
         }
         Ok(())
     }
@@ -512,7 +516,7 @@ impl DateTimePrinter {
         let mut buf = ArrayBuffer::<REASONABLE_PIECES_LEN>::default();
         let mut bbuf = buf.as_borrowed();
         let mut wtr = BorrowedWriter::new(&mut bbuf, &mut wtr);
-        self.print_pieces_wtr(pieces, &mut wtr)?;
+        rtry!(self.print_pieces_wtr(pieces, &mut wtr));
         wtr.finish()
     }
 
@@ -523,41 +527,41 @@ impl DateTimePrinter {
     ) -> Result<(), Error> {
         if let Some(time) = pieces.time() {
             let dt = DateTime::from_parts(pieces.date(), time);
-            self.print_datetime_wtr(&dt, wtr)?;
+            rtry!(self.print_datetime_wtr(&dt, wtr));
             if let Some(poffset) = pieces.offset() {
-                self.print_pieces_offset(&poffset, wtr)?;
+                rtry!(self.print_pieces_offset(&poffset, wtr));
             }
         } else if let Some(poffset) = pieces.offset() {
             // In this case, we have an offset but no time component. Since
             // `2025-01-02-05:00` isn't valid, we forcefully write out the
             // default time (which is what would be assumed anyway).
             let dt = DateTime::from_parts(pieces.date(), Time::midnight());
-            self.print_datetime_wtr(&dt, wtr)?;
-            self.print_pieces_offset(&poffset, wtr)?;
+            rtry!(self.print_datetime_wtr(&dt, wtr));
+            rtry!(self.print_pieces_offset(&poffset, wtr));
         } else {
             // We have no time and no offset, so we can just write the date.
             // It's okay to write this followed by an annotation, e.g.,
             // `2025-01-02[America/New_York]` or even `2025-01-02[-05:00]`.
-            self.print_date_wtr(&pieces.date(), wtr)?;
+            rtry!(self.print_date_wtr(&pieces.date(), wtr));
         }
         // For the time zone annotation, a `Pieces` gives us the annotation
         // name or offset directly, where as with `Zoned`, we have a
         // `TimeZone`. So we hand-roll our own formatter directly from the
         // annotation.
         if let Some(ann) = pieces.time_zone_annotation() {
-            wtr.write_ascii_char(b'[')?;
+            rtry!(wtr.write_ascii_char(b'['));
             if ann.is_critical() {
-                wtr.write_ascii_char(b'!')?;
+                rtry!(wtr.write_ascii_char(b'!'));
             }
             match *ann.kind() {
                 TimeZoneAnnotationKind::Named(ref name) => {
-                    wtr.write_str(name.as_str())?;
+                    rtry!(wtr.write_str(name.as_str()));
                 }
                 TimeZoneAnnotationKind::Offset(offset) => {
-                    self.print_offset_rounded_wtr(&offset, wtr)?;
+                    rtry!(self.print_offset_rounded_wtr(&offset, wtr));
                 }
             }
-            wtr.write_ascii_char(b']')?;
+            rtry!(wtr.write_ascii_char(b']'));
         }
         Ok(())
     }
@@ -635,11 +639,15 @@ impl DateTimePrinter {
         offset: &Offset,
         wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
-        wtr.write_ascii_char(if offset.is_negative() { b'-' } else { b'+' })?;
+        rtry!(wtr.write_ascii_char(if offset.is_negative() {
+            b'-'
+        } else {
+            b'+'
+        }));
         let (offset_hours, offset_minutes) = offset.round_to_nearest_minute();
-        wtr.write_int_pad2(offset_hours)?;
-        wtr.write_ascii_char(b':')?;
-        wtr.write_int_pad2(offset_minutes)?;
+        rtry!(wtr.write_int_pad2(offset_hours));
+        rtry!(wtr.write_ascii_char(b':'));
+        rtry!(wtr.write_int_pad2(offset_minutes));
         Ok(())
     }
 
@@ -720,13 +728,13 @@ impl DateTimePrinter {
         offset: &Offset,
         wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
-        wtr.write_ascii_char(b'[')?;
+        rtry!(wtr.write_ascii_char(b'['));
         if let Some(iana_name) = time_zone.iana_name() {
-            wtr.write_str(iana_name)?;
+            rtry!(wtr.write_str(iana_name));
         } else {
-            self.print_offset_rounded_wtr(offset, wtr)?;
+            rtry!(self.print_offset_rounded_wtr(offset, wtr));
         }
-        wtr.write_ascii_char(b']')?;
+        rtry!(wtr.write_ascii_char(b']'));
         Ok(())
     }
 }

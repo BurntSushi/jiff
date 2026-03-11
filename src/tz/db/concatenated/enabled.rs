@@ -70,7 +70,7 @@ impl Database {
     }
 
     pub(crate) fn from_path(path: &Path) -> Result<Database, Error> {
-        let names = Some(Names::new(path)?);
+        let names = Some(rtry!(Names::new(path)));
         let zones = RwLock::new(CachedZones::new());
         Ok(Database { path: Some(path.to_path_buf()), names, zones })
     }
@@ -203,11 +203,11 @@ impl Database {
 
 impl core::fmt::Debug for Database {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.write_str("Concatenated(")?;
+        rtry!(f.write_str("Concatenated("));
         if let Some(ref path) = self.path {
-            path.display().fmt(f)?;
+            rtry!(path.display().fmt(f));
         } else {
-            f.write_str("unavailable")?;
+            rtry!(f.write_str("unavailable"));
         }
         f.write_str(")")
     }
@@ -279,9 +279,10 @@ impl CachedTimeZone {
         scratch1: &mut Vec<u8>,
         scratch2: &mut Vec<u8>,
     ) -> Result<Option<CachedTimeZone>, Error> {
-        let file = File::open(path).map_err(|e| Error::io(e).path(path))?;
-        let db = ConcatenatedTzif::open(&file)?;
-        let Some(tz) = db.get(query, scratch1, scratch2)? else {
+        let file =
+            rtry!(File::open(path).map_err(|e| Error::io(e).path(path)));
+        let db = rtry!(ConcatenatedTzif::open(&file));
+        let Some(tz) = rtry!(db.get(query, scratch1, scratch2)) else {
             return Ok(None);
         };
         let last_modified = util::fs::last_modified_from_file(path, &file);
@@ -413,7 +414,8 @@ impl Names {
     fn new(path: &Path) -> Result<Names, Error> {
         let path = path.to_path_buf();
         let mut scratch = vec![];
-        let (names, version) = read_names_and_version(&path, &mut scratch)?;
+        let (names, version) =
+            rtry!(read_names_and_version(&path, &mut scratch));
         trace!(
             "found concatenated tzdata at {path} \
              with version {version} and {len} \
@@ -535,10 +537,10 @@ fn read_names_and_version(
     path: &Path,
     scratch: &mut Vec<u8>,
 ) -> Result<(Vec<Arc<str>>, ArrayStr<5>), Error> {
-    let file = File::open(path).map_err(|e| Error::io(e).path(path))?;
-    let db = ConcatenatedTzif::open(file)?;
+    let file = rtry!(File::open(path).map_err(|e| Error::io(e).path(path)));
+    let db = rtry!(ConcatenatedTzif::open(file));
     let names: Vec<Arc<str>> =
-        db.available(scratch)?.into_iter().map(Arc::from).collect();
+        rtry!(db.available(scratch)).into_iter().map(Arc::from).collect();
     if names.is_empty() {
         return Err(Error::from(E::ConcatenatedMissingIanaIdentifiers));
     }

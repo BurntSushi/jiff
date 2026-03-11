@@ -359,9 +359,9 @@ impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         let mut it = self.chain().peekable();
         while let Some(err) = it.next() {
-            core::fmt::Display::fmt(err.kind(), f)?;
+            rtry!(core::fmt::Display::fmt(err.kind(), f));
             if it.peek().is_some() {
-                f.write_str(": ")?;
+                rtry!(f.write_str(": "));
             }
         }
         Ok(())
@@ -581,7 +581,7 @@ impl core::fmt::Display for CrateFeatureError {
         #[allow(unused_imports)]
         use self::CrateFeatureError::*;
 
-        f.write_str("operation failed because Jiff crate feature `")?;
+        rtry!(f.write_str("operation failed because Jiff crate feature `"));
         #[allow(unused_variables)]
         let name: &str = match *self {
             #[cfg(not(feature = "tz-system"))]
@@ -593,7 +593,7 @@ impl core::fmt::Display for CrateFeatureError {
         };
         #[allow(unreachable_code)]
         {
-            core::fmt::Display::fmt(name, f)?;
+            rtry!(core::fmt::Display::fmt(name, f));
             f.write_str("` is not enabled")
         }
     }

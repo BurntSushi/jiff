@@ -652,10 +652,10 @@ impl DateTimeParser {
         input: I,
     ) -> Result<Zoned, Error> {
         let input = input.as_ref();
-        let parsed = self.p.parse_temporal_datetime(input)?;
-        let dt = parsed.into_full()?;
+        let parsed = rtry!(self.p.parse_temporal_datetime(input));
+        let dt = rtry!(parsed.into_full());
         let zoned =
-            dt.to_zoned(db, self.offset_conflict, self.disambiguation)?;
+            rtry!(dt.to_zoned(db, self.offset_conflict, self.disambiguation));
         Ok(zoned)
     }
 
@@ -706,9 +706,9 @@ impl DateTimeParser {
         input: I,
     ) -> Result<Timestamp, Error> {
         let input = input.as_ref();
-        let parsed = self.p.parse_temporal_datetime(input)?;
-        let dt = parsed.into_full()?;
-        let timestamp = dt.to_timestamp()?;
+        let parsed = rtry!(self.p.parse_temporal_datetime(input));
+        let dt = rtry!(parsed.into_full());
+        let timestamp = rtry!(dt.to_timestamp());
         Ok(timestamp)
     }
 
@@ -765,9 +765,9 @@ impl DateTimeParser {
         input: I,
     ) -> Result<civil::DateTime, Error> {
         let input = input.as_ref();
-        let parsed = self.p.parse_temporal_datetime(input)?;
-        let dt = parsed.into_full()?;
-        let datetime = dt.to_datetime()?;
+        let parsed = rtry!(self.p.parse_temporal_datetime(input));
+        let dt = rtry!(parsed.into_full());
+        let datetime = rtry!(dt.to_datetime());
         Ok(datetime)
     }
 
@@ -824,9 +824,9 @@ impl DateTimeParser {
         input: I,
     ) -> Result<civil::Date, Error> {
         let input = input.as_ref();
-        let parsed = self.p.parse_temporal_datetime(input)?;
-        let dt = parsed.into_full()?;
-        let date = dt.to_date()?;
+        let parsed = rtry!(self.p.parse_temporal_datetime(input));
+        let dt = rtry!(parsed.into_full());
+        let date = rtry!(dt.to_date());
         Ok(date)
     }
 
@@ -883,8 +883,8 @@ impl DateTimeParser {
         input: I,
     ) -> Result<civil::Time, Error> {
         let input = input.as_ref();
-        let parsed = self.p.parse_temporal_time(input)?;
-        let parsed_time = parsed.into_full()?;
+        let parsed = rtry!(self.p.parse_temporal_time(input));
+        let parsed_time = rtry!(parsed.into_full());
         let time = parsed_time.to_time();
         Ok(time)
     }
@@ -982,7 +982,7 @@ impl DateTimeParser {
         input: I,
     ) -> Result<TimeZone, Error> {
         let input = input.as_ref();
-        let parsed = self.p.parse_time_zone(input)?.into_full()?;
+        let parsed = rtry!(rtry!(self.p.parse_time_zone(input)).into_full());
         parsed.into_time_zone(db)
     }
 
@@ -1103,8 +1103,9 @@ impl DateTimeParser {
         input: &'i I,
     ) -> Result<Pieces<'i>, Error> {
         let input = input.as_ref();
-        let parsed = self.p.parse_temporal_datetime(input)?.into_full()?;
-        let pieces = parsed.to_pieces()?;
+        let parsed =
+            rtry!(rtry!(self.p.parse_temporal_datetime(input)).into_full());
+        let pieces = rtry!(parsed.to_pieces());
         Ok(pieces)
     }
 
@@ -1120,7 +1121,7 @@ impl DateTimeParser {
         input: I,
     ) -> Result<ISOWeekDate, Error> {
         let input = input.as_ref();
-        let wd = self.p.parse_iso_week_date(input)?.into_full()?;
+        let wd = rtry!(rtry!(self.p.parse_iso_week_date(input)).into_full());
         Ok(wd)
     }
 }
@@ -1566,7 +1567,7 @@ impl DateTimePrinter {
         let mut buf = alloc::string::String::new();
         // Writing to a `String` itself will never fail, but this could fail
         // as described above in the docs.
-        self.print_time_zone(tz, &mut buf)?;
+        rtry!(self.print_time_zone(tz, &mut buf));
         Ok(buf)
     }
 

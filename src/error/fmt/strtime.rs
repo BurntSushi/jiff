@@ -355,14 +355,14 @@ impl core::fmt::Display for ParseError {
                  to contain one",
             ),
             ExpectedChoice { available } => {
-                f.write_str(
+                rtry!(f.write_str(
                     "failed to find expected value, available choices are: ",
-                )?;
+                ));
                 for (i, choice) in available.iter().enumerate() {
                     if i > 0 {
-                        f.write_str(", ")?;
+                        rtry!(f.write_str(", "));
                     }
-                    write!(f, "{}", escape::Bytes(choice))?;
+                    rtry!(write!(f, "{}", escape::Bytes(choice)));
                 }
                 Ok(())
             }

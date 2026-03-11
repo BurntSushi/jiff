@@ -84,9 +84,9 @@ impl TzifOwned {
         let (header32, rest) =
             Header::parse(4, bytes).map_err(TzifErrorKind::Header32)?;
         let (mut tzif, rest) = if header32.version == 0 {
-            TzifOwned::parse32(name, header32, rest)?
+            rtry!(TzifOwned::parse32(name, header32, rest))
         } else {
-            TzifOwned::parse64(name, header32, rest)?
+            rtry!(TzifOwned::parse64(name, header32, rest))
         };
         tzif.fatten();
         // This should come after fattening, because fattening may add new
@@ -133,11 +133,11 @@ impl TzifOwned {
                 infos: vec![],
             },
         };
-        let rest = tzif.parse_transitions(&header32, bytes)?;
+        let rest = rtry!(tzif.parse_transitions(&header32, bytes));
         let rest = tzif.parse_transition_types(&header32, rest)?;
-        let rest = tzif.parse_local_time_types(&header32, rest)?;
+        let rest = rtry!(tzif.parse_local_time_types(&header32, rest));
         let rest = tzif.parse_time_zone_designations(&header32, rest)?;
-        let rest = tzif.parse_leap_seconds(&header32, rest)?;
+        let rest = rtry!(tzif.parse_leap_seconds(&header32, rest));
         let rest = tzif.parse_indicators(&header32, rest)?;
         Ok((tzif, rest))
     }
@@ -168,11 +168,11 @@ impl TzifOwned {
                 infos: vec![],
             },
         };
-        let rest = tzif.parse_transitions(&header64, rest)?;
+        let rest = rtry!(tzif.parse_transitions(&header64, rest));
         let rest = tzif.parse_transition_types(&header64, rest)?;
-        let rest = tzif.parse_local_time_types(&header64, rest)?;
+        let rest = rtry!(tzif.parse_local_time_types(&header64, rest));
         let rest = tzif.parse_time_zone_designations(&header64, rest)?;
-        let rest = tzif.parse_leap_seconds(&header64, rest)?;
+        let rest = rtry!(tzif.parse_leap_seconds(&header64, rest));
         let rest = tzif.parse_indicators(&header64, rest)?;
         let rest = tzif.parse_footer(&header64, rest)?;
         // Note that we don't check that the TZif data is fully valid. It is
@@ -295,24 +295,24 @@ impl TzifOwned {
             bytes,
             header.time_zone_designations_len(),
         )?;
-        self.fixed.designations = String::from_utf8(bytes.to_vec())
-            .map_err(|_| TimeZoneDesignatorError::InvalidUtf8)?;
+        self.fixed.designations = rtry!(String::from_utf8(bytes.to_vec())
+            .map_err(|_| TimeZoneDesignatorError::InvalidUtf8));
         // Holy hell, this is brutal. The boundary conditions are crazy.
         for typ in self.types.iter_mut() {
             let start = usize::from(typ.designation.0);
-            let suffix = self
+            let suffix = rtry!(self
                 .fixed
                 .designations
                 .get(start..)
-                .ok_or(TimeZoneDesignatorError::InvalidStart)?;
-            let len = suffix
+                .ok_or(TimeZoneDesignatorError::InvalidStart));
+            let len = rtry!(suffix
                 .find('\x00')
-                .ok_or(TimeZoneDesignatorError::MissingNul)?;
-            let end = start
+                .ok_or(TimeZoneDesignatorError::MissingNul));
+            let end = rtry!(start
                 .checked_add(len)
-                .ok_or(TimeZoneDesignatorError::InvalidLength)?;
-            typ.designation.1 = u8::try_from(end)
-                .map_err(|_| TimeZoneDesignatorError::InvalidEnd)?;
+                .ok_or(TimeZoneDesignatorError::InvalidLength));
+            typ.designation.1 = rtry!(u8::try_from(end)
+                .map_err(|_| TimeZoneDesignatorError::InvalidEnd));
         }
         Ok(rest)
     }
@@ -426,10 +426,10 @@ impl TzifOwned {
         // Only scan up to 1KB for a NUL terminator in case we somehow got
         // passed a huge block of bytes.
         let toscan = &bytes[..bytes.len().min(1024)];
-        let nlat = toscan
+        let nlat = rtry!(toscan
             .iter()
             .position(|&b| b == b'\n')
-            .ok_or(FooterError::TerminatorNotFound)?;
+            .ok_or(FooterError::TerminatorNotFound));
         let (bytes, rest) = bytes.split_at(nlat);
         if !bytes.is_empty() {
             // We could in theory limit TZ strings to their strict POSIX
@@ -438,8 +438,8 @@ impl TzifOwned {
             // that GNU tooling allows it via the `TZ` environment variable
             // even though POSIX doesn't specify it. This all seems okay to me
             // because the V3+ extension is a strict superset of functionality.
-            let posix_tz = PosixTimeZone::parse(bytes)
-                .map_err(FooterError::InvalidPosixTz)?;
+            let posix_tz = rtry!(PosixTimeZone::parse(bytes)
+                .map_err(FooterError::InvalidPosixTz));
             self.fixed.posix_tz = Some(posix_tz);
         }
         Ok(&rest[1..])
@@ -793,30 +793,34 @@ impl Header {
         let (tzh_typecnt_bytes, rest) = rest.split_at(4);
         let (tzh_charcnt_bytes, rest) = rest.split_at(4);
 
-        let tzh_ttisutcnt =
-            from_be_bytes_u32_to_usize(tzh_ttisutcnt_bytes).map_err(|e| {
-                HeaderError::ParseCount { kind: CountKind::Ut, convert: e }
-            })?;
-        let tzh_ttisstdcnt =
-            from_be_bytes_u32_to_usize(tzh_ttisstdcnt_bytes).map_err(|e| {
-                HeaderError::ParseCount { kind: CountKind::Std, convert: e }
-            })?;
-        let tzh_leapcnt =
-            from_be_bytes_u32_to_usize(tzh_leapcnt_bytes).map_err(|e| {
+        let tzh_ttisutcnt = rtry!(from_be_bytes_u32_to_usize(
+            tzh_ttisutcnt_bytes
+        )
+        .map_err(|e| {
+            HeaderError::ParseCount { kind: CountKind::Ut, convert: e }
+        }));
+        let tzh_ttisstdcnt = rtry!(from_be_bytes_u32_to_usize(
+            tzh_ttisstdcnt_bytes
+        )
+        .map_err(|e| {
+            HeaderError::ParseCount { kind: CountKind::Std, convert: e }
+        }));
+        let tzh_leapcnt = rtry!(from_be_bytes_u32_to_usize(tzh_leapcnt_bytes)
+            .map_err(|e| {
                 HeaderError::ParseCount { kind: CountKind::Leap, convert: e }
-            })?;
-        let tzh_timecnt =
-            from_be_bytes_u32_to_usize(tzh_timecnt_bytes).map_err(|e| {
+            }));
+        let tzh_timecnt = rtry!(from_be_bytes_u32_to_usize(tzh_timecnt_bytes)
+            .map_err(|e| {
                 HeaderError::ParseCount { kind: CountKind::Time, convert: e }
-            })?;
-        let tzh_typecnt =
-            from_be_bytes_u32_to_usize(tzh_typecnt_bytes).map_err(|e| {
+            }));
+        let tzh_typecnt = rtry!(from_be_bytes_u32_to_usize(tzh_typecnt_bytes)
+            .map_err(|e| {
                 HeaderError::ParseCount { kind: CountKind::Type, convert: e }
-            })?;
-        let tzh_charcnt =
-            from_be_bytes_u32_to_usize(tzh_charcnt_bytes).map_err(|e| {
+            }));
+        let tzh_charcnt = rtry!(from_be_bytes_u32_to_usize(tzh_charcnt_bytes)
+            .map_err(|e| {
                 HeaderError::ParseCount { kind: CountKind::Char, convert: e }
-            })?;
+            }));
 
         if tzh_ttisutcnt != 0 && tzh_ttisutcnt != tzh_typecnt {
             return Err(HeaderError::MismatchUtType);
@@ -860,11 +864,11 @@ impl Header {
     /// This is useful for, e.g., skipping over the 32-bit V1 data block in
     /// V2+ TZif formatted files.
     fn data_block_len(&self) -> Result<usize, HeaderError> {
-        let a = self.transition_times_len()?;
+        let a = rtry!(self.transition_times_len());
         let b = self.transition_types_len();
-        let c = self.local_time_types_len()?;
+        let c = rtry!(self.local_time_types_len());
         let d = self.time_zone_designations_len();
-        let e = self.leap_second_len()?;
+        let e = rtry!(self.leap_second_len());
         let f = self.standard_wall_len();
         let g = self.ut_local_len();
         a.checked_add(b)
@@ -939,44 +943,46 @@ impl core::fmt::Display for TzifError {
         use self::TzifErrorKind::*;
         match self.kind {
             Footer(ref err) => {
-                f.write_str("invalid TZif footer: ")?;
+                rtry!(f.write_str("invalid TZif footer: "));
                 err.fmt(f)
             }
             Header(ref err) => {
-                f.write_str("invalid TZif header: ")?;
+                rtry!(f.write_str("invalid TZif header: "));
                 err.fmt(f)
             }
             Header32(ref err) => {
-                f.write_str("invalid 32-bit TZif header: ")?;
+                rtry!(f.write_str("invalid 32-bit TZif header: "));
                 err.fmt(f)
             }
             Header64(ref err) => {
-                f.write_str("invalid 64-bit TZif header: ")?;
+                rtry!(f.write_str("invalid 64-bit TZif header: "));
                 err.fmt(f)
             }
             InconsistentPosixTimeZone(ref err) => {
-                f.write_str(
+                rtry!(f.write_str(
                     "found inconsistency with \
                      POSIX time zone transition rule \
                      in TZif file footer: ",
-                )?;
+                ));
                 err.fmt(f)
             }
             Indicator(ref err) => {
-                f.write_str("failed to parse indicators: ")?;
+                rtry!(f.write_str("failed to parse indicators: "));
                 err.fmt(f)
             }
             LocalTimeType(ref err) => {
-                f.write_str("failed to parse local time types: ")?;
+                rtry!(f.write_str("failed to parse local time types: "));
                 err.fmt(f)
             }
             SplitAt(ref err) => err.fmt(f),
             TimeZoneDesignator(ref err) => {
-                f.write_str("failed to parse time zone designators: ")?;
+                rtry!(f.write_str("failed to parse time zone designators: "));
                 err.fmt(f)
             }
             TransitionType(ref err) => {
-                f.write_str("failed to parse time zone transition types: ")?;
+                rtry!(f.write_str(
+                    "failed to parse time zone transition types: "
+                ));
                 err.fmt(f)
             }
         }
@@ -1210,7 +1216,7 @@ impl core::fmt::Display for FooterError {
 
         match *self {
             InvalidPosixTz(ref err) => {
-                f.write_str("invalid POSIX time zone transition rule")?;
+                rtry!(f.write_str("invalid POSIX time zone transition rule"));
                 core::fmt::Display::fmt(err, f)
             }
             MismatchEnd => f.write_str(
@@ -1340,8 +1346,8 @@ impl core::fmt::Display for SplitAtError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         use self::SplitAtError::*;
 
-        f.write_str("expected bytes for '")?;
-        f.write_str(match *self {
+        rtry!(f.write_str("expected bytes for '"));
+        rtry!(f.write_str(match *self {
             V1 => "v1 TZif",
             LeapSeconds => "leap seconds",
             LocalTimeTypes => "local time types",
@@ -1350,8 +1356,8 @@ impl core::fmt::Display for SplitAtError {
             TransitionTimes => "transition times",
             TransitionTypes => "transition types",
             UTLocalIndicators => "UT/local indicators",
-        })?;
-        f.write_str("data block', but did not find enough bytes")?;
+        }));
+        rtry!(f.write_str("data block', but did not find enough bytes"));
         Ok(())
     }
 }

@@ -1031,10 +1031,10 @@ impl AmbiguousZoned {
     /// ```
     #[inline]
     pub fn compatible(self) -> Result<Zoned, Error> {
-        let ts = self
+        let ts = rtry!(self
             .ts
             .compatible()
-            .with_context(|| E::InTimeZone { tz: self.time_zone().clone() })?;
+            .with_context(|| E::InTimeZone { tz: self.time_zone().clone() }));
         Ok(ts.to_zoned(self.tz))
     }
 
@@ -1090,10 +1090,10 @@ impl AmbiguousZoned {
     /// ```
     #[inline]
     pub fn earlier(self) -> Result<Zoned, Error> {
-        let ts = self
+        let ts = rtry!(self
             .ts
             .earlier()
-            .with_context(|| E::InTimeZone { tz: self.time_zone().clone() })?;
+            .with_context(|| E::InTimeZone { tz: self.time_zone().clone() }));
         Ok(ts.to_zoned(self.tz))
     }
 
@@ -1149,10 +1149,10 @@ impl AmbiguousZoned {
     /// ```
     #[inline]
     pub fn later(self) -> Result<Zoned, Error> {
-        let ts = self
+        let ts = rtry!(self
             .ts
             .later()
-            .with_context(|| E::InTimeZone { tz: self.time_zone().clone() })?;
+            .with_context(|| E::InTimeZone { tz: self.time_zone().clone() }));
         Ok(ts.to_zoned(self.tz))
     }
 
@@ -1203,10 +1203,10 @@ impl AmbiguousZoned {
     /// ```
     #[inline]
     pub fn unambiguous(self) -> Result<Zoned, Error> {
-        let ts = self
+        let ts = rtry!(self
             .ts
             .unambiguous()
-            .with_context(|| E::InTimeZone { tz: self.time_zone().clone() })?;
+            .with_context(|| E::InTimeZone { tz: self.time_zone().clone() }));
         Ok(ts.to_zoned(self.tz))
     }
 

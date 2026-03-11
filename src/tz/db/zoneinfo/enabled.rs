@@ -81,7 +81,7 @@ impl Database {
     }
 
     pub(crate) fn from_dir(dir: &Path) -> Result<Database, Error> {
-        let names = Some(ZoneInfoNames::new(dir)?);
+        let names = Some(rtry!(ZoneInfoNames::new(dir)));
         let zones = RwLock::new(CachedZones::new());
         Ok(Database { dir: Some(dir.to_path_buf()), names, zones })
     }
@@ -204,11 +204,11 @@ impl Database {
 
 impl core::fmt::Debug for Database {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.write_str("ZoneInfo(")?;
+        rtry!(f.write_str("ZoneInfo("));
         if let Some(ref dir) = self.dir {
-            core::fmt::Display::fmt(&dir.display(), f)?;
+            rtry!(core::fmt::Display::fmt(&dir.display(), f));
         } else {
-            f.write_str("unavailable")?;
+            rtry!(f.write_str("unavailable"));
         }
         f.write_str(")")
     }
@@ -275,12 +275,13 @@ impl CachedTimeZone {
         ) -> Result<CachedTimeZone, Error> {
             let path = info.path();
             let mut file =
-                File::open(path).map_err(|e| Error::io(e).path(path))?;
+                rtry!(File::open(path).map_err(|e| Error::io(e).path(path)));
             let mut data = vec![];
-            file.read_to_end(&mut data)
-                .map_err(|e| Error::io(e).path(path))?;
-            let tz = TimeZone::tzif(&info.inner.original, &data)
-                .map_err(|e| e.path(path))?;
+            rtry!(file
+                .read_to_end(&mut data)
+                .map_err(|e| Error::io(e).path(path)));
+            let tz = rtry!(TimeZone::tzif(&info.inner.original, &data)
+                .map_err(|e| e.path(path)));
             let name = info.clone();
             let last_modified = util::fs::last_modified_from_file(path, &file);
             let expiration = Expiration::after(ttl);
@@ -416,7 +417,7 @@ impl ZoneInfoNames {
     /// If no names of time zones with corresponding TZif data files could be
     /// found in the given directory, then an error is returned.
     fn new(dir: &Path) -> Result<ZoneInfoNames, Error> {
-        let names = walk(dir)?;
+        let names = rtry!(walk(dir));
         let dir = dir.to_path_buf();
         let ttl = ZoneInfoNames::DEFAULT_TTL;
         let expiration = Expiration::after(ttl);
@@ -559,8 +560,8 @@ impl ZoneInfoName {
     /// suffix `time_zone_name` path was returned.
     fn new(base: &Path, time_zone_name: &Path) -> Result<ZoneInfoName, Error> {
         let full = base.join(time_zone_name);
-        let original = parse::os_str_utf8(time_zone_name.as_os_str())
-            .map_err(|err| Error::from(err).path(base))?;
+        let original = rtry!(parse::os_str_utf8(time_zone_name.as_os_str())
+            .map_err(|err| Error::from(err).path(base)));
         let lower = original.to_ascii_lowercase();
         let inner = ZoneInfoNameInner {
             full,

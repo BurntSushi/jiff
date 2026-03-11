@@ -41,6 +41,17 @@ this crate. Everything should be managed through the `jiff` crate.
 extern crate alloc;
 extern crate proc_macro;
 
+// Simplified try operator that bypasses Try and From traits, used to reduce
+// compile times.
+macro_rules! rtry {
+    ($($tt:tt)*) => {
+        match $($tt)* {
+            Ok(ok) => ok,
+            Err(err) => return Err(err),
+        }
+    };
+}
+
 use proc_macro::TokenStream;
 use quote::quote;
 

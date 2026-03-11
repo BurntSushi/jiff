@@ -102,8 +102,9 @@ fn get_tz_key_name() -> Result<String, Error> {
     // to unless it fails, and we check for failure above. So we're only here
     // when `info` is properly initialized.
     let info = unsafe { info.assume_init() };
-    let tz_key_name = nul_terminated_utf16_to_string(&info.TimeZoneKeyName)
-        .context(E::WindowsTimeZoneKeyName)?;
+    let tz_key_name =
+        rtry!(nul_terminated_utf16_to_string(&info.TimeZoneKeyName)
+            .context(E::WindowsTimeZoneKeyName));
     Ok(tz_key_name)
 }
 

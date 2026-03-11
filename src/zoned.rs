@@ -643,7 +643,7 @@ impl Zoned {
     /// ```
     #[inline]
     pub fn in_tz(&self, name: &str) -> Result<Zoned, Error> {
-        let tz = crate::tz::db().get(name)?;
+        let tz = rtry!(crate::tz::db().get(name));
         Ok(self.with_time_zone(tz))
     }
 
@@ -1503,7 +1503,7 @@ impl Zoned {
     /// ```
     #[inline]
     pub fn tomorrow(&self) -> Result<Zoned, Error> {
-        self.datetime().tomorrow()?.to_zoned(self.time_zone().clone())
+        rtry!(self.datetime().tomorrow()).to_zoned(self.time_zone().clone())
     }
 
     /// Returns the zoned datetime with a date immediately preceding this one.
@@ -1561,7 +1561,7 @@ impl Zoned {
     /// ```
     #[inline]
     pub fn yesterday(&self) -> Result<Zoned, Error> {
-        self.datetime().yesterday()?.to_zoned(self.time_zone().clone())
+        rtry!(self.datetime().yesterday()).to_zoned(self.time_zone().clone())
     }
 
     /// Returns the "nth" weekday from the beginning or end of the month in
@@ -1660,8 +1660,7 @@ impl Zoned {
         nth: i8,
         weekday: Weekday,
     ) -> Result<Zoned, Error> {
-        self.datetime()
-            .nth_weekday_of_month(nth, weekday)?
+        rtry!(self.datetime().nth_weekday_of_month(nth, weekday))
             .to_zoned(self.time_zone().clone())
     }
 
@@ -1846,8 +1845,7 @@ impl Zoned {
         nth: i32,
         weekday: Weekday,
     ) -> Result<Zoned, Error> {
-        self.datetime()
-            .nth_weekday(nth, weekday)?
+        rtry!(self.datetime().nth_weekday(nth, weekday))
             .to_zoned(self.time_zone().clone())
     }
 
@@ -2245,17 +2243,17 @@ impl Zoned {
                 .context(E::AddTimestamp);
         }
         let span_time = span.only_time();
-        let dt = self
+        let dt = rtry!(self
             .datetime()
             .checked_add(span_calendar)
-            .context(E::AddDateTime)?;
+            .context(E::AddDateTime));
 
         let tz = self.inner.time_zone;
-        let mut ts = tz
+        let mut ts = rtry!(tz
             .to_ambiguous_timestamp(dt)
             .compatible()
-            .context(E::ConvertDateTimeToTimestamp)?;
-        ts = ts.checked_add(span_time).context(E::AddTimestamp)?;
+            .context(E::ConvertDateTimeToTimestamp));
+        ts = rtry!(ts.checked_add(span_time).context(E::AddTimestamp));
         Ok(ts.to_zoned(tz))
     }
 
@@ -2574,7 +2572,7 @@ impl Zoned {
         other: A,
     ) -> Result<Span, Error> {
         let args: ZonedDifference = other.into();
-        let span = args.until_with_largest_unit(self)?;
+        let span = rtry!(args.until_with_largest_unit(self));
         if args.rounding_may_change_span() {
             span.round(args.round.relative(self))
         } else {
@@ -2613,7 +2611,7 @@ impl Zoned {
         other: A,
     ) -> Result<Span, Error> {
         let args: ZonedDifference = other.into();
-        let span = -args.until_with_largest_unit(self)?;
+        let span = -rtry!(args.until_with_largest_unit(self));
         if args.rounding_may_change_span() {
             span.round(args.round.relative(self))
         } else {
@@ -3519,7 +3517,7 @@ impl TryFrom<std::time::SystemTime> for Zoned {
 
     #[inline]
     fn try_from(system_time: std::time::SystemTime) -> Result<Zoned, Error> {
-        let timestamp = Timestamp::try_from(system_time)?;
+        let timestamp = rtry!(Timestamp::try_from(system_time));
         Ok(Zoned::new(timestamp, TimeZone::system()))
     }
 }
@@ -4034,7 +4032,7 @@ pub struct ZonedArithmetic {
 impl ZonedArithmetic {
     #[inline]
     fn checked_add(self, zdt: Zoned) -> Result<Zoned, Error> {
-        match self.duration.to_signed()? {
+        match rtry!(self.duration.to_signed()) {
             SDuration::Span(span) => zdt.checked_add_span(span),
             SDuration::Absolute(sdur) => zdt.checked_add_duration(sdur),
         }
@@ -4042,7 +4040,7 @@ impl ZonedArithmetic {
 
     #[inline]
     fn checked_neg(self) -> Result<ZonedArithmetic, Error> {
-        let duration = self.duration.checked_neg()?;
+        let duration = rtry!(self.duration.checked_neg());
         Ok(ZonedArithmetic { duration })
     }
 
@@ -4366,28 +4364,28 @@ impl<'a> ZonedDifference<'a> {
             day_correct += 1;
         }
 
-        let mut mid = dt2
+        let mut mid = rtry!(dt2
             .date()
             .checked_add(Span::new().days(day_correct * -sign))
-            .context(E::AddDays)?
-            .to_datetime(dt1.time());
-        let mut zmid: Zoned = mid
+            .context(E::AddDays))
+        .to_datetime(dt1.time());
+        let mut zmid: Zoned = rtry!(mid
             .to_zoned(tz.clone())
-            .context(E::ConvertIntermediateDatetime)?;
+            .context(E::ConvertIntermediateDatetime));
         if b::Sign::from_ordinals(zdt2, &zmid) == -sign {
             if sign.is_negative() {
                 // FIXME
                 panic!("this should be an error");
             }
             day_correct += 1;
-            mid = dt2
+            mid = rtry!(dt2
                 .date()
                 .checked_add(Span::new().days(day_correct * -sign))
-                .context(E::AddDays)?
-                .to_datetime(dt1.time());
-            zmid = mid
+                .context(E::AddDays))
+            .to_datetime(dt1.time());
+            zmid = rtry!(mid
                 .to_zoned(tz.clone())
-                .context(E::ConvertIntermediateDatetime)?;
+                .context(E::ConvertIntermediateDatetime));
             if b::Sign::from_ordinals(zdt2, &zmid) == -sign {
                 // FIXME
                 panic!("this should be an error too");
@@ -4397,7 +4395,7 @@ impl<'a> ZonedDifference<'a> {
             zdt2.timestamp().as_duration() - zmid.timestamp().as_duration();
         dt2 = mid;
 
-        let date_span = dt1.date().until((largest, dt2.date()))?;
+        let date_span = rtry!(dt1.date().until((largest, dt2.date())));
         Ok(Span::from_invariant_duration(Unit::Hour, remainder)
             .expect("difference between time always fits in span")
             .years(date_span.get_years())
@@ -4611,15 +4609,15 @@ impl ZonedRound {
         if self.round.get_smallest() == Unit::Day {
             return self.round_days(zdt);
         }
-        let end = self.round.round(start)?;
+        let end = rtry!(self.round.round(start));
         // Like in the ZonedWith API, in order to avoid small changes to clock
         // time hitting a 1 hour disambiguation shift, we use offset conflict
         // resolution to do our best to "prefer" the offset we already have.
-        let amb = OffsetConflict::PreferOffset.resolve(
+        let amb = rtry!(OffsetConflict::PreferOffset.resolve(
             end,
             zdt.offset(),
             zdt.time_zone().clone(),
-        )?;
+        ));
         amb.compatible()
     }
 
@@ -4633,15 +4631,15 @@ impl ZonedRound {
 
         // Rounding by days requires an increment of 1. We just re-use the
         // civil datetime rounding checks, which has the same constraint.
-        Increment::for_datetime(Unit::Day, self.round.get_increment())?;
+        rtry!(Increment::for_datetime(Unit::Day, self.round.get_increment()));
 
         // FIXME: We should be doing this with a &TimeZone, but will need a
         // refactor so that we do zone-aware arithmetic using just a Timestamp
         // and a &TimeZone. Fixing just this should just be some minor annoying
         // work. The grander refactor is something like an `Unzoned` type, but
         // I'm not sure that's really worth it. ---AG
-        let start = zdt.start_of_day().context(E::FailedStartOfDay)?;
-        let end = start.tomorrow().context(E::FailedLengthOfDay)?;
+        let start = rtry!(zdt.start_of_day().context(E::FailedStartOfDay));
+        let end = rtry!(start.tomorrow().context(E::FailedLengthOfDay));
         // I don't believe this is actually possible, since adding 1 day should
         // always advance the underlying timestamp by some amount. On the
         // other hand, it's somewhat tricky to reason about this because of the
@@ -4658,14 +4656,17 @@ impl ZonedRound {
             end.timestamp().as_duration() - start.timestamp().as_duration();
         let progress =
             zdt.timestamp().as_duration() - start.timestamp().as_duration();
-        let rounded =
-            self.round.get_mode().round_by_duration(progress, day_length)?;
+        let rounded = rtry!(self
+            .round
+            .get_mode()
+            .round_by_duration(progress, day_length));
         let nanos = start
             .timestamp()
             .as_duration()
             .checked_add(rounded)
             .ok_or(E::FailedSpanNanoseconds)?;
-        Ok(Timestamp::from_duration(nanos)?.to_zoned(zdt.time_zone().clone()))
+        Ok(rtry!(Timestamp::from_duration(nanos))
+            .to_zoned(zdt.time_zone().clone()))
     }
 }
 
@@ -4798,10 +4799,11 @@ impl ZonedWith {
     /// ```
     #[inline]
     pub fn build(self) -> Result<Zoned, Error> {
-        let dt = self.datetime_with.build()?;
+        let dt = rtry!(self.datetime_with.build());
         let (_, _, offset, time_zone) = self.original.into_parts();
         let offset = self.offset.unwrap_or(offset);
-        let ambiguous = self.offset_conflict.resolve(dt, offset, time_zone)?;
+        let ambiguous =
+            rtry!(self.offset_conflict.resolve(dt, offset, time_zone));
         ambiguous.disambiguate(self.disambiguation)
     }
 

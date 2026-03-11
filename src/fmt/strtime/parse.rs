@@ -28,7 +28,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
 
         while !self.fmt.is_empty() {
             if self.f() != b'%' {
-                self.parse_literal()?;
+                rtry!(self.parse_literal());
                 continue;
             }
             if !self.bump_fmt() {
@@ -42,55 +42,75 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                 }));
             }
             // Parse extensions like padding/case options and padding width.
-            let ext = self.parse_extension()?;
+            let ext = rtry!(self.parse_extension());
             match self.f() {
-                b'%' => self.parse_percent().context(fail(b'%'))?,
-                b'A' => self.parse_weekday_full().context(fail(b'A'))?,
-                b'a' => self.parse_weekday_abbrev().context(fail(b'a'))?,
-                b'B' => self.parse_month_name_full().context(fail(b'B'))?,
-                b'b' => self.parse_month_name_abbrev().context(fail(b'b'))?,
-                b'C' => self.parse_century(ext).context(fail(b'C'))?,
-                b'D' => self.parse_american_date().context(fail(b'D'))?,
-                b'd' => self.parse_day(ext).context(fail(b'd'))?,
-                b'e' => self.parse_day(ext).context(fail(b'e'))?,
-                b'F' => self.parse_iso_date().context(fail(b'F'))?,
-                b'f' => self.parse_fractional(ext).context(fail(b'f'))?,
-                b'G' => self.parse_iso_week_year(ext).context(fail(b'G'))?,
-                b'g' => self.parse_iso_week_year2(ext).context(fail(b'g'))?,
-                b'H' => self.parse_hour24(ext).context(fail(b'H'))?,
-                b'h' => self.parse_month_name_abbrev().context(fail(b'h'))?,
-                b'I' => self.parse_hour12(ext).context(fail(b'I'))?,
-                b'j' => self.parse_day_of_year(ext).context(fail(b'j'))?,
-                b'k' => self.parse_hour24(ext).context(fail(b'k'))?,
-                b'l' => self.parse_hour12(ext).context(fail(b'l'))?,
-                b'M' => self.parse_minute(ext).context(fail(b'M'))?,
-                b'm' => self.parse_month(ext).context(fail(b'm'))?,
-                b'N' => self.parse_fractional(ext).context(fail(b'N'))?,
-                b'n' => self.parse_whitespace().context(fail(b'n'))?,
-                b'P' => self.parse_ampm().context(fail(b'P'))?,
-                b'p' => self.parse_ampm().context(fail(b'p'))?,
+                b'%' => rtry!(self.parse_percent().context(fail(b'%'))),
+                b'A' => rtry!(self.parse_weekday_full().context(fail(b'A'))),
+                b'a' => rtry!(self.parse_weekday_abbrev().context(fail(b'a'))),
+                b'B' => {
+                    rtry!(self.parse_month_name_full().context(fail(b'B')))
+                }
+                b'b' => {
+                    rtry!(self.parse_month_name_abbrev().context(fail(b'b')))
+                }
+                b'C' => rtry!(self.parse_century(ext).context(fail(b'C'))),
+                b'D' => rtry!(self.parse_american_date().context(fail(b'D'))),
+                b'd' => rtry!(self.parse_day(ext).context(fail(b'd'))),
+                b'e' => rtry!(self.parse_day(ext).context(fail(b'e'))),
+                b'F' => rtry!(self.parse_iso_date().context(fail(b'F'))),
+                b'f' => rtry!(self.parse_fractional(ext).context(fail(b'f'))),
+                b'G' => {
+                    rtry!(self.parse_iso_week_year(ext).context(fail(b'G')))
+                }
+                b'g' => {
+                    rtry!(self.parse_iso_week_year2(ext).context(fail(b'g')))
+                }
+                b'H' => rtry!(self.parse_hour24(ext).context(fail(b'H'))),
+                b'h' => {
+                    rtry!(self.parse_month_name_abbrev().context(fail(b'h')))
+                }
+                b'I' => rtry!(self.parse_hour12(ext).context(fail(b'I'))),
+                b'j' => rtry!(self.parse_day_of_year(ext).context(fail(b'j'))),
+                b'k' => rtry!(self.parse_hour24(ext).context(fail(b'k'))),
+                b'l' => rtry!(self.parse_hour12(ext).context(fail(b'l'))),
+                b'M' => rtry!(self.parse_minute(ext).context(fail(b'M'))),
+                b'm' => rtry!(self.parse_month(ext).context(fail(b'm'))),
+                b'N' => rtry!(self.parse_fractional(ext).context(fail(b'N'))),
+                b'n' => rtry!(self.parse_whitespace().context(fail(b'n'))),
+                b'P' => rtry!(self.parse_ampm().context(fail(b'P'))),
+                b'p' => rtry!(self.parse_ampm().context(fail(b'p'))),
                 b'Q' => match ext.colons {
-                    0 => self.parse_iana_nocolon().context(fail(b'Q'))?,
-                    1 => self.parse_iana_colon().context(failc(b'Q', 1))?,
+                    0 => rtry!(self.parse_iana_nocolon().context(fail(b'Q'))),
+                    1 => {
+                        rtry!(self.parse_iana_colon().context(failc(b'Q', 1)))
+                    }
                     _ => return Err(E::ColonCount { directive: b'Q' }.into()),
                 },
-                b'R' => self.parse_clock_nosecs().context(fail(b'R'))?,
-                b'S' => self.parse_second(ext).context(fail(b'S'))?,
-                b's' => self.parse_timestamp(ext).context(fail(b's'))?,
-                b'T' => self.parse_clock_secs().context(fail(b'T'))?,
-                b't' => self.parse_whitespace().context(fail(b't'))?,
-                b'U' => self.parse_week_sun(ext).context(fail(b'U'))?,
-                b'u' => self.parse_weekday_mon(ext).context(fail(b'u'))?,
-                b'V' => self.parse_week_iso(ext).context(fail(b'V'))?,
-                b'W' => self.parse_week_mon(ext).context(fail(b'W'))?,
-                b'w' => self.parse_weekday_sun(ext).context(fail(b'w'))?,
-                b'Y' => self.parse_year(ext).context(fail(b'Y'))?,
-                b'y' => self.parse_year2(ext).context(fail(b'y'))?,
+                b'R' => rtry!(self.parse_clock_nosecs().context(fail(b'R'))),
+                b'S' => rtry!(self.parse_second(ext).context(fail(b'S'))),
+                b's' => rtry!(self.parse_timestamp(ext).context(fail(b's'))),
+                b'T' => rtry!(self.parse_clock_secs().context(fail(b'T'))),
+                b't' => rtry!(self.parse_whitespace().context(fail(b't'))),
+                b'U' => rtry!(self.parse_week_sun(ext).context(fail(b'U'))),
+                b'u' => rtry!(self.parse_weekday_mon(ext).context(fail(b'u'))),
+                b'V' => rtry!(self.parse_week_iso(ext).context(fail(b'V'))),
+                b'W' => rtry!(self.parse_week_mon(ext).context(fail(b'W'))),
+                b'w' => rtry!(self.parse_weekday_sun(ext).context(fail(b'w'))),
+                b'Y' => rtry!(self.parse_year(ext).context(fail(b'Y'))),
+                b'y' => rtry!(self.parse_year2(ext).context(fail(b'y'))),
                 b'z' => match ext.colons {
-                    0 => self.parse_offset_nocolon().context(fail(b'z'))?,
-                    1 => self.parse_offset_colon().context(failc(b'z', 1))?,
-                    2 => self.parse_offset_colon2().context(failc(b'z', 2))?,
-                    3 => self.parse_offset_colon3().context(failc(b'z', 3))?,
+                    0 => {
+                        rtry!(self.parse_offset_nocolon().context(fail(b'z')))
+                    }
+                    1 => rtry!(self
+                        .parse_offset_colon()
+                        .context(failc(b'z', 1))),
+                    2 => rtry!(self
+                        .parse_offset_colon2()
+                        .context(failc(b'z', 2))),
+                    3 => rtry!(self
+                        .parse_offset_colon3()
+                        .context(failc(b'z', 3))),
                     _ => return Err(E::ColonCount { directive: b'z' }.into()),
                 },
                 b'c' => {
@@ -116,13 +136,13 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
                     }
                     // Skip over any precision settings that might be here.
                     // This is a specific special format supported by `%.f`.
-                    let (width, fmt) = Extension::parse_width(self.fmt)?;
+                    let (width, fmt) = rtry!(Extension::parse_width(self.fmt));
                     let ext = Extension { width, ..ext };
                     self.fmt = fmt;
                     match self.f() {
-                        b'f' => self.parse_dot_fractional(ext).context(
+                        b'f' => rtry!(self.parse_dot_fractional(ext).context(
                             E::DirectiveFailureDot { directive: b'f' },
-                        )?,
+                        )),
                         unk => {
                             return Err(Error::from(
                                 E::UnknownDirectiveAfterDot { directive: unk },
@@ -180,9 +200,9 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// after the `%`. If any extensions are parsed, the parser is bumped
     /// to the next byte. (If no next byte exists, then an error is returned.)
     fn parse_extension(&mut self) -> Result<Extension, Error> {
-        let (flag, fmt) = Extension::parse_flag(self.fmt)?;
-        let (width, fmt) = Extension::parse_width(fmt)?;
-        let (colons, fmt) = Extension::parse_colons(fmt)?;
+        let (flag, fmt) = rtry!(Extension::parse_flag(self.fmt));
+        let (width, fmt) = rtry!(Extension::parse_width(fmt));
+        let (colons, fmt) = rtry!(Extension::parse_colons(fmt));
         self.fmt = fmt;
         Ok(Extension { flag, width, colons })
     }
@@ -246,7 +266,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// Parses `%D`, which is equivalent to `%m/%d/%y`.
     fn parse_american_date(&mut self) -> Result<(), Error> {
         let mut p = Parser { fmt: b"%m/%d/%y", inp: self.inp, tm: self.tm };
-        p.parse()?;
+        rtry!(p.parse());
         self.inp = p.inp;
         self.bump_fmt();
         Ok(())
@@ -258,7 +278,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// the AM/PM moniker will be validated, but it doesn't actually influence
     /// the clock time.
     fn parse_ampm(&mut self) -> Result<(), Error> {
-        let (index, inp) = parse_ampm(self.inp)?;
+        let (index, inp) = rtry!(parse_ampm(self.inp));
         self.inp = inp;
 
         self.tm.set_meridiem(Some(match index {
@@ -274,7 +294,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// Parses `%T`, which is equivalent to `%H:%M:%S`.
     fn parse_clock_secs(&mut self) -> Result<(), Error> {
         let mut p = Parser { fmt: b"%H:%M:%S", inp: self.inp, tm: self.tm };
-        p.parse()?;
+        rtry!(p.parse());
         self.inp = p.inp;
         self.bump_fmt();
         Ok(())
@@ -283,7 +303,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// Parses `%R`, which is equivalent to `%H:%M`.
     fn parse_clock_nosecs(&mut self) -> Result<(), Error> {
         let mut p = Parser { fmt: b"%H:%M", inp: self.inp, tm: self.tm };
-        p.parse()?;
+        rtry!(p.parse());
         self.inp = p.inp;
         self.bump_fmt();
         Ok(())
@@ -293,12 +313,12 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     ///
     /// We merely require that it is in the range 1-31 here.
     fn parse_day(&mut self, ext: Extension) -> Result<(), Error> {
-        let (day, inp) = ext
+        let (day, inp) = rtry!(ext
             .parse_number(2, Flag::PadZero, self.inp)
-            .context(PE::ParseDay)?;
+            .context(PE::ParseDay));
         self.inp = inp;
 
-        self.tm.day = Some(b::Day::check(day).context(PE::ParseDay)?);
+        self.tm.day = Some(rtry!(b::Day::check(day).context(PE::ParseDay)));
         self.bump_fmt();
         Ok(())
     }
@@ -307,25 +327,25 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     ///
     /// We merely require that it is in the range 1-366 here.
     fn parse_day_of_year(&mut self, ext: Extension) -> Result<(), Error> {
-        let (day, inp) = ext
+        let (day, inp) = rtry!(ext
             .parse_number(3, Flag::PadZero, self.inp)
-            .context(PE::ParseDayOfYear)?;
+            .context(PE::ParseDayOfYear));
         self.inp = inp;
 
         self.tm.day_of_year =
-            Some(b::DayOfYear::check(day).context(PE::ParseDayOfYear)?);
+            Some(rtry!(b::DayOfYear::check(day).context(PE::ParseDayOfYear)));
         self.bump_fmt();
         Ok(())
     }
 
     /// Parses `%H`, which is equivalent to the hour.
     fn parse_hour24(&mut self, ext: Extension) -> Result<(), Error> {
-        let (hour, inp) = ext
+        let (hour, inp) = rtry!(ext
             .parse_number(2, Flag::PadZero, self.inp)
-            .context(PE::ParseHour)?;
+            .context(PE::ParseHour));
         self.inp = inp;
 
-        let hour = b::Hour::check(hour).context(PE::ParseHour)?;
+        let hour = rtry!(b::Hour::check(hour).context(PE::ParseHour));
         // OK because our hour is in bounds.
         self.tm.set_hour(Some(hour)).unwrap();
         self.bump_fmt();
@@ -334,12 +354,12 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
 
     /// Parses `%I`, which is equivalent to the hour on a 12-hour clock.
     fn parse_hour12(&mut self, ext: Extension) -> Result<(), Error> {
-        let (hour, inp) = ext
+        let (hour, inp) = rtry!(ext
             .parse_number(2, Flag::PadZero, self.inp)
-            .context(PE::ParseHour)?;
+            .context(PE::ParseHour));
         self.inp = inp;
 
-        let hour = b::Hour12::check(hour).context(PE::ParseHour)?;
+        let hour = rtry!(b::Hour12::check(hour).context(PE::ParseHour));
         // OK because our hour is in bounds.
         self.tm.set_hour(Some(hour)).unwrap();
         self.bump_fmt();
@@ -349,7 +369,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// Parses `%F`, which is equivalent to `%Y-%m-%d`.
     fn parse_iso_date(&mut self) -> Result<(), Error> {
         let mut p = Parser { fmt: b"%Y-%m-%d", inp: self.inp, tm: self.tm };
-        p.parse()?;
+        rtry!(p.parse());
         self.inp = p.inp;
         self.bump_fmt();
         Ok(())
@@ -357,13 +377,13 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
 
     /// Parses `%M`, which is equivalent to the minute.
     fn parse_minute(&mut self, ext: Extension) -> Result<(), Error> {
-        let (minute, inp) = ext
+        let (minute, inp) = rtry!(ext
             .parse_number(2, Flag::PadZero, self.inp)
-            .context(PE::ParseMinute)?;
+            .context(PE::ParseMinute));
         self.inp = inp;
 
         self.tm.minute =
-            Some(b::Minute::check(minute).context(PE::ParseMinute)?);
+            Some(rtry!(b::Minute::check(minute).context(PE::ParseMinute)));
         self.bump_fmt();
         Ok(())
     }
@@ -385,7 +405,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             if !self.inp.is_empty() && matches!(self.inp[0], b'+' | b'-') {
                 return self.parse_offset_nocolon();
             }
-            let (iana, inp) = parse_iana(self.inp)?;
+            let (iana, inp) = rtry!(parse_iana(self.inp));
             self.inp = inp;
             self.tm.iana = Some(iana.to_string());
             self.bump_fmt();
@@ -410,7 +430,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             if !self.inp.is_empty() && matches!(self.inp[0], b'+' | b'-') {
                 return self.parse_offset_colon();
             }
-            let (iana, inp) = parse_iana(self.inp)?;
+            let (iana, inp) = rtry!(parse_iana(self.inp));
             self.inp = inp;
             self.tm.iana = Some(iana.to_string());
             self.bump_fmt();
@@ -428,8 +448,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             .subsecond(false)
             .colon(offset::Colon::Absent);
 
-        let Parsed { value, input } = PARSER.parse(self.inp)?;
-        self.tm.offset = Some(value.to_offset()?);
+        let Parsed { value, input } = rtry!(PARSER.parse(self.inp));
+        self.tm.offset = Some(rtry!(value.to_offset()));
         self.inp = input;
         self.bump_fmt();
 
@@ -446,8 +466,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             .subsecond(false)
             .colon(offset::Colon::Required);
 
-        let Parsed { value, input } = PARSER.parse(self.inp)?;
-        self.tm.offset = Some(value.to_offset()?);
+        let Parsed { value, input } = rtry!(PARSER.parse(self.inp));
+        self.tm.offset = Some(rtry!(value.to_offset()));
         self.inp = input;
         self.bump_fmt();
 
@@ -465,8 +485,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             .subsecond(false)
             .colon(offset::Colon::Required);
 
-        let Parsed { value, input } = PARSER.parse(self.inp)?;
-        self.tm.offset = Some(value.to_offset()?);
+        let Parsed { value, input } = rtry!(PARSER.parse(self.inp));
+        self.tm.offset = Some(rtry!(value.to_offset()));
         self.inp = input;
         self.bump_fmt();
 
@@ -485,8 +505,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             .subsecond(false)
             .colon(offset::Colon::Required);
 
-        let Parsed { value, input } = PARSER.parse(self.inp)?;
-        self.tm.offset = Some(value.to_offset()?);
+        let Parsed { value, input } = rtry!(PARSER.parse(self.inp));
+        self.tm.offset = Some(rtry!(value.to_offset()));
         self.inp = input;
         self.bump_fmt();
 
@@ -495,9 +515,9 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
 
     /// Parses `%S`, which is equivalent to the second.
     fn parse_second(&mut self, ext: Extension) -> Result<(), Error> {
-        let (mut second, inp) = ext
+        let (mut second, inp) = rtry!(ext
             .parse_number(2, Flag::PadZero, self.inp)
-            .context(PE::ParseSecond)?;
+            .context(PE::ParseSecond));
         self.inp = inp;
 
         // As with other parses in Jiff, and like Temporal,
@@ -507,7 +527,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             second = 59;
         }
         self.tm.second =
-            Some(b::Second::check(second).context(PE::ParseSecond)?);
+            Some(rtry!(b::Second::check(second).context(PE::ParseSecond)));
         self.bump_fmt();
         Ok(())
     }
@@ -515,17 +535,18 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// Parses `%s`, which is equivalent to a Unix timestamp.
     fn parse_timestamp(&mut self, ext: Extension) -> Result<(), Error> {
         let (sign, inp) = parse_optional_sign(self.inp);
-        let (timestamp, inp) = ext
+        let (timestamp, inp) = rtry!(ext
             // 19 comes from `i64::MAX.to_string().len()`.
             .parse_number(19, Flag::PadSpace, inp)
-            .context(PE::ParseTimestamp)?;
+            .context(PE::ParseTimestamp));
         // I believe this error case is actually impossible. Since `timestamp`
         // is guaranteed to be positive, and negating any positive `i64` will
         // always result in a valid `i64`.
         let timestamp =
             timestamp.checked_mul(sign).ok_or(PE::ParseTimestamp)?;
-        let timestamp =
-            Timestamp::from_second(timestamp).context(PE::ParseTimestamp)?;
+        let timestamp = rtry!(
+            Timestamp::from_second(timestamp).context(PE::ParseTimestamp)
+        );
         self.inp = inp;
         self.tm.timestamp = Some(timestamp);
 
@@ -555,15 +576,13 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         // than 9 ASCII digits. Any sequence of 9 ASCII digits can be parsed
         // into an `i64`.
         let nanoseconds =
-            parse::fraction(digits).context(PE::ParseFractionalSeconds)?;
+            rtry!(parse::fraction(digits).context(PE::ParseFractionalSeconds));
         // I believe this is also impossible to fail, since the maximal
         // fractional nanosecond is 999_999_999, and which also corresponds
         // to the maximal expressible number with 9 ASCII digits. So every
         // possible expressible value here is in range.
-        self.tm.subsec = Some(
-            b::SubsecNanosecond::check(nanoseconds)
-                .context(PE::ParseFractionalSeconds)?,
-        );
+        self.tm.subsec = Some(rtry!(b::SubsecNanosecond::check(nanoseconds)
+            .context(PE::ParseFractionalSeconds)));
         self.bump_fmt();
         Ok(())
     }
@@ -582,19 +601,20 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
 
     /// Parses `%m`, which is equivalent to the month.
     fn parse_month(&mut self, ext: Extension) -> Result<(), Error> {
-        let (month, inp) = ext
+        let (month, inp) = rtry!(ext
             .parse_number(2, Flag::PadZero, self.inp)
-            .context(PE::ParseMonth)?;
+            .context(PE::ParseMonth));
         self.inp = inp;
 
-        self.tm.month = Some(b::Month::check(month).context(PE::ParseMonth)?);
+        self.tm.month =
+            Some(rtry!(b::Month::check(month).context(PE::ParseMonth)));
         self.bump_fmt();
         Ok(())
     }
 
     /// Parse `%b` or `%h`, which is an abbreviated month name.
     fn parse_month_name_abbrev(&mut self) -> Result<(), Error> {
-        let (index, inp) = parse_month_name_abbrev(self.inp)?;
+        let (index, inp) = rtry!(parse_month_name_abbrev(self.inp));
         self.inp = inp;
 
         // Both are OK because 0 <= index <= 11.
@@ -620,8 +640,9 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             b"December",
         ];
 
-        let (index, inp) =
-            parse_choice(self.inp, CHOICES).context(PE::UnknownMonthName)?;
+        let (index, inp) = rtry!(
+            parse_choice(self.inp, CHOICES).context(PE::UnknownMonthName)
+        );
         self.inp = inp;
 
         // Both are OK because 0 <= index <= 11.
@@ -632,7 +653,7 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
 
     /// Parse `%a`, which is an abbreviated weekday.
     fn parse_weekday_abbrev(&mut self) -> Result<(), Error> {
-        let (index, inp) = parse_weekday_abbrev(self.inp)?;
+        let (index, inp) = rtry!(parse_weekday_abbrev(self.inp));
         self.inp = inp;
 
         // Both are OK because 0 <= index <= 6.
@@ -655,8 +676,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
             b"Saturday",
         ];
 
-        let (index, inp) = parse_choice(self.inp, CHOICES)
-            .context(PE::UnknownWeekdayAbbreviation)?;
+        let (index, inp) = rtry!(parse_choice(self.inp, CHOICES)
+            .context(PE::UnknownWeekdayAbbreviation));
         self.inp = inp;
 
         // Both are OK because 0 <= index <= 6.
@@ -670,15 +691,15 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// Parse `%u`, which is a weekday number with Monday being `1` and
     /// Sunday being `7`.
     fn parse_weekday_mon(&mut self, ext: Extension) -> Result<(), Error> {
-        let (weekday, inp) = ext
+        let (weekday, inp) = rtry!(ext
             .parse_number(1, Flag::NoPad, self.inp)
-            .context(PE::ParseWeekdayNumber)?;
+            .context(PE::ParseWeekdayNumber));
         self.inp = inp;
 
         let weekday =
             i8::try_from(weekday).map_err(|_| PE::ParseWeekdayNumber)?;
-        let weekday = Weekday::from_monday_one_offset(weekday)
-            .context(PE::ParseWeekdayNumber)?;
+        let weekday = rtry!(Weekday::from_monday_one_offset(weekday)
+            .context(PE::ParseWeekdayNumber));
         self.tm.weekday = Some(weekday);
         self.bump_fmt();
         Ok(())
@@ -686,15 +707,15 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
 
     /// Parse `%w`, which is a weekday number with Sunday being `0`.
     fn parse_weekday_sun(&mut self, ext: Extension) -> Result<(), Error> {
-        let (weekday, inp) = ext
+        let (weekday, inp) = rtry!(ext
             .parse_number(1, Flag::NoPad, self.inp)
-            .context(PE::ParseWeekdayNumber)?;
+            .context(PE::ParseWeekdayNumber));
         self.inp = inp;
 
         let weekday =
             i8::try_from(weekday).map_err(|_| PE::ParseWeekdayNumber)?;
-        let weekday = Weekday::from_sunday_zero_offset(weekday)
-            .context(PE::ParseWeekdayNumber)?;
+        let weekday = rtry!(Weekday::from_sunday_zero_offset(weekday)
+            .context(PE::ParseWeekdayNumber));
         self.tm.weekday = Some(weekday);
         self.bump_fmt();
         Ok(())
@@ -703,26 +724,28 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// Parse `%U`, which is a week number with Sunday being the first day
     /// in the first week numbered `01`.
     fn parse_week_sun(&mut self, ext: Extension) -> Result<(), Error> {
-        let (week, inp) = ext
+        let (week, inp) = rtry!(ext
             .parse_number(2, Flag::PadZero, self.inp)
-            .context(PE::ParseSundayWeekNumber)?;
+            .context(PE::ParseSundayWeekNumber));
         self.inp = inp;
 
-        self.tm.week_sun =
-            Some(b::WeekNum::check(week).context(PE::ParseSundayWeekNumber)?);
+        self.tm.week_sun = Some(rtry!(
+            b::WeekNum::check(week).context(PE::ParseSundayWeekNumber)
+        ));
         self.bump_fmt();
         Ok(())
     }
 
     /// Parse `%V`, which is an ISO 8601 week number.
     fn parse_week_iso(&mut self, ext: Extension) -> Result<(), Error> {
-        let (week, inp) = ext
+        let (week, inp) = rtry!(ext
             .parse_number(2, Flag::PadZero, self.inp)
-            .context(PE::ParseIsoWeekNumber)?;
+            .context(PE::ParseIsoWeekNumber));
         self.inp = inp;
 
-        self.tm.iso_week =
-            Some(b::ISOWeek::check(week).context(PE::ParseIsoWeekNumber)?);
+        self.tm.iso_week = Some(rtry!(
+            b::ISOWeek::check(week).context(PE::ParseIsoWeekNumber)
+        ));
         self.bump_fmt();
         Ok(())
     }
@@ -730,13 +753,14 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// Parse `%W`, which is a week number with Monday being the first day
     /// in the first week numbered `01`.
     fn parse_week_mon(&mut self, ext: Extension) -> Result<(), Error> {
-        let (week, inp) = ext
+        let (week, inp) = rtry!(ext
             .parse_number(2, Flag::PadZero, self.inp)
-            .context(PE::ParseMondayWeekNumber)?;
+            .context(PE::ParseMondayWeekNumber));
         self.inp = inp;
 
-        self.tm.week_mon =
-            Some(b::WeekNum::check(week).context(PE::ParseMondayWeekNumber)?);
+        self.tm.week_mon = Some(rtry!(
+            b::WeekNum::check(week).context(PE::ParseMondayWeekNumber)
+        ));
         self.bump_fmt();
         Ok(())
     }
@@ -744,14 +768,16 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// Parses `%Y`, which we permit to be any year, including a negative year.
     fn parse_year(&mut self, ext: Extension) -> Result<(), Error> {
         let (sign, inp) = parse_optional_sign(self.inp);
-        let (year, inp) =
-            ext.parse_number(4, Flag::PadZero, inp).context(PE::ParseYear)?;
+        let (year, inp) = rtry!(ext
+            .parse_number(4, Flag::PadZero, inp)
+            .context(PE::ParseYear));
         self.inp = inp;
 
         // OK because sign=={1,-1} and year can't be bigger than 4 digits
         // so overflow isn't possible.
         let year = sign.checked_mul(year).unwrap();
-        self.tm.year = Some(b::Year::check(year).context(PE::ParseYear)?);
+        self.tm.year =
+            Some(rtry!(b::Year::check(year).context(PE::ParseYear)));
         self.bump_fmt();
         Ok(())
     }
@@ -760,13 +786,13 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     ///
     /// The numbers 69-99 refer to 1969-1999, while 00-68 refer to 2000-2068.
     fn parse_year2(&mut self, ext: Extension) -> Result<(), Error> {
-        let (year, inp) = ext
+        let (year, inp) = rtry!(ext
             .parse_number(2, Flag::PadZero, self.inp)
-            .context(PE::ParseYearTwoDigit)?;
+            .context(PE::ParseYearTwoDigit));
         self.inp = inp;
 
         let mut year =
-            b::YearTwoDigit::check(year).context(PE::ParseYearTwoDigit)?;
+            rtry!(b::YearTwoDigit::check(year).context(PE::ParseYearTwoDigit));
         if year <= 68 {
             year += 2000;
         } else {
@@ -781,12 +807,14 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// century.
     fn parse_century(&mut self, ext: Extension) -> Result<(), Error> {
         let (sign, inp) = parse_optional_sign(self.inp);
-        let (century, inp) =
-            ext.parse_number(2, Flag::NoPad, inp).context(PE::ParseCentury)?;
+        let (century, inp) = rtry!(ext
+            .parse_number(2, Flag::NoPad, inp)
+            .context(PE::ParseCentury));
         self.inp = inp;
 
-        let century =
-            i64::from(b::Century::check(century).context(PE::ParseCentury)?);
+        let century = i64::from(rtry!(
+            b::Century::check(century).context(PE::ParseCentury)
+        ));
         // OK because sign=={1,-1} and century can't be bigger than 2 digits
         // so overflow isn't possible.
         let century = sign.checked_mul(century).unwrap();
@@ -794,7 +822,8 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
         // 100 will never overflow.
         let year = century.checked_mul(100).unwrap();
         // I believe the error condition here is impossible.
-        self.tm.year = Some(b::Year::check(year).context(PE::ParseCentury)?);
+        self.tm.year =
+            Some(rtry!(b::Year::check(year).context(PE::ParseCentury)));
         self.bump_fmt();
         Ok(())
     }
@@ -802,16 +831,16 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// Parses `%G`, which we permit to be any year, including a negative year.
     fn parse_iso_week_year(&mut self, ext: Extension) -> Result<(), Error> {
         let (sign, inp) = parse_optional_sign(self.inp);
-        let (year, inp) = ext
+        let (year, inp) = rtry!(ext
             .parse_number(4, Flag::PadZero, inp)
-            .context(PE::ParseIsoWeekYear)?;
+            .context(PE::ParseIsoWeekYear));
         self.inp = inp;
 
         // OK because sign=={1,-1} and year can't be bigger than 4 digits
         // so overflow isn't possible.
         let year = sign.checked_mul(year).unwrap();
         self.tm.iso_week_year =
-            Some(b::ISOYear::check(year).context(PE::ParseIsoWeekYear)?);
+            Some(rtry!(b::ISOYear::check(year).context(PE::ParseIsoWeekYear)));
         self.bump_fmt();
         Ok(())
     }
@@ -820,13 +849,14 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     ///
     /// The numbers 69-99 refer to 1969-1999, while 00-68 refer to 2000-2068.
     fn parse_iso_week_year2(&mut self, ext: Extension) -> Result<(), Error> {
-        let (year, inp) = ext
+        let (year, inp) = rtry!(ext
             .parse_number(2, Flag::PadZero, self.inp)
-            .context(PE::ParseIsoWeekYearTwoDigit)?;
+            .context(PE::ParseIsoWeekYearTwoDigit));
         self.inp = inp;
 
-        let mut year = b::YearTwoDigit::check(year)
-            .context(PE::ParseIsoWeekYearTwoDigit)?;
+        let mut year =
+            rtry!(b::YearTwoDigit::check(year)
+                .context(PE::ParseIsoWeekYearTwoDigit));
         if year <= 68 {
             year += 2000;
         } else {
@@ -1033,10 +1063,10 @@ fn parse_month_name_abbrev<'i>(
 #[cfg_attr(feature = "perf-inline", inline(always))]
 fn parse_iana<'i>(input: &'i [u8]) -> Result<(&'i str, &'i [u8]), Error> {
     let mkiana = parse::slicer(input);
-    let (_, mut input) = parse_iana_component(input)?;
+    let (_, mut input) = rtry!(parse_iana_component(input));
     while let Some(tail) = input.strip_prefix(b"/") {
         input = tail;
-        let (_, unconsumed) = parse_iana_component(input)?;
+        let (_, unconsumed) = rtry!(parse_iana_component(input));
         input = unconsumed;
     }
     // This is OK because all bytes in a IANA TZ annotation are guaranteed

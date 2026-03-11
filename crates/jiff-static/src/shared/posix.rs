@@ -333,13 +333,13 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
 
 impl<ABBREV: AsRef<str>> core::fmt::Display for PosixTimeZone<ABBREV> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(
+        rtry!(core::fmt::Display::fmt(
             &AbbreviationDisplay(self.std_abbrev.as_ref()),
             f,
-        )?;
-        core::fmt::Display::fmt(&self.std_offset, f)?;
+        ));
+        rtry!(core::fmt::Display::fmt(&self.std_offset, f));
         if let Some(ref dst) = self.dst {
-            dst.display(&self.std_offset, f)?;
+            rtry!(dst.display(&self.std_offset, f));
         }
         Ok(())
     }
@@ -351,28 +351,28 @@ impl<ABBREV: AsRef<str>> PosixDst<ABBREV> {
         std_offset: &PosixOffset,
         f: &mut core::fmt::Formatter,
     ) -> core::fmt::Result {
-        core::fmt::Display::fmt(
+        rtry!(core::fmt::Display::fmt(
             &AbbreviationDisplay(self.abbrev.as_ref()),
             f,
-        )?;
+        ));
         // The overwhelming common case is that DST is exactly one hour ahead
         // of standard time. So common that this is the default. So don't write
         // the offset if we don't need to.
         let default = PosixOffset { second: std_offset.second + 3600 };
         if self.offset != default {
-            core::fmt::Display::fmt(&self.offset, f)?;
+            rtry!(core::fmt::Display::fmt(&self.offset, f));
         }
-        f.write_str(",")?;
-        core::fmt::Display::fmt(&self.rule, f)?;
+        rtry!(f.write_str(","));
+        rtry!(core::fmt::Display::fmt(&self.rule, f));
         Ok(())
     }
 }
 
 impl core::fmt::Display for PosixRule {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self.start, f)?;
-        f.write_str(",")?;
-        core::fmt::Display::fmt(&self.end, f)?;
+        rtry!(core::fmt::Display::fmt(&self.start, f));
+        rtry!(f.write_str(","));
+        rtry!(core::fmt::Display::fmt(&self.end, f));
         Ok(())
     }
 }
@@ -424,12 +424,12 @@ impl PosixDayTime {
 
 impl core::fmt::Display for PosixDayTime {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self.date, f)?;
+        rtry!(core::fmt::Display::fmt(&self.date, f));
         // This is the default time, so don't write it if we
         // don't need to.
         if self.time != PosixTime::DEFAULT {
-            f.write_str("/")?;
-            core::fmt::Display::fmt(&self.time, f)?;
+            rtry!(f.write_str("/"));
+            rtry!(core::fmt::Display::fmt(&self.time, f));
         }
         Ok(())
     }
@@ -498,17 +498,17 @@ impl core::fmt::Display for PosixDay {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match *self {
             PosixDay::JulianOne(n) => {
-                f.write_str("J")?;
+                rtry!(f.write_str("J"));
                 core::fmt::Display::fmt(&n, f)
             }
             PosixDay::JulianZero(n) => core::fmt::Display::fmt(&n, f),
             PosixDay::WeekdayOfMonth { month, week, weekday } => {
-                f.write_str("M")?;
-                core::fmt::Display::fmt(&month, f)?;
-                f.write_str(".")?;
-                core::fmt::Display::fmt(&week, f)?;
-                f.write_str(".")?;
-                core::fmt::Display::fmt(&weekday, f)?;
+                rtry!(f.write_str("M"));
+                rtry!(core::fmt::Display::fmt(&month, f));
+                rtry!(f.write_str("."));
+                rtry!(core::fmt::Display::fmt(&week, f));
+                rtry!(f.write_str("."));
+                rtry!(core::fmt::Display::fmt(&weekday, f));
                 Ok(())
             }
         }
@@ -522,7 +522,7 @@ impl PosixTime {
 impl core::fmt::Display for PosixTime {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if self.second.is_negative() {
-            f.write_str("-")?;
+            rtry!(f.write_str("-"));
             // The default is positive, so when
             // positive, we write nothing.
         }
@@ -530,11 +530,11 @@ impl core::fmt::Display for PosixTime {
         let h = second / 3600;
         let m = (second / 60) % 60;
         let s = second % 60;
-        core::fmt::Display::fmt(&h, f)?;
+        rtry!(core::fmt::Display::fmt(&h, f));
         if m != 0 || s != 0 {
-            write!(f, ":{m:02}")?;
+            rtry!(write!(f, ":{m:02}"));
             if s != 0 {
-                write!(f, ":{s:02}")?;
+                rtry!(write!(f, ":{s:02}"));
             }
         }
         Ok(())
@@ -553,17 +553,17 @@ impl core::fmt::Display for PosixOffset {
         // N.B. `+` is the default, so we don't
         // need to write that out.
         if self.second > 0 {
-            f.write_str("-")?;
+            rtry!(f.write_str("-"));
         }
         let second = self.second.unsigned_abs();
         let h = second / 3600;
         let m = (second / 60) % 60;
         let s = second % 60;
-        core::fmt::Display::fmt(&h, f)?;
+        rtry!(core::fmt::Display::fmt(&h, f));
         if m != 0 || s != 0 {
-            write!(f, ":{m:02}")?;
+            rtry!(write!(f, ":{m:02}"));
             if s != 0 {
-                write!(f, ":{s:02}")?;
+                rtry!(write!(f, ":{s:02}"));
             }
         }
         Ok(())
@@ -581,8 +581,8 @@ impl<S: AsRef<str>> core::fmt::Display for AbbreviationDisplay<S> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         let s = self.0.as_ref();
         if s.chars().any(|ch| ch == '+' || ch == '-') {
-            f.write_str("<")?;
-            core::fmt::Display::fmt(&s, f)?;
+            rtry!(f.write_str("<"));
+            rtry!(core::fmt::Display::fmt(&s, f));
             f.write_str(">")
         } else {
             core::fmt::Display::fmt(&s, f)
@@ -682,7 +682,7 @@ impl<'s> Parser<'s> {
     fn parse(
         &self,
     ) -> Result<PosixTimeZone<Abbreviation>, PosixTimeZoneError> {
-        let (time_zone, remaining) = self.parse_prefix()?;
+        let (time_zone, remaining) = rtry!(self.parse_prefix());
         if !remaining.is_empty() {
             return Err(ErrorKind::FoundRemaining.into());
         }
@@ -695,7 +695,7 @@ impl<'s> Parser<'s> {
         &self,
     ) -> Result<(PosixTimeZone<Abbreviation>, &'s [u8]), PosixTimeZoneError>
     {
-        let time_zone = self.parse_posix_time_zone()?;
+        let time_zone = rtry!(self.parse_posix_time_zone());
         Ok((time_zone, self.remaining()))
     }
 
@@ -717,7 +717,7 @@ impl<'s> Parser<'s> {
         if !self.is_done()
             && (self.byte().is_ascii_alphabetic() || self.byte() == b'<')
         {
-            dst = Some(self.parse_posix_dst(&std_offset)?);
+            dst = Some(rtry!(self.parse_posix_dst(&std_offset)));
         }
         Ok(PosixTimeZone { std_abbrev, std_offset, dst })
     }
@@ -813,8 +813,8 @@ impl<'s> Parser<'s> {
             }
         }
         let end = self.pos();
-        let abbrev =
-            core::str::from_utf8(&self.tz[start..end]).map_err(|_| {
+        let abbrev = rtry!(core::str::from_utf8(&self.tz[start..end])
+            .map_err(|_| {
                 // NOTE: I believe this error is technically impossible
                 // since the loop above restricts letters in an
                 // abbreviation to ASCII. So everything from `start` to
@@ -822,7 +822,7 @@ impl<'s> Parser<'s> {
                 // cost us anything to report an error here in case the
                 // code above evolves somehow.
                 UnquotedAbbreviationError::InvalidUtf8
-            })?;
+            }));
         if abbrev.len() < 3 {
             return Err(UnquotedAbbreviationError::TooShort);
         }
@@ -861,8 +861,8 @@ impl<'s> Parser<'s> {
             }
         }
         let end = self.pos();
-        let abbrev =
-            core::str::from_utf8(&self.tz[start..end]).map_err(|_| {
+        let abbrev = rtry!(core::str::from_utf8(&self.tz[start..end])
+            .map_err(|_| {
                 // NOTE: I believe this error is technically impossible
                 // since the loop above restricts letters in an
                 // abbreviation to ASCII. So everything from `start` to
@@ -870,7 +870,7 @@ impl<'s> Parser<'s> {
                 // cost us anything to report an error here in case the
                 // code above evolves somehow.
                 QuotedAbbreviationError::InvalidUtf8
-            })?;
+            }));
         if self.is_done() {
             return Err(QuotedAbbreviationError::UnexpectedEnd);
         }
@@ -937,15 +937,15 @@ impl<'s> Parser<'s> {
     /// DST transition rule. In typical cases, this corresponds to the end
     /// of the TZ string.
     fn parse_rule(&self) -> Result<PosixRule, PosixRuleError> {
-        let start = self
+        let start = rtry!(self
             .parse_posix_datetime()
-            .map_err(PosixRuleError::DateTimeStart)?;
+            .map_err(PosixRuleError::DateTimeStart));
         if self.maybe_byte() != Some(b',') || !self.bump() {
             return Err(PosixRuleError::ExpectedEnd);
         }
-        let end = self
+        let end = rtry!(self
             .parse_posix_datetime()
-            .map_err(PosixRuleError::DateTimeEnd)?;
+            .map_err(PosixRuleError::DateTimeEnd));
         Ok(PosixRule { start, end })
     }
 
@@ -1018,11 +1018,12 @@ impl<'s> Parser<'s> {
     fn parse_posix_julian_day_no_leap(
         &self,
     ) -> Result<i16, PosixJulianNoLeapError> {
-        let number = self
+        let number = rtry!(self
             .parse_number_with_upto_n_digits(3)
-            .map_err(PosixJulianNoLeapError::Parse)?;
-        let number = i16::try_from(number)
-            .map_err(|_| PosixJulianNoLeapError::Range)?;
+            .map_err(PosixJulianNoLeapError::Parse));
+        let number =
+            rtry!(i16::try_from(number)
+                .map_err(|_| PosixJulianNoLeapError::Range));
         if !(1 <= number && number <= 365) {
             return Err(PosixJulianNoLeapError::Range);
         }
@@ -1038,11 +1039,12 @@ impl<'s> Parser<'s> {
     fn parse_posix_julian_day_with_leap(
         &self,
     ) -> Result<i16, PosixJulianLeapError> {
-        let number = self
+        let number = rtry!(self
             .parse_number_with_upto_n_digits(3)
-            .map_err(PosixJulianLeapError::Parse)?;
-        let number =
-            i16::try_from(number).map_err(|_| PosixJulianLeapError::Range)?;
+            .map_err(PosixJulianLeapError::Parse));
+        let number = rtry!(
+            i16::try_from(number).map_err(|_| PosixJulianLeapError::Range)
+        );
         if !(0 <= number && number <= 365) {
             return Err(PosixJulianLeapError::Range);
         }
@@ -1127,10 +1129,11 @@ impl<'s> Parser<'s> {
     /// the parser will be positioned after the month (which may contain
     /// two digits).
     fn parse_month(&self) -> Result<i8, MonthError> {
-        let number = self
+        let number = rtry!(self
             .parse_number_with_upto_n_digits(2)
-            .map_err(MonthError::Parse)?;
-        let number = i8::try_from(number).map_err(|_| MonthError::Range)?;
+            .map_err(MonthError::Parse));
+        let number =
+            rtry!(i8::try_from(number).map_err(|_| MonthError::Range));
         if !(1 <= number && number <= 12) {
             return Err(MonthError::Range);
         }
@@ -1142,11 +1145,11 @@ impl<'s> Parser<'s> {
     /// This is expected to be positioned at the first digit. Upon success,
     /// the parser will be positioned after the week digit.
     fn parse_week(&self) -> Result<i8, WeekOfMonthError> {
-        let number = self
+        let number = rtry!(self
             .parse_number_with_exactly_n_digits(1)
-            .map_err(WeekOfMonthError::Parse)?;
+            .map_err(WeekOfMonthError::Parse));
         let number =
-            i8::try_from(number).map_err(|_| WeekOfMonthError::Range)?;
+            rtry!(i8::try_from(number).map_err(|_| WeekOfMonthError::Range));
         if !(1 <= number && number <= 5) {
             return Err(WeekOfMonthError::Range);
         }
@@ -1161,10 +1164,11 @@ impl<'s> Parser<'s> {
     /// The weekday returned is guaranteed to be in the range `0..=6`, with
     /// `0` corresponding to Sunday.
     fn parse_weekday(&self) -> Result<i8, WeekdayError> {
-        let number = self
+        let number = rtry!(self
             .parse_number_with_exactly_n_digits(1)
-            .map_err(WeekdayError::Parse)?;
-        let number = i8::try_from(number).map_err(|_| WeekdayError::Range)?;
+            .map_err(WeekdayError::Parse));
+        let number =
+            rtry!(i8::try_from(number).map_err(|_| WeekdayError::Range));
         if !(0 <= number && number <= 6) {
             return Err(WeekdayError::Range);
         }
@@ -1186,11 +1190,11 @@ impl<'s> Parser<'s> {
         // Callers should only be using this method when IANA v3+ parsing
         // is enabled.
         assert!(self.ianav3plus);
-        let number = self
+        let number = rtry!(self
             .parse_number_with_upto_n_digits(3)
-            .map_err(HourIanaError::Parse)?;
+            .map_err(HourIanaError::Parse));
         let number =
-            i16::try_from(number).map_err(|_| HourIanaError::Range)?;
+            rtry!(i16::try_from(number).map_err(|_| HourIanaError::Range));
         if !(0 <= number && number <= 167) {
             // The error message says -167 but the check above uses 0.
             // This is because the caller is responsible for parsing
@@ -1210,11 +1214,11 @@ impl<'s> Parser<'s> {
     /// first hour digit should occur. Upon success, the parser will be
     /// positioned immediately after the last hour digit.
     fn parse_hour_posix(&self) -> Result<i8, HourPosixError> {
-        let number = self
+        let number = rtry!(self
             .parse_number_with_upto_n_digits(2)
-            .map_err(HourPosixError::Parse)?;
+            .map_err(HourPosixError::Parse));
         let number =
-            i8::try_from(number).map_err(|_| HourPosixError::Range)?;
+            rtry!(i8::try_from(number).map_err(|_| HourPosixError::Range));
         if !(0 <= number && number <= 24) {
             return Err(HourPosixError::Range);
         }
@@ -1229,10 +1233,11 @@ impl<'s> Parser<'s> {
     /// first minute digit should occur. Upon success, the parser will be
     /// positioned immediately after the second minute digit.
     fn parse_minute(&self) -> Result<i8, MinuteError> {
-        let number = self
+        let number = rtry!(self
             .parse_number_with_exactly_n_digits(2)
-            .map_err(MinuteError::Parse)?;
-        let number = i8::try_from(number).map_err(|_| MinuteError::Range)?;
+            .map_err(MinuteError::Parse));
+        let number =
+            rtry!(i8::try_from(number).map_err(|_| MinuteError::Range));
         if !(0 <= number && number <= 59) {
             return Err(MinuteError::Range);
         }
@@ -1247,10 +1252,11 @@ impl<'s> Parser<'s> {
     /// first second digit should occur. Upon success, the parser will be
     /// positioned immediately after the second second digit.
     fn parse_second(&self) -> Result<i8, SecondError> {
-        let number = self
+        let number = rtry!(self
             .parse_number_with_exactly_n_digits(2)
-            .map_err(SecondError::Parse)?;
-        let number = i8::try_from(number).map_err(|_| SecondError::Range)?;
+            .map_err(SecondError::Parse));
+        let number =
+            rtry!(i8::try_from(number).map_err(|_| SecondError::Range));
         if !(0 <= number && number <= 59) {
             return Err(SecondError::Range);
         }
@@ -1288,10 +1294,10 @@ impl<'s> Parser<'s> {
                     i32::from(digit)
                 }
             };
-            number = number
+            number = rtry!(number
                 .checked_mul(10)
                 .and_then(|n| n.checked_add(digit))
-                .ok_or(NumberError::TooBig)?;
+                .ok_or(NumberError::TooBig));
             self.bump();
         }
         Ok(number)
@@ -1317,10 +1323,10 @@ impl<'s> Parser<'s> {
                 break;
             }
             let digit = i32::from(self.byte() - b'0');
-            number = number
+            number = rtry!(number
                 .checked_mul(10)
                 .and_then(|n| n.checked_add(digit))
-                .ok_or(NumberError::TooBig)?;
+                .ok_or(NumberError::TooBig));
             self.bump();
         }
         Ok(number)
@@ -1429,13 +1435,13 @@ impl core::fmt::Display for PosixTimeZoneError {
         use self::ErrorKind::*;
         match self.kind {
             AbbreviationDst(ref err) => {
-                f.write_str("failed to parse DST time zone abbreviation: ")?;
+                rtry!(f.write_str("failed to parse DST time zone abbreviation: "));
                 core::fmt::Display::fmt(err, f)
             }
             AbbreviationStd(ref err) => {
-                f.write_str(
+                rtry!(f.write_str(
                     "failed to parse standard time zone abbreviation: ",
-                )?;
+                ));
                 core::fmt::Display::fmt(err, f)
             }
             Empty => f.write_str(
@@ -1468,11 +1474,11 @@ impl core::fmt::Display for PosixTimeZoneError {
                  parsing a valid time zone transition rule",
             ),
             OffsetDst(ref err) => {
-                f.write_str("failed to parse DST offset: ")?;
+                rtry!(f.write_str("failed to parse DST offset: "));
                 core::fmt::Display::fmt(err, f)
             }
             OffsetStd(ref err) => {
-                f.write_str("failed to parse standard offset: ")?;
+                rtry!(f.write_str("failed to parse standard offset: "));
                 core::fmt::Display::fmt(err, f)
             }
             Rule(ref err) => core::fmt::Display::fmt(err, f),
@@ -1512,10 +1518,10 @@ impl core::fmt::Display for PosixOffsetError {
             Minute(ref err) => core::fmt::Display::fmt(err, f),
             Second(ref err) => core::fmt::Display::fmt(err, f),
             OptionalSign(ref err) => {
-                f.write_str(
+                rtry!(f.write_str(
                     "failed to parse sign for time offset \
                      POSIX time zone string",
-                )?;
+                ));
                 core::fmt::Display::fmt(err, f)
             }
         }
@@ -1558,11 +1564,15 @@ impl core::fmt::Display for PosixRuleError {
         use self::PosixRuleError::*;
         match *self {
             DateTimeEnd(ref err) => {
-                f.write_str("failed to parse end of DST transition rule: ")?;
+                rtry!(f.write_str(
+                    "failed to parse end of DST transition rule: "
+                ));
                 core::fmt::Display::fmt(err, f)
             }
             DateTimeStart(ref err) => {
-                f.write_str("failed to parse start of DST transition rule: ")?;
+                rtry!(f.write_str(
+                    "failed to parse start of DST transition rule: "
+                ));
                 core::fmt::Display::fmt(err, f)
             }
             ExpectedEnd => f.write_str(
@@ -1670,7 +1680,7 @@ impl core::fmt::Display for PosixJulianNoLeapError {
         use self::PosixJulianNoLeapError::*;
         match *self {
             Parse(ref err) => {
-                f.write_str("invalid one-based Julian day digits: ")?;
+                rtry!(f.write_str("invalid one-based Julian day digits: "));
                 core::fmt::Display::fmt(err, f)
             }
             Range => f.write_str(
@@ -1692,7 +1702,7 @@ impl core::fmt::Display for PosixJulianLeapError {
         use self::PosixJulianLeapError::*;
         match *self {
             Parse(ref err) => {
-                f.write_str("invalid zero-based Julian day digits: ")?;
+                rtry!(f.write_str("invalid zero-based Julian day digits: "));
                 core::fmt::Display::fmt(err, f)
             }
             Range => f.write_str(
@@ -1873,9 +1883,9 @@ impl core::fmt::Display for PosixTimeError {
             Minute(ref err) => core::fmt::Display::fmt(err, f),
             Second(ref err) => core::fmt::Display::fmt(err, f),
             OptionalSign(ref err) => {
-                f.write_str(
+                rtry!(f.write_str(
                     "failed to parse sign for time zone transition time",
-                )?;
+                ));
                 core::fmt::Display::fmt(err, f)
             }
         }
@@ -1923,7 +1933,7 @@ impl core::fmt::Display for MonthError {
         use self::MonthError::*;
         match *self {
             Parse(ref err) => {
-                f.write_str("invalid month digits: ")?;
+                rtry!(f.write_str("invalid month digits: "));
                 core::fmt::Display::fmt(err, f)
             }
             Range => f.write_str(
@@ -1945,7 +1955,7 @@ impl core::fmt::Display for WeekOfMonthError {
         use self::WeekOfMonthError::*;
         match *self {
             Parse(ref err) => {
-                f.write_str("invalid week-of-month digits: ")?;
+                rtry!(f.write_str("invalid week-of-month digits: "));
                 core::fmt::Display::fmt(err, f)
             }
             Range => f.write_str(
@@ -1967,7 +1977,7 @@ impl core::fmt::Display for WeekdayError {
         use self::WeekdayError::*;
         match *self {
             Parse(ref err) => {
-                f.write_str("invalid weekday digits: ")?;
+                rtry!(f.write_str("invalid weekday digits: "));
                 core::fmt::Display::fmt(err, f)
             }
             Range => f.write_str(
@@ -1989,7 +1999,7 @@ impl core::fmt::Display for HourIanaError {
         use self::HourIanaError::*;
         match *self {
             Parse(ref err) => {
-                f.write_str("invalid hour digits: ")?;
+                rtry!(f.write_str("invalid hour digits: "));
                 core::fmt::Display::fmt(err, f)
             }
             Range => f.write_str(
@@ -2011,7 +2021,7 @@ impl core::fmt::Display for HourPosixError {
         use self::HourPosixError::*;
         match *self {
             Parse(ref err) => {
-                f.write_str("invalid hour digits: ")?;
+                rtry!(f.write_str("invalid hour digits: "));
                 core::fmt::Display::fmt(err, f)
             }
             Range => f.write_str(
@@ -2033,7 +2043,7 @@ impl core::fmt::Display for MinuteError {
         use self::MinuteError::*;
         match *self {
             Parse(ref err) => {
-                f.write_str("invalid minute digits: ")?;
+                rtry!(f.write_str("invalid minute digits: "));
                 core::fmt::Display::fmt(err, f)
             }
             Range => f.write_str(
@@ -2055,7 +2065,7 @@ impl core::fmt::Display for SecondError {
         use self::SecondError::*;
         match *self {
             Parse(ref err) => {
-                f.write_str("invalid second digits: ")?;
+                rtry!(f.write_str("invalid second digits: "));
                 core::fmt::Display::fmt(err, f)
             }
             Range => f.write_str(

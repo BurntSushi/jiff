@@ -548,7 +548,7 @@ pub(crate) trait Bounds: Sized {
         n1: Self::Primitive,
         n2: Self::Primitive,
     ) -> Result<Self::Primitive, BoundsError> {
-        Self::check_self(n1.checked_add(n2).ok_or_else(Self::error)?)
+        Self::check_self(rtry!(n1.checked_add(n2).ok_or_else(Self::error)))
     }
 
     /// Performs checked subtraction using this boundary type's primitive
@@ -563,7 +563,7 @@ pub(crate) trait Bounds: Sized {
         n1: Self::Primitive,
         n2: Self::Primitive,
     ) -> Result<Self::Primitive, BoundsError> {
-        Self::check_self(n1.checked_sub(n2).ok_or_else(Self::error)?)
+        Self::check_self(rtry!(n1.checked_sub(n2).ok_or_else(Self::error)))
     }
 
     /// Performs checked multiplication using this boundary type's primitive
@@ -578,7 +578,7 @@ pub(crate) trait Bounds: Sized {
         n1: Self::Primitive,
         n2: Self::Primitive,
     ) -> Result<Self::Primitive, BoundsError> {
-        Self::check_self(n1.checked_mul(n2).ok_or_else(Self::error)?)
+        Self::check_self(rtry!(n1.checked_mul(n2).ok_or_else(Self::error)))
     }
 }
 

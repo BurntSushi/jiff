@@ -120,11 +120,11 @@ impl DurationUnits {
                 return Err(Error::from(E::OutOfOrderHMS { found: min }));
             }
         }
-        self.set_unit_value(Unit::Hour, hours)?;
-        self.set_unit_value(Unit::Minute, minutes)?;
-        self.set_unit_value(Unit::Second, seconds)?;
+        rtry!(self.set_unit_value(Unit::Hour, hours));
+        rtry!(self.set_unit_value(Unit::Minute, minutes));
+        rtry!(self.set_unit_value(Unit::Second, seconds));
         if let Some(fraction) = fraction {
-            self.set_fraction(fraction)?;
+            rtry!(self.set_fraction(fraction));
         }
         Ok(())
     }
@@ -283,73 +283,76 @@ impl DurationUnits {
                 .context(E::FailedValueSet { unit })
         }
 
-        let (min, _) = self.get_min_max_units()?;
+        let (min, _) = rtry!(self.get_min_max_units());
         let mut span = Span::new();
 
         if self.values[Unit::Year.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Year)?;
-            span = span
+            let value = rtry!(self.get_unit_value(Unit::Year));
+            span = rtry!(span
                 .try_years(value)
-                .context(E::FailedValueSet { unit: Unit::Year })?;
+                .context(E::FailedValueSet { unit: Unit::Year }));
         }
         if self.values[Unit::Month.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Month)?;
-            span = span
+            let value = rtry!(self.get_unit_value(Unit::Month));
+            span = rtry!(span
                 .try_months(value)
-                .context(E::FailedValueSet { unit: Unit::Month })?;
+                .context(E::FailedValueSet { unit: Unit::Month }));
         }
         if self.values[Unit::Week.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Week)?;
-            span = span
+            let value = rtry!(self.get_unit_value(Unit::Week));
+            span = rtry!(span
                 .try_weeks(value)
-                .context(E::FailedValueSet { unit: Unit::Week })?;
+                .context(E::FailedValueSet { unit: Unit::Week }));
         }
         if self.values[Unit::Day.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Day)?;
-            span = span
+            let value = rtry!(self.get_unit_value(Unit::Day));
+            span = rtry!(span
                 .try_days(value)
-                .context(E::FailedValueSet { unit: Unit::Day })?;
+                .context(E::FailedValueSet { unit: Unit::Day }));
         }
         if self.values[Unit::Hour.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Hour)?;
-            span = set_time_unit(Unit::Hour, value, span, |span| {
+            let value = rtry!(self.get_unit_value(Unit::Hour));
+            span = rtry!(set_time_unit(Unit::Hour, value, span, |span| {
                 span.try_hours(value)
-            })?;
+            }));
         }
         if self.values[Unit::Minute.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Minute)?;
-            span = set_time_unit(Unit::Minute, value, span, |span| {
+            let value = rtry!(self.get_unit_value(Unit::Minute));
+            span = rtry!(set_time_unit(Unit::Minute, value, span, |span| {
                 span.try_minutes(value)
-            })?;
+            }));
         }
         if self.values[Unit::Second.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Second)?;
-            span = set_time_unit(Unit::Second, value, span, |span| {
+            let value = rtry!(self.get_unit_value(Unit::Second));
+            span = rtry!(set_time_unit(Unit::Second, value, span, |span| {
                 span.try_seconds(value)
-            })?;
+            }));
         }
         if self.values[Unit::Millisecond.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Millisecond)?;
-            span = set_time_unit(Unit::Millisecond, value, span, |span| {
-                span.try_milliseconds(value)
-            })?;
+            let value = rtry!(self.get_unit_value(Unit::Millisecond));
+            span =
+                rtry!(set_time_unit(Unit::Millisecond, value, span, |span| {
+                    span.try_milliseconds(value)
+                }));
         }
         if self.values[Unit::Microsecond.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Microsecond)?;
-            span = set_time_unit(Unit::Microsecond, value, span, |span| {
-                span.try_microseconds(value)
-            })?;
+            let value = rtry!(self.get_unit_value(Unit::Microsecond));
+            span =
+                rtry!(set_time_unit(Unit::Microsecond, value, span, |span| {
+                    span.try_microseconds(value)
+                }));
         }
         if self.values[Unit::Nanosecond.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Nanosecond)?;
-            span = set_time_unit(Unit::Nanosecond, value, span, |span| {
-                span.try_nanoseconds(value)
-            })?;
+            let value = rtry!(self.get_unit_value(Unit::Nanosecond));
+            span =
+                rtry!(set_time_unit(Unit::Nanosecond, value, span, |span| {
+                    span.try_nanoseconds(value)
+                }));
         }
 
-        if let Some(fraction) = self.get_fraction()? {
-            let value = self.get_unit_value(min)?;
-            span = fractional_time_to_span(min, value, fraction, span)?;
+        if let Some(fraction) = rtry!(self.get_fraction()) {
+            let value = rtry!(self.get_unit_value(min));
+            span = rtry!(fractional_time_to_span(min, value, fraction, span));
         }
 
         Ok(span)
@@ -418,50 +421,50 @@ impl DurationUnits {
     #[cold]
     #[inline(never)]
     fn to_signed_duration_general(&self) -> Result<SignedDuration, Error> {
-        let (min, max) = self.get_min_max_units()?;
+        let (min, max) = rtry!(self.get_min_max_units());
         if max > Unit::Hour {
             return Err(Error::from(E::NotAllowedCalendarUnit { unit: max }));
         }
 
         let mut sdur = SignedDuration::ZERO;
         if self.values[Unit::Hour.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Hour)?;
+            let value = rtry!(self.get_unit_value(Unit::Hour));
             sdur = SignedDuration::try_from_hours(value)
                 .and_then(|nanos| sdur.checked_add(nanos))
                 .ok_or(E::OverflowForUnit { unit: Unit::Hour })?;
         }
         if self.values[Unit::Minute.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Minute)?;
+            let value = rtry!(self.get_unit_value(Unit::Minute));
             sdur = SignedDuration::try_from_mins(value)
                 .and_then(|nanos| sdur.checked_add(nanos))
                 .ok_or(E::OverflowForUnit { unit: Unit::Minute })?;
         }
         if self.values[Unit::Second.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Second)?;
+            let value = rtry!(self.get_unit_value(Unit::Second));
             sdur = SignedDuration::from_secs(value)
                 .checked_add(sdur)
                 .ok_or(E::OverflowForUnit { unit: Unit::Second })?;
         }
         if self.values[Unit::Millisecond.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Millisecond)?;
+            let value = rtry!(self.get_unit_value(Unit::Millisecond));
             sdur = SignedDuration::from_millis(value)
                 .checked_add(sdur)
                 .ok_or(E::OverflowForUnit { unit: Unit::Millisecond })?;
         }
         if self.values[Unit::Microsecond.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Microsecond)?;
+            let value = rtry!(self.get_unit_value(Unit::Microsecond));
             sdur = SignedDuration::from_micros(value)
                 .checked_add(sdur)
                 .ok_or(E::OverflowForUnit { unit: Unit::Microsecond })?;
         }
         if self.values[Unit::Nanosecond.as_usize()] != 0 {
-            let value = self.get_unit_value(Unit::Nanosecond)?;
+            let value = rtry!(self.get_unit_value(Unit::Nanosecond));
             sdur = SignedDuration::from_nanos(value)
                 .checked_add(sdur)
                 .ok_or(E::OverflowForUnit { unit: Unit::Nanosecond })?;
         }
 
-        if let Some(fraction) = self.get_fraction()? {
+        if let Some(fraction) = rtry!(self.get_fraction()) {
             sdur = sdur
                 .checked_add(fractional_duration(min, fraction)?)
                 .ok_or(E::OverflowForUnitFractional { unit: min })?;
@@ -558,7 +561,7 @@ impl DurationUnits {
             return Err(Error::from(E::NotAllowedNegative));
         }
 
-        let (min, max) = self.get_min_max_units()?;
+        let (min, max) = rtry!(self.get_min_max_units());
         if max > Unit::Hour {
             return Err(Error::from(E::NotAllowedCalendarUnit { unit: max }));
         }
@@ -601,7 +604,7 @@ impl DurationUnits {
                 .ok_or(E::OverflowForUnit { unit: Unit::Nanosecond })?;
         }
 
-        if let Some(fraction) = self.get_fraction()? {
+        if let Some(fraction) = rtry!(self.get_fraction()) {
             sdur = sdur
                 .checked_add(
                     fractional_duration(min, fraction)?.unsigned_abs(),
@@ -758,7 +761,7 @@ pub(crate) fn parse_temporal_fraction<'i>(
         // than 9 ASCII digits. Any sequence of 9 ASCII digits can be parsed
         // into an `i64`.
         let nanoseconds =
-            parse::fraction(digits).context(E::InvalidFraction)?;
+            rtry!(parse::fraction(digits).context(E::InvalidFraction));
         // OK because parsing is forcefully limited to 9 digits,
         // which can never be greater than `999_999_99`,
         // which is less than `u32::MAX`.
@@ -824,7 +827,7 @@ fn fractional_time_to_span(
     // out anything over the limit and carry it over to the lesser units. If
     // our value is truly too big, then the final call to set nanoseconds will
     // fail.
-    let mut sdur = fractional_time_to_duration(unit, value, fraction)?;
+    let mut sdur = rtry!(fractional_time_to_duration(unit, value, fraction));
 
     if unit >= Unit::Hour && !sdur.is_zero() {
         let (mut hours, rem) = sdur.as_hours_with_remainder();
@@ -895,8 +898,9 @@ fn fractional_time_to_span(
         let nanos = sdur.as_nanos();
         let nanos64 =
             i64::try_from(nanos).map_err(|_| E::InvalidFractionNanos)?;
-        span =
-            span.try_nanoseconds(nanos64).context(E::InvalidFractionNanos)?;
+        span = rtry!(span
+            .try_nanoseconds(nanos64)
+            .context(E::InvalidFractionNanos));
     }
 
     Ok(span)
@@ -924,8 +928,8 @@ fn fractional_time_to_duration(
     value: i64,
     fraction: i32,
 ) -> Result<SignedDuration, Error> {
-    let sdur = duration_unit_value(unit, value)?;
-    let fraction_dur = fractional_duration(unit, fraction)?;
+    let sdur = rtry!(duration_unit_value(unit, value));
+    let fraction_dur = rtry!(fractional_duration(unit, fraction));
     Ok(sdur
         .checked_add(fraction_dur)
         .ok_or(E::OverflowForUnitFractional { unit })?)

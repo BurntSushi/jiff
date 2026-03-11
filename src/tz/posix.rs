@@ -136,7 +136,7 @@ impl core::fmt::Display for PosixTzEnv {
         match *self {
             PosixTzEnv::Rule(ref tz) => core::fmt::Display::fmt(tz, f),
             PosixTzEnv::Implementation(ref imp) => {
-                f.write_str(":")?;
+                rtry!(f.write_str(":"));
                 core::fmt::Display::fmt(imp, f)
             }
         }
@@ -209,9 +209,9 @@ impl PosixTimeZone<Abbreviation> {
         bytes: impl AsRef<[u8]>,
     ) -> Result<PosixTimeZoneOwned, Error> {
         let bytes = bytes.as_ref();
-        let inner = shared::PosixTimeZone::parse(bytes.as_ref())
+        let inner = rtry!(shared::PosixTimeZone::parse(bytes.as_ref())
             .map_err(Error::posix_tz)
-            .context(E::InvalidPosixTz)?;
+            .context(E::InvalidPosixTz));
         Ok(PosixTimeZone { inner })
     }
 
@@ -223,9 +223,9 @@ impl PosixTimeZone<Abbreviation> {
     ) -> Result<(PosixTimeZoneOwned, &'b [u8]), Error> {
         let bytes = bytes.as_ref();
         let (inner, remaining) =
-            shared::PosixTimeZone::parse_prefix(bytes.as_ref())
+            rtry!(shared::PosixTimeZone::parse_prefix(bytes.as_ref())
                 .map_err(Error::posix_tz)
-                .context(E::InvalidPosixTz)?;
+                .context(E::InvalidPosixTz));
         Ok((PosixTimeZone { inner }, remaining))
     }
 
