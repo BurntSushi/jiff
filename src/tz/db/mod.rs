@@ -313,7 +313,7 @@ impl TimeZoneDatabase {
         path: P,
     ) -> Result<TimeZoneDatabase, Error> {
         let path = path.as_ref();
-        let db = zoneinfo::Database::from_dir(path)?;
+        let db = rtry!(zoneinfo::Database::from_dir(path));
         if db.is_definitively_empty() {
             warn!(
                 "could not find zoneinfo data at directory {path}",
@@ -351,7 +351,7 @@ impl TimeZoneDatabase {
         path: P,
     ) -> Result<TimeZoneDatabase, Error> {
         let path = path.as_ref();
-        let db = concatenated::Database::from_path(path)?;
+        let db = rtry!(concatenated::Database::from_path(path));
         if db.is_definitively_empty() {
             warn!(
                 "could not find concatenated tzdata in file {path}",
@@ -565,14 +565,14 @@ impl TimeZoneDatabase {
 
 impl core::fmt::Debug for TimeZoneDatabase {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.write_str("TimeZoneDatabase(")?;
+        rtry!(f.write_str("TimeZoneDatabase("));
         let Some(inner) = self.inner.as_deref() else {
             return f.write_str("unavailable)");
         };
         match *inner {
-            Kind::ZoneInfo(ref db) => core::fmt::Debug::fmt(db, f)?,
-            Kind::Concatenated(ref db) => core::fmt::Debug::fmt(db, f)?,
-            Kind::Bundled(ref db) => core::fmt::Debug::fmt(db, f)?,
+            Kind::ZoneInfo(ref db) => rtry!(core::fmt::Debug::fmt(db, f)),
+            Kind::Concatenated(ref db) => rtry!(core::fmt::Debug::fmt(db, f)),
+            Kind::Bundled(ref db) => rtry!(core::fmt::Debug::fmt(db, f)),
         }
         f.write_str(")")
     }

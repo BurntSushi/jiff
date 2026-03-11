@@ -95,17 +95,17 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
         while !self.fmt.is_empty() {
             if self.f() != b'%' {
                 if self.f().is_ascii() {
-                    self.wtr.write_ascii_char(self.f())?;
+                    rtry!(self.wtr.write_ascii_char(self.f()));
                     self.bump_fmt();
                 } else {
                     let ch = self.utf8_decode_and_bump()?;
-                    self.wtr.write_char(ch)?;
+                    rtry!(self.wtr.write_char(ch));
                 }
                 continue;
             }
             if !self.bump_fmt() {
                 if self.config.lenient {
-                    self.wtr.write_ascii_char(b'%')?;
+                    rtry!(self.wtr.write_ascii_char(b'%'));
                     break;
                 }
                 return Err(E::UnexpectedEndAfterPercent.into());
@@ -120,7 +120,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
                 // `orig` is whatever failed to parse immediately after a `%`.
                 // Since it failed, we write out the `%` and then proceed to
                 // handle what failed to parse literally.
-                self.wtr.write_ascii_char(b'%')?;
+                rtry!(self.wtr.write_ascii_char(b'%'));
                 // Reset back to right after parsing the `%`.
                 self.fmt = orig;
             }
@@ -139,7 +139,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
 
         // Parse extensions like padding/case options and padding width.
         let mut directive = self.f();
-        let item = match directive {
+        let item = rtry!(match directive {
             b'%' => self.fmt_literal("%").map(s).context(fail(b'%')),
             b'A' => self.fmt_weekday_full().map(s).context(fail(b'A')),
             b'a' => self.fmt_weekday_abbrev().map(s).context(fail(b'a')),
@@ -201,8 +201,10 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
                 }
                 // Parse precision settings after the `.`, effectively
                 // overriding any digits that came before it.
-                let ext =
-                    &Extension { width: self.parse_width()?, ..ext.clone() };
+                let ext = &Extension {
+                    width: rtry!(self.parse_width()),
+                    ..ext.clone()
+                };
                 directive = self.f();
                 match directive {
                     b'f' => self
@@ -216,8 +218,8 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
                 }
             }
             _ => return Err(Error::from(E::UnknownDirective { directive })),
-        }?;
-        self.write_item(ext, &item).context(fail(directive))?;
+        });
+        rtry!(self.write_item(ext, &item).context(fail(directive)));
         self.bump_fmt();
         Ok(())
     }
@@ -285,9 +287,9 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
         if self.f().is_ascii_alphabetic() {
             return Ok(Extension { flag: None, width: None, colons: 0 });
         }
-        let flag = self.parse_flag()?;
-        let width = self.parse_width()?;
-        let colons = self.parse_colons()?;
+        let flag = rtry!(self.parse_flag());
+        let width = rtry!(self.parse_width());
+        let colons = rtry!(self.parse_colons());
         Ok(Extension { flag, width, colons })
     }
 
@@ -295,7 +297,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     /// to the next byte. (If no next byte exists, then an error is returned.)
     #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_flag(&mut self) -> Result<Option<Flag>, Error> {
-        let (flag, fmt) = Extension::parse_flag(self.fmt)?;
+        let (flag, fmt) = rtry!(Extension::parse_flag(self.fmt));
         self.fmt = fmt;
         Ok(flag)
     }
@@ -311,7 +313,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     /// technically valid, but the `5` is ignored.
     #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_width(&mut self) -> Result<Option<u8>, Error> {
-        let (width, fmt) = Extension::parse_width(self.fmt)?;
+        let (width, fmt) = rtry!(Extension::parse_width(self.fmt));
         self.fmt = fmt;
         Ok(width)
     }
@@ -320,7 +322,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
     /// conversion specifier.
     #[cfg_attr(feature = "perf-inline", inline(always))]
     fn parse_colons(&mut self) -> Result<u8, Error> {
-        let (colons, fmt) = Extension::parse_colons(self.fmt)?;
+        let (colons, fmt) = rtry!(Extension::parse_colons(self.fmt));
         self.fmt = fmt;
         Ok(colons)
     }
@@ -341,7 +343,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
             ),
             Item::Fraction(ItemFraction { width, dot, subsec }) => {
                 if dot {
-                    self.wtr.write_ascii_char(b'.')?;
+                    rtry!(self.wtr.write_ascii_char(b'.'));
                 }
                 self.wtr.write_fraction(width, subsec)
             }
@@ -413,56 +415,56 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
 
     /// %D
     fn fmt_american_date(&mut self) -> Result<Item, Error> {
-        let ItemInteger { number, .. } = self.fmt_month()?;
-        self.wtr.write_int_pad2(number.unsigned_abs())?;
-        self.wtr.write_ascii_char(b'/')?;
-        let ItemInteger { number, .. } = self.fmt_day_zero()?;
-        self.wtr.write_int_pad2(number.unsigned_abs())?;
-        self.wtr.write_ascii_char(b'/')?;
-        let ItemInteger { number, .. } = self.fmt_year2()?;
+        let ItemInteger { number, .. } = rtry!(self.fmt_month());
+        rtry!(self.wtr.write_int_pad2(number.unsigned_abs()));
+        rtry!(self.wtr.write_ascii_char(b'/'));
+        let ItemInteger { number, .. } = rtry!(self.fmt_day_zero());
+        rtry!(self.wtr.write_int_pad2(number.unsigned_abs()));
+        rtry!(self.wtr.write_ascii_char(b'/'));
+        let ItemInteger { number, .. } = rtry!(self.fmt_year2());
         if number < 0 {
-            self.wtr.write_ascii_char(b'-')?;
+            rtry!(self.wtr.write_ascii_char(b'-'));
         }
-        self.wtr.write_int_pad2(number.unsigned_abs())?;
+        rtry!(self.wtr.write_int_pad2(number.unsigned_abs()));
         Ok(Item::AlreadyFormatted)
     }
 
     /// %R
     fn fmt_clock_nosecs(&mut self) -> Result<Item, Error> {
-        let ItemInteger { number, .. } = self.fmt_hour24_zero()?;
-        self.wtr.write_int_pad2(number.unsigned_abs())?;
-        self.wtr.write_ascii_char(b':')?;
-        let ItemInteger { number, .. } = self.fmt_minute()?;
-        self.wtr.write_int_pad2(number.unsigned_abs())?;
+        let ItemInteger { number, .. } = rtry!(self.fmt_hour24_zero());
+        rtry!(self.wtr.write_int_pad2(number.unsigned_abs()));
+        rtry!(self.wtr.write_ascii_char(b':'));
+        let ItemInteger { number, .. } = rtry!(self.fmt_minute());
+        rtry!(self.wtr.write_int_pad2(number.unsigned_abs()));
         Ok(Item::AlreadyFormatted)
     }
 
     /// %T
     fn fmt_clock_secs(&mut self) -> Result<Item, Error> {
-        let ItemInteger { number, .. } = self.fmt_hour24_zero()?;
-        self.wtr.write_int_pad2(number.unsigned_abs())?;
-        self.wtr.write_ascii_char(b':')?;
-        let ItemInteger { number, .. } = self.fmt_minute()?;
-        self.wtr.write_int_pad2(number.unsigned_abs())?;
-        self.wtr.write_ascii_char(b':')?;
-        let ItemInteger { number, .. } = self.fmt_second()?;
-        self.wtr.write_int_pad2(number.unsigned_abs())?;
+        let ItemInteger { number, .. } = rtry!(self.fmt_hour24_zero());
+        rtry!(self.wtr.write_int_pad2(number.unsigned_abs()));
+        rtry!(self.wtr.write_ascii_char(b':'));
+        let ItemInteger { number, .. } = rtry!(self.fmt_minute());
+        rtry!(self.wtr.write_int_pad2(number.unsigned_abs()));
+        rtry!(self.wtr.write_ascii_char(b':'));
+        let ItemInteger { number, .. } = rtry!(self.fmt_second());
+        rtry!(self.wtr.write_int_pad2(number.unsigned_abs()));
         Ok(Item::AlreadyFormatted)
     }
 
     /// %F
     fn fmt_iso_date(&mut self) -> Result<Item, Error> {
-        let ItemInteger { number, .. } = self.fmt_year()?;
+        let ItemInteger { number, .. } = rtry!(self.fmt_year());
         if number < 0 {
-            self.wtr.write_ascii_char(b'-')?;
+            rtry!(self.wtr.write_ascii_char(b'-'));
         }
-        self.wtr.write_int_pad4(number.unsigned_abs())?;
-        self.wtr.write_ascii_char(b'-')?;
-        let ItemInteger { number, .. } = self.fmt_month()?;
-        self.wtr.write_int_pad2(number.unsigned_abs())?;
-        self.wtr.write_ascii_char(b'-')?;
-        let ItemInteger { number, .. } = self.fmt_day_zero()?;
-        self.wtr.write_int_pad2(number.unsigned_abs())?;
+        rtry!(self.wtr.write_int_pad4(number.unsigned_abs()));
+        rtry!(self.wtr.write_ascii_char(b'-'));
+        let ItemInteger { number, .. } = rtry!(self.fmt_month());
+        rtry!(self.wtr.write_int_pad2(number.unsigned_abs()));
+        rtry!(self.wtr.write_ascii_char(b'-'));
+        let ItemInteger { number, .. } = rtry!(self.fmt_day_zero());
+        rtry!(self.wtr.write_int_pad2(number.unsigned_abs()));
         Ok(Item::AlreadyFormatted)
     }
 
@@ -564,7 +566,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
                 offset, false, true, false,
             )));
         };
-        self.wtr.write_str(iana)?;
+        rtry!(self.wtr.write_str(iana));
         Ok(Item::AlreadyFormatted)
     }
 
@@ -576,7 +578,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
                 offset, true, true, false,
             )));
         };
-        self.wtr.write_str(iana)?;
+        rtry!(self.wtr.write_str(iana));
         Ok(Item::AlreadyFormatted)
     }
 
@@ -684,7 +686,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
         let tz = self.tm.tz.as_ref().ok_or(FE::RequiresTimeZone)?;
         let ts = self.tm.to_timestamp().map_err(|_| FE::RequiresInstant)?;
         let oinfo = tz.to_offset_info(ts);
-        ext.write_str(Case::Upper, oinfo.abbreviation(), self.wtr)?;
+        rtry!(ext.write_str(Case::Upper, oinfo.abbreviation(), self.wtr));
         Ok(Item::AlreadyFormatted)
     }
 
@@ -883,35 +885,45 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
 
     /// %c
     fn fmt_datetime(&mut self, ext: &Extension) -> Result<Item, Error> {
-        self.config.custom.format_datetime(
+        rtry!(self.config.custom.format_datetime(
             self.config,
             ext,
             self.tm,
             self.wtr,
-        )?;
+        ));
         Ok(Item::AlreadyFormatted)
     }
 
     /// %x
     fn fmt_date(&mut self, ext: &Extension) -> Result<Item, Error> {
-        self.config.custom.format_date(self.config, ext, self.tm, self.wtr)?;
+        rtry!(self.config.custom.format_date(
+            self.config,
+            ext,
+            self.tm,
+            self.wtr
+        ));
         Ok(Item::AlreadyFormatted)
     }
 
     /// %X
     fn fmt_time(&mut self, ext: &Extension) -> Result<Item, Error> {
-        self.config.custom.format_time(self.config, ext, self.tm, self.wtr)?;
+        rtry!(self.config.custom.format_time(
+            self.config,
+            ext,
+            self.tm,
+            self.wtr
+        ));
         Ok(Item::AlreadyFormatted)
     }
 
     /// %r
     fn fmt_12hour_time(&mut self, ext: &Extension) -> Result<Item, Error> {
-        self.config.custom.format_12hour_time(
+        rtry!(self.config.custom.format_12hour_time(
             self.config,
             ext,
             self.tm,
             self.wtr,
-        )?;
+        ));
         Ok(Item::AlreadyFormatted)
     }
 }
@@ -940,18 +952,22 @@ fn write_offset(
     let minutes = ((total_seconds / 60) % 60) as u8;
     let seconds = (total_seconds % 60) as u8;
 
-    wtr.write_ascii_char(if offset.is_negative() { b'-' } else { b'+' })?;
-    wtr.write_int_pad2(hours)?;
+    rtry!(wtr.write_ascii_char(if offset.is_negative() {
+        b'-'
+    } else {
+        b'+'
+    }));
+    rtry!(wtr.write_int_pad2(hours));
     if minute || minutes != 0 || seconds != 0 {
         if colon {
-            wtr.write_ascii_char(b':')?;
+            rtry!(wtr.write_ascii_char(b':'));
         }
-        wtr.write_int_pad2(minutes)?;
+        rtry!(wtr.write_int_pad2(minutes));
         if second || seconds != 0 {
             if colon {
-                wtr.write_ascii_char(b':')?;
+                rtry!(wtr.write_ascii_char(b':'));
             }
-            wtr.write_int_pad2(seconds)?;
+            rtry!(wtr.write_int_pad2(seconds));
         }
     }
     Ok(())
@@ -988,15 +1004,15 @@ impl Extension {
         };
         match case {
             Case::AsIs => {
-                wtr.write_str(string)?;
+                rtry!(wtr.write_str(string));
             }
             Case::Upper | Case::Lower => {
                 for ch in string.chars() {
-                    wtr.write_char(if matches!(case, Case::Upper) {
+                    rtry!(wtr.write_char(if matches!(case, Case::Upper) {
                         ch.to_ascii_uppercase()
                     } else {
                         ch.to_ascii_lowercase()
-                    })?;
+                    }));
                 }
             }
         }
@@ -1037,7 +1053,7 @@ impl Extension {
                     wtr,
                 );
             }
-            wtr.write_ascii_char(b'-')?;
+            rtry!(wtr.write_ascii_char(b'-'));
         }
         let number = number.unsigned_abs();
         match (pad_byte, pad_width) {
@@ -1069,7 +1085,7 @@ impl Extension {
         if pad_byte == b' ' {
             let d = 1 + number.checked_ilog10().unwrap_or(0) as u8;
             for _ in 0..pad_width.saturating_sub(d) {
-                wtr.write_ascii_char(b' ')?;
+                rtry!(wtr.write_ascii_char(b' '));
             }
             // Don't do any padding to the call below.
             // We could instead add a `BorrowedWriter::write_int`
@@ -1077,7 +1093,7 @@ impl Extension {
             // this case.
             pad_width = 0;
         }
-        wtr.write_ascii_char(b'-')?;
+        rtry!(wtr.write_ascii_char(b'-'));
         wtr.write_int_pad(number, pad_byte, pad_width)
     }
 }

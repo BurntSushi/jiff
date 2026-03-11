@@ -44,7 +44,7 @@ impl<R: Read> ConcatenatedTzif<R> {
     /// This reads the header and will return an error if the header is
     /// invalid.
     pub(crate) fn open(rdr: R) -> Result<ConcatenatedTzif<R>, Error> {
-        let header = Header::read(&rdr)?;
+        let header = rtry!(Header::read(&rdr));
         Ok(ConcatenatedTzif { rdr, header })
     }
 
@@ -71,10 +71,11 @@ impl<R: Read> ConcatenatedTzif<R> {
         scratch2: &mut Vec<u8>,
     ) -> Result<Option<TimeZone>, Error> {
         scratch1.clear();
-        alloc(scratch1, self.header.index_len())?;
-        self.rdr
+        rtry!(alloc(scratch1, self.header.index_len()));
+        rtry!(self
+            .rdr
             .read_exact_at(scratch1, self.header.index_offset)
-            .context(E::FailedReadIndex)?;
+            .context(E::FailedReadIndex));
 
         let mut index = &**scratch1;
         while !index.is_empty() {
@@ -93,11 +94,12 @@ impl<R: Read> ConcatenatedTzif<R> {
             // `entry.name_bytes()` is itself valid UTF-8.
             let name = entry.name().unwrap();
             scratch2.clear();
-            alloc(scratch2, entry.len())?;
+            rtry!(alloc(scratch2, entry.len()));
             let start = self.header.data_offset.saturating_add(entry.start());
-            self.rdr
+            rtry!(self
+                .rdr
                 .read_exact_at(scratch2, start)
-                .context(E::FailedReadData)?;
+                .context(E::FailedReadData));
             return TimeZone::tzif(name, scratch2).map(Some);
         }
         Ok(None)
@@ -114,10 +116,11 @@ impl<R: Read> ConcatenatedTzif<R> {
         scratch: &mut Vec<u8>,
     ) -> Result<Vec<String>, Error> {
         scratch.clear();
-        alloc(scratch, self.header.index_len())?;
-        self.rdr
+        rtry!(alloc(scratch, self.header.index_len()));
+        rtry!(self
+            .rdr
             .read_exact_at(scratch, self.header.index_offset)
-            .context(E::FailedReadIndex)?;
+            .context(E::FailedReadIndex));
 
         let names_len = self.header.index_len() / IndexEntry::LEN;
         // Why are we careless with this alloc? Well, its size is proportional
@@ -130,7 +133,7 @@ impl<R: Read> ConcatenatedTzif<R> {
         while !index.is_empty() {
             let entry = IndexEntry::new(&index[..IndexEntry::LEN]);
             index = &index[IndexEntry::LEN..];
-            names.push(entry.name()?.to_string());
+            names.push(rtry!(entry.name()).to_string());
         }
         Ok(names)
     }
@@ -157,7 +160,7 @@ impl Header {
     fn read<R: Read + ?Sized>(rdr: &R) -> Result<Header, Error> {
         // 12 bytes plus 3 4-byte big endian integers.
         let mut buf = [0; 12 + 3 * 4];
-        rdr.read_exact_at(&mut buf, 0).context(E::FailedReadHeader)?;
+        rtry!(rdr.read_exact_at(&mut buf, 0).context(E::FailedReadHeader));
         if &buf[..6] != b"tzdata" {
             return Err(Error::from(E::ExpectedFirstSixBytes));
         }
@@ -362,10 +365,10 @@ impl Read for std::fs::File {
                 Ok(0) => break,
                 Ok(n) => {
                     buf = &mut buf[n..];
-                    offset = u64::try_from(n)
+                    offset = rtry!(u64::try_from(n)
                         .ok()
                         .and_then(|n| n.checked_add(offset))
-                        .ok_or(E::InvalidOffsetOverflowFile)?;
+                        .ok_or(E::InvalidOffsetOverflowFile));
                 }
                 Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(e) => return Err(Error::io(e)),
@@ -387,9 +390,10 @@ impl Read for std::fs::File {
     fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> Result<(), Error> {
         use std::io::{Read as _, Seek as _, SeekFrom};
         let mut file = self;
-        file.seek(SeekFrom::Start(offset))
+        rtry!(file
+            .seek(SeekFrom::Start(offset))
             .map_err(Error::io)
-            .context(E::FailedSeek)?;
+            .context(E::FailedSeek));
         file.read_exact(buf).map_err(Error::io)
     }
 }

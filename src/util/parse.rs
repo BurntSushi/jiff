@@ -20,10 +20,10 @@ pub(crate) fn i64(bytes: &[u8]) -> Result<i64, ParseIntError> {
             return Err(ParseIntError::InvalidDigit(byte));
         }
         let digit = i64::from(byte - b'0');
-        n = n
+        n = rtry!(n
             .checked_mul(10)
             .and_then(|n| n.checked_add(digit))
-            .ok_or(ParseIntError::TooBig)?;
+            .ok_or(ParseIntError::TooBig));
     }
     Ok(n)
 }
@@ -60,10 +60,10 @@ pub(crate) fn u64_prefix(
         digit_count += 1;
         // OK because we confirmed `byte` is an ASCII digit.
         let digit = u64::from(byte - b'0');
-        n = n
+        n = rtry!(n
             .checked_mul(10)
             .and_then(|n| n.checked_add(digit))
-            .ok_or(ParseIntError::TooBig)?;
+            .ok_or(ParseIntError::TooBig));
     }
     if digit_count == 0 {
         return Ok((None, bytes));
@@ -101,13 +101,13 @@ pub(crate) fn fraction(bytes: &[u8]) -> Result<u32, ParseFractionError> {
                 u32::from(digit)
             }
         };
-        n = n
+        n = rtry!(n
             .checked_mul(10)
             .and_then(|n| n.checked_add(digit))
-            .ok_or_else(|| ParseFractionError::TooBig)?;
+            .ok_or_else(|| ParseFractionError::TooBig));
     }
     for _ in bytes.len()..ParseFractionError::MAX_PRECISION {
-        n = n.checked_mul(10).ok_or_else(|| ParseFractionError::TooBig)?;
+        n = rtry!(n.checked_mul(10).ok_or_else(|| ParseFractionError::TooBig));
     }
     Ok(n)
 }
@@ -155,7 +155,7 @@ where
         // that's important, we can add a new API that returns a `&str`. But it
         // probably won't matter because an `OsStr` in this crate is usually
         // just an environment variable.
-        Ok(os_str_utf8(os_str)?.as_bytes())
+        Ok(rtry!(os_str_utf8(os_str)).as_bytes())
     }
 }
 

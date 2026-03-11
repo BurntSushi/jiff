@@ -44,9 +44,9 @@ impl<'i> ParsedDateTime<'i> {
             pieces = pieces.with_time(time.time);
         }
         if let Some(ref offset) = self.offset {
-            pieces = pieces.with_offset(offset.to_pieces_offset()?);
+            pieces = pieces.with_offset(rtry!(offset.to_pieces_offset()));
         }
-        if let Some(ann) = self.annotations.to_time_zone_annotation()? {
+        if let Some(ann) = rtry!(self.annotations.to_time_zone_annotation()) {
             pieces = pieces.with_time_zone_annotation(ann);
         }
         Ok(pieces)
@@ -59,7 +59,7 @@ impl<'i> ParsedDateTime<'i> {
         offset_conflict: OffsetConflict,
         disambiguation: Disambiguation,
     ) -> Result<Zoned, Error> {
-        self.to_ambiguous_zoned(db, offset_conflict)?
+        rtry!(self.to_ambiguous_zoned(db, offset_conflict))
             .disambiguate(disambiguation)
     }
 
@@ -77,7 +77,7 @@ impl<'i> ParsedDateTime<'i> {
             .annotations
             .to_time_zone_annotation()?
             .ok_or(E::MissingTimeZoneAnnotation)?;
-        let tz = tz_annotation.to_time_zone_with(db)?;
+        let tz = rtry!(tz_annotation.to_time_zone_with(db));
 
         // If there's no offset, then our only choice, regardless of conflict
         // resolution preference, is to use the time zone. That is, there is no
@@ -97,7 +97,7 @@ impl<'i> ParsedDateTime<'i> {
             // the time zone parsed.)
             return OffsetConflict::AlwaysOffset.resolve(dt, Offset::UTC, tz);
         }
-        let offset = parsed_offset.to_offset()?;
+        let offset = rtry!(parsed_offset.to_offset());
         let is_equal = |parsed: Offset, candidate: Offset| {
             // If they're equal down to the second, then no amount of rounding
             // or whatever should change that.
@@ -138,11 +138,11 @@ impl<'i> ParsedDateTime<'i> {
             .ok_or(E::MissingTimeInTimestamp)?;
         let parsed_offset =
             self.offset.as_ref().ok_or(E::MissingOffsetInTimestamp)?;
-        let offset = parsed_offset.to_offset()?;
+        let offset = rtry!(parsed_offset.to_offset());
         let dt = DateTime::from_parts(self.date.date, time);
-        let timestamp = offset
+        let timestamp = rtry!(offset
             .to_timestamp(dt)
-            .context(E::ConvertDateTimeToTimestamp { offset })?;
+            .context(E::ConvertDateTimeToTimestamp { offset }));
         Ok(timestamp)
     }
 
@@ -170,12 +170,12 @@ impl<'i> ParsedDateTime<'i> {
 
 impl<'i> core::fmt::Display for ParsedDateTime<'i> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self.date, f)?;
+        rtry!(core::fmt::Display::fmt(&self.date, f));
         if let Some(ref time) = self.time {
-            core::fmt::Display::fmt(&time, f)?;
+            rtry!(core::fmt::Display::fmt(&time, f));
         }
         if let Some(ref offset) = self.offset {
-            core::fmt::Display::fmt(&offset, f)?;
+            rtry!(core::fmt::Display::fmt(&offset, f));
         }
         core::fmt::Display::fmt(&self.annotations, f)
     }
@@ -248,7 +248,7 @@ impl<'i> ParsedTimeZone<'i> {
             }
             ParsedTimeZoneKind::Offset(poff) => {
                 let offset =
-                    poff.to_offset().context(E::FailedOffsetNumeric)?;
+                    rtry!(poff.to_offset().context(E::FailedOffsetNumeric));
                 Ok(TimeZone::fixed(offset))
             }
             #[cfg(feature = "alloc")]
@@ -287,7 +287,7 @@ impl DateTimeParser {
         &self,
         input: &'i [u8],
     ) -> Result<Parsed<'i, ParsedDateTime<'i>>, Error> {
-        let Parsed { value: date, input } = self.parse_date_spec(input)?;
+        let Parsed { value: date, input } = rtry!(self.parse_date_spec(input));
         let Some((&first, tail)) = input.split_first() else {
             let value = ParsedDateTime {
                 date,
@@ -304,12 +304,14 @@ impl DateTimeParser {
             // If there's a separator, then we must parse a time and we are
             // *allowed* to parse an offset. But without a separator, we don't
             // support offsets. Just annotations (which are parsed below).
-            let Parsed { value: time, input } = self.parse_time_spec(input)?;
-            let Parsed { value: offset, input } = self.parse_offset(input)?;
+            let Parsed { value: time, input } =
+                rtry!(self.parse_time_spec(input));
+            let Parsed { value: offset, input } =
+                rtry!(self.parse_offset(input));
             (Some(time), offset, input)
         };
         let Parsed { value: annotations, input } =
-            self.parse_annotations(input)?;
+            rtry!(self.parse_annotations(input));
         let value = ParsedDateTime { date, time, offset, annotations };
         Ok(Parsed { value, input })
     }
@@ -341,12 +343,14 @@ impl DateTimeParser {
         if let Some(input) =
             input.strip_prefix(b"T").or_else(|| input.strip_prefix(b"t"))
         {
-            let Parsed { value: time, input } = self.parse_time_spec(input)?;
-            let Parsed { value: offset, input } = self.parse_offset(input)?;
+            let Parsed { value: time, input } =
+                rtry!(self.parse_time_spec(input));
+            let Parsed { value: offset, input } =
+                rtry!(self.parse_offset(input));
             if offset.map_or(false, |o| o.is_zulu()) {
                 return Err(Error::from(E::CivilDateTimeZulu));
             }
-            let Parsed { input, .. } = self.parse_annotations(input)?;
+            let Parsed { input, .. } = rtry!(self.parse_annotations(input));
             return Ok(Parsed { value: time, input });
         }
         // We now look for a full datetime and extract the time from that.
@@ -372,8 +376,8 @@ impl DateTimeParser {
         // At this point, we look for something that is a time that doesn't
         // start with a `T`. We need to check that it isn't ambiguous with a
         // possible date.
-        let Parsed { value: time, input } = self.parse_time_spec(input)?;
-        let Parsed { value: offset, input } = self.parse_offset(input)?;
+        let Parsed { value: time, input } = rtry!(self.parse_time_spec(input));
+        let Parsed { value: offset, input } = rtry!(self.parse_offset(input));
         if offset.map_or(false, |o| o.is_zulu()) {
             return Err(Error::from(E::CivilDateTimeZulu));
         }
@@ -394,7 +398,7 @@ impl DateTimeParser {
             }
         }
         // OK... carry on.
-        let Parsed { input, .. } = self.parse_annotations(input)?;
+        let Parsed { input, .. } = rtry!(self.parse_annotations(input));
         Ok(Parsed { value: time, input })
     }
 
@@ -488,34 +492,36 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, ISOWeekDate>, Error> {
         // Parse year component.
         let Parsed { value: year, input } =
-            self.parse_year(input).context(E::FailedYearInDate)?;
+            rtry!(self.parse_year(input).context(E::FailedYearInDate));
         let extended = input.starts_with(b"-");
 
         // Parse optional separator.
-        let Parsed { input, .. } = self
+        let Parsed { input, .. } = rtry!(self
             .parse_date_separator(input, extended)
-            .context(E::FailedSeparatorAfterYear)?;
+            .context(E::FailedSeparatorAfterYear));
 
         // Parse 'W' prefix before week num.
-        let Parsed { input, .. } = self
+        let Parsed { input, .. } = rtry!(self
             .parse_week_prefix(input)
-            .context(E::FailedWeekNumberPrefixInDate)?;
+            .context(E::FailedWeekNumberPrefixInDate));
 
         // Parse week num component.
-        let Parsed { value: week, input } =
-            self.parse_week_num(input).context(E::FailedWeekNumberInDate)?;
+        let Parsed { value: week, input } = rtry!(self
+            .parse_week_num(input)
+            .context(E::FailedWeekNumberInDate));
 
         // Parse optional separator.
-        let Parsed { input, .. } = self
+        let Parsed { input, .. } = rtry!(self
             .parse_date_separator(input, extended)
-            .context(E::FailedSeparatorAfterWeekNumber)?;
+            .context(E::FailedSeparatorAfterWeekNumber));
 
         // Parse day component.
         let Parsed { value: weekday, input } =
-            self.parse_weekday(input).context(E::FailedWeekdayInDate)?;
+            rtry!(self.parse_weekday(input).context(E::FailedWeekdayInDate));
 
-        let iso_week_date = ISOWeekDate::new(year, week, weekday)
-            .context(E::InvalidWeekDate)?;
+        let iso_week_date =
+            rtry!(ISOWeekDate::new(year, week, weekday)
+                .context(E::InvalidWeekDate));
 
         Ok(Parsed { value: iso_week_date, input: input })
     }
@@ -530,28 +536,28 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, ParsedDate>, Error> {
         // Parse year component.
         let Parsed { value: year, input } =
-            self.parse_year(input).context(E::FailedYearInDate)?;
+            rtry!(self.parse_year(input).context(E::FailedYearInDate));
         let extended = input.starts_with(b"-");
 
         // Parse optional separator.
-        let Parsed { input, .. } = self
+        let Parsed { input, .. } = rtry!(self
             .parse_date_separator(input, extended)
-            .context(E::FailedSeparatorAfterYear)?;
+            .context(E::FailedSeparatorAfterYear));
 
         // Parse month component.
         let Parsed { value: month, input } =
-            self.parse_month(input).context(E::FailedMonthInDate)?;
+            rtry!(self.parse_month(input).context(E::FailedMonthInDate));
 
         // Parse optional separator.
-        let Parsed { input, .. } = self
+        let Parsed { input, .. } = rtry!(self
             .parse_date_separator(input, extended)
-            .context(E::FailedSeparatorAfterMonth)?;
+            .context(E::FailedSeparatorAfterMonth));
 
         // Parse day component.
         let Parsed { value: day, input } =
-            self.parse_day(input).context(E::FailedDayInDate)?;
+            rtry!(self.parse_day(input).context(E::FailedDayInDate));
 
-        let date = Date::new(year, month, day).context(E::InvalidDate)?;
+        let date = rtry!(Date::new(year, month, day).context(E::InvalidDate));
         let value = ParsedDate { date };
         Ok(Parsed { value, input })
     }
@@ -569,7 +575,7 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, ParsedTime>, Error> {
         // Parse hour component.
         let Parsed { value: hour, input } =
-            self.parse_hour(input).context(E::FailedHourInTime)?;
+            rtry!(self.parse_hour(input).context(E::FailedHourInTime));
         let extended = input.starts_with(b":");
 
         // Parse optional minute component.
@@ -583,7 +589,7 @@ impl DateTimeParser {
             return Ok(Parsed { value, input });
         }
         let Parsed { value: minute, input } =
-            self.parse_minute(input).context(E::FailedMinuteInTime)?;
+            rtry!(self.parse_minute(input).context(E::FailedMinuteInTime));
 
         // Parse optional second component.
         let Parsed { value: has_second, input } =
@@ -597,12 +603,12 @@ impl DateTimeParser {
             return Ok(Parsed { value, input });
         }
         let Parsed { value: second, input } =
-            self.parse_second(input).context(E::FailedSecondInTime)?;
+            rtry!(self.parse_second(input).context(E::FailedSecondInTime));
 
         // Parse an optional fractional component.
         let Parsed { value: nanosecond, input } =
-            parse_temporal_fraction(input)
-                .context(E::FailedFractionalSecondInTime)?;
+            rtry!(parse_temporal_fraction(input)
+                .context(E::FailedFractionalSecondInTime));
 
         // OK because we know that all our components are in bounds and all
         // combinations of in-bounds components are valid `Time` values.
@@ -638,7 +644,7 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, ()>, Error> {
         // Parse month component.
         let Parsed { value: month, mut input } =
-            self.parse_month(input).context(E::FailedMonthInMonthDay)?;
+            rtry!(self.parse_month(input).context(E::FailedMonthInMonthDay));
 
         // Skip over optional separator.
         if let Some(tail) = input.strip_prefix(b"-") {
@@ -647,13 +653,13 @@ impl DateTimeParser {
 
         // Parse day component.
         let Parsed { value: day, input } =
-            self.parse_day(input).context(E::FailedDayInMonthDay)?;
+            rtry!(self.parse_day(input).context(E::FailedDayInMonthDay));
 
         // Check that the month-day is valid. Since Temporal's month-day
         // permits 02-29, we use a leap year. The error message here is
         // probably confusing, but these errors should never be exposed to the
         // user.
-        let _ = Date::new(2024, month, day).context(E::InvalidMonthDay)?;
+        let _ = rtry!(Date::new(2024, month, day).context(E::InvalidMonthDay));
 
         // We have a valid year-month. But we don't return it because we just
         // need to check validity.
@@ -672,7 +678,7 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, ()>, Error> {
         // Parse year component.
         let Parsed { value: year, mut input } =
-            self.parse_year(input).context(E::FailedYearInYearMonth)?;
+            rtry!(self.parse_year(input).context(E::FailedYearInYearMonth));
 
         // Skip over optional separator.
         if let Some(tail) = input.strip_prefix(b"-") {
@@ -681,11 +687,11 @@ impl DateTimeParser {
 
         // Parse month component.
         let Parsed { value: month, input } =
-            self.parse_month(input).context(E::FailedMonthInYearMonth)?;
+            rtry!(self.parse_month(input).context(E::FailedMonthInYearMonth));
 
         // Check that the year-month is valid. We just use a day of 1, since
         // every month in every year must have a day 1.
-        let _ = Date::new(year, month, 1).context(E::InvalidYearMonth)?;
+        let _ = rtry!(Date::new(year, month, 1).context(E::InvalidYearMonth));
 
         // We have a valid year-month. But we don't return it because we just
         // need to check validity.
@@ -714,7 +720,7 @@ impl DateTimeParser {
 
         let (year, input) =
             parse::split(input, 4).ok_or(E::ExpectedFourDigitYear)?;
-        let year = b::Year::parse(year).context(E::ParseYearFourDigit)?;
+        let year = rtry!(b::Year::parse(year).context(E::ParseYearFourDigit));
         Ok(Parsed { value: year, input })
     }
 
@@ -727,7 +733,7 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, i16>, Error> {
         let (year, input) =
             parse::split(input, 6).ok_or(E::ExpectedSixDigitYear)?;
-        let year = b::Year::parse(year).context(E::ParseYearSixDigit)?;
+        let year = rtry!(b::Year::parse(year).context(E::ParseYearSixDigit));
         if year == 0 && sign.is_negative() {
             return Err(Error::from(E::InvalidYearZero));
         }
@@ -746,7 +752,8 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, i8>, Error> {
         let (month, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitMonth)?;
-        let month = b::Month::parse(month).context(E::ParseMonthTwoDigit)?;
+        let month =
+            rtry!(b::Month::parse(month).context(E::ParseMonthTwoDigit));
         Ok(Parsed { value: month, input })
     }
 
@@ -760,7 +767,7 @@ impl DateTimeParser {
     fn parse_day<'i>(&self, input: &'i [u8]) -> Result<Parsed<'i, i8>, Error> {
         let (day, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitDay)?;
-        let day = b::Day::parse(day).context(E::ParseDayTwoDigit)?;
+        let day = rtry!(b::Day::parse(day).context(E::ParseDayTwoDigit));
         Ok(Parsed { value: day, input })
     }
 
@@ -781,7 +788,7 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, i8>, Error> {
         let (hour, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitHour)?;
-        let hour = b::Hour::parse(hour).context(E::ParseHourTwoDigit)?;
+        let hour = rtry!(b::Hour::parse(hour).context(E::ParseHourTwoDigit));
         Ok(Parsed { value: hour, input })
     }
 
@@ -803,7 +810,7 @@ impl DateTimeParser {
         let (minute, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitMinute)?;
         let minute =
-            b::Minute::parse(minute).context(E::ParseMinuteTwoDigit)?;
+            rtry!(b::Minute::parse(minute).context(E::ParseMinuteTwoDigit));
         Ok(Parsed { value: minute, input })
     }
 
@@ -825,8 +832,9 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, i8>, Error> {
         let (second, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitSecond)?;
-        let mut second =
-            b::LeapSecond::parse(second).context(E::ParseSecondTwoDigit)?;
+        let mut second = rtry!(
+            b::LeapSecond::parse(second).context(E::ParseSecondTwoDigit)
+        );
         // NOTE: I believe Temporal allows one to make this configurable. That
         // is, to reject it. But for now, we just always clamp a leap second.
         if second == 60 {
@@ -974,7 +982,8 @@ impl DateTimeParser {
         let (week_num, input) =
             parse::split(input, 2).ok_or(E::ExpectedTwoDigitWeekNumber)?;
         let week_num =
-            b::ISOWeek::parse(week_num).context(E::ParseWeekNumberTwoDigit)?;
+            rtry!(b::ISOWeek::parse(week_num)
+                .context(E::ParseWeekNumberTwoDigit));
         Ok(Parsed { value: week_num, input })
     }
 
@@ -987,8 +996,8 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, Weekday>, Error> {
         let (weekday, input) =
             parse::split(input, 1).ok_or(E::ExpectedOneDigitWeekday)?;
-        let weekday = b::WeekdayMondayOne::parse(weekday)
-            .context(E::ParseWeekdayOneDigit)?;
+        let weekday = rtry!(b::WeekdayMondayOne::parse(weekday)
+            .context(E::ParseWeekdayOneDigit));
         // OK because we know `weekday` is in bounds from above.
         let weekday = Weekday::from_monday_one_offset(weekday).unwrap();
         Ok(Parsed { value: weekday, input })
@@ -1018,8 +1027,8 @@ impl SpanParser {
         #[inline(never)]
         fn imp(p: &SpanParser, input: &[u8]) -> Result<Span, Error> {
             let mut builder = DurationUnits::default();
-            let parsed = p.parse_calendar_and_time(input, &mut builder)?;
-            let parsed = parsed.and_then(|_| builder.to_span())?;
+            let parsed = rtry!(p.parse_calendar_and_time(input, &mut builder));
+            let parsed = rtry!(parsed.and_then(|_| builder.to_span()));
             parsed.into_full()
         }
         imp(self, input.as_ref())
@@ -1033,8 +1042,9 @@ impl SpanParser {
         #[inline(never)]
         fn imp(p: &SpanParser, input: &[u8]) -> Result<SignedDuration, Error> {
             let mut builder = DurationUnits::default();
-            let parsed = p.parse_time_only(input, &mut builder)?;
-            let parsed = parsed.and_then(|_| builder.to_signed_duration())?;
+            let parsed = rtry!(p.parse_time_only(input, &mut builder));
+            let parsed =
+                rtry!(parsed.and_then(|_| builder.to_signed_duration()));
             parsed.into_full()
         }
         imp(self, input.as_ref())
@@ -1051,9 +1061,9 @@ impl SpanParser {
             input: &[u8],
         ) -> Result<core::time::Duration, Error> {
             let mut builder = DurationUnits::default();
-            let parsed = p.parse_time_only(input, &mut builder)?;
+            let parsed = rtry!(p.parse_time_only(input, &mut builder));
             let parsed =
-                parsed.and_then(|_| builder.to_unsigned_duration())?;
+                rtry!(parsed.and_then(|_| builder.to_unsigned_duration()));
             let d = parsed.value;
             parsed.into_full_with(format_args!("{d:?}"))
         }
@@ -1074,12 +1084,14 @@ impl SpanParser {
                 (sign, input)
             };
 
-        let Parsed { input, .. } = self.parse_duration_designator(input)?;
-        let Parsed { input, .. } = self.parse_date_units(input, builder)?;
+        let Parsed { input, .. } =
+            rtry!(self.parse_duration_designator(input));
+        let Parsed { input, .. } =
+            rtry!(self.parse_date_units(input, builder));
         let Parsed { value: has_time, mut input } =
             self.parse_time_designator(input);
         if has_time {
-            let parsed = self.parse_time_units(input, builder)?;
+            let parsed = rtry!(self.parse_time_units(input, builder));
             input = parsed.input;
 
             if builder.get_min().map_or(true, |min| min > Unit::Hour) {
@@ -1104,14 +1116,16 @@ impl SpanParser {
                 (sign, input)
             };
 
-        let Parsed { input, .. } = self.parse_duration_designator(input)?;
+        let Parsed { input, .. } =
+            rtry!(self.parse_duration_designator(input));
         let Parsed { value: has_time, input } =
             self.parse_time_designator(input);
         if !has_time {
             return Err(Error::from(E::ExpectedTimeDesignator));
         }
 
-        let Parsed { input, .. } = self.parse_time_units(input, builder)?;
+        let Parsed { input, .. } =
+            rtry!(self.parse_time_units(input, builder));
         if builder.get_min().map_or(true, |min| min > Unit::Hour) {
             return Err(Error::from(E::ExpectedTimeUnits));
         }
@@ -1128,15 +1142,15 @@ impl SpanParser {
         builder: &mut DurationUnits,
     ) -> Result<Parsed<'i, ()>, Error> {
         loop {
-            let parsed = self.parse_unit_value(input)?;
+            let parsed = rtry!(self.parse_unit_value(input));
             input = parsed.input;
             let Some(value) = parsed.value else { break };
 
-            let parsed = self.parse_unit_date_designator(input)?;
+            let parsed = rtry!(self.parse_unit_date_designator(input));
             input = parsed.input;
             let unit = parsed.value;
 
-            builder.set_unit_value(unit, value)?;
+            rtry!(builder.set_unit_value(unit, value));
         }
         Ok(Parsed { value: (), input })
     }
@@ -1150,21 +1164,21 @@ impl SpanParser {
         builder: &mut DurationUnits,
     ) -> Result<Parsed<'i, ()>, Error> {
         loop {
-            let parsed = self.parse_unit_value(input)?;
+            let parsed = rtry!(self.parse_unit_value(input));
             input = parsed.input;
             let Some(value) = parsed.value else { break };
 
-            let parsed = parse_temporal_fraction(input)?;
+            let parsed = rtry!(parse_temporal_fraction(input));
             input = parsed.input;
             let fraction = parsed.value;
 
-            let parsed = self.parse_unit_time_designator(input)?;
+            let parsed = rtry!(self.parse_unit_time_designator(input));
             input = parsed.input;
             let unit = parsed.value;
 
-            builder.set_unit_value(unit, value)?;
+            rtry!(builder.set_unit_value(unit, value));
             if let Some(fraction) = fraction {
-                builder.set_fraction(fraction)?;
+                rtry!(builder.set_fraction(fraction));
                 // Once we see a fraction, we are done. We don't permit parsing
                 // any more units. That is, a fraction can only occur on the
                 // lowest unit of time.

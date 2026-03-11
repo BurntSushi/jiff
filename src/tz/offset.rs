@@ -639,8 +639,8 @@ impl Offset {
         self,
         duration: SignedDuration,
     ) -> Result<Offset, Error> {
-        let duration = b::OffsetTotalSeconds::check(duration.as_secs())
-            .context(E::OverflowAddSignedDuration)?;
+        let duration = rtry!(b::OffsetTotalSeconds::check(duration.as_secs())
+            .context(E::OverflowAddSignedDuration));
         Offset::from_seconds(duration + self.seconds())
     }
 
@@ -1387,7 +1387,7 @@ pub struct OffsetArithmetic {
 impl OffsetArithmetic {
     #[inline]
     fn checked_add(self, offset: Offset) -> Result<Offset, Error> {
-        match self.duration.to_signed()? {
+        match rtry!(self.duration.to_signed()) {
             SDuration::Span(span) => offset.checked_add_span(span),
             SDuration::Absolute(sdur) => offset.checked_add_duration(sdur),
         }
@@ -1395,7 +1395,7 @@ impl OffsetArithmetic {
 
     #[inline]
     fn checked_neg(self) -> Result<OffsetArithmetic, Error> {
-        let duration = self.duration.checked_neg()?;
+        let duration = rtry!(self.duration.checked_neg());
         Ok(OffsetArithmetic { duration })
     }
 
@@ -1597,11 +1597,12 @@ impl OffsetRound {
 
     /// Does the actual offset rounding.
     fn round(&self, offset: Offset) -> Result<Offset, Error> {
-        let increment = Increment::for_offset(self.smallest, self.increment)?;
+        let increment =
+            rtry!(Increment::for_offset(self.smallest, self.increment));
         // let rounded_sdur = SignedDuration::from(offset).round(self.0)?;
-        let rounded = increment
+        let rounded = rtry!(increment
             .round(self.mode, SignedDuration::from(offset))
-            .context(E::RoundOverflow)?;
+            .context(E::RoundOverflow));
         Offset::try_from(rounded)
             .map_err(|_| b::OffsetTotalSeconds::error())
             .context(E::RoundOverflow)

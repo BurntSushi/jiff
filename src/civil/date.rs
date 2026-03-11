@@ -903,11 +903,9 @@ impl Date {
     ) -> Result<Date, Error> {
         let weekday = weekday.to_iweekday();
         let idate = self.to_idate_const();
-        Ok(Date::from_idate_const(
-            idate
-                .nth_weekday_of_month(nth, weekday)
-                .map_err(Error::itime_range)?,
-        ))
+        Ok(Date::from_idate_const(rtry!(idate
+            .nth_weekday_of_month(nth, weekday)
+            .map_err(Error::itime_range))))
     }
 
     /// Returns the "nth" weekday from this date, not including itself.
@@ -1064,7 +1062,7 @@ impl Date {
         } else if nth > 0 {
             let weekday_diff = i32::from(weekday.since(self.weekday().next()));
             let diff = (nth - 1) * 7 + weekday_diff;
-            let start = self.tomorrow()?.to_unix_epoch_day();
+            let start = rtry!(self.tomorrow()).to_unix_epoch_day();
             let end = b::UnixEpochDays::checked_add(start, diff)?;
             Ok(Date::from_unix_epoch_day(end))
         } else {
@@ -1073,7 +1071,7 @@ impl Date {
             // OK because of the range on `NthWeekday`.
             let nth = nth.abs();
             let diff = (nth - 1) * 7 + weekday_diff;
-            let start = self.yesterday()?.to_unix_epoch_day();
+            let start = rtry!(self.yesterday()).to_unix_epoch_day();
             let end = b::UnixEpochDays::checked_sub(start, diff)?;
             Ok(Date::from_unix_epoch_day(end))
         }
@@ -1232,7 +1230,7 @@ impl Date {
     /// ```
     #[inline]
     pub fn in_tz(self, time_zone_name: &str) -> Result<Zoned, Error> {
-        let tz = crate::tz::db().get(time_zone_name)?;
+        let tz = rtry!(crate::tz::db().get(time_zone_name));
         self.to_zoned(tz)
     }
 
@@ -1483,7 +1481,7 @@ impl Date {
             month_add_overflowing(self.month(), span.get_months());
         let year = b::Year::checked_add(self.year(), years)
             .and_then(|years| b::Year::checked_add(years, span.get_years()))?;
-        let date = Date::new_constrain(year, month, self.day())?;
+        let date = rtry!(Date::new_constrain(year, month, self.day()));
         let epoch_days = date.to_unix_epoch_day();
         let mut days =
             b::UnixEpochDays::checked_add(epoch_days, 7 * span.get_weeks())
@@ -1509,8 +1507,8 @@ impl Date {
             -1 => self.yesterday(),
             1 => self.tomorrow(),
             days => {
-                let days = b::UnixEpochDays::check(days)
-                    .context(E::OverflowDaysDuration)?;
+                let days = rtry!(b::UnixEpochDays::check(days)
+                    .context(E::OverflowDaysDuration));
                 let days = b::UnixEpochDays::checked_add(
                     days,
                     self.to_unix_epoch_day(),
@@ -1752,7 +1750,7 @@ impl Date {
         other: A,
     ) -> Result<Span, Error> {
         let args: DateDifference = other.into();
-        let span = args.since_with_largest_unit(self)?;
+        let span = rtry!(args.since_with_largest_unit(self));
         if args.rounding_may_change_span() {
             span.round(args.round.relative(self))
         } else {
@@ -1788,7 +1786,7 @@ impl Date {
         other: A,
     ) -> Result<Span, Error> {
         let args: DateDifference = other.into();
-        let span = -args.since_with_largest_unit(self)?;
+        let span = -rtry!(args.since_with_largest_unit(self));
         if args.rounding_may_change_span() {
             span.round(args.round.relative(self))
         } else {
@@ -2485,7 +2483,7 @@ pub struct DateArithmetic {
 impl DateArithmetic {
     #[inline]
     fn checked_add(self, date: Date) -> Result<Date, Error> {
-        match self.duration.to_signed()? {
+        match rtry!(self.duration.to_signed()) {
             SDuration::Span(span) => date.checked_add_span(span),
             SDuration::Absolute(sdur) => date.checked_add_duration(sdur),
         }
@@ -2493,7 +2491,7 @@ impl DateArithmetic {
 
     #[inline]
     fn checked_neg(self) -> Result<DateArithmetic, Error> {
-        let duration = self.duration.checked_neg()?;
+        let duration = rtry!(self.duration.checked_neg());
         Ok(DateArithmetic { duration })
     }
 
@@ -3080,13 +3078,13 @@ impl DateWith {
             None => self.original.day(),
             Some(DateWithDay::OfMonth(day)) => b::Day::check(day)?,
             Some(DateWithDay::OfYear(day)) => {
-                let idate = IDate::from_day_of_year(year, day)
-                    .map_err(Error::itime_range)?;
+                let idate = rtry!(IDate::from_day_of_year(year, day)
+                    .map_err(Error::itime_range));
                 return Ok(Date::from_idate_const(idate));
             }
             Some(DateWithDay::OfYearNoLeap(day)) => {
-                let idate = IDate::from_day_of_year_no_leap(year, day)
-                    .map_err(Error::itime_range)?;
+                let idate = rtry!(IDate::from_day_of_year_no_leap(year, day)
+                    .map_err(Error::itime_range));
                 return Ok(Date::from_idate_const(idate));
             }
         };

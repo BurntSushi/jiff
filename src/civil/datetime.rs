@@ -306,8 +306,8 @@ impl DateTime {
         second: i8,
         subsec_nanosecond: i32,
     ) -> Result<DateTime, Error> {
-        let date = Date::new(year, month, day)?;
-        let time = Time::new(hour, minute, second, subsec_nanosecond)?;
+        let date = rtry!(Date::new(year, month, day));
+        let time = rtry!(Time::new(hour, minute, second, subsec_nanosecond));
         Ok(DateTime { date, time })
     }
 
@@ -963,7 +963,7 @@ impl DateTime {
     /// ```
     #[inline]
     pub fn tomorrow(self) -> Result<DateTime, Error> {
-        Ok(DateTime::from_parts(self.date().tomorrow()?, self.time()))
+        Ok(DateTime::from_parts(rtry!(self.date().tomorrow()), self.time()))
     }
 
     /// Returns the datetime with a date immediately preceding this one.
@@ -989,7 +989,7 @@ impl DateTime {
     /// ```
     #[inline]
     pub fn yesterday(self) -> Result<DateTime, Error> {
-        Ok(DateTime::from_parts(self.date().yesterday()?, self.time()))
+        Ok(DateTime::from_parts(rtry!(self.date().yesterday()), self.time()))
     }
 
     /// Returns the "nth" weekday from the beginning or end of the month in
@@ -1062,7 +1062,7 @@ impl DateTime {
         nth: i8,
         weekday: Weekday,
     ) -> Result<DateTime, Error> {
-        let date = self.date().nth_weekday_of_month(nth, weekday)?;
+        let date = rtry!(self.date().nth_weekday_of_month(nth, weekday));
         Ok(DateTime::from_parts(date, self.time()))
     }
 
@@ -1220,7 +1220,7 @@ impl DateTime {
         nth: i32,
         weekday: Weekday,
     ) -> Result<DateTime, Error> {
-        let date = self.date().nth_weekday(nth, weekday)?;
+        let date = rtry!(self.date().nth_weekday(nth, weekday));
         Ok(DateTime::from_parts(date, self.time()))
     }
 
@@ -1442,7 +1442,7 @@ impl DateTime {
     /// clock time.
     #[inline]
     pub fn in_tz(self, time_zone_name: &str) -> Result<Zoned, Error> {
-        let tz = crate::tz::db().get(time_zone_name)?;
+        let tz = rtry!(crate::tz::db().get(time_zone_name));
         self.to_zoned(tz)
     }
 
@@ -1549,17 +1549,17 @@ impl DateTime {
         let amb_ts = tz.to_ambiguous_timestamp(dt);
         let (offset, ts, dt) = match amb_ts.offset() {
             AmbiguousOffset::Unambiguous { offset } => {
-                let ts = offset.to_timestamp(dt)?;
+                let ts = rtry!(offset.to_timestamp(dt));
                 (offset, ts, dt)
             }
             AmbiguousOffset::Gap { before, .. } => {
-                let ts = before.to_timestamp(dt)?;
+                let ts = rtry!(before.to_timestamp(dt));
                 let offset = tz.to_offset(ts);
                 let dt = offset.to_datetime(ts);
                 (offset, ts, dt)
             }
             AmbiguousOffset::Fold { before, .. } => {
-                let ts = before.to_timestamp(dt)?;
+                let ts = rtry!(before.to_timestamp(dt));
                 let offset = tz.to_offset(ts);
                 let dt = offset.to_datetime(ts);
                 (offset, ts, dt)
@@ -1691,18 +1691,18 @@ impl DateTime {
         {
             (true, true) => Ok(self),
             (false, true) => {
-                let new_date = old_date
+                let new_date = rtry!(old_date
                     .checked_add(span)
-                    .context(E::FailedAddSpanDate)?;
+                    .context(E::FailedAddSpanDate));
                 Ok(DateTime::from_parts(new_date, old_time))
             }
             (true, false) => {
-                let (new_time, leftovers) = old_time
+                let (new_time, leftovers) = rtry!(old_time
                     .overflowing_add(span)
-                    .context(E::FailedAddSpanTime)?;
-                let new_date = old_date
+                    .context(E::FailedAddSpanTime));
+                let new_date = rtry!(old_date
                     .checked_add(leftovers)
-                    .context(E::FailedAddSpanOverflowing)?;
+                    .context(E::FailedAddSpanOverflowing));
                 Ok(DateTime::from_parts(new_date, new_time))
             }
             (false, false) => self.checked_add_span_general(span),
@@ -1716,14 +1716,15 @@ impl DateTime {
         let span_date = span.without_lower(Unit::Day);
         let span_time = span.only_lower(Unit::Day);
 
-        let (new_time, leftovers) = old_time
+        let (new_time, leftovers) = rtry!(old_time
             .overflowing_add(&span_time)
-            .context(E::FailedAddSpanTime)?;
-        let new_date =
-            old_date.checked_add(span_date).context(E::FailedAddSpanDate)?;
-        let new_date = new_date
+            .context(E::FailedAddSpanTime));
+        let new_date = rtry!(old_date
+            .checked_add(span_date)
+            .context(E::FailedAddSpanDate));
+        let new_date = rtry!(new_date
             .checked_add(leftovers)
-            .context(E::FailedAddSpanOverflowing)?;
+            .context(E::FailedAddSpanOverflowing));
         Ok(DateTime::from_parts(new_date, new_time))
     }
 
@@ -1733,10 +1734,11 @@ impl DateTime {
         duration: SignedDuration,
     ) -> Result<DateTime, Error> {
         let (date, time) = (self.date(), self.time());
-        let (new_time, leftovers) = time.overflowing_add_duration(duration)?;
-        let new_date = date
+        let (new_time, leftovers) =
+            rtry!(time.overflowing_add_duration(duration));
+        let new_date = rtry!(date
             .checked_add(leftovers)
-            .context(E::FailedAddDurationOverflowing)?;
+            .context(E::FailedAddDurationOverflowing));
         Ok(DateTime::from_parts(new_date, new_time))
     }
 
@@ -1995,7 +1997,7 @@ impl DateTime {
         other: A,
     ) -> Result<Span, Error> {
         let args: DateTimeDifference = other.into();
-        let span = args.until_with_largest_unit(self)?;
+        let span = rtry!(args.until_with_largest_unit(self));
         if args.rounding_may_change_span() {
             span.round(args.round.relative(self))
         } else {
@@ -2032,7 +2034,7 @@ impl DateTime {
         other: A,
     ) -> Result<Span, Error> {
         let args: DateTimeDifference = other.into();
-        let span = -args.until_with_largest_unit(self)?;
+        let span = -rtry!(args.until_with_largest_unit(self));
         if args.rounding_may_change_span() {
             span.round(args.round.relative(self))
         } else {
@@ -2904,7 +2906,7 @@ pub struct DateTimeArithmetic {
 impl DateTimeArithmetic {
     #[inline]
     fn checked_add(self, dt: DateTime) -> Result<DateTime, Error> {
-        match self.duration.to_signed()? {
+        match rtry!(self.duration.to_signed()) {
             SDuration::Span(span) => dt.checked_add_span(span),
             SDuration::Absolute(sdur) => dt.checked_add_duration(sdur),
         }
@@ -2912,7 +2914,7 @@ impl DateTimeArithmetic {
 
     #[inline]
     fn checked_neg(self) -> Result<DateTimeArithmetic, Error> {
-        let duration = self.duration.checked_neg()?;
+        let duration = rtry!(self.duration.checked_neg());
         Ok(DateTimeArithmetic { duration })
     }
 
@@ -3260,7 +3262,7 @@ impl DateTimeDifference {
             }
             time_diff += b::NANOS_PER_CIVIL_DAY * sign;
         }
-        let date_span = d1.until((largest, d2))?;
+        let date_span = rtry!(d1.until((largest, d2)));
         // Unlike in the <=Unit::Day case, this always succeeds because
         // every unit except for nanoseconds (which is not used here) can
         // represent all possible spans of time between any two civil
@@ -3535,10 +3537,10 @@ impl DateTimeRound {
         }
 
         let increment =
-            Increment::for_datetime(self.smallest, self.increment)?;
+            rtry!(Increment::for_datetime(self.smallest, self.increment));
         let time_nanos = dt.time().to_duration();
         let sign = b::Sign::from(dt.date().year());
-        let time_rounded = increment.round(self.mode, time_nanos)?;
+        let time_rounded = rtry!(increment.round(self.mode, time_nanos));
         let (days, time_nanos) = time_rounded.as_civil_days_with_remainder();
         // OK because `abs(days)` here can never be greater than 1. Namely,
         // rounding time increments are limited to values that divide evenly
@@ -3556,9 +3558,9 @@ impl DateTimeRound {
         // `abs(days)` is always <= 1, and so `days_len` should
         // always be at most 1 greater (or less) than where we started. If we
         // started at, e.g., `DateTime::MAX`, then this could overflow.
-        let date = start
+        let date = rtry!(start
             .checked_add(Span::new().days(days_len))
-            .context(E::FailedAddDays)?;
+            .context(E::FailedAddDays));
         Ok(DateTime::from_parts(date, time))
     }
 
@@ -3688,8 +3690,8 @@ impl DateTimeWith {
     /// ```
     #[inline]
     pub fn build(self) -> Result<DateTime, Error> {
-        let date = self.date_with.build()?;
-        let time = self.time_with.build()?;
+        let date = rtry!(self.date_with.build());
+        let time = rtry!(self.time_with.build());
         Ok(DateTime::from_parts(date, time))
     }
 

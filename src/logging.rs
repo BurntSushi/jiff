@@ -2,6 +2,17 @@
 // Which is fine. Just squash the warnings.
 #![allow(dead_code, unused_macros)]
 
+// Simplified try operator that by passes Try and From traits, used to reduce
+// compile times. (3-4% on debug builds).
+macro_rules! rtry {
+    ($($tt:tt)*) => {
+        match $($tt)* {
+            Ok(ok) => ok,
+            Err(err) => return Err(err),
+        }
+    };
+}
+
 macro_rules! log {
     ($($tt:tt)*) => {
         #[cfg(feature = "logging")]
@@ -90,7 +101,7 @@ impl Logger {
     pub(crate) fn init() -> Result<(), log::SetLoggerError> {
         #[cfg(all(feature = "std", feature = "logging"))]
         {
-            log::set_logger(LOGGER)?;
+            rtry!(log::set_logger(LOGGER));
             log::set_max_level(log::LevelFilter::Trace);
             Ok(())
         }

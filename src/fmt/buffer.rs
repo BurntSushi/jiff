@@ -134,8 +134,8 @@ impl<'data> BorrowedBuffer<'data> {
         }
         let mut buf = ArrayBuffer::<N>::default();
         let mut bbuf = buf.as_borrowed();
-        with(&mut bbuf)?;
-        wtr.write_str(bbuf.filled())?;
+        rtry!(with(&mut bbuf));
+        rtry!(wtr.write_str(bbuf.filled()));
         Ok(())
     }
 
@@ -721,7 +721,7 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn finish(self) -> Result<(), Error> {
-        self.wtr.write_str(self.bbuf.filled())?;
+        rtry!(self.wtr.write_str(self.bbuf.filled()));
         self.bbuf.clear();
         Ok(())
     }
@@ -729,7 +729,7 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
     #[cold]
     #[inline(never)]
     pub(crate) fn flush(&mut self) -> Result<(), Error> {
-        self.wtr.write_str(self.bbuf.filled())?;
+        rtry!(self.wtr.write_str(self.bbuf.filled()));
         self.bbuf.clear();
         Ok(())
     }
@@ -741,7 +741,7 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
     ) -> Result<(), Error> {
         let n = additional.into();
         if self.bbuf.len().saturating_add(n) > self.bbuf.capacity() {
-            self.flush()?;
+            rtry!(self.flush());
         }
         Ok(())
     }
@@ -749,7 +749,7 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_str(&mut self, string: &str) -> Result<(), Error> {
         if string.len() > self.bbuf.available_capacity() {
-            self.flush()?;
+            rtry!(self.flush());
             if string.len() > self.bbuf.available_capacity() {
                 return self.wtr.write_str(string);
             }
@@ -760,7 +760,7 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_char(&mut self, ch: char) -> Result<(), Error> {
-        self.if_will_fill_then_flush(ch.len_utf8())?;
+        rtry!(self.if_will_fill_then_flush(ch.len_utf8()));
         self.bbuf.write_char(ch);
         Ok(())
     }
@@ -768,7 +768,7 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) fn write_ascii_char(&mut self, byte: u8) -> Result<(), Error> {
         if self.bbuf.available_capacity() == 0 {
-            self.flush()?;
+            rtry!(self.flush());
         }
         self.bbuf.write_ascii_char(byte);
         Ok(())
@@ -784,7 +784,7 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
         let n = n.into();
         let pad_len = pad_len.min(MAX_INTEGER_LEN);
         let digits = pad_len.max(digits(n));
-        self.if_will_fill_then_flush(digits)?;
+        rtry!(self.if_will_fill_then_flush(digits));
         self.bbuf.write_int_pad(n, pad_byte, pad_len);
         Ok(())
     }
@@ -794,7 +794,7 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
         &mut self,
         n: impl Into<u64>,
     ) -> Result<(), Error> {
-        self.if_will_fill_then_flush(2usize)?;
+        rtry!(self.if_will_fill_then_flush(2usize));
         self.bbuf.write_int_pad2(n);
         Ok(())
     }
@@ -804,7 +804,7 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
         &mut self,
         n: impl Into<u64>,
     ) -> Result<(), Error> {
-        self.if_will_fill_then_flush(2usize)?;
+        rtry!(self.if_will_fill_then_flush(2usize));
         self.bbuf.write_int_pad2_space(n);
         Ok(())
     }
@@ -814,7 +814,7 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
         &mut self,
         n: impl Into<u64>,
     ) -> Result<(), Error> {
-        self.if_will_fill_then_flush(4usize)?;
+        rtry!(self.if_will_fill_then_flush(4usize));
         self.bbuf.write_int_pad4(n);
         Ok(())
     }
@@ -832,7 +832,7 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
         // clear if it's worth it or not. I think in practice, for common
         // cases, our uninit buffer will be big enough anyway even when we're
         // pessimistic about the number of digits we'll print.
-        self.if_will_fill_then_flush(9usize)?;
+        rtry!(self.if_will_fill_then_flush(9usize));
         self.bbuf.write_fraction(precision, n);
         Ok(())
     }

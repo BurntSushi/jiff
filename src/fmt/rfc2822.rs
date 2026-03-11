@@ -113,7 +113,7 @@ const PRINTER_MAX_BYTES_RFC9110: usize = 29;
 #[inline]
 pub fn to_string(zdt: &Zoned) -> Result<alloc::string::String, Error> {
     let mut buf = alloc::string::String::new();
-    DEFAULT_DATETIME_PRINTER.print_zoned(zdt, &mut buf)?;
+    rtry!(DEFAULT_DATETIME_PRINTER.print_zoned(zdt, &mut buf));
     Ok(buf)
 }
 
@@ -318,10 +318,10 @@ impl DateTimeParser {
         input: I,
     ) -> Result<Zoned, Error> {
         let input = input.as_ref();
-        let zdt = self
+        let zdt = rtry!(rtry!(self
             .parse_zoned_internal(input)
-            .context(E::FailedZoned)?
-            .into_full()?;
+            .context(E::FailedZoned))
+        .into_full());
         Ok(zdt)
     }
 
@@ -354,10 +354,10 @@ impl DateTimeParser {
         input: I,
     ) -> Result<Timestamp, Error> {
         let input = input.as_ref();
-        let ts = self
+        let ts = rtry!(rtry!(self
             .parse_timestamp_internal(input)
-            .context(E::FailedTimestamp)?
-            .into_full()?;
+            .context(E::FailedTimestamp))
+        .into_full());
         Ok(ts)
     }
 
@@ -371,8 +371,8 @@ impl DateTimeParser {
         input: &'i [u8],
     ) -> Result<Parsed<'i, Zoned>, Error> {
         let Parsed { value: (dt, offset), input } =
-            self.parse_datetime_offset(input)?;
-        let ts = offset.to_timestamp(dt)?;
+            rtry!(self.parse_datetime_offset(input));
+        let ts = rtry!(offset.to_timestamp(dt));
         let zdt = ts.to_zoned(TimeZone::fixed(offset));
         Ok(Parsed { value: zdt, input })
     }
@@ -387,8 +387,8 @@ impl DateTimeParser {
         input: &'i [u8],
     ) -> Result<Parsed<'i, Timestamp>, Error> {
         let Parsed { value: (dt, offset), input } =
-            self.parse_datetime_offset(input)?;
-        let ts = offset.to_timestamp(dt)?;
+            rtry!(self.parse_datetime_offset(input));
+        let ts = rtry!(offset.to_timestamp(dt));
         Ok(Parsed { value: ts, input })
     }
 
@@ -402,13 +402,13 @@ impl DateTimeParser {
         input: &'i [u8],
     ) -> Result<Parsed<'i, (DateTime, Offset)>, Error> {
         let input = input.as_ref();
-        let Parsed { value: dt, input } = self.parse_datetime(input)?;
-        let Parsed { value: offset, input } = self.parse_offset(input)?;
+        let Parsed { value: dt, input } = rtry!(self.parse_datetime(input));
+        let Parsed { value: offset, input } = rtry!(self.parse_offset(input));
         let Parsed { input, .. } = self.skip_whitespace(input);
         let input = if input.is_empty() {
             input
         } else {
-            self.skip_comment(input)?.input
+            rtry!(self.skip_comment(input)).input
         };
         Ok(Parsed { value: (dt, offset), input })
     }
@@ -432,16 +432,16 @@ impl DateTimeParser {
         if input.is_empty() {
             return Err(Error::from(E::EmptyAfterWhitespace));
         }
-        let Parsed { value: wd, input } = self.parse_weekday(input)?;
-        let Parsed { value: day, input } = self.parse_day(input)?;
-        let Parsed { value: month, input } = self.parse_month(input)?;
-        let Parsed { value: year, input } = self.parse_year(input)?;
+        let Parsed { value: wd, input } = rtry!(self.parse_weekday(input));
+        let Parsed { value: day, input } = rtry!(self.parse_day(input));
+        let Parsed { value: month, input } = rtry!(self.parse_month(input));
+        let Parsed { value: year, input } = rtry!(self.parse_year(input));
 
-        let Parsed { value: hour, input } = self.parse_hour(input)?;
+        let Parsed { value: hour, input } = rtry!(self.parse_hour(input));
         let Parsed { input, .. } = self.skip_whitespace(input);
-        let Parsed { input, .. } = self.parse_time_separator(input)?;
+        let Parsed { input, .. } = rtry!(self.parse_time_separator(input));
         let Parsed { input, .. } = self.skip_whitespace(input);
-        let Parsed { value: minute, input } = self.parse_minute(input)?;
+        let Parsed { value: minute, input } = rtry!(self.parse_minute(input));
 
         let Parsed { value: whitespace_after_minute, input } =
             self.skip_whitespace(input);
@@ -451,14 +451,15 @@ impl DateTimeParser {
             }
             (0, input)
         } else {
-            let Parsed { input, .. } = self.parse_time_separator(input)?;
+            let Parsed { input, .. } = rtry!(self.parse_time_separator(input));
             let Parsed { input, .. } = self.skip_whitespace(input);
-            let Parsed { value: second, input } = self.parse_second(input)?;
-            let Parsed { input, .. } = self.parse_whitespace(input)?;
+            let Parsed { value: second, input } =
+                rtry!(self.parse_second(input));
+            let Parsed { input, .. } = rtry!(self.parse_whitespace(input));
             (second, input)
         };
 
-        let date = Date::new(year, month, day).context(E::InvalidDate)?;
+        let date = rtry!(Date::new(year, month, day).context(E::InvalidDate));
         // OK because hour, minute and second have been verified as being
         // in bounds. And all combinations of such in-bound values are also
         // valid `Time` values.
@@ -559,9 +560,9 @@ impl DateTimeParser {
             digits = 2;
         }
         let (day, input) = input.split_at(digits);
-        let day = b::Day::parse(day).context(E::ParseDay)?;
+        let day = rtry!(b::Day::parse(day).context(E::ParseDay));
         let Parsed { input, .. } =
-            self.parse_whitespace(input).context(E::WhitespaceAfterDay)?;
+            rtry!(self.parse_whitespace(input).context(E::WhitespaceAfterDay));
         Ok(Parsed { value: day, input })
     }
 
@@ -603,9 +604,9 @@ impl DateTimeParser {
             b"dec" => 12,
             _ => return Err(Error::from(E::InvalidMonth)),
         };
-        let Parsed { input, .. } = self
+        let Parsed { input, .. } = rtry!(self
             .parse_whitespace(&input[3..])
-            .context(E::WhitespaceAfterMonth)?;
+            .context(E::WhitespaceAfterMonth));
         Ok(Parsed { value: month, input })
     }
 
@@ -644,15 +645,16 @@ impl DateTimeParser {
             }
         }
         let (year, input) = input.split_at(digits);
-        let year = b::Year::parse(year).context(E::ParseYear)?;
+        let year = rtry!(b::Year::parse(year).context(E::ParseYear));
         let year = match digits {
             2 if year <= 49 => year + 2000,
             2 | 3 => year + 1900,
             4 => year,
             _ => unreachable!("digits={digits} must be 2, 3 or 4"),
         };
-        let Parsed { input, .. } =
-            self.parse_whitespace(input).context(E::WhitespaceAfterYear)?;
+        let Parsed { input, .. } = rtry!(self
+            .parse_whitespace(input)
+            .context(E::WhitespaceAfterYear));
         Ok(Parsed { value: year, input })
     }
 
@@ -667,7 +669,7 @@ impl DateTimeParser {
         input: &'i [u8],
     ) -> Result<Parsed<'i, i8>, Error> {
         let (hour, input) = parse::split(input, 2).ok_or(E::EndOfInputHour)?;
-        let hour = b::Hour::parse(hour).context(E::ParseHour)?;
+        let hour = rtry!(b::Hour::parse(hour).context(E::ParseHour));
         Ok(Parsed { value: hour, input })
     }
 
@@ -680,7 +682,7 @@ impl DateTimeParser {
     ) -> Result<Parsed<'i, i8>, Error> {
         let (minute, input) =
             parse::split(input, 2).ok_or(E::EndOfInputMinute)?;
-        let minute = b::Minute::parse(minute).context(E::ParseMinute)?;
+        let minute = rtry!(b::Minute::parse(minute).context(E::ParseMinute));
         Ok(Parsed { value: minute, input })
     }
 
@@ -694,7 +696,7 @@ impl DateTimeParser {
         let (second, input) =
             parse::split(input, 2).ok_or(E::EndOfInputSecond)?;
         let mut second =
-            b::LeapSecond::parse(second).context(E::ParseSecond)?;
+            rtry!(b::LeapSecond::parse(second).context(E::ParseSecond));
         if second == 60 {
             second = 59;
         }
@@ -721,10 +723,12 @@ impl DateTimeParser {
         let input = &input[1..];
         let (hhmm, input) = parse::split(input, 4).ok_or(E::TooShortOffset)?;
 
-        let hh =
-            b::OffsetHours::parse(&hhmm[0..2]).context(E::ParseOffsetHour)?;
-        let mm = b::OffsetMinutes::parse(&hhmm[2..4])
-            .context(E::ParseOffsetMinute)?;
+        let hh = rtry!(
+            b::OffsetHours::parse(&hhmm[0..2]).context(E::ParseOffsetHour)
+        );
+        let mm =
+            rtry!(b::OffsetMinutes::parse(&hhmm[2..4])
+                .context(E::ParseOffsetMinute));
 
         let seconds = sign * (i32::from(hh) * 3_600 + i32::from(mm) * 60);
         // OK because we check the bounds of both hours and minutes.
@@ -1039,7 +1043,7 @@ impl DateTimePrinter {
         // to `print_zoned`.
         let mut buf =
             alloc::string::String::with_capacity(PRINTER_MAX_BYTES_RFC2822);
-        self.print_zoned(zdt, &mut buf)?;
+        rtry!(self.print_zoned(zdt, &mut buf));
         Ok(buf)
     }
 
@@ -1082,7 +1086,7 @@ impl DateTimePrinter {
     ) -> Result<alloc::string::String, Error> {
         let mut buf =
             alloc::string::String::with_capacity(PRINTER_MAX_BYTES_RFC2822);
-        self.print_timestamp(timestamp, &mut buf)?;
+        rtry!(self.print_timestamp(timestamp, &mut buf));
         Ok(buf)
     }
 
@@ -1129,7 +1133,7 @@ impl DateTimePrinter {
     ) -> Result<alloc::string::String, Error> {
         let mut buf =
             alloc::string::String::with_capacity(PRINTER_MAX_BYTES_RFC9110);
-        self.print_timestamp_rfc9110(timestamp, &mut buf)?;
+        rtry!(self.print_timestamp_rfc9110(timestamp, &mut buf));
         Ok(buf)
     }
 

@@ -1306,7 +1306,7 @@ impl Timestamp {
     /// ```
     #[inline]
     pub fn in_tz(self, time_zone_name: &str) -> Result<Zoned, Error> {
-        let tz = crate::tz::db().get(time_zone_name)?;
+        let tz = rtry!(crate::tz::db().get(time_zone_name));
         Ok(self.to_zoned(tz))
     }
 
@@ -1504,8 +1504,9 @@ impl Timestamp {
         if self.subsec_nanosecond() == 0 && !span.has_fractional_seconds() {
             let span_seconds = span.to_hms_seconds();
             let time_seconds = self.as_second();
-            let sum = b::UnixSeconds::checked_add(span_seconds, time_seconds)
-                .context(E::OverflowAddSpan)?;
+            let sum =
+                rtry!(b::UnixSeconds::checked_add(span_seconds, time_seconds)
+                    .context(E::OverflowAddSpan));
             // We know `sum` is in bounds so we don't need to recheck.
             return Ok(Timestamp { dur: SignedDuration::from_secs(sum) });
         }
@@ -1802,7 +1803,7 @@ impl Timestamp {
         other: A,
     ) -> Result<Span, Error> {
         let args: TimestampDifference = other.into();
-        let span = args.until_with_largest_unit(self)?;
+        let span = rtry!(args.until_with_largest_unit(self));
         if args.rounding_may_change_span() {
             span.round(args.round)
         } else {
@@ -1838,7 +1839,7 @@ impl Timestamp {
         other: A,
     ) -> Result<Span, Error> {
         let args: TimestampDifference = other.into();
-        let span = -args.until_with_largest_unit(self)?;
+        let span = -rtry!(args.until_with_largest_unit(self));
         if args.rounding_may_change_span() {
             span.round(args.round)
         } else {
@@ -2627,7 +2628,7 @@ impl TryFrom<std::time::SystemTime> for Timestamp {
         system_time: std::time::SystemTime,
     ) -> Result<Timestamp, Error> {
         let unix_epoch = std::time::SystemTime::UNIX_EPOCH;
-        let dur = SignedDuration::system_until(unix_epoch, system_time)?;
+        let dur = rtry!(SignedDuration::system_until(unix_epoch, system_time));
         Timestamp::from_duration(dur)
     }
 }
@@ -2859,7 +2860,7 @@ pub struct TimestampArithmetic {
 impl TimestampArithmetic {
     #[inline]
     fn checked_add(self, ts: Timestamp) -> Result<Timestamp, Error> {
-        match self.duration.to_signed()? {
+        match rtry!(self.duration.to_signed()) {
             SDuration::Span(span) => ts.checked_add_span(span),
             SDuration::Absolute(sdur) => ts.checked_add_duration(sdur),
         }
@@ -2891,7 +2892,7 @@ impl TimestampArithmetic {
 
     #[inline]
     fn checked_neg(self) -> Result<TimestampArithmetic, Error> {
-        let duration = self.duration.checked_neg()?;
+        let duration = rtry!(self.duration.checked_neg());
         Ok(TimestampArithmetic { duration })
     }
 
@@ -3458,10 +3459,10 @@ impl TimestampRound {
         timestamp: Timestamp,
     ) -> Result<Timestamp, Error> {
         let increment =
-            Increment::for_timestamp(self.smallest, self.increment)?;
-        Timestamp::from_duration(
-            increment.round(self.mode, timestamp.as_duration())?,
-        )
+            rtry!(Increment::for_timestamp(self.smallest, self.increment));
+        Timestamp::from_duration(rtry!(
+            increment.round(self.mode, timestamp.as_duration())
+        ))
     }
 }
 

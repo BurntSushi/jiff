@@ -62,8 +62,8 @@ impl Increment {
         } else {
             // For calendar units, just verify that the increment is in the
             // correct range.
-            let value = b::Increment32::check(value)
-                .context(RoundingIncrementError::ForSpan)?;
+            let value = rtry!(b::Increment32::check(value)
+                .context(RoundingIncrementError::ForSpan));
             Ok(Increment { unit, value })
         }
     }
@@ -81,8 +81,8 @@ impl Increment {
         }
 
         // For signed durations, we allow any increment that is within range.
-        let value = b::Increment32::check(value)
-            .context(RoundingIncrementError::ForSignedDuration)?;
+        let value = rtry!(b::Increment32::check(value)
+            .context(RoundingIncrementError::ForSignedDuration));
         Ok(Increment { unit, value })
     }
 
@@ -99,8 +99,8 @@ impl Increment {
         }
 
         // For time zone offsets, we allow any increment that is within range.
-        let value = b::Increment32::check(value)
-            .context(RoundingIncrementError::ForOffset)?;
+        let value = rtry!(b::Increment32::check(value)
+            .context(RoundingIncrementError::ForOffset));
         Ok(Increment { unit, value })
     }
 

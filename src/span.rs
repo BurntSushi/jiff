@@ -1769,17 +1769,17 @@ impl Span {
         let (span1, span2) = (*self, *span);
         let unit = span1.largest_unit().max(span2.largest_unit());
         let start = match relative {
-            Some(r) => match r.to_relative(unit)? {
+            Some(r) => match rtry!(r.to_relative(unit)) {
                 None => return span1.checked_add_invariant(unit, &span2),
                 Some(r) => r,
             },
             None => {
-                requires_relative_date_err(unit)?;
+                rtry!(requires_relative_date_err(unit));
                 return span1.checked_add_invariant(unit, &span2);
             }
         };
-        let mid = start.checked_add(span1)?;
-        let end = mid.checked_add(span2)?;
+        let mid = rtry!(start.checked_add(span1));
+        let end = rtry!(mid.checked_add(span2));
         start.until(unit, &end)
     }
 
@@ -1792,19 +1792,19 @@ impl Span {
         let (span1, dur2) = (*self, duration);
         let unit = span1.largest_unit();
         let start = match relative {
-            Some(r) => match r.to_relative(unit)? {
+            Some(r) => match rtry!(r.to_relative(unit)) {
                 None => {
                     return span1.checked_add_invariant_duration(unit, dur2)
                 }
                 Some(r) => r,
             },
             None => {
-                requires_relative_date_err(unit)?;
+                rtry!(requires_relative_date_err(unit));
                 return span1.checked_add_invariant_duration(unit, dur2);
             }
         };
-        let mid = start.checked_add(span1)?;
-        let end = mid.checked_add_duration(dur2)?;
+        let mid = rtry!(start.checked_add(span1));
+        let end = rtry!(mid.checked_add_duration(dur2));
         start.until(unit, &end)
     }
 
@@ -1871,7 +1871,7 @@ impl Span {
         options: A,
     ) -> Result<Span, Error> {
         let mut options: SpanArithmetic<'_> = options.into();
-        options.duration = options.duration.checked_neg()?;
+        options.duration = rtry!(options.duration.checked_neg());
         options.checked_add(*self)
     }
 
@@ -2389,7 +2389,7 @@ impl Span {
         let Some(result) = relative.to_relative(max_unit).transpose() else {
             return Ok(self.to_invariant_duration());
         };
-        let relspan = result
+        let relspan = rtry!(result
             .and_then(|r| r.into_relative_span(Unit::Second, *self))
             .with_context(|| match relative.kind {
                 SpanRelativeToKind::Civil(_) => E::ToDurationCivil,
@@ -2397,7 +2397,7 @@ impl Span {
                 SpanRelativeToKind::DaysAre24Hours => {
                     E::ToDurationDaysAre24Hours
                 }
-            })?;
+            }));
         debug_assert!(relspan.span.largest_unit() <= Unit::Second);
         Ok(relspan.span.to_invariant_duration())
     }
@@ -2680,47 +2680,47 @@ impl Span {
 
         if matches!(largest, Unit::Week) {
             let (weeks, rem) = dur.as_civil_weeks_with_remainder();
-            span = span.try_weeks(weeks)?;
+            span = rtry!(span.try_weeks(weeks));
             dur = rem;
         }
         if largest >= Unit::Day {
             let (days, rem) = dur.as_civil_days_with_remainder();
-            span = span.try_days(days)?;
+            span = rtry!(span.try_days(days));
             dur = rem;
         }
         if largest >= Unit::Hour {
             let (hours, rem) = dur.as_hours_with_remainder();
-            span = span.try_hours(hours)?;
+            span = rtry!(span.try_hours(hours));
             dur = rem;
         }
         if largest >= Unit::Minute {
             let (mins, rem) = dur.as_mins_with_remainder();
-            span = span.try_minutes(mins)?;
+            span = rtry!(span.try_minutes(mins));
             dur = rem;
         }
         if largest >= Unit::Second {
             let (secs, rem) = dur.as_secs_with_remainder();
-            span = span.try_seconds(secs)?;
+            span = rtry!(span.try_seconds(secs));
             dur = rem;
         }
         if largest >= Unit::Millisecond {
             let (millis, rem) = dur.as_millis_with_remainder();
             let millis = i64::try_from(millis)
                 .map_err(|_| b::SpanMilliseconds::error())?;
-            span = span.try_milliseconds(millis)?;
+            span = rtry!(span.try_milliseconds(millis));
             dur = rem;
         }
         if largest >= Unit::Microsecond {
             let (micros, rem) = dur.as_micros_with_remainder();
             let micros = i64::try_from(micros)
                 .map_err(|_| b::SpanMicroseconds::error())?;
-            span = span.try_microseconds(micros)?;
+            span = rtry!(span.try_microseconds(micros));
             dur = rem;
         }
         if largest >= Unit::Nanosecond {
             let nanos = i64::try_from(dur.as_nanos())
                 .map_err(|_| b::SpanNanoseconds::error())?;
-            span = span.try_nanoseconds(nanos)?;
+            span = rtry!(span.try_nanoseconds(nanos));
         }
 
         Ok(span)
@@ -3239,8 +3239,8 @@ impl TryFrom<Span> for SignedDuration {
 
     #[inline]
     fn try_from(sp: Span) -> Result<SignedDuration, Error> {
-        requires_relative_date_err(sp.largest_unit())
-            .context(E::ConvertSpanToSignedDuration)?;
+        rtry!(requires_relative_date_err(sp.largest_unit())
+            .context(E::ConvertSpanToSignedDuration));
         Ok(sp.to_invariant_duration())
     }
 }
@@ -3309,7 +3309,7 @@ impl TryFrom<SignedDuration> for Span {
             (nanoseconds % b::NANOS_PER_MILLI) / b::NANOS_PER_MICRO;
         let nanoseconds = nanoseconds % b::NANOS_PER_MICRO;
 
-        let span = Span::new().try_seconds(seconds)?;
+        let span = rtry!(Span::new().try_seconds(seconds));
         // These are all OK because `|SignedDuration::subsec_nanos|` is
         // guaranteed to return less than 1_000_000_000 nanoseconds. And
         // splitting that up into millis, micros and nano components is
@@ -4124,7 +4124,7 @@ impl<'a> SpanArithmetic<'a> {
 
     #[inline]
     fn checked_add(self, span1: Span) -> Result<Span, Error> {
-        match self.duration.to_signed()? {
+        match rtry!(self.duration.to_signed()) {
             SDuration::Span(span2) => {
                 span1.checked_add_span(self.relative, &span2)
             }
@@ -4370,7 +4370,7 @@ impl<'a> SpanCompare<'a> {
         let (span1, span2) = (span, self.span);
         let unit = span1.largest_unit().max(span2.largest_unit());
         let start = match self.relative {
-            Some(r) => match r.to_relative(unit)? {
+            Some(r) => match rtry!(r.to_relative(unit)) {
                 Some(r) => r,
                 None => {
                     let dur1 = span1.to_invariant_duration();
@@ -4379,14 +4379,14 @@ impl<'a> SpanCompare<'a> {
                 }
             },
             None => {
-                requires_relative_date_err(unit)?;
+                rtry!(requires_relative_date_err(unit));
                 let dur1 = span1.to_invariant_duration();
                 let dur2 = span2.to_invariant_duration();
                 return Ok(dur1.cmp(&dur2));
             }
         };
-        let end1 = start.checked_add(span1)?.to_duration();
-        let end2 = start.checked_add(span2)?.to_duration();
+        let end1 = rtry!(start.checked_add(span1)).to_duration();
+        let end2 = rtry!(start.checked_add(span2)).to_duration();
         Ok(end1.cmp(&end2))
     }
 }
@@ -4606,18 +4606,18 @@ impl<'a> SpanTotal<'a> {
     fn total(self, span: Span) -> Result<f64, Error> {
         let max_unit = self.unit.max(span.largest_unit());
         let relative = match self.relative {
-            Some(r) => match r.to_relative(max_unit)? {
+            Some(r) => match rtry!(r.to_relative(max_unit)) {
                 Some(r) => r,
                 None => {
                     return Ok(self.total_invariant(span));
                 }
             },
             None => {
-                requires_relative_date_err(max_unit)?;
+                rtry!(requires_relative_date_err(max_unit));
                 return Ok(self.total_invariant(span));
             }
         };
-        let relspan = relative.into_relative_span(self.unit, span)?;
+        let relspan = rtry!(relative.into_relative_span(self.unit, span));
         if !self.unit.is_variable() {
             return Ok(self.total_invariant(relspan.span));
         }
@@ -4636,12 +4636,12 @@ impl<'a> SpanTotal<'a> {
                 (start, end)
             }
         };
-        let (relative0, relative1) = unit_start_and_end(
+        let (relative0, relative1) = rtry!(unit_start_and_end(
             &relative_start,
             relspan.span.without_lower(self.unit),
             self.unit,
             sign.as_i64(),
-        )?;
+        ));
         let denom = (relative1 - relative0).as_nanos() as f64;
         let numer = (relative_end.to_duration() - relative0).as_nanos() as f64;
         let unit_val = relspan.span.get_unit(self.unit) as f64;
@@ -5144,7 +5144,8 @@ impl<'a> SpanRound<'a> {
             .largest
             .unwrap_or_else(|| self.smallest.max(existing_largest));
         let max = existing_largest.max(largest);
-        let increment = Increment::for_span(self.smallest, self.increment)?;
+        let increment =
+            rtry!(Increment::for_span(self.smallest, self.increment));
         if largest < self.smallest {
             return Err(Error::from(
                 UnitConfigError::LargestSmallerThanSmallest {
@@ -5156,7 +5157,7 @@ impl<'a> SpanRound<'a> {
 
         let relative = match self.relative {
             Some(ref r) => {
-                match r.to_relative(max)? {
+                match rtry!(r.to_relative(max)) {
                     Some(r) => r,
                     None => {
                         // If our reference point is civil time, then its units
@@ -5165,9 +5166,9 @@ impl<'a> SpanRound<'a> {
                         // independent of the reference point. In which case,
                         // rounding is a simple matter of converting the span
                         // to a number of nanoseconds and then rounding that.
-                        return Ok(round_span_invariant(
+                        return Ok(rtry!(round_span_invariant(
                             span, largest, &increment, self.mode,
-                        )?);
+                        )));
                     }
                 }
             }
@@ -5177,18 +5178,18 @@ impl<'a> SpanRound<'a> {
                 // when it has weeks/days units, but that requires explicitly
                 // specifying a special relative date marker, which is handled
                 // by the `Some` case above.
-                requires_relative_date_err(self.smallest)
-                    .context(E::OptionSmallest)?;
+                rtry!(requires_relative_date_err(self.smallest)
+                    .context(E::OptionSmallest));
                 if let Some(largest) = self.largest {
-                    requires_relative_date_err(largest)
-                        .context(E::OptionLargest)?;
+                    rtry!(requires_relative_date_err(largest)
+                        .context(E::OptionLargest));
                 }
-                requires_relative_date_err(existing_largest)
-                    .context(E::OptionLargestInSpan)?;
+                rtry!(requires_relative_date_err(existing_largest)
+                    .context(E::OptionLargestInSpan));
                 assert!(max <= Unit::Week);
-                return Ok(round_span_invariant(
+                return Ok(rtry!(round_span_invariant(
                     span, largest, &increment, self.mode,
-                )?);
+                )));
             }
         };
         relative.round(span, largest, &increment, self.mode)
@@ -5474,7 +5475,7 @@ impl<'a> SpanRelativeTo<'a> {
         }
         match self.kind {
             SpanRelativeToKind::Civil(dt) => {
-                Ok(Some(Relative::Civil(RelativeCivil::new(dt)?)))
+                Ok(Some(Relative::Civil(rtry!(RelativeCivil::new(dt)))))
             }
             SpanRelativeToKind::Zoned(zdt) => {
                 Ok(Some(Relative::Zoned(RelativeZoned {
@@ -5620,19 +5621,19 @@ impl UnitSet {
 // part of the public crate API.
 impl core::fmt::Debug for UnitSet {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{{")?;
+        rtry!(write!(f, "{{"));
         let mut units = *self;
         let mut i = 0;
         while let Some(unit) = units.largest_unit() {
             if i > 0 {
-                write!(f, ", ")?;
+                rtry!(write!(f, ", "));
             }
             i += 1;
-            write!(f, "{}", unit.compact())?;
+            rtry!(write!(f, "{}", unit.compact()));
             units = units.set(unit, false);
         }
         if i == 0 {
-            write!(f, "∅")?;
+            rtry!(write!(f, "∅"));
         }
         write!(f, "}}")
     }
@@ -5694,9 +5695,11 @@ impl<'a> Relative<'a> {
     /// would result in overflow.
     fn checked_add(&'a self, span: Span) -> Result<Relative<'a>, Error> {
         match *self {
-            Relative::Civil(dt) => Ok(Relative::Civil(dt.checked_add(span)?)),
+            Relative::Civil(dt) => {
+                Ok(Relative::Civil(rtry!(dt.checked_add(span))))
+            }
             Relative::Zoned(ref zdt) => {
-                Ok(Relative::Zoned(zdt.checked_add(span)?))
+                Ok(Relative::Zoned(rtry!(zdt.checked_add(span))))
             }
         }
     }
@@ -5707,10 +5710,10 @@ impl<'a> Relative<'a> {
     ) -> Result<Relative<'a>, Error> {
         match *self {
             Relative::Civil(dt) => {
-                Ok(Relative::Civil(dt.checked_add_duration(duration)?))
+                Ok(Relative::Civil(rtry!(dt.checked_add_duration(duration))))
             }
             Relative::Zoned(ref zdt) => {
-                Ok(Relative::Zoned(zdt.checked_add_duration(duration)?))
+                Ok(Relative::Zoned(rtry!(zdt.checked_add_duration(duration))))
             }
         }
     }
@@ -5784,15 +5787,15 @@ impl<'a> Relative<'a> {
     ) -> Result<RelativeSpan<'a>, Error> {
         let kind = match self {
             Relative::Civil(start) => {
-                let end = start.checked_add(span)?;
+                let end = rtry!(start.checked_add(span));
                 RelativeSpanKind::Civil { start, end }
             }
             Relative::Zoned(start) => {
-                let end = start.checked_add(span)?;
+                let end = rtry!(start.checked_add(span));
                 RelativeSpanKind::Zoned { start, end }
             }
         };
-        let relspan = kind.into_relative_span(largest)?;
+        let relspan = rtry!(kind.into_relative_span(largest));
         if !span.get_sign().is_zero()
             && !relspan.span.get_sign().is_zero()
             && span.get_sign() != relspan.span.get_sign()
@@ -5817,57 +5820,57 @@ impl<'a> Relative<'a> {
         increment: &Increment,
         mode: RoundMode,
     ) -> Result<Span, Error> {
-        let relspan = self.into_relative_span(largest, span)?;
+        let relspan = rtry!(self.into_relative_span(largest, span));
         if relspan.span.get_sign().is_zero() {
             return Ok(relspan.span);
         }
         let nudge = match relspan.kind {
             RelativeSpanKind::Civil { start, end } => {
                 if increment.unit() > Unit::Day {
-                    Nudge::relative_calendar(
+                    rtry!(Nudge::relative_calendar(
                         relspan.span,
                         &Relative::Civil(start),
                         &Relative::Civil(end),
                         increment,
                         mode,
-                    )?
+                    ))
                 } else {
-                    Nudge::relative_invariant(
+                    rtry!(Nudge::relative_invariant(
                         relspan.span,
                         end.timestamp.as_duration(),
                         largest,
                         increment,
                         mode,
-                    )?
+                    ))
                 }
             }
             RelativeSpanKind::Zoned { ref start, ref end } => {
                 if increment.unit() >= Unit::Day {
-                    Nudge::relative_calendar(
+                    rtry!(Nudge::relative_calendar(
                         relspan.span,
                         &Relative::Zoned(start.borrowed()),
                         &Relative::Zoned(end.borrowed()),
                         increment,
                         mode,
-                    )?
+                    ))
                 } else if largest >= Unit::Day {
                     // This is a special case for zoned datetimes when rounding
                     // could bleed into variable units.
-                    Nudge::relative_zoned_time(
+                    rtry!(Nudge::relative_zoned_time(
                         relspan.span,
                         start,
                         increment,
                         mode,
-                    )?
+                    ))
                 } else {
                     // Otherwise, rounding is the same as civil datetime.
-                    Nudge::relative_invariant(
+                    rtry!(Nudge::relative_invariant(
                         relspan.span,
                         end.zoned.timestamp().as_duration(),
                         largest,
                         increment,
                         mode,
-                    )?
+                    ))
                 }
             }
         };
@@ -5906,14 +5909,14 @@ impl<'a> RelativeSpanKind<'a> {
         largest: Unit,
     ) -> Result<RelativeSpan<'a>, Error> {
         let span = match self {
-            RelativeSpanKind::Civil { ref start, ref end } => start
+            RelativeSpanKind::Civil { ref start, ref end } => rtry!(start
                 .datetime
                 .until((largest, end.datetime))
-                .context(E::FailedSpanBetweenDateTimes { unit: largest })?,
+                .context(E::FailedSpanBetweenDateTimes { unit: largest })),
             RelativeSpanKind::Zoned { ref start, ref end } => {
-                start.zoned.until((largest, &*end.zoned)).context(
+                rtry!(start.zoned.until((largest, &*end.zoned)).context(
                     E::FailedSpanBetweenZonedDateTimes { unit: largest },
-                )?
+                ))
             }
         };
         Ok(RelativeSpan { span, kind: self })
@@ -5953,10 +5956,10 @@ impl RelativeCivil {
     /// timestamp. This only occurs near the minimum and maximum civil datetime
     /// values.
     fn new(datetime: DateTime) -> Result<RelativeCivil, Error> {
-        let timestamp = datetime
+        let timestamp = rtry!(datetime
             .to_zoned(TimeZone::UTC)
-            .context(E::ConvertDateTimeToTimestamp)?
-            .timestamp();
+            .context(E::ConvertDateTimeToTimestamp))
+        .timestamp();
         Ok(RelativeCivil { datetime, timestamp })
     }
 
@@ -5971,11 +5974,11 @@ impl RelativeCivil {
     /// converted to a timestamp in UTC. This only occurs near the minimum and
     /// maximum datetime values.
     fn checked_add(&self, span: Span) -> Result<RelativeCivil, Error> {
-        let datetime = self.datetime.checked_add(span)?;
-        let timestamp = datetime
+        let datetime = rtry!(self.datetime.checked_add(span));
+        let timestamp = rtry!(datetime
             .to_zoned(TimeZone::UTC)
-            .context(E::ConvertDateTimeToTimestamp)?
-            .timestamp();
+            .context(E::ConvertDateTimeToTimestamp))
+        .timestamp();
         Ok(RelativeCivil { datetime, timestamp })
     }
 
@@ -5994,11 +5997,11 @@ impl RelativeCivil {
         &self,
         duration: SignedDuration,
     ) -> Result<RelativeCivil, Error> {
-        let datetime = self.datetime.checked_add(duration)?;
-        let timestamp = datetime
+        let datetime = rtry!(self.datetime.checked_add(duration));
+        let timestamp = rtry!(datetime
             .to_zoned(TimeZone::UTC)
-            .context(E::ConvertDateTimeToTimestamp)?
-            .timestamp();
+            .context(E::ConvertDateTimeToTimestamp))
+        .timestamp();
         Ok(RelativeCivil { datetime, timestamp })
     }
 
@@ -6038,7 +6041,7 @@ impl<'a> RelativeZoned<'a> {
         &self,
         span: Span,
     ) -> Result<RelativeZoned<'static>, Error> {
-        let zoned = self.zoned.checked_add(span)?;
+        let zoned = rtry!(self.zoned.checked_add(span));
         Ok(RelativeZoned { zoned: DumbCow::Owned(zoned) })
     }
 
@@ -6052,7 +6055,7 @@ impl<'a> RelativeZoned<'a> {
         &self,
         duration: SignedDuration,
     ) -> Result<RelativeZoned<'static>, Error> {
-        let zoned = self.zoned.checked_add(duration)?;
+        let zoned = rtry!(self.zoned.checked_add(duration));
         Ok(RelativeZoned { zoned: DumbCow::Owned(zoned) })
     }
 
@@ -6148,9 +6151,10 @@ impl Nudge {
 
         let sign = balanced.get_sign();
         let balanced_nanos = balanced.to_invariant_duration();
-        let rounded_nanos = increment.round(mode, balanced_nanos)?;
-        let span = Span::from_invariant_duration(largest, rounded_nanos)
-            .context(E::ConvertNanoseconds { unit: largest })?
+        let rounded_nanos = rtry!(increment.round(mode, balanced_nanos));
+        let span =
+            rtry!(Span::from_invariant_duration(largest, rounded_nanos)
+                .context(E::ConvertNanoseconds { unit: largest }))
             .years(balanced.get_years())
             .months(balanced.get_months())
             .weeks(balanced.get_weeks());
@@ -6232,8 +6236,9 @@ impl Nudge {
         // Drop all units below smallest. We specifically don't want them and
         // here is where we no longer need them. `relative_end` still captures
         // how "close" we are between increments of `smallest`.
-        let span =
-            balanced.without_lower(smallest).try_unit(smallest, truncated)?;
+        let span = rtry!(balanced
+            .without_lower(smallest)
+            .try_unit(smallest, truncated));
         // This is OK because the increment value is guaranteed to be in the
         // range `1..=1_000_000_000`. Therefore, multiplying by {-1,0,1} is
         // always valid.
@@ -6249,7 +6254,7 @@ impl Nudge {
         // `amount`. Thus, `relative1 - relative0` corresponds to the length
         // in time, in nanoseconds, of `increment` units of `smallest`.
         let (relative0, relative1) =
-            unit_start_and_end(relative_start, span, smallest, amount)?;
+            rtry!(unit_start_and_end(relative_start, span, smallest, amount));
 
         // This corresponds to how far our original span gets us to the next
         // increment. That is, `relative_end = relative_start + original_span`.
@@ -6273,7 +6278,7 @@ impl Nudge {
         // `relative_end` might be much bigger (or smaller, for negative spans)
         // than `relative1`.
         let rounded_nanos =
-            mode.round_by_duration(progress_nanos, increment_nanos)?;
+            rtry!(mode.round_by_duration(progress_nanos, increment_nanos));
         // If we rounded up, then it's possible we might need to to re-balance
         // our span. (This happens in `bubble`.)
         let grew_big_unit =
@@ -6297,12 +6302,12 @@ impl Nudge {
         // rounding. We must multiply by `increment` because `rounded /
         // increment` gets us back the number of *increments* we rounded over.
         // But the actual number of units may be bigger.
-        let span = span.try_unit(
+        let span = rtry!(span.try_unit(
             smallest,
             truncated
                 + (increment_units
                     * (rounded_nanos.as_secs() / increment_nanos.as_secs())),
-        )?;
+        ));
         // If we rounded up, then the time we don't want to exceed is
         // `relative1`. Otherwise, we don't want to exceed `relative0`.
         // (This is used later in `bubble`.)
@@ -6321,13 +6326,13 @@ impl Nudge {
     ) -> Result<Nudge, Error> {
         let sign = balanced.get_sign();
         let time_dur = balanced.only_lower(Unit::Day).to_invariant_duration();
-        let mut rounded_time_nanos = increment.round(mode, time_dur)?;
-        let (relative0, relative1) = unit_start_and_end(
+        let mut rounded_time_nanos = rtry!(increment.round(mode, time_dur));
+        let (relative0, relative1) = rtry!(unit_start_and_end(
             &Relative::Zoned(relative_start.borrowed()),
             balanced.without_lower(Unit::Day),
             Unit::Day,
             sign.as_i64(),
-        )?;
+        ));
         let day_nanos = relative1 - relative0;
         let beyond_day_nanos = rounded_time_nanos - day_nanos;
 
@@ -6336,19 +6341,22 @@ impl Nudge {
             || b::Sign::from(beyond_day_nanos) == sign
         {
             day_delta += 1;
-            rounded_time_nanos = increment.round(mode, beyond_day_nanos)?;
+            rounded_time_nanos =
+                rtry!(increment.round(mode, beyond_day_nanos));
             relative1 + rounded_time_nanos
         } else {
             relative0 + rounded_time_nanos
         };
 
-        let span =
-            Span::from_invariant_duration(Unit::Hour, rounded_time_nanos)
-                .context(E::ConvertNanoseconds { unit: Unit::Hour })?
-                .years(balanced.get_years())
-                .months(balanced.get_months())
-                .weeks(balanced.get_weeks())
-                .days(balanced.get_days() + day_delta);
+        let span = rtry!(Span::from_invariant_duration(
+            Unit::Hour,
+            rounded_time_nanos
+        )
+        .context(E::ConvertNanoseconds { unit: Unit::Hour }))
+        .years(balanced.get_years())
+        .months(balanced.get_months())
+        .weeks(balanced.get_weeks())
+        .days(balanced.get_days() + day_delta);
         let grew_big_unit = day_delta != 0;
         Ok(Nudge { span, rounded_relative_end, grew_big_unit })
     }
@@ -6391,13 +6399,13 @@ impl Nudge {
                 .get_unit(unit)
                 .checked_add(sign.as_i64())
                 .ok_or_else(|| unit.error())?;
-            let span_end = span_start.try_unit(unit, new_units)?;
+            let span_end = rtry!(span_start.try_unit(unit, new_units));
             let threshold = match relative.kind {
                 RelativeSpanKind::Civil { ref start, .. } => {
-                    start.checked_add(span_end)?.timestamp
+                    rtry!(start.checked_add(span_end)).timestamp
                 }
                 RelativeSpanKind::Zoned { ref start, .. } => {
-                    start.checked_add(span_end)?.zoned.timestamp()
+                    rtry!(start.checked_add(span_end)).zoned.timestamp()
                 }
             };
             // If we overshoot our expected endpoint, then bail.
@@ -6432,7 +6440,7 @@ fn round_span_invariant(
     debug_assert!(increment.unit() <= Unit::Week);
     debug_assert!(largest <= Unit::Week);
     let dur = span.to_invariant_duration();
-    let rounded = increment.round(mode, dur)?;
+    let rounded = rtry!(increment.round(mode, dur));
     Span::from_invariant_duration(largest, rounded)
         .context(E::ConvertNanoseconds { unit: largest })
 }
@@ -6460,9 +6468,9 @@ fn unit_start_and_end(
 ) -> Result<(SignedDuration, SignedDuration), Error> {
     let amount =
         span.get_unit(unit).checked_add(amount).ok_or_else(|| unit.error())?;
-    let span_amount = span.try_unit(unit, amount)?;
-    let relative0 = relative.checked_add(span)?.to_duration();
-    let relative1 = relative.checked_add(span_amount)?.to_duration();
+    let span_amount = rtry!(span.try_unit(unit, amount));
+    let relative0 = rtry!(relative.checked_add(span)).to_duration();
+    let relative1 = rtry!(relative.checked_add(span_amount)).to_duration();
     // This assertion gives better failure modes to what would otherwise be
     // subtle errors downstream if the durations returned here were equivalent.
     // It would imply that the physical time duration between them is zero,

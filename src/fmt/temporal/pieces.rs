@@ -1594,7 +1594,7 @@ impl<'n> TimeZoneAnnotation<'n> {
         // between offsets and time zones.
         let tz = match *self.kind() {
             TimeZoneAnnotationKind::Named(ref name) => {
-                db.get(name.as_str())?
+                rtry!(db.get(name.as_str()))
             }
             TimeZoneAnnotationKind::Offset(offset) => TimeZone::fixed(offset),
         };

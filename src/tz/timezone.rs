@@ -504,7 +504,7 @@ impl TimeZone {
     /// ```
     #[cfg(feature = "alloc")]
     pub fn posix(posix_tz_string: &str) -> Result<TimeZone, Error> {
-        let posix_tz = PosixTimeZoneOwned::parse(posix_tz_string)?;
+        let posix_tz = rtry!(PosixTimeZoneOwned::parse(posix_tz_string));
         Ok(TimeZone::from_posix_tz(posix_tz))
     }
 
@@ -538,7 +538,7 @@ impl TimeZone {
         use alloc::string::ToString;
 
         let name = name.to_string();
-        let tzif = crate::tz::tzif::Tzif::parse(Some(name), data)?;
+        let tzif = rtry!(crate::tz::tzif::Tzif::parse(Some(name), data));
         let repr = Repr::arc_tzif(Arc::new(tzif));
         Ok(TimeZone { repr })
     }
@@ -616,7 +616,7 @@ impl TimeZone {
     /// This returns an error if the given TZif data is invalid.
     #[cfg(feature = "tz-system")]
     pub(crate) fn tzif_system(data: &[u8]) -> Result<TimeZone, Error> {
-        let tzif = crate::tz::tzif::Tzif::parse(None, data)?;
+        let tzif = rtry!(crate::tz::tzif::Tzif::parse(None, data));
         let repr = Repr::arc_tzif(Arc::new(tzif));
         Ok(TimeZone { repr })
     }

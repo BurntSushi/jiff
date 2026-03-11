@@ -157,7 +157,8 @@ impl TzifOwned {
         name: Option<String>,
         bytes: &[u8],
     ) -> Result<Self, Error> {
-        let sh = shared::TzifOwned::parse(name, bytes).map_err(Error::tzif)?;
+        let sh =
+            rtry!(shared::TzifOwned::parse(name, bytes).map_err(Error::tzif));
         Ok(TzifOwned::from_shared_owned(sh))
     }
 
@@ -710,8 +711,9 @@ mod tests {
         let Ok(val) = val.into_string() else {
             anyhow::bail!("{ENV} has invalid UTF-8")
         };
-        let bytes =
-            std::fs::read(&val).with_context(|| alloc::format!("{val:?}"))?;
+        let bytes = rtry!(
+            std::fs::read(&val).with_context(|| alloc::format!("{val:?}"))
+        );
         let tzif = Tzif::parse(Some(val.to_string()), &bytes)?;
         std::eprint!("{}", tzif_to_human_readable(&tzif));
         Ok(())

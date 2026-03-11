@@ -943,7 +943,7 @@ impl Time {
 
     #[inline]
     fn checked_add_span(self, span: &Span) -> Result<Time, Error> {
-        let (time, span) = self.overflowing_add(span)?;
+        let (time, span) = rtry!(self.overflowing_add(span));
         if span.smallest_non_time_non_zero_unit_error().is_some() {
             return Err(Error::from(E::OverflowTimeNanoseconds));
         }
@@ -1112,7 +1112,7 @@ impl Time {
         let sum = span + time;
         let days = sum.div_euclid(i128::from(b::NANOS_PER_CIVIL_DAY)) as i64;
         let rem = sum.rem_euclid(i128::from(b::NANOS_PER_CIVIL_DAY)) as i64;
-        let span = Span::new().try_days(days)?;
+        let span = rtry!(Span::new().try_days(days));
         Ok((Time::from_nanosecond_unchecked(rem), span))
     }
 
@@ -1241,7 +1241,7 @@ impl Time {
         other: A,
     ) -> Result<Span, Error> {
         let args: TimeDifference = other.into();
-        let span = args.until_with_largest_unit(self)?;
+        let span = rtry!(args.until_with_largest_unit(self));
         if args.rounding_may_change_span() {
             span.round(args.round)
         } else {
@@ -1275,7 +1275,7 @@ impl Time {
         other: A,
     ) -> Result<Span, Error> {
         let args: TimeDifference = other.into();
-        let span = -args.until_with_largest_unit(self)?;
+        let span = -rtry!(args.until_with_largest_unit(self));
         if args.rounding_may_change_span() {
             span.round(args.round)
         } else {
@@ -2230,7 +2230,7 @@ impl TimeArithmetic {
 
     #[inline]
     fn checked_add(self, time: Time) -> Result<Time, Error> {
-        match self.duration.to_signed()? {
+        match rtry!(self.duration.to_signed()) {
             SDuration::Span(span) => time.checked_add_span(span),
             SDuration::Absolute(sdur) => time.checked_add_duration(sdur),
         }
@@ -2238,7 +2238,7 @@ impl TimeArithmetic {
 
     #[inline]
     fn checked_neg(self) -> Result<TimeArithmetic, Error> {
-        let duration = self.duration.checked_neg()?;
+        let duration = rtry!(self.duration.checked_neg());
         Ok(TimeArithmetic { duration })
     }
 
@@ -2793,8 +2793,9 @@ impl TimeRound {
 
     /// Does the actual rounding.
     fn round(&self, t: Time) -> Result<Time, Error> {
-        let increment = Increment::for_time(self.smallest, self.increment)?;
-        let rounded = increment.round(self.mode, t.to_duration())?;
+        let increment =
+            rtry!(Increment::for_time(self.smallest, self.increment));
+        let rounded = rtry!(increment.round(self.mode, t.to_duration()));
         if rounded.as_secs() == i64::from(b::CivilDaySecond::MAX + 1) {
             return Ok(Time::MIN);
         }

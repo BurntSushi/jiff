@@ -547,12 +547,12 @@ pub mod timestamp {
                 self,
                 v: u64,
             ) -> Result<crate::Timestamp, E> {
-                let v = i64::try_from(v).map_err(|_| {
+                let v = rtry!(i64::try_from(v).map_err(|_| {
                     de::Error::custom(format_args!(
                         "got unsigned integer {v} seconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
-                })?;
+                }));
                 self.visit_i64(v)
             }
 
@@ -561,12 +561,12 @@ pub mod timestamp {
                 self,
                 v: i128,
             ) -> Result<crate::Timestamp, E> {
-                let v = i64::try_from(v).map_err(|_| {
+                let v = rtry!(i64::try_from(v).map_err(|_| {
                     de::Error::custom(format_args!(
                         "got signed integer {v} seconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
-                })?;
+                }));
                 self.visit_i64(v)
             }
 
@@ -575,12 +575,12 @@ pub mod timestamp {
                 self,
                 v: u128,
             ) -> Result<crate::Timestamp, E> {
-                let v = i64::try_from(v).map_err(|_| {
+                let v = rtry!(i64::try_from(v).map_err(|_| {
                     de::Error::custom(format_args!(
                         "got unsigned integer {v} seconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
-                })?;
+                }));
                 self.visit_i64(v)
             }
         }
@@ -717,12 +717,12 @@ pub mod timestamp {
                 self,
                 v: u64,
             ) -> Result<crate::Timestamp, E> {
-                let v = i64::try_from(v).map_err(|_| {
+                let v = rtry!(i64::try_from(v).map_err(|_| {
                     de::Error::custom(format_args!(
                         "got unsigned integer {v} milliseconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
-                })?;
+                }));
                 self.visit_i64(v)
             }
 
@@ -731,12 +731,12 @@ pub mod timestamp {
                 self,
                 v: i128,
             ) -> Result<crate::Timestamp, E> {
-                let v = i64::try_from(v).map_err(|_| {
+                let v = rtry!(i64::try_from(v).map_err(|_| {
                     de::Error::custom(format_args!(
                         "got signed integer {v} milliseconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
-                })?;
+                }));
                 self.visit_i64(v)
             }
 
@@ -745,12 +745,12 @@ pub mod timestamp {
                 self,
                 v: u128,
             ) -> Result<crate::Timestamp, E> {
-                let v = i64::try_from(v).map_err(|_| {
+                let v = rtry!(i64::try_from(v).map_err(|_| {
                     de::Error::custom(format_args!(
                         "got unsigned integer {v} milliseconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
-                })?;
+                }));
                 self.visit_i64(v)
             }
         }
@@ -887,12 +887,12 @@ pub mod timestamp {
                 self,
                 v: u64,
             ) -> Result<crate::Timestamp, E> {
-                let v = i64::try_from(v).map_err(|_| {
+                let v = rtry!(i64::try_from(v).map_err(|_| {
                     de::Error::custom(format_args!(
                         "got unsigned integer {v} microseconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
-                })?;
+                }));
                 self.visit_i64(v)
             }
 
@@ -901,12 +901,12 @@ pub mod timestamp {
                 self,
                 v: i128,
             ) -> Result<crate::Timestamp, E> {
-                let v = i64::try_from(v).map_err(|_| {
+                let v = rtry!(i64::try_from(v).map_err(|_| {
                     de::Error::custom(format_args!(
                         "got signed integer {v} microseconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
-                })?;
+                }));
                 self.visit_i64(v)
             }
 
@@ -915,12 +915,12 @@ pub mod timestamp {
                 self,
                 v: u128,
             ) -> Result<crate::Timestamp, E> {
-                let v = i64::try_from(v).map_err(|_| {
+                let v = rtry!(i64::try_from(v).map_err(|_| {
                     de::Error::custom(format_args!(
                         "got unsigned integer {v} microseconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
-                })?;
+                }));
                 self.visit_i64(v)
             }
         }
@@ -1024,12 +1024,12 @@ pub mod timestamp {
                 self,
                 v: u128,
             ) -> Result<crate::Timestamp, E> {
-                let v = i128::try_from(v).map_err(|_| {
+                let v = rtry!(i128::try_from(v).map_err(|_| {
                     de::Error::custom(format_args!(
                         "got unsigned integer {v} nanoseconds, \
                          which is too big to fit in a Jiff `Timestamp`",
                     ))
-                })?;
+                }));
                 self.visit_i128(v)
             }
         }
@@ -1797,13 +1797,13 @@ pub mod unsigned_duration {
             };
             first = byte;
         }
-        let dur = if first == b'P' || first == b'p' {
+        let dur = rtry!(if first == b'P' || first == b'p' {
             crate::fmt::temporal::DEFAULT_SPAN_PARSER
                 .parse_unsigned_duration(bytes)
         } else {
             crate::fmt::friendly::DEFAULT_SPAN_PARSER
                 .parse_unsigned_duration(bytes)
-        }?;
+        });
         Ok(dur)
     }
 }

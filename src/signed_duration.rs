@@ -2139,8 +2139,8 @@ impl SignedDuration {
             }
             Err(err) => {
                 let dur = err.duration();
-                let dur = SignedDuration::try_from(dur)
-                    .context(E::ConvertSystemTime)?;
+                let dur = rtry!(SignedDuration::try_from(dur)
+                    .context(E::ConvertSystemTime));
                 dur.checked_neg()
                     .ok_or_else(b::SignedDurationSeconds::error)
                     .context(E::ConvertSystemTime)
@@ -2473,18 +2473,18 @@ impl core::fmt::Debug for SignedDuration {
 
         if f.alternate() {
             if self.subsec_nanos() == 0 {
-                core::fmt::Display::fmt(&self.as_secs(), f)?;
+                rtry!(core::fmt::Display::fmt(&self.as_secs(), f));
                 f.write_str("s")
             } else if self.as_secs() == 0 {
-                core::fmt::Display::fmt(&self.subsec_nanos(), f)?;
+                rtry!(core::fmt::Display::fmt(&self.subsec_nanos(), f));
                 f.write_str("ns")
             } else {
-                core::fmt::Display::fmt(&self.as_secs(), f)?;
-                f.write_str("s ")?;
-                core::fmt::Display::fmt(
+                rtry!(core::fmt::Display::fmt(&self.as_secs(), f));
+                rtry!(f.write_str("s "));
+                rtry!(core::fmt::Display::fmt(
                     &self.subsec_nanos().unsigned_abs(),
                     f,
-                )?;
+                ));
                 f.write_str("ns")
             }
         } else {
@@ -2889,8 +2889,10 @@ impl SignedDurationRound {
 
     /// Does the actual duration rounding.
     fn round(&self, dur: SignedDuration) -> Result<SignedDuration, Error> {
-        let increment =
-            Increment::for_signed_duration(self.smallest, self.increment)?;
+        let increment = rtry!(Increment::for_signed_duration(
+            self.smallest,
+            self.increment
+        ));
         increment
             .round(self.mode, dur)
             .with_context(|| E::RoundOverflowed { unit: self.smallest })

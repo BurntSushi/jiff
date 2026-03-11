@@ -154,7 +154,8 @@ impl ParsedOffset {
         match self.kind {
             ParsedOffsetKind::Zulu => Ok(PiecesOffset::Zulu),
             ParsedOffsetKind::Numeric(ref numeric) => {
-                let mut off = PiecesNumericOffset::from(numeric.to_offset()?);
+                let mut off =
+                    PiecesNumericOffset::from(rtry!(numeric.to_offset()));
                 if numeric.sign.is_negative() {
                     off = off.with_negative_zero();
                 }
@@ -435,7 +436,8 @@ impl Parser {
             let value = ParsedOffset { kind: ParsedOffsetKind::Zulu };
             return Ok(Parsed { value, input });
         }
-        let Parsed { value: numeric, input } = self.parse_numeric(input)?;
+        let Parsed { value: numeric, input } =
+            rtry!(self.parse_numeric(input));
         let value = ParsedOffset { kind: ParsedOffsetKind::Numeric(numeric) };
         Ok(Parsed { value, input })
     }
@@ -456,7 +458,7 @@ impl Parser {
         if !matches!(first, b'z' | b'Z' | b'+' | b'-') {
             return Ok(Parsed { value: None, input });
         }
-        let Parsed { value, input } = self.parse(input)?;
+        let Parsed { value, input } = rtry!(self.parse(input));
         Ok(Parsed { value: Some(value), input })
     }
 
@@ -471,11 +473,11 @@ impl Parser {
     ) -> Result<Parsed<'i, Numeric>, Error> {
         // Parse sign component.
         let Parsed { value: sign, input } =
-            self.parse_sign(input).context(E::InvalidSign)?;
+            rtry!(self.parse_sign(input).context(E::InvalidSign));
 
         // Parse hours component.
         let Parsed { value: hours, input } =
-            self.parse_hours(input).context(E::InvalidHours)?;
+            rtry!(self.parse_hours(input).context(E::InvalidHours));
         let extended = match self.colon {
             Colon::Optional => input.starts_with(b":"),
             Colon::Required => {
@@ -502,9 +504,9 @@ impl Parser {
         };
 
         // Parse optional separator after hours.
-        let Parsed { value: has_minutes, input } = self
+        let Parsed { value: has_minutes, input } = rtry!(self
             .parse_separator(input, extended)
-            .context(E::SeparatorAfterHours)?;
+            .context(E::SeparatorAfterHours));
         if !has_minutes {
             return if self.require_minute
                 || (self.subminute && self.require_second)
@@ -517,7 +519,7 @@ impl Parser {
 
         // Parse minutes component.
         let Parsed { value: minutes, input } =
-            self.parse_minutes(input).context(E::InvalidMinutes)?;
+            rtry!(self.parse_minutes(input).context(E::InvalidMinutes));
         numeric.minutes = Some(minutes);
 
         // If subminute resolution is not supported, then we're done here.
@@ -536,9 +538,9 @@ impl Parser {
         }
 
         // Parse optional separator after minutes.
-        let Parsed { value: has_seconds, input } = self
+        let Parsed { value: has_seconds, input } = rtry!(self
             .parse_separator(input, extended)
-            .context(E::SeparatorAfterMinutes)?;
+            .context(E::SeparatorAfterMinutes));
         if !has_seconds {
             return if self.require_second {
                 Err(Error::from(E::MissingSecondAfterMinute))
@@ -549,7 +551,7 @@ impl Parser {
 
         // Parse seconds component.
         let Parsed { value: seconds, input } =
-            self.parse_seconds(input).context(E::InvalidSeconds)?;
+            rtry!(self.parse_seconds(input).context(E::InvalidSeconds));
         numeric.seconds = Some(seconds);
 
         // If subsecond resolution is not supported, then we're done here.
@@ -562,8 +564,8 @@ impl Parser {
 
         // Parse an optional fractional component.
         let Parsed { value: nanoseconds, input } =
-            parse_temporal_fraction(input)
-                .context(E::InvalidSecondsFractional)?;
+            rtry!(parse_temporal_fraction(input)
+                .context(E::InvalidSecondsFractional));
         // OK because `parse_temporal_fraction` guarantees `0..=999_999_999`.
         numeric.nanoseconds = nanoseconds.map(|n| i32::try_from(n).unwrap());
         Ok(Parsed { value: numeric, input })
@@ -592,7 +594,7 @@ impl Parser {
     ) -> Result<Parsed<'i, i8>, Error> {
         let (hours, input) =
             parse::split(input, 2).ok_or(E::EndOfInputHour)?;
-        let hours = b::OffsetHours::parse(hours).context(E::ParseHours)?;
+        let hours = rtry!(b::OffsetHours::parse(hours).context(E::ParseHours));
         Ok(Parsed { value: hours, input })
     }
 
@@ -604,7 +606,7 @@ impl Parser {
         let (minutes, input) =
             parse::split(input, 2).ok_or(E::EndOfInputMinute)?;
         let minutes =
-            b::OffsetMinutes::parse(minutes).context(E::ParseMinutes)?;
+            rtry!(b::OffsetMinutes::parse(minutes).context(E::ParseMinutes));
         Ok(Parsed { value: minutes, input })
     }
 
@@ -616,7 +618,7 @@ impl Parser {
         let (seconds, input) =
             parse::split(input, 2).ok_or(E::EndOfInputSecond)?;
         let seconds =
-            b::OffsetSeconds::parse(seconds).context(E::ParseSeconds)?;
+            rtry!(b::OffsetSeconds::parse(seconds).context(E::ParseSeconds));
         Ok(Parsed { value: seconds, input })
     }
 

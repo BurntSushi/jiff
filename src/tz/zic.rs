@@ -203,12 +203,12 @@ impl Rules {
                 "every name in rule group must be identical"
             );
             let dst = Dst::from(r.save.suffix() == RuleSaveSuffixP::Dst);
-            let offset = r.save.to_offset().with_context(|| {
+            let offset = rtry!(r.save.to_offset().with_context(|| {
                 E::FailedRule { name: inner.name.as_str().into() }
-            })?;
-            let years = r.years().with_context(|| E::FailedRule {
+            }));
+            let years = rtry!(r.years().with_context(|| E::FailedRule {
                 name: inner.name.as_str().into(),
-            })?;
+            }));
             let month = r.inn.month;
             let letters = r.letters.part;
             let day = r.on;
@@ -248,7 +248,7 @@ impl ZicP {
     /// Parse the zic data given into this zic value. If the data given isn't
     /// valid UTF-8, then this returns an error.
     fn parse_bytes(&mut self, src: &[u8]) -> Result<(), Error> {
-        self.parse_with_fields(FieldParser::from_bytes(src)?)
+        self.parse_with_fields(rtry!(FieldParser::from_bytes(src)))
     }
 
     /// Parse the zic data from the given field parser.
@@ -256,9 +256,10 @@ impl ZicP {
         &mut self,
         mut parser: FieldParser<'_>,
     ) -> Result<(), Error> {
-        while parser.read_next_fields()? {
-            self.parse_one(&mut parser)
-                .context(E::Line { number: parser.line_number })?;
+        while rtry!(parser.read_next_fields()) {
+            rtry!(self
+                .parse_one(&mut parser)
+                .context(E::Line { number: parser.line_number }));
         }
         if let Some(ref name) = parser.continuation_zone_for {
             return Err(Error::from(E::ExpectedContinuationZoneLine {
@@ -274,8 +275,8 @@ impl ZicP {
         assert!(!p.fields.is_empty());
 
         if let Some(name) = p.continuation_zone_for.take() {
-            let zone = ZoneContinuationP::parse(&p.fields)
-                .context(E::FailedContinuationZone)?;
+            let zone = rtry!(ZoneContinuationP::parse(&p.fields)
+                .context(E::FailedContinuationZone));
             let more_continuations = zone.until.is_some();
             // OK because `p.continuation_zone_for` is only set when we have
             // seen a first zone with the corresponding name.
@@ -289,11 +290,12 @@ impl ZicP {
 
         let (first, rest) = (&p.fields[0], &p.fields[1..]);
         if first.starts_with("R") && "Rule".starts_with(first) {
-            let rule = RuleP::parse(rest).context(E::FailedRuleLine)?;
+            let rule = rtry!(RuleP::parse(rest).context(E::FailedRuleLine));
             let name = rule.name.name.clone();
             self.rules.entry(name).or_default().push(rule);
         } else if first.starts_with("Z") && "Zone".starts_with(first) {
-            let first = ZoneFirstP::parse(rest).context(E::FailedZoneFirst)?;
+            let first =
+                rtry!(ZoneFirstP::parse(rest).context(E::FailedZoneFirst));
             let name = first.name.name.clone();
             if first.until.is_some() {
                 p.continuation_zone_for = Some(name.clone());
@@ -310,7 +312,7 @@ impl ZicP {
                 }));
             }
         } else if first.starts_with("L") && "Link".starts_with(first) {
-            let link = LinkP::parse(rest).context(E::FailedLinkLine)?;
+            let link = rtry!(LinkP::parse(rest).context(E::FailedLinkLine));
             let name = link.name.name.clone();
             if self.zones.contains_key(&name) {
                 return Err(Error::from(E::DuplicateLinkZone {
@@ -373,23 +375,26 @@ impl RuleP {
         let (save_field, fields) = (fields[0], &fields[1..]);
         let letters_field = fields[0];
 
-        let name = name_field
+        let name = rtry!(name_field
             .parse::<RuleNameP>()
-            .context(E::FailedParseFieldName)?;
-        let from = from_field
+            .context(E::FailedParseFieldName));
+        let from = rtry!(from_field
             .parse::<RuleFromP>()
-            .context(E::FailedParseFieldFrom)?;
-        let to = to_field.parse::<RuleToP>().context(E::FailedParseFieldTo)?;
+            .context(E::FailedParseFieldFrom));
+        let to =
+            rtry!(to_field.parse::<RuleToP>().context(E::FailedParseFieldTo));
         let inn =
-            in_field.parse::<RuleInP>().context(E::FailedParseFieldIn)?;
-        let on = on_field.parse::<RuleOnP>().context(E::FailedParseFieldOn)?;
-        let at = at_field.parse::<RuleAtP>().context(E::FailedParseFieldAt)?;
-        let save = save_field
+            rtry!(in_field.parse::<RuleInP>().context(E::FailedParseFieldIn));
+        let on =
+            rtry!(on_field.parse::<RuleOnP>().context(E::FailedParseFieldOn));
+        let at =
+            rtry!(at_field.parse::<RuleAtP>().context(E::FailedParseFieldAt));
+        let save = rtry!(save_field
             .parse::<RuleSaveP>()
-            .context(E::FailedParseFieldSave)?;
-        let letters = letters_field
+            .context(E::FailedParseFieldSave));
+        let letters = rtry!(letters_field
             .parse::<RuleLettersP>()
-            .context(E::FailedParseFieldLetters)?;
+            .context(E::FailedParseFieldLetters));
 
         Ok(RuleP { name, from, to, inn, on, at, save, letters })
     }
@@ -451,22 +456,24 @@ impl ZoneFirstP {
         let (stdoff_field, fields) = (fields[0], &fields[1..]);
         let (rules_field, fields) = (fields[0], &fields[1..]);
         let (format_field, fields) = (fields[0], &fields[1..]);
-        let name = name_field
+        let name = rtry!(name_field
             .parse::<ZoneNameP>()
-            .context(E::FailedParseFieldName)?;
-        let stdoff = stdoff_field
+            .context(E::FailedParseFieldName));
+        let stdoff = rtry!(stdoff_field
             .parse::<ZoneStdoffP>()
-            .context(E::FailedParseFieldStdOff)?;
-        let rules = rules_field
+            .context(E::FailedParseFieldStdOff));
+        let rules = rtry!(rules_field
             .parse::<ZoneRulesP>()
-            .context(E::FailedParseFieldRules)?;
-        let format = format_field
+            .context(E::FailedParseFieldRules));
+        let format = rtry!(format_field
             .parse::<ZoneFormatP>()
-            .context(E::FailedParseFieldFormat)?;
+            .context(E::FailedParseFieldFormat));
         let until = if fields.is_empty() {
             None
         } else {
-            Some(ZoneUntilP::parse(fields).context(E::FailedParseFieldUntil)?)
+            Some(rtry!(
+                ZoneUntilP::parse(fields).context(E::FailedParseFieldUntil)
+            ))
         };
         Ok(ZoneFirstP { name, stdoff, rules, format, until })
     }
@@ -497,19 +504,21 @@ impl ZoneContinuationP {
         let (stdoff_field, fields) = (fields[0], &fields[1..]);
         let (rules_field, fields) = (fields[0], &fields[1..]);
         let (format_field, fields) = (fields[0], &fields[1..]);
-        let stdoff = stdoff_field
+        let stdoff = rtry!(stdoff_field
             .parse::<ZoneStdoffP>()
-            .context(E::FailedParseFieldStdOff)?;
-        let rules = rules_field
+            .context(E::FailedParseFieldStdOff));
+        let rules = rtry!(rules_field
             .parse::<ZoneRulesP>()
-            .context(E::FailedParseFieldRules)?;
-        let format = format_field
+            .context(E::FailedParseFieldRules));
+        let format = rtry!(format_field
             .parse::<ZoneFormatP>()
-            .context(E::FailedParseFieldFormat)?;
+            .context(E::FailedParseFieldFormat));
         let until = if fields.is_empty() {
             None
         } else {
-            Some(ZoneUntilP::parse(fields).context(E::FailedParseFieldUntil)?)
+            Some(rtry!(
+                ZoneUntilP::parse(fields).context(E::FailedParseFieldUntil)
+            ))
         };
         Ok(ZoneContinuationP { stdoff, rules, format, until })
     }
@@ -530,12 +539,12 @@ impl LinkP {
         if fields.len() != 2 {
             return Err(Error::from(E::ExpectedLinkTwoFields));
         }
-        let target = fields[0]
+        let target = rtry!(fields[0]
             .parse::<ZoneNameP>()
-            .context(E::FailedParseFieldLinkTarget)?;
-        let name = fields[1]
+            .context(E::FailedParseFieldLinkTarget));
+        let name = rtry!(fields[1]
             .parse::<ZoneNameP>()
-            .context(E::FailedParseFieldLinkName)?;
+            .context(E::FailedParseFieldLinkName));
         Ok(LinkP { target, name })
     }
 }
@@ -583,7 +592,7 @@ impl FromStr for RuleFromP {
     type Err = Error;
 
     fn from_str(from: &str) -> Result<RuleFromP, Error> {
-        let year = parse_year(from).context(E::FailedParseFieldFrom)?;
+        let year = rtry!(parse_year(from).context(E::FailedParseFieldFrom));
         Ok(RuleFromP { year })
     }
 }
@@ -610,7 +619,7 @@ impl FromStr for RuleToP {
         } else if to.starts_with("o") && "only".starts_with(to) {
             Ok(RuleToP::Only)
         } else {
-            let year = parse_year(to).context(E::FailedParseFieldTo)?;
+            let year = rtry!(parse_year(to).context(E::FailedParseFieldTo));
             Ok(RuleToP::Year { year })
         }
     }
@@ -675,14 +684,16 @@ impl RuleOnP {
             }
             RuleOnP::OnOrBefore { weekday, day } => {
                 let start =
-                    Date::new(year, month, day)?.checked_add(1.day())?;
+                    rtry!(rtry!(Date::new(year, month, day))
+                        .checked_add(1.day()));
                 // nth_weekday returns "before" instead of "on or before," so
                 // offset the date by a day to get "on or before" semantics.
                 start.nth_weekday(-1, weekday)
             }
             RuleOnP::OnOrAfter { weekday, day } => {
                 let start =
-                    Date::new(year, month, day)?.checked_sub(1.day())?;
+                    rtry!(rtry!(Date::new(year, month, day))
+                        .checked_sub(1.day()));
                 // nth_weekday returns "after" instead of "on or after," so
                 // offset the date by a day to get "on or after" semantics.
                 start.nth_weekday(1, weekday)
@@ -696,18 +707,18 @@ impl FromStr for RuleOnP {
 
     fn from_str(field: &str) -> Result<RuleOnP, Error> {
         if field.starts_with("last") {
-            let weekday = parse_weekday(&field[4..])?;
+            let weekday = rtry!(parse_weekday(&field[4..]));
             Ok(RuleOnP::Last { weekday })
         } else if let Some(i) = field.find("<=") {
-            let weekday = parse_weekday(&field[..i])?;
-            let day = parse_day(&field[i + 2..])?;
+            let weekday = rtry!(parse_weekday(&field[..i]));
+            let day = rtry!(parse_day(&field[i + 2..]));
             Ok(RuleOnP::OnOrBefore { weekday, day })
         } else if let Some(i) = field.find(">=") {
-            let weekday = parse_weekday(&field[..i])?;
-            let day = parse_day(&field[i + 2..])?;
+            let weekday = rtry!(parse_weekday(&field[..i]));
+            let day = rtry!(parse_day(&field[i + 2..]));
             Ok(RuleOnP::OnOrAfter { weekday, day })
         } else if field.chars().all(|ch| ch.is_ascii_digit()) {
-            let day = parse_day(field)?;
+            let day = rtry!(parse_day(field));
             // We don't check that `day` is valid for the month given in the IN
             // field. That gets checked at a higher level.
             Ok(RuleOnP::Day { day })
@@ -751,11 +762,11 @@ impl FromStr for RuleAtP {
         }
         let (span_string, suffix_string) = at.split_at(at.len() - 1);
         if suffix_string.chars().all(|ch| ch.is_ascii_alphabetic()) {
-            let span = parse_duration(span_string)?;
-            let suffix = suffix_string.parse()?;
+            let span = rtry!(parse_duration(span_string));
+            let suffix = rtry!(suffix_string.parse());
             Ok(RuleAtP { dur: span, suffix: Some(suffix) })
         } else {
-            let span = parse_duration(at)?;
+            let span = rtry!(parse_duration(at));
             Ok(RuleAtP { dur: span, suffix: None })
         }
     }
@@ -829,11 +840,11 @@ impl FromStr for RuleSaveP {
         }
         let (span_string, suffix_string) = at.split_at(at.len() - 1);
         if suffix_string.chars().all(|ch| ch.is_ascii_alphabetic()) {
-            let span = parse_duration(span_string)?;
-            let suffix = suffix_string.parse()?;
+            let span = rtry!(parse_duration(span_string));
+            let suffix = rtry!(suffix_string.parse());
             Ok(RuleSaveP { dur: span, suffix: Some(suffix) })
         } else {
-            let span = parse_duration(at)?;
+            let span = rtry!(parse_duration(at));
             Ok(RuleSaveP { dur: span, suffix: None })
         }
     }
@@ -921,7 +932,7 @@ impl FromStr for ZoneStdoffP {
     type Err = Error;
 
     fn from_str(stdoff: &str) -> Result<ZoneStdoffP, Error> {
-        let dur = parse_duration(stdoff)?;
+        let dur = rtry!(parse_duration(stdoff));
         Ok(ZoneStdoffP { dur })
     }
 }
@@ -949,10 +960,10 @@ impl FromStr for ZoneRulesP {
             if rules == "-" {
                 Ok(ZoneRulesP::None)
             } else {
-                Ok(ZoneRulesP::Save(rules.parse()?))
+                Ok(ZoneRulesP::Save(rtry!(rules.parse())))
             }
         } else {
-            Ok(ZoneRulesP::Named(rules.parse()?))
+            Ok(ZoneRulesP::Named(rtry!(rules.parse())))
         }
     }
 }
@@ -1005,16 +1016,16 @@ impl FromStr for ZoneFormatP {
             Ok(ZoneFormatP::Offset)
         } else if let Some((before, after)) = format.split_once("%s") {
             Ok(ZoneFormatP::Variable {
-                before: check_abbrev(before)?,
-                after: check_abbrev(after)?,
+                before: rtry!(check_abbrev(before)),
+                after: rtry!(check_abbrev(after)),
             })
         } else if let Some((std, dst)) = format.split_once("/") {
             Ok(ZoneFormatP::Pair {
-                std: check_abbrev(std)?,
-                dst: check_abbrev(dst)?,
+                std: rtry!(check_abbrev(std)),
+                dst: rtry!(check_abbrev(dst)),
             })
         } else {
-            Ok(ZoneFormatP::Static { format: check_abbrev(format)? })
+            Ok(ZoneFormatP::Static { format: rtry!(check_abbrev(format)) })
         }
     }
 }
@@ -1055,28 +1066,29 @@ impl ZoneUntilP {
         }
 
         let (year_field, fields) = (fields[0], &fields[1..]);
-        let year = parse_year(year_field).context(E::FailedParseYear)?;
+        let year = rtry!(parse_year(year_field).context(E::FailedParseYear));
         if fields.is_empty() {
             return Ok(ZoneUntilP::Year { year });
         }
 
         let (month_field, fields) = (fields[0], &fields[1..]);
         let month =
-            month_field.parse::<RuleInP>().context(E::FailedParseMonth)?;
+            rtry!(month_field.parse::<RuleInP>().context(E::FailedParseMonth));
         if fields.is_empty() {
             return Ok(ZoneUntilP::YearMonth { year, month });
         }
 
         let (day_field, fields) = (fields[0], &fields[1..]);
-        let day = day_field.parse::<RuleOnP>().context(E::FailedParseDay)?;
+        let day =
+            rtry!(day_field.parse::<RuleOnP>().context(E::FailedParseDay));
         if fields.is_empty() {
             return Ok(ZoneUntilP::YearMonthDay { year, month, day });
         }
 
         let (duration_field, fields) = (fields[0], &fields[1..]);
-        let duration = duration_field
+        let duration = rtry!(duration_field
             .parse::<RuleAtP>()
-            .context(E::FailedParseTimeDuration)?;
+            .context(E::FailedParseTimeDuration));
         if !fields.is_empty() {
             return Err(Error::from(E::ExpectedNothingAfterTime));
         }
@@ -1084,9 +1096,10 @@ impl ZoneUntilP {
     }
 
     fn to_datetime(&self) -> Result<DateTime, Error> {
-        let date = self.on().date(self.year(), self.month())?;
-        let dt =
-            date.to_datetime(Time::midnight()).checked_add(self.at().dur)?;
+        let date = rtry!(self.on().date(self.year(), self.month()));
+        let dt = rtry!(date
+            .to_datetime(Time::midnight())
+            .checked_add(self.at().dur));
         Ok(dt)
     }
 
@@ -1142,7 +1155,8 @@ fn parse_year(year: &str) -> Result<i16, Error> {
     } else {
         (b::Sign::Positive, year)
     };
-    let year = b::Year::parse(rest.as_bytes()).context(E::FailedParseYear)?;
+    let year =
+        rtry!(b::Year::parse(rest.as_bytes()).context(E::FailedParseYear));
     Ok(sign * year)
 }
 
@@ -1181,8 +1195,8 @@ fn parse_duration(span: &str) -> Result<SignedDuration, Error> {
     if hour_digits.is_empty() {
         return Err(Error::from(E::ExpectedTimeOneHour));
     }
-    let hours = b::SpanHours::parse(hour_digits.as_bytes())
-        .context(E::FailedParseHour)?;
+    let hours = rtry!(b::SpanHours::parse(hour_digits.as_bytes())
+        .context(E::FailedParseHour));
     dur += SignedDuration::from_hours(sign * i64::from(hours));
     if rest.is_empty() {
         return Ok(dur);
@@ -1198,8 +1212,8 @@ fn parse_duration(span: &str) -> Result<SignedDuration, Error> {
     if minute_digits.is_empty() {
         return Err(Error::from(E::ExpectedMinuteAfterHours));
     }
-    let minutes = b::Minute::parse(minute_digits.as_bytes())
-        .context(E::FailedParseMinute)?;
+    let minutes = rtry!(b::Minute::parse(minute_digits.as_bytes())
+        .context(E::FailedParseMinute));
     dur += SignedDuration::from_mins(sign * i64::from(minutes));
     if rest.is_empty() {
         return Ok(dur);
@@ -1215,8 +1229,8 @@ fn parse_duration(span: &str) -> Result<SignedDuration, Error> {
     if second_digits.is_empty() {
         return Err(Error::from(E::ExpectedSecondAfterMinutes));
     }
-    let seconds = b::Second::parse(second_digits.as_bytes())
-        .context(E::FailedParseSecond)?;
+    let seconds = rtry!(b::Second::parse(second_digits.as_bytes())
+        .context(E::FailedParseSecond));
     dur += SignedDuration::from_secs(sign * i64::from(seconds));
     if rest.is_empty() {
         return Ok(dur);
@@ -1233,8 +1247,8 @@ fn parse_duration(span: &str) -> Result<SignedDuration, Error> {
     if nanosecond_digits.is_empty() {
         return Err(Error::from(E::ExpectedNanosecondDigits));
     }
-    let nanoseconds = parse::fraction(nanosecond_digits.as_bytes())
-        .context(E::FailedParseNanosecond)?;
+    let nanoseconds = rtry!(parse::fraction(nanosecond_digits.as_bytes())
+        .context(E::FailedParseNanosecond));
     // OK because `parse::fraction` can't return anything more than
     // `999_999_999` nanoseconds.
     dur += SignedDuration::from_nanos(sign * i64::from(nanoseconds));
@@ -1305,8 +1319,9 @@ impl<'a> FieldParser<'a> {
     ///
     /// This returns an error if the given bytes are not valid UTF-8.
     fn from_bytes(src: &'a [u8]) -> Result<FieldParser<'a>, Error> {
-        let src = core::str::from_utf8(src)
-            .map_err(|_| Error::from(E::InvalidUtf8))?;
+        let src =
+            rtry!(core::str::from_utf8(src)
+                .map_err(|_| Error::from(E::InvalidUtf8)));
         Ok(FieldParser::new(src))
     }
 
@@ -1324,8 +1339,8 @@ impl<'a> FieldParser<'a> {
             let Some(line) = self.lines.next() else { return Ok(false) };
             self.line_number =
                 self.line_number.checked_add(1).ok_or(E::LineOverflow)?;
-            parse_fields(&line, &mut self.fields)
-                .context(E::Line { number: self.line_number })?;
+            rtry!(parse_fields(&line, &mut self.fields)
+                .context(E::Line { number: self.line_number }));
             if self.fields.is_empty() {
                 continue;
             }

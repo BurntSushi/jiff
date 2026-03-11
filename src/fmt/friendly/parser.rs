@@ -182,8 +182,8 @@ impl SpanParser {
         #[inline(never)]
         fn imp(span_parser: &SpanParser, input: &[u8]) -> Result<Span, Error> {
             let mut builder = DurationUnits::default();
-            let parsed = span_parser.parse(input, &mut builder)?;
-            let parsed = parsed.and_then(|_| builder.to_span())?;
+            let parsed = rtry!(span_parser.parse(input, &mut builder));
+            let parsed = rtry!(parsed.and_then(|_| builder.to_span()));
             parsed.into_full()
         }
 
@@ -237,8 +237,9 @@ impl SpanParser {
             input: &[u8],
         ) -> Result<SignedDuration, Error> {
             let mut builder = DurationUnits::default();
-            let parsed = span_parser.parse(input, &mut builder)?;
-            let parsed = parsed.and_then(|_| builder.to_signed_duration())?;
+            let parsed = rtry!(span_parser.parse(input, &mut builder));
+            let parsed =
+                rtry!(parsed.and_then(|_| builder.to_signed_duration()));
             parsed.into_full()
         }
 
@@ -294,9 +295,9 @@ impl SpanParser {
             input: &[u8],
         ) -> Result<core::time::Duration, Error> {
             let mut builder = DurationUnits::default();
-            let parsed = span_parser.parse(input, &mut builder)?;
+            let parsed = rtry!(span_parser.parse(input, &mut builder));
             let parsed =
-                parsed.and_then(|_| builder.to_unsigned_duration())?;
+                rtry!(parsed.and_then(|_| builder.to_unsigned_duration()));
             let d = parsed.value;
             parsed.into_full_with(format_args!("{d:?}"))
         }
@@ -325,20 +326,20 @@ impl SpanParser {
                 (sign, input)
             };
 
-        let Parsed { value, input } = self.parse_unit_value(input)?;
+        let Parsed { value, input } = rtry!(self.parse_unit_value(input));
         let Some(first_unit_value) = value else {
             return Err(Error::from(E::ExpectedIntegerAfterSign));
         };
 
         let Parsed { input, .. } =
-            self.parse_duration_units(input, first_unit_value, builder)?;
+            rtry!(self.parse_duration_units(input, first_unit_value, builder));
 
         // As with the prefix sign parsing, guard it to avoid calling the
         // function.
         let (sign, input) = if !input.first().map_or(false, is_whitespace) {
             (sign.unwrap_or(Sign::Positive), input)
         } else {
-            let parsed = self.parse_suffix_sign(sign, input)?;
+            let parsed = rtry!(self.parse_suffix_sign(sign, input));
             (parsed.value, parsed.input)
         };
         builder.set_sign(sign);
@@ -355,21 +356,21 @@ impl SpanParser {
         let mut parsed_any_after_comma = true;
         let mut value = first_unit_value;
         loop {
-            let parsed = self.parse_hms_maybe(input, value)?;
+            let parsed = rtry!(self.parse_hms_maybe(input, value));
             input = parsed.input;
             if let Some(hms) = parsed.value {
-                builder.set_hms(
+                rtry!(builder.set_hms(
                     hms.hour,
                     hms.minute,
                     hms.second,
                     hms.fraction,
-                )?;
+                ));
                 break;
             }
 
             let fraction =
                 if input.first().map_or(false, |&b| b == b'.' || b == b',') {
-                    let parsed = parse_temporal_fraction(input)?;
+                    let parsed = rtry!(parse_temporal_fraction(input));
                     input = parsed.input;
                     parsed.value
                 } else {
@@ -380,7 +381,7 @@ impl SpanParser {
             input = self.parse_optional_whitespace(input).input;
 
             // Parse the actual unit label/designator.
-            let parsed = self.parse_unit_designator(input)?;
+            let parsed = rtry!(self.parse_unit_designator(input));
             input = parsed.input;
             let unit = parsed.value;
 
@@ -389,13 +390,13 @@ impl SpanParser {
             // if the comma is there and only then call the function (which is
             // marked unlineable to try and keep the hot path tighter).
             if input.first().map_or(false, |&b| b == b',') {
-                input = self.parse_optional_comma(input)?.input;
+                input = rtry!(self.parse_optional_comma(input)).input;
                 parsed_any_after_comma = false;
             }
 
-            builder.set_unit_value(unit, value)?;
+            rtry!(builder.set_unit_value(unit, value));
             if let Some(fraction) = fraction {
-                builder.set_fraction(fraction)?;
+                rtry!(builder.set_fraction(fraction));
                 // Once we see a fraction, we are done. We don't permit parsing
                 // any more units. That is, a fraction can only occur on the
                 // lowest unit of time.
@@ -406,7 +407,7 @@ impl SpanParser {
             // before the next unit value. But if we don't see a unit value,
             // we don't eat the whitespace.
             let after_whitespace = self.parse_optional_whitespace(input).input;
-            let parsed = self.parse_unit_value(after_whitespace)?;
+            let parsed = rtry!(self.parse_unit_value(after_whitespace));
             value = match parsed.value {
                 None => break,
                 Some(value) => value,
@@ -437,7 +438,7 @@ impl SpanParser {
         if first != b':' {
             return Ok(Parsed { input, value: None });
         }
-        let Parsed { input, value } = self.parse_hms(tail, hour)?;
+        let Parsed { input, value } = rtry!(self.parse_hms(tail, hour));
         Ok(Parsed { input, value: Some(value) })
     }
 
@@ -456,7 +457,7 @@ impl SpanParser {
         input: &'i [u8],
         hour: u64,
     ) -> Result<Parsed<'i, HMS>, Error> {
-        let Parsed { input, value } = self.parse_unit_value(input)?;
+        let Parsed { input, value } = rtry!(self.parse_unit_value(input));
         let minute = value.ok_or(E::ExpectedMinuteAfterHour)?;
 
         let (&first, input) =
@@ -465,11 +466,11 @@ impl SpanParser {
             return Err(Error::from(E::ExpectedColonAfterMinute));
         }
 
-        let Parsed { input, value } = self.parse_unit_value(input)?;
+        let Parsed { input, value } = rtry!(self.parse_unit_value(input));
         let second = value.ok_or(E::ExpectedSecondAfterMinute)?;
         let (fraction, input) =
             if input.first().map_or(false, |&b| b == b'.' || b == b',') {
-                let parsed = parse_temporal_fraction(input)?;
+                let parsed = rtry!(parse_temporal_fraction(input));
                 (parsed.value, parsed.input)
             } else {
                 (None, input)
