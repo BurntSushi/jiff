@@ -111,12 +111,12 @@ fn get_tz_key_name() -> Result<String, Error> {
 fn nul_terminated_utf16_to_string(
     code_units: &[u16],
 ) -> Result<String, Error> {
-    let nul = rtry!(code_units
+    let nul = code_units
         .iter()
         .position(|&cu| cu == 0)
-        .ok_or(E::WindowsUtf16DecodeNul));
-    let string = rtry!(String::from_utf16(&code_units[..nul])
-        .map_err(|_| E::WindowsUtf16DecodeInvalid));
+        .ok_or(E::WindowsUtf16DecodeNul)?;
+    let string = String::from_utf16(&code_units[..nul])
+        .map_err(|_| E::WindowsUtf16DecodeInvalid)?;
     Ok(string)
 }
 

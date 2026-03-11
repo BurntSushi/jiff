@@ -19,7 +19,7 @@ pub(super) fn get(db: &TimeZoneDatabase) -> Option<TimeZone> {
         // have already done so.
         return None;
     };
-    let tzname = rtry!(getter.get(cstr(PROPERTY_NAME)));
+    let tzname = getter.get(cstr(PROPERTY_NAME))?;
     let Some(tzname) = core::str::from_utf8(&tzname).ok() else {
         warn!(
             "found `{PROPERTY_NAME}` name `{name}` on Android, \
@@ -130,14 +130,13 @@ impl PropertyGetter {
 
         // SAFETY: Our `SystemPropertyFind` type definition matches what is
         // declared in `include/sys/system_properties.h` on Android.
-        let system_property_find: SystemPropertyFind = unsafe {
-            rtry!(load_symbol(libc, cstr("__system_property_find\0")))
-        };
+        let system_property_find: SystemPropertyFind =
+            unsafe { load_symbol(libc, cstr("__system_property_find\0"))? };
 
         // SAFETY: Our `SystemPropertyRead` type definition matches what is
         // declared in `include/sys/system_properties.h` on Android.
         let system_property_read: SystemPropertyRead = unsafe {
-            rtry!(load_symbol(libc, cstr("__system_property_read_callback\0")))
+            load_symbol(libc, cstr("__system_property_read_callback\0"))?
         };
 
         Some(PropertyGetter {

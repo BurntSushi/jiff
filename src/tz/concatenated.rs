@@ -365,10 +365,10 @@ impl Read for std::fs::File {
                 Ok(0) => break,
                 Ok(n) => {
                     buf = &mut buf[n..];
-                    offset = rtry!(u64::try_from(n)
+                    offset = u64::try_from(n)
                         .ok()
                         .and_then(|n| n.checked_add(offset))
-                        .ok_or(E::InvalidOffsetOverflowFile));
+                        .ok_or(E::InvalidOffsetOverflowFile)?;
                 }
                 Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(e) => return Err(Error::io(e)),
