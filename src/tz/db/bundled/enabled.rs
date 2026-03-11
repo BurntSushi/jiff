@@ -20,7 +20,7 @@ impl Database {
         if let Some(tz) = special_time_zone(name) {
             return Some(tz);
         }
-        let (canonical_name, tzif) = rtry!(lookup(name));
+        let (canonical_name, tzif) = lookup(name)?;
         let tz = match TimeZone::tzif(canonical_name, tzif) {
             Ok(tz) => tz,
             Err(_err) => {

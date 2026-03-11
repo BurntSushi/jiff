@@ -154,15 +154,15 @@ impl IDateTime {
         &self,
         seconds: i32,
     ) -> Result<IDateTime, RangeError> {
-        let day_second = self
+        let day_second = rtry!(self
             .time
             .to_second()
             .second
             .checked_add(seconds)
-            .ok_or_else(|| RangeError::DateTimeSeconds)?;
+            .ok_or_else(|| RangeError::DateTimeSeconds));
         let days = day_second.div_euclid(86400);
         let second = day_second.rem_euclid(86400);
-        let date = self.date.checked_add_days(days)?;
+        let date = rtry!(self.date.checked_add_days(days));
         let time = ITimeSecond { second }.to_time();
         Ok(IDateTime { date, time })
     }
@@ -236,9 +236,9 @@ impl IEpochDay {
         amount: i32,
     ) -> Result<IEpochDay, RangeError> {
         let epoch_day = self.epoch_day;
-        let sum = epoch_day
+        let sum = rtry!(epoch_day
             .checked_add(amount)
-            .ok_or_else(|| RangeError::EpochDayI32)?;
+            .ok_or_else(|| RangeError::EpochDayI32));
         let ret = IEpochDay { epoch_day: sum };
         if !(IEpochDay::MIN <= ret && ret <= IEpochDay::MAX) {
             return Err(RangeError::EpochDayDays);
@@ -294,11 +294,11 @@ impl IDate {
             return Err(RangeError::DateInvalidDayOfYear { year });
         }
         let start = IDate { year, month: 1, day: 1 }.to_epoch_day();
-        let end = start
+        let end = rtry!(start
             .checked_add(i32::from(day) - 1)
             // This can only happen when `year=9999` and `day=366`.
-            .map_err(|_| RangeError::DayOfYear)?
-            .to_date();
+            .map_err(|_| RangeError::DayOfYear))
+        .to_date();
         // If we overflowed into the next year, then `day` is too big.
         if year != end.year {
             // Can only happen given day=366 and this is a leap year.
