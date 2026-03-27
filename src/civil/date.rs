@@ -3531,7 +3531,7 @@ fn month_add_overflowing(month: i8, span: i32) -> (i8, i16) {
     let years = total.div_euclid(12);
     let month = total.rem_euclid(12) + 1;
     // OK because `month` is derived from `% 12`, so must fit into an `i8`. And
-    // becuase `years` is derived from `([1-12] - 1 + SpanMonths) / 12` where
+    // because `years` is derived from `([1-12] - 1 + SpanMonths) / 12` where
     // the maximum `SpanMonths` is `239976`. Thus, the result is guaranteed to
     // fit into an `i16`.
     (month as i8, years as i16)
