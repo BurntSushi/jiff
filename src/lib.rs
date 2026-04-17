@@ -636,8 +636,7 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
   When enabled, Jiff will include code that attempts to determine the "system"
   time zone. For example, on Unix systems, this is usually determined by
   looking at the symlink information on `/etc/localtime`. But in general, it's
-  very platform specific and heuristic oriented. On some platforms, this may
-  require extra dependencies. (For example, `windows-sys` on Windows.)
+  very platform specific and heuristic oriented.
 * **tz-fat** (enabled by default) -
   When enabled, Jiff will "fatten" time zone data with extra transitions to
   make time zone lookups faster. This may result in increased heap memory
