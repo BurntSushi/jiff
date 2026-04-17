@@ -169,8 +169,7 @@ Jiff is very conservative. I consider there to be two primary use cases for
 adding new dependencies:
 
 1. When a dependency is _practically_ required in order to interact with a
-platform. For example, `windows-sys` for discovering the system time zone on
-Windows.
+platform.
 2. When a dependency is necessary for inter-operability. For example, `serde`.
 But even here, I expect to be conservative, where I'm generally only willing
 to depend on things that have fewer breaking change releases than Jiff.
