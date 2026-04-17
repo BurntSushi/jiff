@@ -15,7 +15,7 @@ keywords = ["date", "time", "calendar", "zone", "duration"]
 edition = "2021"
 autotests = false
 autoexamples = false
-rust-version = "1.70"
+rust-version = "1.71"
 # We include `/tests/lib.rs` to squash a `cargo package` warning that the
 # `integration` test target is being ignored. We don't include anything else
 # so tests obviously won't work, but it makes `cargo package` quiet.
@@ -56,9 +56,8 @@ logging = ["dep:log"]
 # When enabled, Jiff will include code that attempts to determine the "system"
 # time zone. For example, on Unix systems, this is usually determined by
 # looking at the symlink information on /etc/localtime. But in general, it's
-# very platform specific and heuristic oriented. On some platforms, this may
-# require extra dependencies. (For example, `windows-sys` on Windows.)
-tz-system = ["std", "dep:windows-sys"]
+# very platform specific and heuristic oriented.
+tz-system = ["std"]
 
 # When enabled, Jiff will "fatten" time zone data so that it contains more
 # transitions. This uses a little extra heap memory (or binary size, when
@@ -204,12 +203,6 @@ jiff-static = { version = "=0.2.23", path = "crates/jiff-static" }
 # actually used on platforms without a system tzdb (i.e., Windows and wasm).
 [target.'cfg(any(windows, target_family = "wasm"))'.dependencies]
 jiff-tzdb-platform = { version = "0.1.3", path = "crates/jiff-tzdb-platform", optional = true }
-
-[target.'cfg(windows)'.dependencies.windows-sys]
-version = ">=0.52.0, <=0.61.*"
-default-features = false
-features = ["Win32_Foundation", "Win32_System_Time"]
-optional = true
 
 [target.'cfg(all(any(target_arch = "wasm32", target_arch = "wasm64"), target_os = "unknown"))'.dependencies]
 js-sys = { version = "0.3.50", optional = true }
