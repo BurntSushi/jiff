@@ -65,7 +65,7 @@ jobs:
     - name: Switch to Rust 2024
       run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
     - name: Bump rust-version to Rust 1.85
-      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
+      run: sed -i.bak 's/^rust-version = "1\.71"$/rust-version = "1.85"/' Cargo.toml
     - run: ./scripts/test-default
 
   # Test all features enabled.
@@ -96,7 +96,7 @@ jobs:
     - name: Switch to Rust 2024
       run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
     - name: Bump rust-version to Rust 1.85
-      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
+      run: sed -i.bak 's/^rust-version = "1\.71"$/rust-version = "1.85"/' Cargo.toml
     - run: ./scripts/test-all
 
   # Test Jiff when only the bundled tzdb is enabled.
@@ -127,7 +127,7 @@ jobs:
     - name: Switch to Rust 2024
       run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
     - name: Bump rust-version to Rust 1.85
-      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
+      run: sed -i.bak 's/^rust-version = "1\.71"$/rust-version = "1.85"/' Cargo.toml
     - run: ./scripts/test-only-bundle
 
   # Test Jiff in core-only (including no-alloc) configurations.
@@ -198,7 +198,7 @@ jobs:
     - name: Switch to Rust 2024
       run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
     - name: Bump rust-version to Rust 1.85
-      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
+      run: sed -i.bak 's/^rust-version = "1\.71"$/rust-version = "1.85"/' Cargo.toml
     - name: Run tests under release mode
       run: cargo test --verbose --all --profile testrelease
 
@@ -293,7 +293,7 @@ jobs:
       run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
     - name: Bump rust-version to Rust 1.85
       shell: bash
-      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
+      run: sed -i.bak 's/^rust-version = "1\.71"$/rust-version = "1.85"/' Cargo.toml
     - run: cargo build --verbose
     - run: cargo doc --features serde,static --verbose
     - run: cargo test --verbose --all
