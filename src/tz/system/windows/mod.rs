@@ -2,11 +2,6 @@ use core::mem::MaybeUninit;
 
 use alloc::string::String;
 
-use windows_sys::Win32::System::Time::{
-    GetDynamicTimeZoneInformation, DYNAMIC_TIME_ZONE_INFORMATION,
-    TIME_ZONE_ID_INVALID,
-};
-
 use crate::{
     error::{tz::system::Error as E, Error, ErrorContext},
     tz::{TimeZone, TimeZoneDatabase},
@@ -17,6 +12,13 @@ use self::windows_zones::WINDOWS_TO_IANA;
 
 #[allow(dead_code)] // we don't currently read the version
 mod windows_zones;
+
+mod ffi;
+
+use ffi::{
+    GetDynamicTimeZoneInformation, DYNAMIC_TIME_ZONE_INFORMATION,
+    TIME_ZONE_ID_INVALID,
+};
 
 /// Attempts to find the default "system" time zone.
 ///
@@ -102,7 +104,7 @@ fn get_tz_key_name() -> Result<String, Error> {
     // to unless it fails, and we check for failure above. So we're only here
     // when `info` is properly initialized.
     let info = unsafe { info.assume_init() };
-    let tz_key_name = nul_terminated_utf16_to_string(&info.TimeZoneKeyName)
+    let tz_key_name = nul_terminated_utf16_to_string(&info.timezone_key_name)
         .context(E::WindowsTimeZoneKeyName)?;
     Ok(tz_key_name)
 }

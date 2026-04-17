@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.2.26 (TBD)
+============
+TODO
+
+Enhancements:
+
+* [#538](https://github.com/BurntSushi/jiff/pull/538):
+Replace use of `windows-sys` with `windows-link` and inline bindings.
+
+
 0.2.25 (2026-05-24)
 ===================
 This release updates Jiff's bundled copy of the [IANA Time Zone Database]
