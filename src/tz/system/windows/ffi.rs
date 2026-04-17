@@ -35,7 +35,7 @@ unsafe extern "system" {
     /// These settings control the translations between Coordinated Universal Time (UTC) and local time.
     ///
     /// <https://learn.microsoft.com/en-us/windows/win32/api/timezoneapi/nf-timezoneapi-getdynamictimezoneinformation>
-    pub(super) fn GetDynamicTimeZoneInformation(
+    pub(super) unsafe fn GetDynamicTimeZoneInformation(
         info: *mut DYNAMIC_TIME_ZONE_INFORMATION,
     ) -> u32;
 }
