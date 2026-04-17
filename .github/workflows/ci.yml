@@ -329,7 +329,7 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: 1.70.0
+        toolchain: 1.71.0
     # We would use `cargo build --all` here, but `jiff-cli` doesn't really
     # track an MSRV and I don't want it to.
     - name: Build jiff
