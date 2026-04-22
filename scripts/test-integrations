@@ -12,6 +12,8 @@ set -e
 cd "$(dirname "$0")/.."
 
 integrations=(
+  "jiff-chrono std"
+  "jiff-chrono std,chrono-tz"
   "jiff-diesel mysql"
   "jiff-diesel postgres"
   "jiff-icu std,zoned"
@@ -31,6 +33,7 @@ done
 # Same as above, but with `--lib` only. This is useful when we don't expect
 # doctests to pass for certain feature combinations.
 integrations=(
+  "jiff-chrono alloc"
   "jiff-icu alloc"
   "jiff-icu std"
   "jiff-icu time"
