@@ -108,10 +108,10 @@ documentation lists the full set of supported features.
 
 ### Future plans
 
-My original plan was to release Jiff 1.0 in Summer 2025. It is now Winter 2026,
+My original plan was to release Jiff 1.0 in Summer 2025. It is now April 2026,
 so that deadline has clearly slipped. I've continued to make progress toward
-Jiff 1.0, but it has been more work than anticipated. My current hope is to
-have Jiff 1.0 out by Spring or Summer 2026.
+Jiff 1.0, but it has been more work than anticipated. I don't currently have a
+timeline for a Jiff 1.0 release.
 
 It's important to get Jiff 1.0 as "right" as possible. Namely, once it's
 released, I plan to commit to its API indefinitely. At which point, users of
