@@ -1681,12 +1681,13 @@ impl Span {
     ///
     /// let span1 = 1.month().days(15);
     /// let span2 = 15.days();
-    /// // 1 month from March 1 is 31 days...
+    /// // March 1 plus 1 month is April 1
+    /// // 1 month from April 1 is 30 days...
     /// assert_eq!(
     ///     span1.checked_add((span2, date(2008, 3, 1)))?,
     ///     2.months().fieldwise(),
     /// );
-    /// // ... but 1 month from April 1 is 30 days!
+    /// // ... but 1 month from May 1 is 31 days!
     /// assert_eq!(
     ///     span1.checked_add((span2, date(2008, 4, 1)))?,
     ///     1.month().days(30).fieldwise(),
