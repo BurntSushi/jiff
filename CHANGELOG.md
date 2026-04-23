@@ -1,5 +1,25 @@
 # CHANGELOG
 
+0.2.24 (2026-04-23)
+===================
+This release primarily adds a new `memory_usage` routine for reporting
+heap allocation sizes for the `TimeZone` and `Zoned` types. This
+release also acknowledges and updates the timeline expectations for a
+Jiff 1.0 release in `README.md`.
+
+Enhancements:
+
+* [#520](https://github.com/BurntSushi/jiff/issues/520):
+Add `memory_usage` to the `TimeZone` and `Zoned` types.
+* [#535](https://github.com/BurntSushi/jiff/pull/535):
+Improve comment in `Span::checked_add` example.
+
+Bug fixes:
+
+* [#541](https://github.com/BurntSushi/jiff/pull/541):
+Update Jiff 1.0 timeline.
+
+
 0.2.23 (2026-03-03)
 ===================
 This release updates Jiff's bundled copy of the [IANA Time Zone Database]
