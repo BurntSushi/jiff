@@ -294,15 +294,15 @@ impl Increment {
 pub enum RoundMode {
     /// Rounds toward positive infinity.
     ///
-    /// For negative spans and datetimes, this option will make the value
-    /// smaller, which could be unexpected. To round away from zero, use
+    /// For negative spans and datetimes, this option will make the absolute
+    /// value smaller, which could be unexpected. To round away from zero, use
     /// `Expand`.
     Ceil,
     /// Rounds toward negative infinity.
     ///
     /// This mode acts like `Trunc` for positive spans and datetimes, but
-    /// for negative values it will make the value larger, which could be
-    /// unexpected. To round towards zero, use `Trunc`.
+    /// for negative values, it will make the absolute value larger, which
+    /// could be unexpected. To round towards zero, use `Trunc`.
     Floor,
     /// Rounds away from zero like `Ceil` for positive spans and datetimes,
     /// and like `Floor` for negative spans and datetimes.
