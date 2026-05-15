@@ -779,6 +779,8 @@ mod now;
 pub mod shared;
 mod signed_duration;
 mod span;
+#[cfg(feature = "sqlx-traits")]
+mod sqlx_traits_impl;
 mod timestamp;
 pub mod tz;
 mod util;
