@@ -129,6 +129,15 @@ had optimization attention paid to them, but many still have not. It is a goal
 to improve where we can, but performance will generally come second to API
 comprehension and correctness.
 
+The submodules in Jiff, especially `jiff::fmt`, often work as an
+escape hatch for more complicated APIs that provide more control. For
+example, using the `std::fmt::Display` implementation of `Zoned` makes
+it difficult to write the data into a reusable buffer. Conversely,
+[`jiff::fmt::temporal::DateTimePrinter::print_zoned`] provides a way to write a
+`Zoned` into an existing `String` or even a `Vec<u8>`.
+
+[`jiff::fmt::temporal::DateTimePrinter::print_zoned`]: https://docs.rs/jiff/latest/jiff/fmt/temporal/struct.DateTimePrinter.html#method.print_zoned
+
 ### Platform support
 
 The question of platform support in the context of datetime libraries comes up
