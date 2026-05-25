@@ -30,6 +30,8 @@ defmt_features=(
     "defmt"
     "alloc defmt"
     "std defmt"
+    "alloc defmt serde"
+    "std defmt serde"
 )
 for f in "${defmt_features[@]}"; do
     echo "===== CHECK FEATURES: '$f' ====="
