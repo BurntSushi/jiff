@@ -1,5 +1,13 @@
 # CHANGELOG
 
+0.2.25 (2026-05-24)
+===================
+This release updates Jiff's bundled copy of the [IANA Time Zone Database]
+to `2026b`. See the [`2026b` release announcement] for more details.
+
+[`2026b` release announcement]: https://lists.iana.org//hyperkitty/list/tz-announce@iana.org/thread/VX2Z3CBO6KHTYZNBBKFFWM7ZCI6TVCXP/
+
+
 0.2.24 (2026-04-23)
 ===================
 This release primarily adds a new `memory_usage` routine for reporting
