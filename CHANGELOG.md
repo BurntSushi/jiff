@@ -1,8 +1,15 @@
 # CHANGELOG
 
-0.2.26 (TBD)
-============
-TODO
+0.2.26 (2026-05-25)
+===================
+This release has a couple enhancements.
+
+Firstly, Jiff now uses `windows-link` for calling FFI routines on Windows
+instead of `windows-sys`. Using `windows-link` means less churn and fewer
+duplicates in the dependency graph.
+
+Secondly, a new `jiff-sqlx 0.2.0` release has been put out to support
+`sqlx 0.9.0`.
 
 Enhancements:
 
