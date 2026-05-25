@@ -630,6 +630,11 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
   should enable this feature. See
   [Platform support](crate::_documentation::platform) for more details.
 
+* **defmt** -
+  When enabled, Jiff will implement the `defmt::Format` trait for its public
+  types. This is useful for embedded targets where the usual `core::fmt`
+  machinery is too expensive to pull in.
+
 ### Time zone features
 
 * **tz-system** (enabled by default) -
