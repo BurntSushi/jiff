@@ -5650,22 +5650,22 @@ impl core::fmt::Debug for UnitSet {
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for UnitSet {
-    fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "{{");
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{{");
         let mut units = *self;
         let mut i = 0;
         while let Some(unit) = units.largest_unit() {
             if i > 0 {
-                defmt::write!(fmt, ", ");
+                defmt::write!(f, ", ");
             }
             i += 1;
-            defmt::write!(fmt, "{}", unit.compact());
+            defmt::write!(f, "{}", unit.compact());
             units = units.set(unit, false);
         }
         if i == 0 {
-            defmt::write!(fmt, "∅");
+            defmt::write!(f, "∅");
         }
-        defmt::write!(fmt, "}}");
+        defmt::write!(f, "}}");
     }
 }
 

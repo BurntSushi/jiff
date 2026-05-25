@@ -2314,24 +2314,24 @@ mod repr {
 
     #[cfg(feature = "defmt")]
     impl defmt::Format for Repr {
-        fn format(&self, fmt: defmt::Formatter) {
+        fn format(&self, f: defmt::Formatter) {
             each! {
                 self,
-                UTC => defmt::write!(fmt, "UTC"),
-                UNKNOWN => defmt::write!(fmt, "Etc/Unknown"),
-                FIXED(offset) => defmt::write!(fmt, "Fixed({})", offset),
+                UTC => defmt::write!(f, "UTC"),
+                UNKNOWN => defmt::write!(f, "Etc/Unknown"),
+                FIXED(offset) => defmt::write!(f, "Fixed({})", offset),
                 STATIC_TZIF(tzif) => {
                     // The full debug output is a bit much, so constrain it.
                     let field = tzif.name().unwrap_or("Local");
-                    defmt::write!(fmt, "TZif({})", field)
+                    defmt::write!(f, "TZif({})", field)
                 },
                 ARC_TZIF(tzif) => {
                     // The full debug output is a bit much, so constrain it.
                     let field = tzif.name().unwrap_or("Local");
-                    defmt::write!(fmt, "TZif({})", field)
+                    defmt::write!(f, "TZif({})", field)
                 },
                 ARC_POSIX(posix) => {
-                    defmt::write!(fmt, "Posix({})", posix)
+                    defmt::write!(f, "Posix({})", posix)
                 },
             }
         }

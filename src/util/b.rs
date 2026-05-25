@@ -693,9 +693,9 @@ where
     B: Bounds<Primitive = P>,
     P: defmt::Format,
 {
-    fn format(&self, fmt: defmt::Formatter) {
+    fn format(&self, f: defmt::Formatter) {
         defmt::write!(
-            fmt,
+            f,
             "RawBoundsError {{ what: {}, min: {}, max: {} }}",
             B::WHAT,
             B::MIN,

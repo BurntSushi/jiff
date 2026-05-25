@@ -1135,10 +1135,10 @@ impl core::fmt::Display for Offset {
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for Offset {
-    fn format(&self, fmt: defmt::Formatter) {
+    fn format(&self, f: defmt::Formatter) {
         let sign = if self.is_negative() { "-" } else { "" };
         defmt::write!(
-            fmt,
+            f,
             "{}{:02}:{:02}:{:02}",
             sign,
             self.part_hours().unsigned_abs(),

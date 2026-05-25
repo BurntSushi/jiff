@@ -139,8 +139,8 @@ impl<const N: usize> core::fmt::Write for ArrayStr<N> {
 
 #[cfg(feature = "defmt")]
 impl<const N: usize> defmt::Format for ArrayStr<N> {
-    fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "{}", self.as_str())
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}", self.as_str())
     }
 }
 

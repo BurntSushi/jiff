@@ -396,14 +396,14 @@ impl core::fmt::Debug for Error {
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for Error {
-    fn format(&self, fmt: defmt::Formatter) {
+    fn format(&self, f: defmt::Formatter) {
         let Some(ref inner) = self.inner else {
-            return defmt::write!(fmt, "Error {{ kind: None }}");
+            return defmt::write!(f, "Error {{ kind: None }}");
         };
         #[cfg(feature = "alloc")]
         {
             defmt::write!(
-                fmt,
+                f,
                 "Error {{ kind: {}, cause: {} }}",
                 inner.kind,
                 inner.cause
@@ -657,10 +657,10 @@ impl core::fmt::Display for IOError {
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for IOError {
-    fn format(&self, fmt: defmt::Formatter) {
+    fn format(&self, f: defmt::Formatter) {
         // `std::io::Error` does not implement `defmt::Format`. Since this error is std-only
         // and defmt is mainly used in embedded contexts, omitting the error is fine.
-        defmt::write!(fmt, "IOError");
+        defmt::write!(f, "IOError");
     }
 }
 

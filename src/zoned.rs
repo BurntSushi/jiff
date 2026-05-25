@@ -4160,9 +4160,9 @@ pub struct ZonedDifference<'a> {
 
 #[cfg(feature = "defmt")]
 impl<'a> defmt::Format for ZonedDifference<'a> {
-    fn format(&self, fmt: defmt::Formatter) {
+    fn format(&self, f: defmt::Formatter) {
         defmt::write!(
-            fmt,
+            f,
             "ZonedDifference {{ zoned: {}, round: {} }}",
             self.zoned,
             self.round

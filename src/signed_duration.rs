@@ -2497,14 +2497,14 @@ impl core::fmt::Debug for SignedDuration {
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for SignedDuration {
-    fn format(&self, fmt: defmt::Formatter) {
+    fn format(&self, f: defmt::Formatter) {
         if self.subsec_nanos() == 0 {
-            defmt::write!(fmt, "{}s", self.as_secs());
+            defmt::write!(f, "{}s", self.as_secs());
         } else if self.as_secs() == 0 {
-            defmt::write!(fmt, "{}ns", self.subsec_nanos());
+            defmt::write!(f, "{}ns", self.subsec_nanos());
         } else {
             defmt::write!(
-                fmt,
+                f,
                 "{}s {}ns",
                 self.as_secs(),
                 self.subsec_nanos().unsigned_abs()

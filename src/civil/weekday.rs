@@ -757,10 +757,10 @@ pub struct WeekdaysForward {
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for WeekdaysForward {
-    fn format(&self, fmt: defmt::Formatter) {
+    fn format(&self, f: defmt::Formatter) {
         // Avoid mirroring `Cycle`'s internal state for defmt output. This public
         // iterator is rarely logged directly, so the type name is sufficient.
-        defmt::write!(fmt, "WeekdaysForward");
+        defmt::write!(f, "WeekdaysForward");
     }
 }
 
@@ -785,10 +785,10 @@ pub struct WeekdaysReverse {
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for WeekdaysReverse {
-    fn format(&self, fmt: defmt::Formatter) {
+    fn format(&self, f: defmt::Formatter) {
         // Avoid mirroring `Cycle`'s internal state just for defmt output. This public
         // iterator is rarely logged directly, so the type name is sufficient.
-        defmt::write!(fmt, "WeekdaysReverse");
+        defmt::write!(f, "WeekdaysReverse");
     }
 }
 

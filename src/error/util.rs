@@ -184,9 +184,9 @@ impl core::fmt::Display for OsStrUtf8Error {
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for OsStrUtf8Error {
-    fn format(&self, fmt: defmt::Formatter) {
+    fn format(&self, f: defmt::Formatter) {
         // `OsStr` does not implement `defmt::Format`. Since this error is std-only
         // and defmt is mainly used in embedded contexts, omitting the value is fine.
-        defmt::write!(fmt, "OsStrUtf8Error");
+        defmt::write!(f, "OsStrUtf8Error");
     }
 }
