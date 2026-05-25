@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+
+# This is a script that handles an update to the IANA Time Zone Database
+# embedded into the `jiff-tzdb` crate. This is mostly just some annoying glue
+# to:
+#
+# 1. Make sure the repository is in the expected state.
+# 2. Find the latest tzdb version.
+# 3. Download the new release.
+# 4. Compile the zoneinfo database.
+# 5. Do the actual embedding.
+# 6. Update the CHANGELOG and submit a PR.
+#
+# This should be run without arguments. If you need to test, set
+# `JIFF_TZDB_UPDATE_ALLOW_DIRTY=1`. When set, this will stop just before
+# submitting a PR.
+
+set -euo pipefail
+
+# Do some sanity checking first to make sure we are in a clean state.
+: "${JIFF_TZDB_UPDATE_ALLOW_DIRTY:=}"
+if [ -z "$JIFF_TZDB_UPDATE_ALLOW_DIRTY" ]; then
+  if [ -n "$(git status --porcelain)" ]; then
+    echo "repository must be in a clean state"
+    exit 1
+  fi
+  git pull --quiet --rebase
+fi
+if rg -q TBD CHANGELOG.md; then
+  echo "CHANGELOG cannot have a TBD entry" >&2
+  exit 1
+fi
+
+# A temporary directory. Permit callers to override for persistence.
+: "${TMPDIR:=$(mktemp -d)}"
+mkdir -p "$TMPDIR"
+
+# Get the next version of Jiff that will contain the tzdb update.
+jiff_next_version="$(./scripts/get-next-version)"
+
+# Some URLs used below.
+download="https://www.iana.org/time-zones"
+list_host="https://lists.iana.org"
+announcements="$list_host/hyperkitty/list/tz-announce@iana.org/latest"
+
+# Get the latest version of tzdb. Parsing HTML with ripgrep... ¯\_(ツ)_/¯
+version="$(
+  curl -s "$download" | \
+    rg --max-count 1 -ior '$version' \
+      '<span id="version">(?<version>[0-9]{4}[a-z]+)</span>'
+)"
+name="tzdb-$version"
+nameext="$name.tar.lz"
+url="https://data.iana.org/time-zones/releases/$nameext"
+(cd "$TMPDIR" && curl -sO "$url" && tar xf "$nameext")
+
+# Get the version announcement URL so that we can include it in a commit
+# message and a CHANGELOG entry. Parsing moar HTML with ripgrep... ¯\_(ツ)_/¯
+version_announcement="$(
+  curl -s "$announcements" | \
+    rg --max-count 1 -ioUr '$path' \
+      '<a[^>]+name="(?-i)[A-Z0-9]+"[^>]+href="(?<path>[^"]+)"[^>]*>\s*(?:<i[^>]+>[^<]*</i>)?[^<]*'$version'[^<]*</a>'
+)"
+version_announcement_url="$list_host/$version_announcement"
+
+tzdb_data_dir="$TMPDIR/$name"
+tzdb_zoneinfo="$TMPDIR/zoneinfo"
+jiff_cli="cargo run -qr --manifest-path ./crates/jiff-cli/Cargo.toml -- "
+
+# Branch and do the actual change.
+branch="tzdb/$version"
+echo "Creating branch \`$branch\` for tzdb update change..."
+if ! git checkout "$branch" &> /dev/null; then
+  git checkout HEAD --quiet -b "$branch"
+fi
+
+echo "Generating zoneinfo database from tzdb raw data..."
+$jiff_cli generate zoneinfo "$tzdb_data_dir" "$tzdb_zoneinfo"
+
+echo "Embedding zoneinfo database into jiff-tzdb crate..."
+$jiff_cli generate jiff-tzdb "$tzdb_zoneinfo"
+
+if git diff --exit-code &> /dev/null; then
+  echo "jiff-tzdb is already on the latest tzdb version ($version)" >&2
+  # Exit cleanly. This makes the command idempotent.
+  exit 0
+fi
+
+# Now write about and commit the change.
+echo "Updating CHANGELOG..."
+bak="$TMPDIR/CHANGELOG.md.bak"
+mv CHANGELOG.md "$bak"
+(
+  head -n +2 "$bak"
+  release_heading="$(echo "$jiff_next_version ($(biff time fmt -f '%Y-%m-%d' now))")"
+  echo "$release_heading"
+  printf '%*s\n' ${#release_heading} '' | tr ' ' '='
+  cat <<EOF
+This release updates Jiff's bundled copy of the [IANA Time Zone Database]
+to \`$version\`. See the [\`$version\` release announcement] for more details.
+
+[\`$version\` release announcement]: $version_announcement_url
+EOF
+
+echo
+echo
+tail -n +3 "$bak"
+) > CHANGELOG.md
+
+echo "Committing update..."
+git commit --quiet --all --file - <<EOF
+jiff-tzdb: update to tzdb $version
+
+Ref: $version_announcement_url
+EOF
+
+echo "Creating PR on GitHub..."
+gh pr create --fill
