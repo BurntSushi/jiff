@@ -15,7 +15,7 @@ keywords = ["date", "time", "calendar", "zone", "duration"]
 edition = "2021"
 autotests = false
 autoexamples = false
-rust-version = "1.71"
+rust-version = "1.70"
 # We include `/tests/lib.rs` to squash a `cargo package` warning that the
 # `integration` test target is being ignored. We don't include anything else
 # so tests obviously won't work, but it makes `cargo package` quiet.

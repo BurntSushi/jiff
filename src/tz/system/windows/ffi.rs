@@ -1,6 +1,18 @@
-//! FFI bindings to the Windows function and types used to acquire timezone information
+pub(super) const TIME_ZONE_ID_INVALID: u32 = 0xffffffff;
 
-pub const TIME_ZONE_ID_INVALID: u32 = 0xffffffff;
+#[repr(C)]
+pub(super) struct DYNAMIC_TIME_ZONE_INFORMATION {
+    bias: i32,
+    standard_name: [u16; 32],
+    standard_date: SYSTEMTIME,
+    standard_bias: i32,
+    daylight_name: [u16; 32],
+    daylight_date: SYSTEMTIME,
+    daylight_bias: i32,
+    /// This is the only field we actually need.
+    pub(super) timezone_key_name: [u16; 128],
+    dynamic_daylight_time_disabled: u8,
+}
 
 #[repr(C)]
 struct SYSTEMTIME {
@@ -14,23 +26,10 @@ struct SYSTEMTIME {
     milliseconds: u16,
 }
 
-#[repr(C)]
-pub(super) struct DYNAMIC_TIME_ZONE_INFORMATION {
-    bias: i32,
-    standard_name: [u16; 32],
-    standard_date: SYSTEMTIME,
-    standard_bias: i32,
-    daylight_name: [u16; 32],
-    daylight_date: SYSTEMTIME,
-    daylight_bias: i32,
-    /// This is the only field actually read by jiff
-    pub(super) timezone_key_name: [u16; 128],
-    dynamic_daylight_time_disabled: u8,
-}
-
-// Retrieves the current time zone and dynamic daylight saving time settings.
-//
-// These settings control the translations between Coordinated Universal Time (UTC) and local time.
-//
-// <https://learn.microsoft.com/en-us/windows/win32/api/timezoneapi/nf-timezoneapi-getdynamictimezoneinformation>
+/// Retrieves the current time zone and dynamic daylight saving time settings.
+///
+/// These settings control the translations between Coordinated Universal Time
+/// (UTC) and local time..
+///
+/// See: <https://learn.microsoft.com/en-us/windows/win32/api/timezoneapi/nf-timezoneapi-getdynamictimezoneinformation>
 windows_link::link!("kernel32.dll" "system" fn GetDynamicTimeZoneInformation(info: *mut DYNAMIC_TIME_ZONE_INFORMATION) -> u32);
