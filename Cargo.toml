@@ -168,7 +168,7 @@ tzdb-concatenated = ["std"]
 # Libraries that depend on Jiff should not need to define their own `js`
 # feature just to forward it to Jiff. Instead, application authors can depend
 # on Jiff directly and enable the `js` feature themselves.
-# 
+#
 # (This is the same dependency setup that the `getrandom` crate uses.)
 js = ["dep:wasm-bindgen", "dep:js-sys"]
 
