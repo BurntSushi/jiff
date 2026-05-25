@@ -721,10 +721,11 @@ impl core::fmt::Debug for FilePathError {
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for FilePathError {
-    fn format(&self, fmt: defmt::Formatter) {
-        // `std::path::PathBuf` does not implement `defmt::Format`. Since this error is std-only
-        // and defmt is mainly used in embedded contexts, omitting the path is fine.
-        defmt::write!(fmt, "FilePathError");
+    fn format(&self, f: defmt::Formatter) {
+        // `std::path::PathBuf` does not implement `defmt::Format`.
+        // Since this error is std-only and defmt is mainly used in
+        // embedded contexts, omitting the path is fine.
+        defmt::write!(f, "FilePathError");
     }
 }
 
