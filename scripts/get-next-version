@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+# Ripped out of:
+# https://github.com/BurntSushi/dotfiles/blob/fb213eebcbeb9423bde476446478d32a81637212/bin/cargo-up
+
+function current_version {
+  manifest="$1"
+  rg '^version' "$manifest" | sed 's/.*"\([0-9]\+\.[0-9]\+\.[0-9]\+\)"/\1/g'
+}
+
+function next_version {
+  cur="$1"
+  nopatch=${cur%.*}
+  patch=${cur##*.}
+  patchplus=$((patch + 1))
+  printf "%s.%s\n" $nopatch $patchplus
+}
+
+if ! [ -f ./crates/jiff-cli/Cargo.toml ]; then
+  echo "must run in the root of a jiff repository checkout" >&2
+  exit 1
+fi
+next_version $(current_version "./Cargo.toml")
