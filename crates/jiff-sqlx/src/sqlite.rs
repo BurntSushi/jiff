@@ -1,6 +1,6 @@
 use jiff::fmt::temporal::DateTimeParser;
 use sqlx::sqlite::{
-    Sqlite, SqliteArgumentValue, SqliteTypeInfo, SqliteValueRef,
+    Sqlite, SqliteArgumentsBuffer, SqliteTypeInfo, SqliteValueRef,
 };
 use sqlx::{
     decode::Decode,
@@ -27,7 +27,7 @@ impl Type<Sqlite> for Timestamp {
 impl Encode<'_, Sqlite> for Timestamp {
     fn encode_by_ref(
         &self,
-        buf: &mut Vec<SqliteArgumentValue<'_>>,
+        buf: &mut SqliteArgumentsBuffer,
     ) -> Result<IsNull, BoxDynError> {
         Encode::<Sqlite>::encode(self.to_jiff().to_string(), buf)
     }
@@ -62,7 +62,7 @@ impl Type<Sqlite> for DateTime {
 impl Encode<'_, Sqlite> for DateTime {
     fn encode_by_ref(
         &self,
-        buf: &mut Vec<SqliteArgumentValue<'_>>,
+        buf: &mut SqliteArgumentsBuffer,
     ) -> Result<IsNull, BoxDynError> {
         Encode::<Sqlite>::encode(self.to_jiff().to_string(), buf)
     }
@@ -85,7 +85,7 @@ impl Type<Sqlite> for Date {
 impl Encode<'_, Sqlite> for Date {
     fn encode_by_ref(
         &self,
-        buf: &mut Vec<SqliteArgumentValue<'_>>,
+        buf: &mut SqliteArgumentsBuffer,
     ) -> Result<IsNull, BoxDynError> {
         Encode::<Sqlite>::encode(self.to_jiff().to_string(), buf)
     }
@@ -108,7 +108,7 @@ impl Type<Sqlite> for Time {
 impl Encode<'_, Sqlite> for Time {
     fn encode_by_ref(
         &self,
-        buf: &mut Vec<SqliteArgumentValue<'_>>,
+        buf: &mut SqliteArgumentsBuffer,
     ) -> Result<IsNull, BoxDynError> {
         Encode::<Sqlite>::encode(self.to_jiff().to_string(), buf)
     }
