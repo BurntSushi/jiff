@@ -411,7 +411,7 @@ impl defmt::Format for Error {
         }
         #[cfg(not(feature = "alloc"))]
         {
-            defmt::write!(fmt, "Error {{ kind: {} }}", inner.kind);
+            defmt::write!(f, "Error {{ kind: {} }}", inner.kind);
         }
     }
 }
