@@ -10,7 +10,7 @@ description = "Integration for Jiff with SQLx."
 categories = ["date-and-time"]
 keywords = ["date", "time", "jiff", "sqlx", "zone"]
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.94"
 include = ["/src/*.rs", "/*.dat", "COPYING", "LICENSE-MIT", "UNLICENSE"]
 
 # Integration crates in Jiff are explicitly isolated from the workspace to
@@ -34,7 +34,7 @@ sqlite = ["sqlx/sqlite"]
 [dependencies]
 # The `std` feature is necessary for the `std::error::Error` impl.
 jiff = { version = "0.2.0", path = "../..", default-features = false, features = ["std"] }
-sqlx = { version = "0.8.0", default-features = false }
+sqlx = { version = "0.9.0", default-features = false }
 
 [dev-dependencies]
 jiff = { version = "0.2.0", path = "../..", default-features = true }

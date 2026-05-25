@@ -15,7 +15,7 @@ chrono = "0.4.39"
 jiff = { path = "../.." }
 jiff-sqlx = { path = "../../crates/jiff-sqlx", features = ["sqlite"] }
 tempfile = "3.16.0"
-sqlx = { version = "0.8.3", features = ["chrono", "runtime-tokio", "sqlite"] }
+sqlx = { version = "0.9.0", features = ["chrono", "runtime-tokio", "sqlite"] }
 tokio = { version = "1.43.0", features = ["full"] }
 
 [[bin]]

@@ -8,6 +8,8 @@ Enhancements:
 
 * [#538](https://github.com/BurntSushi/jiff/pull/538):
 Replace use of `windows-sys` with `windows-link` and inline bindings.
+* [#561](https://github.com/BurntSushi/jiff/pull/561):
+Update `jiff-sqlx` to use `sqlx 0.9.0` and release `jiff-sqlx 0.2.0`.
 
 
 0.2.25 (2026-05-24)
