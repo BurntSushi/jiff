@@ -1,5 +1,16 @@
 # CHANGELOG
 
+0.2.27 (2026-05-26)
+===================
+This is a small release with a bug fix for build errors on Windows for very old
+versions of Rust.
+
+Bug fixes:
+
+* [#566](https://github.com/BurntSushi/jiff/issues/566):
+Fix build error on Windows for very old versions of Rust (e.g., 1.71).
+
+
 0.2.26 (2026-05-25)
 ===================
 This release has a couple enhancements.
