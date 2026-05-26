@@ -355,6 +355,19 @@ jobs:
     # - name: Run integration tests
       # run: cargo test --test integration
 
+  # Same as above, but for Windows. The MSRV is technically higher because Jiff
+  # inherits the MSRV of system-level dependencies (like `windows-link`).
+  msrv-win:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: 1.71.1
+    - run: cargo build --verbose
+
   # This job tests that examples outside the workspace build.
   #
   # These are outside the workspace because their dependency graphs are
