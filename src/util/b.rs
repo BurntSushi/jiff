@@ -696,7 +696,7 @@ where
     fn format(&self, f: defmt::Formatter) {
         defmt::write!(
             f,
-            "RawBoundsError {{ what: {}, min: {}, max: {} }}",
+            "RawBoundsError {{ what: {=str}, min: {}, max: {} }}",
             B::WHAT,
             B::MIN,
             B::MAX

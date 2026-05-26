@@ -2323,12 +2323,12 @@ mod repr {
                 STATIC_TZIF(tzif) => {
                     // The full debug output is a bit much, so constrain it.
                     let field = tzif.name().unwrap_or("Local");
-                    defmt::write!(f, "TZif({})", field)
+                    defmt::write!(f, "TZif({=str})", field)
                 },
                 ARC_TZIF(tzif) => {
                     // The full debug output is a bit much, so constrain it.
                     let field = tzif.name().unwrap_or("Local");
-                    defmt::write!(f, "TZif({})", field)
+                    defmt::write!(f, "TZif({=str})", field)
                 },
                 ARC_POSIX(posix) => {
                     defmt::write!(f, "Posix({})", posix)

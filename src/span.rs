@@ -5659,7 +5659,7 @@ impl defmt::Format for UnitSet {
                 defmt::write!(f, ", ");
             }
             i += 1;
-            defmt::write!(f, "{}", unit.compact());
+            defmt::write!(f, "{=str}", unit.compact());
             units = units.set(unit, false);
         }
         if i == 0 {
