@@ -5630,7 +5630,7 @@ impl core::fmt::Debug for UnitSet {
             }
             i += 1;
             write!(f, "{}", unit.compact())?;
-            units = units.set(unit, false);
+            units = units.set(unit, true);
         }
         if i == 0 {
             write!(f, "∅")?;
@@ -7183,5 +7183,11 @@ mod tests {
                 709_551_614,
             ),
         );
+    }
+
+    #[test]
+    fn unit_set_debug() {
+        let set = UnitSet::from_slice(&[Unit::Second]);
+        assert_eq!(std::format!("{set:?}"), "{s}");
     }
 }
