@@ -6529,7 +6529,7 @@ fn requires_relative_date_err(unit: Unit) -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
-    use std::{format, io::Cursor};
+    use std::io::Cursor;
 
     use alloc::string::ToString;
 
