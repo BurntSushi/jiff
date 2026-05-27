@@ -2499,13 +2499,13 @@ impl core::fmt::Debug for SignedDuration {
 impl defmt::Format for SignedDuration {
     fn format(&self, f: defmt::Formatter) {
         if self.subsec_nanos() == 0 {
-            defmt::write!(f, "{}s", self.as_secs());
+            defmt::write!(f, "{=i64}s", self.as_secs());
         } else if self.as_secs() == 0 {
-            defmt::write!(f, "{}ns", self.subsec_nanos());
+            defmt::write!(f, "{=i32}ns", self.subsec_nanos());
         } else {
             defmt::write!(
                 f,
-                "{}s {}ns",
+                "{=i64}s {=u32}ns",
                 self.as_secs(),
                 self.subsec_nanos().unsigned_abs()
             )

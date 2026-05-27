@@ -1139,7 +1139,7 @@ impl defmt::Format for Offset {
         let sign = if self.is_negative() { "-" } else { "" };
         defmt::write!(
             f,
-            "{}{:02}:{:02}:{:02}",
+            "{=str}{=u8:02}:{=u8:02}:{=u8:02}",
             sign,
             self.part_hours().unsigned_abs(),
             self.part_minutes().unsigned_abs(),
