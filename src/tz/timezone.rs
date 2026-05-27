@@ -1922,6 +1922,7 @@ impl<'a> core::fmt::Display for DiagnosticName<'a> {
 /// The lifetime parameter `'t` corresponds to the lifetime of the time zone
 /// that produced this abbreviation.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum TimeZoneAbbreviation<'t> {
     /// For when the abbreviation is borrowed directly from other data. For
     /// example, from TZif or from POSIX TZ strings.

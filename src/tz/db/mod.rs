@@ -598,12 +598,21 @@ impl defmt::Format for TimeZoneDatabase {
 /// The lifetime parameter corresponds to the lifetime of the
 /// `TimeZoneDatabase` from which this iterator was created.
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct TimeZoneNameIter<'d> {
     #[cfg(feature = "alloc")]
     it: alloc::vec::IntoIter<TimeZoneName<'d>>,
     #[cfg(not(feature = "alloc"))]
     it: core::iter::Empty<TimeZoneName<'d>>,
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for TimeZoneNameIter<'_> {
+    fn format(&self, f: defmt::Formatter) {
+        // Avoid depending on the iterator's internal representation for defmt
+        // output. This public iterator is rarely logged directly, so the type
+        // name is sufficient.
+        defmt::write!(f, "TimeZoneNameIter");
+    }
 }
 
 impl<'d> TimeZoneNameIter<'d> {
