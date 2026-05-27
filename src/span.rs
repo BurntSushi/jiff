@@ -7187,9 +7187,7 @@ mod tests {
 
     #[test]
     fn unit_set_debug() {
-        assert_eq!(
-            format!("{:?}", UnitSet::from_slice(&[Unit::Second])),
-            "{s}",
-        );
+        let set = UnitSet::from_slice(&[Unit::Second]);
+        assert_eq!(std::format!("{set:?}"), "{s}");
     }
 }
