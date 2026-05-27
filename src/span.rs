@@ -5630,7 +5630,7 @@ impl core::fmt::Debug for UnitSet {
             }
             i += 1;
             write!(f, "{}", unit.compact())?;
-            units = units.set(unit, false);
+            units = units.set(unit, true);
         }
         if i == 0 {
             write!(f, "∅")?;
@@ -6529,7 +6529,7 @@ fn requires_relative_date_err(unit: Unit) -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::{format, io::Cursor};
 
     use alloc::string::ToString;
 
@@ -7182,6 +7182,14 @@ mod tests {
                 2_459_430_479 * 60 * 60 + 34 * 60 + 33,
                 709_551_614,
             ),
+        );
+    }
+
+    #[test]
+    fn unit_set_debug() {
+        assert_eq!(
+            format!("{:?}", UnitSet::from_slice(&[Unit::Second])),
+            "{s}",
         );
     }
 }
