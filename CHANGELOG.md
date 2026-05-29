@@ -1,5 +1,16 @@
 # CHANGELOG
 
+0.2.28 (2026-05-28)
+===================
+This is a small release with a fix for test failures on 32-bit targets in
+`no-alloc` environments.
+
+Bug fixes:
+
+* [#573](https://github.com/BurntSushi/jiff/issues/573):
+Fix test failure on 32-bit targets in `no-alloc` environments.
+
+
 0.2.27 (2026-05-26)
 ===================
 This is a small release with a bug fix for build errors on Windows for very old
