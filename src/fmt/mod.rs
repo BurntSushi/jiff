@@ -50,6 +50,20 @@ also accepted:
 
 This applies to RFC 3339 and RFC 9557 timestamps as well.
 
+**A note on overlapping standards:** RFC 3339, RFC 9557, and ISO 8601 overlap
+substantially, so many valid datetime strings satisfy more than one of them.
+When a format matches multiple standards, the table above cites the most
+specific one. In particular:
+
+* RFC 3339 is a strict profile of ISO 8601 that resolves ambiguities and
+  restricts the format to a single unambiguous form. RFC 9557 extends RFC 3339
+  with IANA time zone annotations (the `[Region/City]` suffix), so RFC 3339
+  is itself a subset of RFC 9557.
+* The "ISO 8601" label in the table means Jiff supports *that particular* ISO
+  8601 form. ISO 8601 is a large standard with many optional features (for
+  example, week dates, ordinal dates, and truncated representations) that Jiff
+  does not fully implement.
+
 Also, for ISO 8601 durations, the unit designator labels are matched
 case insensitively. For example, `PT1h2m3s` is recognized by Jiff.
 
