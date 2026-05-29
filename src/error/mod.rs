@@ -798,7 +798,14 @@ mod tests {
             //
             // 2026-01-14: A change to the `Offset` type made this move back
             // down to `expected_size *= 4`.
-            expected_size *= 4;
+            //
+            // On 32-bit targets the `Offset`-related fields occupy one extra
+            // word compared to 64-bit, so the multiplier is 5 instead of 4.
+            if cfg!(target_pointer_width = "32") {
+                expected_size *= 5;
+            } else {
+                expected_size *= 4;
+            }
         }
         assert_eq!(expected_size, core::mem::size_of::<Error>());
     }
