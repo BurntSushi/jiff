@@ -1144,14 +1144,18 @@ data type in `hifitime` for representing civil time.
 
 In particular, when computing a duration from two `Epoch` values that spans
 a positive leap second (a second gets repeated), `hifitime` will correctly
-report the accurate duration:
+report the accurate duration. With that said, to get an accurate duration, one
+of the two time scales has to be converted to to TAI (or another time scale
+which does not have leap seconds):
 
 ```rust
-use hifitime::{Duration, Epoch};
+use hifitime::{Duration, Epoch, TimeScale};
 
 fn main() -> anyhow::Result<()> {
     let e1: Epoch = "2015-06-30T23:00:00 UTC".parse()?;
     let e2: Epoch = "2015-07-01T00:00:00 UTC".parse()?;
+    let e2 = e2.to_time_scale(TimeScale::TAI);
+
     let duration = e2 - e1;
     assert_eq!(duration, Duration::from_seconds(3_601.0));
 
