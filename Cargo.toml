@@ -251,7 +251,7 @@ walkdir = "2.5.0"
 
 # hifitime doesn't build on wasm for some reason, so exclude it there.
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies.hifitime]
-version = "3.9.0"
+version = "4.3.0"
 
 [[test]]
 path = "tests/lib.rs"
