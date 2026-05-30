@@ -1153,7 +1153,7 @@ fn main() -> anyhow::Result<()> {
     let e1: Epoch = "2015-06-30T23:00:00 UTC".parse()?;
     let e2: Epoch = "2015-07-01T00:00:00 UTC".parse()?;
     let duration = e2 - e1;
-    assert_eq!(duration, Duration::from_seconds(3_601.0));
+    assert_eq!(duration, Duration::from_seconds(3_600.0));
 
     Ok(())
 }
