@@ -7,6 +7,7 @@ use crate::error;
 pub(crate) const ALLOC_LIMIT: usize = 10 * 1 << 20;
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum Error {
     AllocRequestOverLimit,
     AllocFailed,

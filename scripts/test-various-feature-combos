@@ -10,6 +10,8 @@ features=(
     "alloc"
     "alloc tzdb-bundle-always"
     "alloc serde"
+    "alloc defmt"
+    "alloc serde defmt"
     "std"
     "std tzdb-bundle-platform tzdb-bundle-always"
     "std tzdb-bundle-platform tzdb-bundle-always tzdb-zoneinfo"
@@ -17,6 +19,8 @@ features=(
     "std tzdb-bundle-always tzdb-zoneinfo"
     "std tzdb-bundle-always logging"
     "std tzdb-bundle-always serde"
+    "std tzdb-bundle-always defmt"
+    "std tzdb-bundle-always serde defmt"
     "std tzdb-concatenated"
 )
 for f in "${features[@]}"; do

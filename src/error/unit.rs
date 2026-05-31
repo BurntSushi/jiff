@@ -1,6 +1,7 @@
 use crate::{error, util::b, Unit};
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum UnitConfigError {
     CalendarUnitsNotAllowed { unit: Unit },
     CivilDate { given: Unit },
@@ -123,6 +124,7 @@ impl core::fmt::Display for UnitConfigError {
 }
 
 #[derive(Clone, Copy, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum MustDivide {
     NanosPerCivilDay,
     MicrosPerCivilDay,

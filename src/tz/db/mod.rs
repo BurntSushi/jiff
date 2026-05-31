@@ -578,6 +578,16 @@ impl core::fmt::Debug for TimeZoneDatabase {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for TimeZoneDatabase {
+    fn format(&self, f: defmt::Formatter) {
+        // `Kind` doesn't implement `defmt::Format`, so we only emit the type
+        // name. On embedded targets the database is usually bundled or unused,
+        // so the internal backend probably isn't meaningful to log either way.
+        defmt::write!(f, "TimeZoneDatabase(unavailable)");
+    }
+}
+
 /// An iterator over the time zone identifiers in a [`TimeZoneDatabase`].
 ///
 /// This iterator is created by [`TimeZoneDatabase::available`].
@@ -588,6 +598,7 @@ impl core::fmt::Debug for TimeZoneDatabase {
 /// The lifetime parameter corresponds to the lifetime of the
 /// `TimeZoneDatabase` from which this iterator was created.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct TimeZoneNameIter<'d> {
     #[cfg(feature = "alloc")]
     it: alloc::vec::IntoIter<TimeZoneName<'d>>,
@@ -635,6 +646,7 @@ impl<'d> Iterator for TimeZoneNameIter<'d> {
 /// The lifetime parameter corresponds to the lifetime of the
 /// `TimeZoneDatabase` from which this name was created.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct TimeZoneName<'d> {
     /// The lifetime of the tzdb.
     ///

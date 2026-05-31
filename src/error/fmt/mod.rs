@@ -9,6 +9,7 @@ pub(crate) mod temporal;
 pub(crate) mod util;
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum Error {
     HybridDurationEmpty,
     HybridDurationPrefix {

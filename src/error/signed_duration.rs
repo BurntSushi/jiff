@@ -1,6 +1,7 @@
 use crate::{error, Unit};
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum Error {
     ConvertNonFinite,
     ConvertSystemTime,

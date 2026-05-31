@@ -81,6 +81,7 @@ use crate::{error::Error, shared::util::itime::IWeekday, util::b};
 /// assert_eq!(Weekday::Sunday.to_sunday_one_offset(), 1);
 /// ```
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 #[allow(missing_docs)]
 pub enum Weekday {

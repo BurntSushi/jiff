@@ -1,6 +1,7 @@
 use crate::{civil::Weekday, error, util::escape};
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum Error {
     CommentClosingParenWithoutOpen,
     CommentOpeningParenWithoutClose,

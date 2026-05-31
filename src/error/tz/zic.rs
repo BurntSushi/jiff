@@ -1,11 +1,12 @@
-#[cfg(not(test))]
+#[cfg(any(not(test), not(feature = "alloc")))]
 pub(crate) use self::disabled::*;
-#[cfg(test)]
+#[cfg(all(test, feature = "alloc"))]
 pub(crate) use self::enabled::*;
 
-#[cfg(not(test))]
+#[cfg(any(not(test), not(feature = "alloc")))]
 mod disabled {
     #[derive(Clone, Debug)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub(crate) enum Error {}
 
     impl core::fmt::Display for Error {
@@ -15,7 +16,7 @@ mod disabled {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "alloc"))]
 mod enabled {
     use alloc::boxed::Box;
 
@@ -29,6 +30,7 @@ mod enabled {
     pub(crate) const MAX_LINE_LEN: usize = 2047;
 
     #[derive(Clone, Debug)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub(crate) enum Error {
         DuplicateLink { name: Box<str> },
         DuplicateLinkZone { name: Box<str> },

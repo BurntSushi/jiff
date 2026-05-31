@@ -2760,6 +2760,17 @@ impl core::ops::SubAssign<UnsignedDuration> for DateTime {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for DateTime {
+    fn format(&self, f: defmt::Formatter) {
+        use crate::fmt::{temporal::DEFAULT_DATETIME_PRINTER, DefmtWrite};
+
+        defmt::unwrap!(
+            DEFAULT_DATETIME_PRINTER.print_datetime(self, DefmtWrite(f))
+        );
+    }
+}
+
 #[cfg(feature = "serde")]
 impl serde_core::Serialize for DateTime {
     #[inline]

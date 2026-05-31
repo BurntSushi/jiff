@@ -1,6 +1,7 @@
 use crate::{error, util::escape::Byte};
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum RoundingIncrementError {
     ForDateTime,
     ForOffset,
@@ -42,6 +43,7 @@ impl core::fmt::Display for RoundingIncrementError {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum ParseIntError {
     NoDigitsFound,
     InvalidDigit(u8),
@@ -79,6 +81,7 @@ impl core::fmt::Display for ParseIntError {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum ParseFractionError {
     NoDigitsFound,
     TooManyDigits,
@@ -176,5 +179,14 @@ impl core::fmt::Display for OsStrUtf8Error {
         {
             write!(f, "<BUG: SHOULD NOT EXIST>")
         }
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for OsStrUtf8Error {
+    fn format(&self, f: defmt::Formatter) {
+        // `OsStr` does not implement `defmt::Format`. Since this error is std-only
+        // and defmt is mainly used in embedded contexts, omitting the value is fine.
+        defmt::write!(f, "OsStrUtf8Error(unavailable)");
     }
 }

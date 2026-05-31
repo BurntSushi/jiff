@@ -679,6 +679,7 @@ pub(crate) enum IAmbiguousOffset {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum RangeError {
     DateInvalidDayOfYear { year: i16 },
     DateInvalidDayOfYearNoLeap,

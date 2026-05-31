@@ -2684,6 +2684,17 @@ impl core::ops::DivAssign<i32> for SignedDuration {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for SignedDuration {
+    fn format(&self, f: defmt::Formatter) {
+        use crate::fmt::DefmtWrite;
+
+        defmt::unwrap!(
+            friendly::DEFAULT_SPAN_PRINTER.print_duration(self, DefmtWrite(f))
+        );
+    }
+}
+
 #[cfg(feature = "serde")]
 impl serde_core::Serialize for SignedDuration {
     #[inline]

@@ -2055,6 +2055,17 @@ impl<'a> From<&'a Zoned> for Time {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for Time {
+    fn format(&self, f: defmt::Formatter) {
+        use crate::fmt::{temporal::DEFAULT_DATETIME_PRINTER, DefmtWrite};
+
+        defmt::unwrap!(
+            DEFAULT_DATETIME_PRINTER.print_time(self, DefmtWrite(f))
+        );
+    }
+}
+
 #[cfg(feature = "serde")]
 impl serde_core::Serialize for Time {
     #[inline]

@@ -295,7 +295,7 @@ jobs:
       shell: bash
       run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
     - run: cargo build --verbose
-    - run: cargo doc --features serde,static --verbose
+    - run: cargo doc --features defmt,serde,static --verbose
     - run: cargo test --verbose --all
 
   # Tests for stable-x86_64-gnu. It's different enough from the "main" targets
@@ -312,7 +312,7 @@ jobs:
       with:
         toolchain: stable-x86_64-gnu
     - run: cargo build --verbose
-    - run: cargo doc --features serde,static --verbose
+    - run: cargo doc --features defmt,serde,static --verbose
     - run: cargo test --verbose --lib
     - run: cargo test --verbose --test integration
 
@@ -474,6 +474,19 @@ jobs:
       run: cross test --verbose --target ${{ matrix.target }} --lib --no-default-features -- size
     - if: "!contains(matrix.target, 'android')"
       run: cross test --verbose --target ${{ matrix.target }} -p jiff-cli
+
+  # Test integration with the `defmt` crate for a thumb target.
+  thumbv7m-none-eabi:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+        targets: thumbv7m-none-eabi
+    - uses: actions/checkout@v5
+    - name: Test the build only
+      run: |
+        cargo build --target thumbv7m-none-eabi --features alloc --no-default-features --features defmt
 
   # This is meant to test that Jiff's use of `Arc` from `portable-atomic-util`
   # on targets that don't have `alloc::sync::Arc` in `std` works.

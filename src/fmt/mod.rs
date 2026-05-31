@@ -468,3 +468,58 @@ impl<W: Write> core::fmt::Write for StdFmtWrite<W> {
         self.0.write_str(string).map_err(|_| core::fmt::Error)
     }
 }
+
+/// An adapter for writing Jiff's formatted output to a
+/// [`defmt`] formatter.
+///
+/// This is used by Jiff's [`defmt::Format`] trait implementations to share the
+/// same printer code used for [`core::fmt`] output.
+///
+/// # Example
+///
+/// This example shows the [`defmt::Format`] trait implementation for
+/// [`civil::DateTime`](crate::civil::DateTime) (but using a wrapper type).
+///
+/// ```
+/// use jiff::{
+///     civil::DateTime,
+///     fmt::{temporal::DateTimePrinter, DefmtWrite},
+/// };
+///
+/// struct MyDateTime(DateTime);
+///
+/// impl defmt::Format for MyDateTime {
+///     fn format(&self, f: defmt::Formatter) {
+///         static P: DateTimePrinter = DateTimePrinter::new();
+///         defmt::unwrap!(P.print_datetime(&self.0, DefmtWrite(f)));
+///     }
+/// }
+/// ```
+#[cfg(feature = "defmt")]
+#[derive(defmt::Format)]
+pub struct DefmtWrite<'a>(pub defmt::Formatter<'a>);
+
+#[cfg(feature = "defmt")]
+impl<'a> core::fmt::Debug for DefmtWrite<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        f.debug_struct("DefmtWrite").finish()
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl<'a> core::fmt::Write for DefmtWrite<'a> {
+    #[inline]
+    fn write_str(&mut self, string: &str) -> Result<(), core::fmt::Error> {
+        defmt::write!(self.0, "{=str}", string);
+        Ok(())
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl<'a> Write for DefmtWrite<'a> {
+    #[inline]
+    fn write_str(&mut self, string: &str) -> Result<(), Error> {
+        defmt::write!(self.0, "{=str}", string);
+        Ok(())
+    }
+}
