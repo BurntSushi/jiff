@@ -150,6 +150,7 @@ macro_rules! define_bounds {
 
         /// An error that indicates a value is out of its intended range.
         #[derive(Clone, Debug)]
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
         pub(crate) enum BoundsError {
             $($name(RawBoundsError<$name>),)*
         }
@@ -702,10 +703,28 @@ where
     }
 }
 
+#[cfg(feature = "defmt")]
+impl<B, P> defmt::Format for RawBoundsError<B>
+where
+    B: Bounds<Primitive = P>,
+    P: defmt::Format,
+{
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(
+            f,
+            "RawBoundsError {{ what: {=str}, min: {}, max: {} }}",
+            B::WHAT,
+            B::MIN,
+            B::MAX
+        );
+    }
+}
+
 /// Like `BoundsError`, but maintained manually.
 ///
 /// This is useful for range errors outside of the framework above.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum SpecialBoundsError {
     UnixNanoseconds,
     SignedDurationFloatOutOfRangeF32,

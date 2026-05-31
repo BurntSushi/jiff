@@ -412,6 +412,7 @@ use crate::{
 ///
 /// [infer-time-zone]: https://github.com/BurntSushi/jiff/discussions/181#discussioncomment-11729435
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Pieces<'n> {
     date: Date,
     time: Option<Time>,
@@ -1174,6 +1175,7 @@ impl<'n> core::fmt::Display for Pieces<'n> {
 ///
 /// [RFC 9557]: https://www.rfc-editor.org/rfc/rfc9557.html
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[non_exhaustive]
 pub enum PiecesOffset {
     /// The "Zulu" offset, corresponding to UTC in a context where the offset
@@ -1281,6 +1283,7 @@ impl From<PiecesNumericOffset> for PiecesOffset {
 ///
 /// [RFC 9557]: https://www.rfc-editor.org/rfc/rfc9557
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct PiecesNumericOffset {
     offset: Offset,
     is_negative: bool,
@@ -1448,6 +1451,7 @@ impl From<Offset> for PiecesNumericOffset {
 ///
 /// [RFC 9557]: https://www.rfc-editor.org/rfc/rfc9557.html
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct TimeZoneAnnotation<'n> {
     pub(crate) kind: TimeZoneAnnotationKind<'n>,
     /// Whether the annotation is marked as "critical," i.e., with a
@@ -1641,6 +1645,7 @@ impl From<Offset> for TimeZoneAnnotation<'static> {
 ///
 /// [RFC 9557]: https://www.rfc-editor.org/rfc/rfc9557.html
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[non_exhaustive]
 pub enum TimeZoneAnnotationKind<'n> {
     /// The time zone annotation is a name, usually an IANA time zone
@@ -1694,6 +1699,7 @@ impl From<Offset> for TimeZoneAnnotationKind<'static> {
 /// but callers can also construct one via this type's `From<&str>` trait
 /// implementation if necessary.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct TimeZoneAnnotationName<'n> {
     name: StringCow<'n>,
 }

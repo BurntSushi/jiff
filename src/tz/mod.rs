@@ -148,7 +148,7 @@ pub(crate) mod testdata;
 mod timezone;
 pub(crate) mod tzif;
 // See module comment for WIP status. :-(
-#[cfg(test)]
+#[cfg(all(test, feature = "alloc"))]
 mod zic;
 
 /// Create a `TimeZone` value from TZif data in [`jiff-tzdb`] at compile time.

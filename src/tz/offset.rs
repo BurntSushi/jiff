@@ -33,6 +33,7 @@ use crate::{
 /// This type has a `From<bool>` trait implementation, where the bool is
 /// interpreted as being `true` when DST is active.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Dst {
     /// DST is not in effect. In other words, standard time is in effect.
     No,
@@ -1347,6 +1348,21 @@ impl TryFrom<SignedDuration> for Offset {
             i32::try_from(seconds).map_err(|_| E::OverflowSignedDuration)?;
         Offset::from_seconds(seconds)
             .map_err(|_| Error::from(E::OverflowSignedDuration))
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for Offset {
+    fn format(&self, f: defmt::Formatter) {
+        let sign = if self.is_negative() { "-" } else { "" };
+        defmt::write!(
+            f,
+            "{=str}{=u8:02}:{=u8:02}:{=u8:02}",
+            sign,
+            self.part_hours().unsigned_abs(),
+            self.part_minutes().unsigned_abs(),
+            self.part_seconds().unsigned_abs(),
+        )
     }
 }
 

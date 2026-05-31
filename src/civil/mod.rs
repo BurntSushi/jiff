@@ -130,6 +130,7 @@ mod weekday;
 ///
 /// To get the year in its era format, use [`Date::era_year`].
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Era {
     /// The "before common era" era.
     ///

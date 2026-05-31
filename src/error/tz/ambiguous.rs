@@ -4,6 +4,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum Error {
     BecauseFold { before: Offset, after: Offset },
     BecauseGap { before: Offset, after: Offset },

@@ -888,6 +888,7 @@ impl Custom for PosixCustom {
 // unit. For example, only `%M` doesn't fly. If you want to parse minutes, you
 // also have to parse hours.
 #[derive(Debug, Default)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct BrokenDownTime {
     year: Option<i16>,
     month: Option<i8>,
@@ -3352,6 +3353,7 @@ impl<'f> core::fmt::Debug for Display<'f> {
 /// This can be accessed on a [`BrokenDownTime`] via
 /// [`BrokenDownTime::meridiem`].
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Meridiem {
     /// "ante meridiem" or "before midday."
     ///

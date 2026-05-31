@@ -3461,6 +3461,17 @@ impl core::fmt::Display for Zoned {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for Zoned {
+    fn format(&self, f: defmt::Formatter) {
+        use crate::fmt::{temporal::DEFAULT_DATETIME_PRINTER, DefmtWrite};
+
+        defmt::unwrap!(
+            DEFAULT_DATETIME_PRINTER.print_zoned(self, DefmtWrite(f))
+        );
+    }
+}
+
 /// Parses a zoned timestamp from the Temporal datetime format.
 ///
 /// See the [`fmt::temporal`](crate::fmt::temporal) for more information on

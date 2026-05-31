@@ -1,6 +1,7 @@
 use crate::{civil::Weekday, error, tz::Offset, util::escape};
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum Error {
     ColonCount {
         directive: u8,
@@ -250,6 +251,7 @@ impl core::fmt::Display for Error {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum ParseError {
     ExpectedAmPm,
     ExpectedAmPmTooShort,
@@ -459,6 +461,7 @@ impl core::fmt::Display for ParseError {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum FormatError {
     RequiresDate,
     RequiresInstant,

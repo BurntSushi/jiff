@@ -6,6 +6,7 @@ pub(crate) use self::enabled::*;
 #[cfg(not(feature = "tz-system"))]
 mod disabled {
     #[derive(Clone, Debug)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub(crate) enum Error {}
 
     impl core::fmt::Display for Error {
@@ -20,6 +21,7 @@ mod enabled {
     use crate::error;
 
     #[derive(Clone, Debug)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub(crate) enum Error {
         FailedEnvTz,
         FailedEnvTzAsTzif,

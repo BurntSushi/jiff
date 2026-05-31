@@ -1415,11 +1415,13 @@ impl<'s> Parser<'s> {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct PosixTimeZoneError {
     kind: ErrorKind,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum ErrorKind {
     AbbreviationDst(AbbreviationError),
     AbbreviationStd(AbbreviationError),
@@ -1497,6 +1499,7 @@ impl From<ErrorKind> for PosixTimeZoneError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum PosixOffsetError {
     HourPosix(HourPosixError),
     IncompleteMinutes,
@@ -1557,6 +1560,7 @@ impl From<SecondError> for PosixOffsetError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum PosixRuleError {
     DateTimeEnd(PosixDateTimeError),
     DateTimeStart(PosixDateTimeError),
@@ -1584,6 +1588,7 @@ impl core::fmt::Display for PosixRuleError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum PosixDateTimeError {
     Date(PosixDateError),
     ExpectedTime,
@@ -1617,6 +1622,7 @@ impl From<PosixTimeError> for PosixDateTimeError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum PosixDateError {
     ExpectedJulianNoLeap,
     ExpectedMonthWeekWeekday,
@@ -1670,6 +1676,7 @@ impl From<WeekdayOfMonthError> for PosixDateError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum PosixJulianNoLeapError {
     Parse(NumberError),
     Range,
@@ -1692,6 +1699,7 @@ impl core::fmt::Display for PosixJulianNoLeapError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum PosixJulianLeapError {
     Parse(NumberError),
     Range,
@@ -1714,6 +1722,7 @@ impl core::fmt::Display for PosixJulianLeapError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum AbbreviationError {
     Quoted(QuotedAbbreviationError),
     Unquoted(UnquotedAbbreviationError),
@@ -1730,6 +1739,7 @@ impl core::fmt::Display for AbbreviationError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum UnquotedAbbreviationError {
     InvalidUtf8,
     TooLong,
@@ -1758,6 +1768,7 @@ impl core::fmt::Display for UnquotedAbbreviationError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum QuotedAbbreviationError {
     InvalidUtf8,
     TooLong,
@@ -1804,6 +1815,7 @@ impl core::fmt::Display for QuotedAbbreviationError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum WeekdayOfMonthError {
     ExpectedDayOfWeekAfterWeek,
     ExpectedDotAfterMonth,
@@ -1856,6 +1868,7 @@ impl From<WeekdayError> for WeekdayOfMonthError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum PosixTimeError {
     HourIana(HourIanaError),
     HourPosix(HourPosixError),
@@ -1923,6 +1936,7 @@ impl From<SecondError> for PosixTimeError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum MonthError {
     Parse(NumberError),
     Range,
@@ -1945,6 +1959,7 @@ impl core::fmt::Display for MonthError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum WeekOfMonthError {
     Parse(NumberError),
     Range,
@@ -1967,6 +1982,7 @@ impl core::fmt::Display for WeekOfMonthError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum WeekdayError {
     Parse(NumberError),
     Range,
@@ -1989,6 +2005,7 @@ impl core::fmt::Display for WeekdayError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum HourIanaError {
     Parse(NumberError),
     Range,
@@ -2011,6 +2028,7 @@ impl core::fmt::Display for HourIanaError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum HourPosixError {
     Parse(NumberError),
     Range,
@@ -2033,6 +2051,7 @@ impl core::fmt::Display for HourPosixError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum MinuteError {
     Parse(NumberError),
     Range,
@@ -2055,6 +2074,7 @@ impl core::fmt::Display for MinuteError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum SecondError {
     Parse(NumberError),
     Range,
@@ -2077,6 +2097,7 @@ impl core::fmt::Display for SecondError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum NumberError {
     Empty,
     ExpectedLength,
@@ -2102,6 +2123,7 @@ impl core::fmt::Display for NumberError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum OptionalSignError {
     ExpectedDigitAfterMinus,
     ExpectedDigitAfterPlus,

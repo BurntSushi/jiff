@@ -2632,6 +2632,17 @@ impl TryFrom<std::time::SystemTime> for Timestamp {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for Timestamp {
+    fn format(&self, f: defmt::Formatter) {
+        use crate::fmt::{temporal::DEFAULT_DATETIME_PRINTER, DefmtWrite};
+
+        defmt::unwrap!(
+            DEFAULT_DATETIME_PRINTER.print_timestamp(self, DefmtWrite(f))
+        );
+    }
+}
+
 #[cfg(feature = "serde")]
 impl serde_core::Serialize for Timestamp {
     #[inline]

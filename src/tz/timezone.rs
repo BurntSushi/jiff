@@ -1457,6 +1457,13 @@ impl core::fmt::Debug for TimeZone {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for TimeZone {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "TimeZone({})", self.repr);
+    }
+}
+
 /// A representation a single time zone transition.
 ///
 /// A time zone transition is an instant in time the marks the beginning of
@@ -2430,6 +2437,31 @@ mod repr {
                 // SAFETY: OK, because we know the tags are equivalent and
                 // `self` has an `ARC_POSIX` tag.
                 ARC_POSIX(posix) => posix == unsafe { other.get_arc_posix() },
+            }
+        }
+    }
+
+    #[cfg(feature = "defmt")]
+    impl defmt::Format for Repr {
+        fn format(&self, f: defmt::Formatter) {
+            each! {
+                self,
+                UTC => defmt::write!(f, "UTC"),
+                UNKNOWN => defmt::write!(f, "Etc/Unknown"),
+                FIXED(offset) => defmt::write!(f, "{}", offset),
+                STATIC_TZIF(tzif) => {
+                    // The full debug output is a bit much, so constrain it.
+                    let field = tzif.name().unwrap_or("Local");
+                    defmt::write!(f, "TZif({=str})", field)
+                },
+                ARC_TZIF(tzif) => {
+                    // The full debug output is a bit much, so constrain it.
+                    let field = tzif.name().unwrap_or("Local");
+                    defmt::write!(f, "TZif({=str})", field)
+                },
+                ARC_POSIX(_posix) => {
+                    defmt::write!(f, "Posix(unavailable)")
+                },
             }
         }
     }

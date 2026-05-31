@@ -801,6 +801,17 @@ impl<'a> From<&'a Zoned> for ISOWeekDate {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for ISOWeekDate {
+    fn format(&self, f: defmt::Formatter) {
+        use crate::fmt::DefmtWrite;
+
+        defmt::unwrap!(
+            DEFAULT_DATETIME_PRINTER.print_iso_week_date(self, DefmtWrite(f))
+        );
+    }
+}
+
 #[cfg(feature = "serde")]
 impl serde_core::Serialize for ISOWeekDate {
     #[inline]

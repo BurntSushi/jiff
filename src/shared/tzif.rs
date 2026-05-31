@@ -934,11 +934,13 @@ impl Header {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) struct TzifError {
     kind: TzifErrorKind,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum TzifErrorKind {
     Footer(FooterError),
     Header(HeaderError),
@@ -1011,6 +1013,7 @@ impl From<TzifErrorKind> for TzifError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum TransitionTypeError {
     ExceedsLocalTimeTypes,
     Split(SplitAtError),
@@ -1043,6 +1046,7 @@ impl core::fmt::Display for TransitionTypeError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum LocalTimeTypeError {
     InvalidOffset { offset: i32 },
     Split(SplitAtError),
@@ -1077,6 +1081,7 @@ impl core::fmt::Display for LocalTimeTypeError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum TimeZoneDesignatorError {
     InvalidEnd,
     InvalidLength,
@@ -1127,6 +1132,7 @@ impl core::fmt::Display for TimeZoneDesignatorError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum IndicatorError {
     InvalidCombination,
     InvalidStdWallIndicator,
@@ -1175,6 +1181,7 @@ impl core::fmt::Display for IndicatorError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum InconsistentPosixTimeZoneError {
     Designation,
     Dst,
@@ -1212,6 +1219,7 @@ impl core::fmt::Display for InconsistentPosixTimeZoneError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum FooterError {
     InvalidPosixTz(crate::shared::posix::PosixTimeZoneError),
     MismatchEnd,
@@ -1254,6 +1262,7 @@ impl core::fmt::Display for FooterError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum HeaderError {
     InvalidDataBlock { version: u8 },
     InvalidLeapSecondCount,
@@ -1316,6 +1325,7 @@ impl core::fmt::Display for HeaderError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum CountKind {
     Ut,
     Std,
@@ -1340,6 +1350,7 @@ impl core::fmt::Display for CountKind {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum SplitAtError {
     V1,
     LeapSeconds,
@@ -1378,6 +1389,7 @@ impl core::fmt::Display for SplitAtError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 struct U32UsizeError;
 
 impl core::fmt::Display for U32UsizeError {

@@ -26,6 +26,7 @@ features=(
     "logging"
     "serde logging"
     "static"
+    "defmt"
 )
 for f in "${features[@]}"; do
     echo "===== COREONLY PLUS '$f' ====="
