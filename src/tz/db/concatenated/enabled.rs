@@ -27,14 +27,19 @@ const DEFAULT_TTL: Duration = Duration::new(5 * 60, 0);
 /// The places to look for a concatenated `tzdata` file.
 static TZDATA_LOCATIONS: &[TzdataLocation] = &[
     TzdataLocation::Env {
-        name: "ANDROID_ROOT",
-        default: "/system",
-        suffix: "usr/share/zoneinfo/tzdata",
+        name: "ANDROID_TZDATA_ROOT",
+        default: "/apex/com.android.tzdata",
+        suffix: "etc/tz/tzdata",
     },
     TzdataLocation::Env {
         name: "ANDROID_DATA",
-        default: "/data/misc",
-        suffix: "zoneinfo/current/tzdata",
+        default: "/data",
+        suffix: "misc/zoneinfo/current/tzdata",
+    },
+    TzdataLocation::Env {
+        name: "ANDROID_ROOT",
+        default: "/system",
+        suffix: "usr/share/zoneinfo/tzdata",
     },
 ];
 
