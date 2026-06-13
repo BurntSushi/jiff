@@ -1565,7 +1565,7 @@ impl DateTime {
                 (offset, ts, dt)
             }
         };
-        Ok(Zoned::from_parts(ts, tz, offset, dt))
+        Ok(Zoned::from_parts(ts, dt, offset, tz))
     }
 
     /// Add the given span of time to this datetime. If the sum would overflow
