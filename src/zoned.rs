@@ -114,6 +114,13 @@ use crate::{
 /// For more information on the specific format supported, see the
 /// [`fmt::temporal`](crate::fmt::temporal) module documentation.
 ///
+/// # Default value
+///
+/// For convenience, this type implements the `Default` trait. Its default
+/// value corresponds to `1970-01-01T00:00:00.000000000` in the special UTC
+/// time zone. That is, it is the Unix epoch. One can also access this value
+/// via the [`Zoned::UNIX_EPOCH`] constant.
+///
 /// # Leap seconds
 ///
 /// Jiff does not support leap seconds. Jiff behaves as if they don't exist.
@@ -377,22 +384,21 @@ struct ZonedInner {
 }
 
 impl Zoned {
-    /// The default `Zoned` value.
+    /// The Unix epoch represented as a timestamp in the [`UTC`](TimeZone::UTC)
+    /// time zone.
     ///
-    /// This is pre-computed as a constant instead of just doing
-    /// `Zoned::new(Timestamp::default(), TimeZone::UTC)`. I had
-    /// thought the compiler wouldn't be able to optimized away that
-    /// `Zoned::new` call, but it looks like it did. However, this is a
-    /// more robust way to guarantee that `Zoned::default()` is always
-    /// fast.
-    const DEFAULT: Zoned = Zoned {
-        inner: ZonedInner {
-            timestamp: Timestamp::UNIX_EPOCH,
-            datetime: DateTime::constant(1970, 1, 1, 0, 0, 0, 0),
-            offset: Offset::UTC,
-            time_zone: TimeZone::UTC,
-        },
-    };
+    /// The Unix epoch corresponds to the instant at `1970-01-01T00:00:00Z`.
+    ///
+    /// This is equivalent to
+    /// `Zoned::new(Timestamp::UNIX_EPOCH, TimeZone::UTC)`. This is also
+    /// equivalent to `Zoned::default()`, but it can be used in a `const`
+    /// context.
+    pub const UNIX_EPOCH: Zoned = Zoned::from_parts(
+        Timestamp::UNIX_EPOCH,
+        DateTime::constant(1970, 1, 1, 0, 0, 0, 0),
+        Offset::UTC,
+        TimeZone::UTC,
+    );
 
     /// Returns the current system time in this system's time zone.
     ///
@@ -514,20 +520,22 @@ impl Zoned {
     /// A crate internal constructor for building a `Zoned` from its
     /// constituent parts.
     ///
-    /// This should basically never be exposed, because it can be quite tricky
-    /// to get the parts correct.
-    ///
     /// See `civil::DateTime::to_zoned` for a use case for this routine. (Why
     /// do you think? Perf!)
+    ///
+    /// This should *probably* never be exposed, because it can be quite tricky
+    /// to get the parts correct. However, pretty much everything bows at the
+    /// alter of performance, so I'm open to exporting it given sufficient
+    /// motivation. We could add debug asserts that trip when `datetime`
+    /// and `offset` are incorrect.
     #[inline]
-    pub(crate) fn from_parts(
+    pub(crate) const fn from_parts(
         timestamp: Timestamp,
-        time_zone: TimeZone,
-        offset: Offset,
         datetime: DateTime,
+        offset: Offset,
+        time_zone: TimeZone,
     ) -> Zoned {
-        let inner = ZonedInner { timestamp, datetime, offset, time_zone };
-        Zoned { inner }
+        Zoned { inner: ZonedInner { timestamp, datetime, offset, time_zone } }
     }
 
     /// Create a builder for constructing a new `Zoned` from the fields of
@@ -3231,13 +3239,6 @@ impl Zoned {
         ZonedSeries { start: self.clone(), prev: None, period, step: 0 }
     }
 
-    #[inline]
-    fn into_parts(self) -> (Timestamp, DateTime, Offset, TimeZone) {
-        let inner = self.inner;
-        let ZonedInner { timestamp, datetime, offset, time_zone } = inner;
-        (timestamp, datetime, offset, time_zone)
-    }
-
     /// Returns the heap memory usage, in bytes, of this zoned.
     ///
     /// This does **not** include the stack size used up by this zoned.
@@ -3354,7 +3355,7 @@ impl Zoned {
 impl Default for Zoned {
     #[inline]
     fn default() -> Zoned {
-        Zoned::DEFAULT
+        Zoned::UNIX_EPOCH
     }
 }
 
@@ -4818,7 +4819,7 @@ impl ZonedWith {
     #[inline]
     pub fn build(self) -> Result<Zoned, Error> {
         let dt = self.datetime_with.build()?;
-        let (_, _, offset, time_zone) = self.original.into_parts();
+        let ZonedInner { offset, time_zone, .. } = self.original.inner;
         let offset = self.offset.unwrap_or(offset);
         let ambiguous = self.offset_conflict.resolve(dt, offset, time_zone)?;
         ambiguous.disambiguate(self.disambiguation)

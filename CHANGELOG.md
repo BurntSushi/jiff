@@ -10,6 +10,8 @@ Enhancements:
 * [#505](https://github.com/BurntSushi/jiff/issues/505):
 Add support for the `defmt` crate by implementing `defmt::Format` on the
 principle public types in Jiff.
+* [#584](https://github.com/BurntSushi/jiff/pull/584):
+Add `Zoned::UNIX_EPOCH` as a constant.
 * [#587](https://github.com/BurntSushi/jiff/pull/587):
 Change the `Debug` output for `civil::ISOWeekDate` to match the `Debug` output
 style of other primitive datetime types.
