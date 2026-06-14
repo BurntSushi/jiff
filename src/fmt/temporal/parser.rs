@@ -2376,82 +2376,50 @@ mod tests {
 
         insta::assert_debug_snapshot!( p("2024-W01-5"), @r#"
         Parsed {
-            value: ISOWeekDate {
-                year: 2024,
-                week: 1,
-                weekday: Friday,
-            },
+            value: 2024-W01-5,
             input: "",
         }
         "#);
         insta::assert_debug_snapshot!( p("2024-W52-7"), @r#"
         Parsed {
-            value: ISOWeekDate {
-                year: 2024,
-                week: 52,
-                weekday: Sunday,
-            },
+            value: 2024-W52-7,
             input: "",
         }
         "#);
         insta::assert_debug_snapshot!( p("2004-W53-6"), @r#"
         Parsed {
-            value: ISOWeekDate {
-                year: 2004,
-                week: 53,
-                weekday: Saturday,
-            },
+            value: 2004-W53-6,
             input: "",
         }
         "#);
         insta::assert_debug_snapshot!( p("2009-W01-1"), @r#"
         Parsed {
-            value: ISOWeekDate {
-                year: 2009,
-                week: 1,
-                weekday: Monday,
-            },
+            value: 2009-W01-1,
             input: "",
         }
         "#);
 
         insta::assert_debug_snapshot!( p("2024W015"), @r#"
         Parsed {
-            value: ISOWeekDate {
-                year: 2024,
-                week: 1,
-                weekday: Friday,
-            },
+            value: 2024-W01-5,
             input: "",
         }
         "#);
         insta::assert_debug_snapshot!( p("2024W527"), @r#"
         Parsed {
-            value: ISOWeekDate {
-                year: 2024,
-                week: 52,
-                weekday: Sunday,
-            },
+            value: 2024-W52-7,
             input: "",
         }
         "#);
         insta::assert_debug_snapshot!( p("2004W536"), @r#"
         Parsed {
-            value: ISOWeekDate {
-                year: 2004,
-                week: 53,
-                weekday: Saturday,
-            },
+            value: 2004-W53-6,
             input: "",
         }
         "#);
         insta::assert_debug_snapshot!( p("2009W011"), @r#"
         Parsed {
-            value: ISOWeekDate {
-                year: 2009,
-                week: 1,
-                weekday: Monday,
-            },
+            value: 2009-W01-1,
             input: "",
         }
         "#);
@@ -2460,11 +2428,7 @@ mod tests {
         // we support `T` or `t`.
         insta::assert_debug_snapshot!( p("2009w011"), @r#"
         Parsed {
-            value: ISOWeekDate {
-                year: 2009,
-                week: 1,
-                weekday: Monday,
-            },
+            value: 2009-W01-1,
             input: "",
         }
         "#);

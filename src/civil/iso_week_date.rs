@@ -152,7 +152,7 @@ use crate::{
 /// }
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct ISOWeekDate {
     year: i16,
     week: i8,
@@ -726,6 +726,12 @@ impl ISOWeekDate {
 impl Default for ISOWeekDate {
     fn default() -> ISOWeekDate {
         ISOWeekDate::ZERO
+    }
+}
+
+impl core::fmt::Debug for ISOWeekDate {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        core::fmt::Display::fmt(self, f)
     }
 }
 
