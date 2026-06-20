@@ -50,7 +50,7 @@ impl<const N: usize> ArrayStr<N> {
     }
 
     /// Returns the capacity of this array string.
-    pub(crate) fn capacity() -> usize {
+    pub(crate) const fn capacity() -> usize {
         N
     }
 

@@ -8,6 +8,10 @@ use crate::{
         temporal::{Pieces, PiecesOffset, TimeZoneAnnotationKind},
         Write,
     },
+    shared::{
+        PosixDay, PosixDayTime, PosixDst, PosixOffset, PosixRule, PosixTime,
+        PosixTimeZone,
+    },
     span::{Span, UnitSet},
     tz::{Offset, TimeZone},
     SignedDuration, Timestamp, Unit, Zoned,
@@ -63,6 +67,31 @@ const REASONABLE_ZONED_LEN: usize = 72;
 /// printing.
 const REASONABLE_PIECES_LEN: usize = 73;
 
+/// This is my estimate for the "maximum" length of a time zone serialization.
+///
+/// This is effectively
+///
+/// ```text
+/// max(max_iana_tzdb_id, max_posix_tz_string, offset, len('Etc/Unknown'))
+/// ```
+///
+/// where "max" is not a strict upper bound but an expected upper bound based
+/// on common or "reasonable" values. For example, a valid POSIX time zone
+/// string can have 30 byte abbreviations for both standard and daylight saving
+/// time. If that happens, we'll just
+const REASONABLE_TIME_ZONE_LEN: usize = 32;
+
+/// Defines the "maximum" possible length (in bytes) of a POSIX time zone
+/// string.
+///
+/// Most POSIX time zone strings are just two 3 letter abbreviations and an
+/// offset indicating standard time. e.g., `EST5EDT`.
+///
+/// We set this to `20` because we write integers and those APIs require a
+/// minimum buffer length of `20`. (Even though a POSIX time zone will never
+/// have integers nearly that large.)
+const REASONABLE_POSIX_TIME_ZONE_LEN: usize = 20;
+
 /// Defines the maximum possible length (in bytes) of an RFC 3339 timestamp
 /// that is always in Zulu time.
 ///
@@ -89,11 +118,6 @@ const MAX_DATE_LEN: usize = 13;
 ///
 /// The longest possible string is `17:30:00.999999999`.
 const MAX_TIME_LEN: usize = 18;
-
-/// Defines the maximum possible length (in bytes) of an offset.
-///
-/// The longest possible string is `-25:59:59`.
-const MAX_OFFSET_LEN: usize = 9;
 
 /// Defines the maximum possible length (in bytes) of an ISO 8601 week date.
 ///
@@ -437,27 +461,22 @@ impl DateTimePrinter {
         Ok(())
     }
 
-    pub(super) fn print_time_zone<W: Write>(
+    pub(super) fn print_time_zone(
         &self,
         tz: &TimeZone,
-        mut wtr: W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
-        // N.B. We use a `&mut dyn Write` here instead of an uninitialized
-        // buffer (as in the other routines for this printer) because this
-        // can emit a POSIX time zone string. We don't really have strong
-        // guarantees about how long this string can be (although all sensible
-        // values are pretty short). Since this API is not expected to be used
-        // much, we don't spend the time to try and optimize this.
-        //
-        // If and when we get a borrowed buffer writer abstraction (for truly
-        // variable length output), then we might consider using that here.
-        self.print_time_zone_wtr(tz, &mut wtr)
+        let mut buf = ArrayBuffer::<REASONABLE_TIME_ZONE_LEN>::default();
+        let mut bbuf = buf.as_borrowed();
+        let mut wtr = BorrowedWriter::new(&mut bbuf, wtr);
+        self.print_time_zone_wtr(tz, &mut wtr)?;
+        wtr.finish()
     }
 
     fn print_time_zone_wtr(
         &self,
         tz: &TimeZone,
-        wtr: &mut dyn Write,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
         if let Some(iana_name) = tz.iana_name() {
             return wtr.write_str(iana_name);
@@ -466,25 +485,10 @@ impl DateTimePrinter {
             return wtr.write_str("Etc/Unknown");
         }
         if let Ok(offset) = tz.to_fixed_offset() {
-            // Kind of unfortunate, but it's probably better than
-            // making `print_offset_full_precision` accept a `dyn Write`.
-            let mut buf = ArrayBuffer::<MAX_OFFSET_LEN>::default();
-            let mut bbuf = buf.as_borrowed();
-            self.print_offset_full_precision(&offset, &mut bbuf);
-            return wtr.write_str(bbuf.filled());
+            return self.print_offset_full_precision(&offset, wtr);
         }
         if let Some(posix_tz) = tz.posix_tz() {
-            use core::fmt::Write as _;
-
-            // This is rather circuitous, but I'm not sure how else to do it
-            // without allocating an intermediate string. Or writing another
-            // printing API for `PosixTimeZone`. (Which might actually not be
-            // a bad idea. Perhaps using uninit buffers. But... who gives a
-            // fuck about printing POSIX time zone strings?)
-            return write!(crate::fmt::StdFmtWrite(wtr), "{posix_tz}")
-                .map_err(|_| {
-                    Error::from(crate::error::fmt::Error::StdFmtWriteAdapter)
-                });
+            return self.print_posix_time_zone(posix_tz.shared(), wtr);
         }
         // Ideally this never actually happens, but it can, and there
         // are likely system configurations out there in which it does.
@@ -498,10 +502,166 @@ impl DateTimePrinter {
         Err(Error::from(E::PrintTimeZoneFailure))
     }
 
-    pub(super) fn print_pieces<W: Write>(
+    pub(super) fn print_posix_time_zone<ABBREV: AsRef<str>>(
+        &self,
+        posix_tz: &PosixTimeZone<ABBREV>,
+        wtr: &mut dyn Write,
+    ) -> Result<(), Error> {
+        let mut buf = ArrayBuffer::<REASONABLE_POSIX_TIME_ZONE_LEN>::default();
+        let mut bbuf = buf.as_borrowed();
+        let mut wtr = BorrowedWriter::new(&mut bbuf, wtr);
+        self.print_posix_time_zone_wtr(posix_tz, &mut wtr)?;
+        wtr.finish()
+    }
+
+    fn print_posix_time_zone_wtr<ABBREV: AsRef<str>>(
+        &self,
+        tz: &PosixTimeZone<ABBREV>,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        self.print_posix_abbreviation_wtr(tz.std_abbrev.as_ref(), wtr)?;
+        self.print_posix_offset_wtr(&tz.std_offset, wtr)?;
+        if let Some(ref dst) = tz.dst {
+            self.print_posix_dst_wtr(dst, &tz.std_offset, wtr)?;
+        }
+        Ok(())
+    }
+
+    fn print_posix_dst_wtr<ABBREV: AsRef<str>>(
+        &self,
+        dst: &PosixDst<ABBREV>,
+        std_offset: &PosixOffset,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        self.print_posix_abbreviation_wtr(dst.abbrev.as_ref(), wtr)?;
+        // The overwhelmingly common case is that DST is exactly one hour
+        // ahead of standard time. So common that this is the default. So
+        // don't write the offset if we don't need to.
+        let default = PosixOffset { second: std_offset.second + 3600 };
+        if dst.offset != default {
+            self.print_posix_offset_wtr(&dst.offset, wtr)?;
+        }
+        wtr.write_ascii_char(b',')?;
+        self.print_posix_rule_wtr(&dst.rule, wtr)?;
+        Ok(())
+    }
+
+    fn print_posix_rule_wtr(
+        &self,
+        rule: &PosixRule,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        self.print_posix_day_time_wtr(&rule.start, wtr)?;
+        wtr.write_ascii_char(b',')?;
+        self.print_posix_day_time_wtr(&rule.end, wtr)?;
+        Ok(())
+    }
+
+    fn print_posix_day_time_wtr(
+        &self,
+        day_time: &PosixDayTime,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        self.print_posix_day_wtr(&day_time.date, wtr)?;
+        // This is the default time, so don't write it if we don't need to.
+        if day_time.time != PosixTime::DEFAULT {
+            wtr.write_ascii_char(b'/')?;
+            self.print_posix_time_wtr(&day_time.time, wtr)?;
+        }
+        Ok(())
+    }
+
+    fn print_posix_day_wtr(
+        &self,
+        day: &PosixDay,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        match *day {
+            PosixDay::JulianOne(n) => {
+                wtr.write_ascii_char(b'J')?;
+                wtr.write_int(n.unsigned_abs())?;
+                Ok(())
+            }
+            PosixDay::JulianZero(n) => wtr.write_int(n.unsigned_abs()),
+            PosixDay::WeekdayOfMonth { month, week, weekday } => {
+                wtr.write_ascii_char(b'M')?;
+                wtr.write_int(month.unsigned_abs())?;
+                wtr.write_ascii_char(b'.')?;
+                wtr.write_int1(week.unsigned_abs())?;
+                wtr.write_ascii_char(b'.')?;
+                wtr.write_int1(weekday.unsigned_abs())?;
+                Ok(())
+            }
+        }
+    }
+
+    fn print_posix_time_wtr(
+        &self,
+        time: &PosixTime,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        if time.second.is_negative() {
+            wtr.write_ascii_char(b'-')?;
+            // The default is positive, so when
+            // positive, we write nothing.
+        }
+        self.print_posix_time_offset_seconds_wtr(time.second, wtr)
+    }
+
+    fn print_posix_offset_wtr(
+        &self,
+        offset: &PosixOffset,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        // Yes, this is backwards. Blame POSIX.
+        // N.B. `+` is the default, so we don't
+        // need to write that out.
+        if offset.second > 0 {
+            wtr.write_ascii_char(b'-')?;
+        }
+        self.print_posix_time_offset_seconds_wtr(offset.second, wtr)
+    }
+
+    fn print_posix_time_offset_seconds_wtr(
+        &self,
+        second: i32,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        let second = second.unsigned_abs();
+        let h = second / 3600;
+        let m = (second / 60) % 60;
+        let s = second % 60;
+        wtr.write_int(h)?;
+        if m != 0 || s != 0 {
+            wtr.write_ascii_char(b':')?;
+            wtr.write_int_pad2(m)?;
+            if s != 0 {
+                wtr.write_ascii_char(b':')?;
+                wtr.write_int_pad2(s)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn print_posix_abbreviation_wtr(
+        &self,
+        abbreviation: &str,
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        if abbreviation.chars().any(|ch| ch == '+' || ch == '-') {
+            wtr.write_ascii_char(b'<')?;
+            wtr.write_str(abbreviation)?;
+            wtr.write_ascii_char(b'>')?;
+        } else {
+            wtr.write_str(abbreviation)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn print_pieces(
         &self,
         pieces: &Pieces,
-        mut wtr: W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         // N.B. We don't bother with writing into the spare capacity of a
         // `&mut String` here because with `Pieces` it's a little more
@@ -511,7 +671,7 @@ impl DateTimePrinter {
         // if there's a good use case. ---AG
         let mut buf = ArrayBuffer::<REASONABLE_PIECES_LEN>::default();
         let mut bbuf = buf.as_borrowed();
-        let mut wtr = BorrowedWriter::new(&mut bbuf, &mut wtr);
+        let mut wtr = BorrowedWriter::new(&mut bbuf, wtr);
         self.print_pieces_wtr(pieces, &mut wtr)?;
         wtr.finish()
     }
@@ -651,19 +811,20 @@ impl DateTimePrinter {
     fn print_offset_full_precision(
         &self,
         offset: &Offset,
-        bbuf: &mut BorrowedBuffer<'_>,
-    ) {
-        bbuf.write_ascii_char(if offset.is_negative() { b'-' } else { b'+' });
+        wtr: &mut BorrowedWriter<'_, '_, '_>,
+    ) -> Result<(), Error> {
+        wtr.write_ascii_char(if offset.is_negative() { b'-' } else { b'+' })?;
         let hours = offset.part_hours().unsigned_abs();
         let minutes = offset.part_minutes().unsigned_abs();
         let seconds = offset.part_seconds().unsigned_abs();
-        bbuf.write_int_pad2(hours);
-        bbuf.write_ascii_char(b':');
-        bbuf.write_int_pad2(minutes);
+        wtr.write_int_pad2(hours)?;
+        wtr.write_ascii_char(b':')?;
+        wtr.write_int_pad2(minutes)?;
         if seconds > 0 {
-            bbuf.write_ascii_char(b':');
-            bbuf.write_int_pad2(seconds);
+            wtr.write_ascii_char(b':')?;
+            wtr.write_int_pad2(seconds)?;
         }
+        Ok(())
     }
 
     /// Prints the "zulu" indicator.
@@ -768,10 +929,10 @@ impl SpanPrinter {
     /// Print the given span to the writer given.
     ///
     /// This only returns an error when the given writer returns an error.
-    pub(super) fn print_span<W: Write>(
+    pub(super) fn print_span(
         &self,
         span: &Span,
-        mut wtr: W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         let mut buf = ArrayBuffer::<MAX_SPAN_LEN>::default();
         let mut bbuf = buf.as_borrowed();
@@ -866,10 +1027,10 @@ impl SpanPrinter {
     /// Print the given signed duration to the writer given.
     ///
     /// This only returns an error when the given writer returns an error.
-    pub(super) fn print_signed_duration<W: Write>(
+    pub(super) fn print_signed_duration(
         &self,
         dur: &SignedDuration,
-        mut wtr: W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         let mut buf = ArrayBuffer::<MAX_DURATION_LEN>::default();
         let mut bbuf = buf.as_borrowed();
@@ -883,10 +1044,10 @@ impl SpanPrinter {
     /// Print the given unsigned duration to the writer given.
     ///
     /// This only returns an error when the given writer returns an error.
-    pub(super) fn print_unsigned_duration<W: Write>(
+    pub(super) fn print_unsigned_duration(
         &self,
         dur: &Duration,
-        mut wtr: W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         let mut buf = ArrayBuffer::<MAX_DURATION_LEN>::default();
         let mut bbuf = buf.as_borrowed();
@@ -1468,6 +1629,19 @@ mod tests {
         let tz = TimeZone::posix("EST5EDT,M3.2.0,M11.1.0").unwrap();
         let got = to_string(p(), tz);
         assert_eq!(got, "EST5EDT,M3.2.0,M11.1.0");
+
+        let tz = TimeZone::posix("EST5EDT5,M3.2.0,M11.1.0").unwrap();
+        let got = to_string(p(), tz);
+        assert_eq!(got, "EST5EDT5,M3.2.0,M11.1.0");
+
+        let tz = TimeZone::posix("EST5EDT,J1,J365/5:12:34").unwrap();
+        let got = to_string(p(), tz);
+        assert_eq!(got, "EST5EDT,J1,J365/5:12:34");
+
+        let tz =
+            TimeZone::posix("<+09>-9<-10>-10,M3.2.0/1:23:45,J365/-1").unwrap();
+        let got = to_string(p(), tz);
+        assert_eq!(got, "<+09>-9<-10>,M3.2.0/1:23:45,J365/-1");
 
         let tz = TimeZone::posix(
             "ABCDEFGHIJKLMNOPQRSTUVWXY5ABCDEFGHIJKLMNOPQRSTUVWXYT,M3.2.0,M11.1.0",
