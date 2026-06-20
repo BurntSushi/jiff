@@ -73,7 +73,7 @@ use core::fmt::Debug;
 use crate::{
     civil::DateTime,
     error::{tz::posix::Error as E, Error, ErrorContext},
-    shared,
+    fmt, shared,
     timestamp::Timestamp,
     tz::{
         timezone::TimeZoneAbbreviation, AmbiguousOffset, Dst, Offset,
@@ -251,6 +251,14 @@ impl PosixTimeZone<&'static str> {
     }
 }
 
+impl<ABBREV: AsRef<str>> PosixTimeZone<ABBREV> {
+    /// Returns the underlying "shared" type. (The type shared between `jiff`
+    /// and `jiff-static`.)
+    pub(crate) fn shared(&self) -> &shared::PosixTimeZone<ABBREV> {
+        &self.inner
+    }
+}
+
 impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
     /// Returns the appropriate time zone offset to use for the given
     /// timestamp.
@@ -329,7 +337,17 @@ impl<ABBREV: AsRef<str> + Debug> PosixTimeZone<ABBREV> {
 
 impl<ABBREV: AsRef<str>> core::fmt::Display for PosixTimeZone<ABBREV> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self.inner, f)
+        fmt::temporal::DateTimePrinter::new()
+            .print_posix_time_zone(self.shared(), fmt::StdFmtWrite(f))
+            .map_err(|_| core::fmt::Error)
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl<ABBREV: AsRef<str>> defmt::Format for PosixTimeZone<ABBREV> {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::unwrap!(fmt::temporal::DateTimePrinter::new()
+            .print_posix_time_zone(self.shared(), fmt::DefmtWrite(f)))
     }
 }
 

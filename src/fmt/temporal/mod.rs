@@ -1939,9 +1939,23 @@ impl DateTimePrinter {
     pub fn print_time_zone<W: Write>(
         &self,
         tz: &TimeZone,
-        wtr: W,
+        mut wtr: W,
     ) -> Result<(), Error> {
-        self.p.print_time_zone(tz, wtr)
+        self.p.print_time_zone(tz, &mut wtr)
+    }
+
+    /// Prints a POSIX time zone string.
+    ///
+    /// This isn't exported because `PosixTimeZone` isn't exported. It
+    /// probably never will be, but this is used by tests in the POSIX time
+    /// zone parser to ensure our printing round-trips correctly. It is also
+    /// used by way of the internal `Display` impl for `PosixTimeZone`.
+    pub(crate) fn print_posix_time_zone<ABBREV: AsRef<str>, W: Write>(
+        &self,
+        tz: &crate::shared::PosixTimeZone<ABBREV>,
+        mut wtr: W,
+    ) -> Result<(), Error> {
+        self.p.print_posix_time_zone(tz, &mut wtr)
     }
 
     /// Print the `Pieces` of a Temporal datetime.
@@ -1973,9 +1987,9 @@ impl DateTimePrinter {
     pub fn print_pieces<W: Write>(
         &self,
         pieces: &Pieces,
-        wtr: W,
+        mut wtr: W,
     ) -> Result<(), Error> {
-        self.p.print_pieces(pieces, wtr)
+        self.p.print_pieces(pieces, &mut wtr)
     }
 
     /// Prints an ISO 8601 week date.
@@ -2369,9 +2383,9 @@ impl SpanPrinter {
     pub fn print_span<W: Write>(
         &self,
         span: &Span,
-        wtr: W,
+        mut wtr: W,
     ) -> Result<(), Error> {
-        self.p.print_span(span, wtr)
+        self.p.print_span(span, &mut wtr)
     }
 
     /// Print a `SignedDuration` to the given writer.
@@ -2410,9 +2424,9 @@ impl SpanPrinter {
     pub fn print_duration<W: Write>(
         &self,
         duration: &SignedDuration,
-        wtr: W,
+        mut wtr: W,
     ) -> Result<(), Error> {
-        self.p.print_signed_duration(duration, wtr)
+        self.p.print_signed_duration(duration, &mut wtr)
     }
 
     /// Print a `std::time::Duration` to the given writer.
@@ -2447,9 +2461,9 @@ impl SpanPrinter {
     pub fn print_unsigned_duration<W: Write>(
         &self,
         duration: &core::time::Duration,
-        wtr: W,
+        mut wtr: W,
     ) -> Result<(), Error> {
-        self.p.print_unsigned_duration(duration, wtr)
+        self.p.print_unsigned_duration(duration, &mut wtr)
     }
 }
 

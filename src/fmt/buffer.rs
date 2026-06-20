@@ -715,7 +715,13 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
         bbuf: &'buffer mut BorrowedBuffer<'data>,
         wtr: &'write mut dyn Write,
     ) -> BorrowedWriter<'buffer, 'data, 'write> {
-        assert!(bbuf.capacity() >= BROAD_MINIMUM_BUFFER_LEN);
+        assert!(
+            bbuf.capacity() >= BROAD_MINIMUM_BUFFER_LEN,
+            "capacity ({capacity}) must be \
+             at least {BROAD_MINIMUM_BUFFER_LEN} \
+             to handle integer formatting",
+            capacity = bbuf.capacity(),
+        );
         BorrowedWriter { bbuf, wtr }
     }
 
@@ -771,6 +777,28 @@ impl<'buffer, 'data, 'write> BorrowedWriter<'buffer, 'data, 'write> {
             self.flush()?;
         }
         self.bbuf.write_ascii_char(byte);
+        Ok(())
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_int(
+        &mut self,
+        n: impl Into<u64>,
+    ) -> Result<(), Error> {
+        let n = n.into();
+        self.if_will_fill_then_flush(digits(n))?;
+        self.bbuf.write_int(n);
+        Ok(())
+    }
+
+    #[cfg_attr(feature = "perf-inline", inline(always))]
+    pub(crate) fn write_int1(
+        &mut self,
+        n: impl Into<u64>,
+    ) -> Result<(), Error> {
+        let n = n.into();
+        self.if_will_fill_then_flush(1usize)?;
+        self.bbuf.write_int1(n);
         Ok(())
     }
 
