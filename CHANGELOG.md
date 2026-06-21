@@ -16,6 +16,12 @@ Add `Zoned::UNIX_EPOCH` as a constant.
 Change the `Debug` output for `civil::ISOWeekDate` to match the `Debug` output
 style of other primitive datetime types.
 
+Bug fixes:
+
+* [#525](https://github.com/BurntSushi/jiff/issues/525):
+Fix a bug that prevented time zone lookups when using an on-disk time zone
+database on Windows.
+
 
 0.2.28 (2026-05-28)
 ===================

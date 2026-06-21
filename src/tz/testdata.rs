@@ -77,6 +77,11 @@ pub(crate) static TZIF_TEST_FILES: &[TzifTestFile] = &[
         name: "America/Boa_Vista",
         data: include_bytes!("testdata/america-boa-vista.tzif"),
     },
+    // Just another random test file.
+    TzifTestFile {
+        name: "Asia/Tokyo",
+        data: include_bytes!("testdata/asia-tokyo.tzif"),
+    },
     TzifTestFile { name: "UTC", data: include_bytes!("testdata/utc.tzif") },
 ];
 
