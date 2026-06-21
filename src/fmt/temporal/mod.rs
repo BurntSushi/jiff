@@ -2489,6 +2489,17 @@ mod tests {
         );
     }
 
+    // Regression test for: https://github.com/BurntSushi/jiff/issues/539
+    #[test]
+    fn err_temporal_datetime_unparsed_input() {
+        insta::assert_snapshot!(
+            DateTimeParser::new()
+                .parse_datetime(b"2026-04-17 19:43 AM")
+                .unwrap_err(),
+            @r###"parsed value '2026-04-17T19:43:00', but unparsed input " AM" remains (expected no unparsed input)"###,
+        );
+    }
+
     #[test]
     fn year_zero() {
         insta::assert_snapshot!(
