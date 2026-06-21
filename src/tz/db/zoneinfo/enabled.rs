@@ -1,14 +1,10 @@
-use alloc::{
-    string::{String, ToString},
-    vec,
-    vec::Vec,
-};
+use alloc::{string::String, vec, vec::Vec};
 
 use std::{
     ffi::OsStr,
     fs::File,
     io::Read,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, RwLock,
@@ -559,12 +555,12 @@ impl ZoneInfoName {
     /// suffix `time_zone_name` path was returned.
     fn new(base: &Path, time_zone_name: &Path) -> Result<ZoneInfoName, Error> {
         let full = base.join(time_zone_name);
-        let original = parse::os_str_utf8(time_zone_name.as_os_str())
+        let original = iana_name_from_path(time_zone_name)
             .map_err(|err| Error::from(err).path(base))?;
         let lower = original.to_ascii_lowercase();
         let inner = ZoneInfoNameInner {
             full,
-            original: original.to_string(),
+            original,
             lower,
             validity: AtomicUsize::new(ZONE_INFO_NAME_UNKNOWN),
         };
@@ -657,6 +653,21 @@ impl ZoneInfoName {
         }
         true
     }
+}
+
+fn iana_name_from_path(
+    path: &Path,
+) -> Result<String, crate::error::util::OsStrUtf8Error> {
+    let mut name = String::new();
+    for component in path.components() {
+        let Component::Normal(part) = component else { continue };
+        let part = parse::os_str_utf8(part)?;
+        if !name.is_empty() {
+            name.push('/');
+        }
+        name.push_str(part);
+    }
+    Ok(name)
 }
 
 impl Eq for ZoneInfoName {}
@@ -832,9 +843,45 @@ fn walk(start: &Path) -> Result<Vec<ZoneInfoName>, Error> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(
+    test,
+    not(miri),
+    not(target_arch = "wasm32"),
+    not(target_arch = "wasm64"),
+))]
 mod tests {
     use super::*;
+
+    fn mktempdir() -> tempfile::TempDir {
+        tempfile::TempDir::with_prefix("jiff-zoneinfo-").unwrap()
+    }
+
+    #[test]
+    fn iana_name_always_uses_slashes() {
+        let name = ZoneInfoName::new(
+            Path::new("/"),
+            &Path::new("Asia").join("Tokyo"),
+        )
+        .unwrap();
+        assert_eq!("Asia/Tokyo", name.original());
+    }
+
+    #[test]
+    fn from_dir_uses_iana_name_separators() {
+        let tmpdir = mktempdir();
+        let zoneinfo = tmpdir.path().join("zoneinfo");
+        let asia = zoneinfo.join("Asia");
+        std::fs::create_dir_all(&asia).unwrap();
+        std::fs::write(
+            asia.join("Tokyo"),
+            crate::tz::testdata::TzifTestFile::get("Asia/Tokyo").data,
+        )
+        .unwrap();
+
+        let db = Database::from_dir(&zoneinfo).unwrap();
+        assert!(db.get("Asia/Tokyo").is_some());
+        assert!(db.get(r"Asia\Tokyo").is_none());
+    }
 
     /// DEBUG COMMAND
     ///

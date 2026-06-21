@@ -255,6 +255,7 @@ time = { version = "0.3.36", features = ["local-offset", "macros", "parsing"] }
 time-tz = "2.0.0"
 tzfile = "0.1.3"
 walkdir = "2.5.0"
+tempfile = "3.27.0"
 
 # Uncomment if you want to activate doc tests that import from `jiff_icu`
 # (currently only in `COMPARE.md`). Otherwise, this creates a circular

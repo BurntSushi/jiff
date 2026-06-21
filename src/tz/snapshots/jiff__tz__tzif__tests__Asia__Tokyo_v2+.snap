@@ -1,0 +1,26 @@
+---
+source: src/tz/tzif.rs
+expression: tzif_to_human_readable(&tzif_test.parse())
+---
+TIME ZONE NAME
+  Asia/Tokyo
+TIME ZONE VERSION
+  2
+LOCAL TIME TYPES
+  000:  offset=+09:18:59  designation=LMT       indicator=local/wall
+  001:  offset=+10        designation=JDT  dst  indicator=local/wall
+  002:  offset=+09        designation=JST       indicator=local/wall
+  003:  offset=+09        designation=JST       indicator=ut/std
+TRANSITIONS
+  0000:  -009999-01-02T01:59:59Z  unix=-377705023201  wall=-009999-01-01T00:00:00  unambiguous                      type=0  +09:18:59  LMT  
+  0001:  1887-12-31T15:00:00Z     unix=-2587712400    wall=1888-01-01T00:00:00     fold-until(1888-01-01T00:18:59)  type=3  +09        JST  
+  0002:  1948-05-01T15:00:00Z     unix=-683802000     wall=1948-05-02T00:00:00      gap-until(1948-05-02T01:00:00)  type=1  +10        JDT  dst
+  0003:  1948-09-11T15:00:00Z     unix=-672310800     wall=1948-09-12T00:00:00     fold-until(1948-09-12T01:00:00)  type=2  +09        JST  
+  0004:  1949-04-02T15:00:00Z     unix=-654771600     wall=1949-04-03T00:00:00      gap-until(1949-04-03T01:00:00)  type=1  +10        JDT  dst
+  0005:  1949-09-10T15:00:00Z     unix=-640861200     wall=1949-09-11T00:00:00     fold-until(1949-09-11T01:00:00)  type=2  +09        JST  
+  0006:  1950-05-06T15:00:00Z     unix=-620298000     wall=1950-05-07T00:00:00      gap-until(1950-05-07T01:00:00)  type=1  +10        JDT  dst
+  0007:  1950-09-09T15:00:00Z     unix=-609411600     wall=1950-09-10T00:00:00     fold-until(1950-09-10T01:00:00)  type=2  +09        JST  
+  0008:  1951-05-05T15:00:00Z     unix=-588848400     wall=1951-05-06T00:00:00      gap-until(1951-05-06T01:00:00)  type=1  +10        JDT  dst
+  0009:  1951-09-08T15:00:00Z     unix=-577962000     wall=1951-09-09T00:00:00     fold-until(1951-09-09T01:00:00)  type=2  +09        JST  
+POSIX TIME ZONE STRING
+  JST-9
