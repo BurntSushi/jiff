@@ -172,6 +172,7 @@ impl<'i> core::fmt::Display for ParsedDateTime<'i> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         core::fmt::Display::fmt(&self.date, f)?;
         if let Some(ref time) = self.time {
+            f.write_str("T")?;
             core::fmt::Display::fmt(&time, f)?;
         }
         if let Some(ref offset) = self.offset {

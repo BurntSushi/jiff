@@ -21,6 +21,9 @@ Bug fixes:
 * [#525](https://github.com/BurntSushi/jiff/issues/525):
 Fix a bug that prevented time zone lookups when using an on-disk time zone
 database on Windows.
+* [#539](https://github.com/BurntSushi/jiff/issues/539):
+Fix a bug where rendering a datetime in an error message would omit a `T`
+separator.
 
 
 0.2.28 (2026-05-28)
