@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.2.30 (TBD)
+============
+TODO
+
+Enhancements:
+
+* [#591](https://github.com/BurntSushi/jiff/pull/591):
+Improve the performance of weekday calculations from Gregorian dates by 30-50%.
+
+
 0.2.29 (2026-06-20)
 ===================
 This release adds support for [`defmt`], which is a highly efficient logging
