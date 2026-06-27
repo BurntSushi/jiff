@@ -596,7 +596,7 @@ impl ITimeNanosecond {
 /// Represents a weekday.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub(crate) struct IWeekday {
-    /// Range is `1..=6` with `1=Monday`.
+    /// Range is `1..=7` with `1=Monday`.
     offset: i8,
 }
 
