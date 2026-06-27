@@ -214,14 +214,37 @@ impl IEpochDay {
     /// Returns the day of the week for this epoch day.
     #[cfg_attr(feature = "perf-inline", inline(always))]
     pub(crate) const fn weekday(&self) -> IWeekday {
-        // Based on Hinnant's approach here, although we use ISO weekday
-        // numbering by default. Basically, this works by using the knowledge
-        // that 1970-01-01 was a Thursday.
+        // Fast technique to obtain weekday 1..7 (Mon..Sun)
+        // directly via an add-mul-shift. Relies on the fact
+        // that the Unix epoch was a Thursday and that 7 is a
+        // Mersenne number.
         //
-        // Ref: http://howardhinnant.github.io/date_algorithms.html
-        IWeekday::from_monday_zero_offset(
-            (self.epoch_day + 3).rem_euclid(7) as i8
-        )
+        // Accurate over a limited range (-89478489 to 89478489)
+        // which is -243014-03-21 (Tue) to 246953-10-13 (Sat).
+        // This exceeds Jiff's range.
+        //
+        // Ref: https://www.benjoffe.com/fast-day-of-week
+        IWeekday::from_monday_one_offset({
+            const M: u32 = {
+                // MSRV(1.73): Just use `n.div_ceil` instead.
+                const fn div_ceil(lhs: u64, rhs: u64) -> u64 {
+                    let d = lhs / rhs;
+                    let r = lhs % rhs;
+                    if r > 0 {
+                        d + 1
+                    } else {
+                        d
+                    }
+                }
+
+                let n = div_ceil(1u64 << 32, 7) as u32;
+                assert!(n == 613_566_757);
+                n
+            };
+            const Z: u32 = 0x90000000; // Magic add: see link above.
+            let rd: u32 = self.epoch_day as u32;
+            (rd.wrapping_mul(M).wrapping_add(Z) >> 29) as i8
+        })
     }
 
     /// Add the given number of days to this epoch day.
