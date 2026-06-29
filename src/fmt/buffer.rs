@@ -156,14 +156,21 @@ impl<'data> BorrowedBuffer<'data> {
         buf: &'data mut alloc::vec::Vec<u8>,
         mut with: impl FnMut(&mut BorrowedBuffer<'_>) -> T,
     ) -> T {
+        let old_len = buf.len();
         let mut bbuf = BorrowedBuffer::from_vec_spare_capacity(buf);
         let returned = with(&mut bbuf);
         let new_len = bbuf.len();
-        // SAFETY: `BorrowedBuffer::len()` always reflects the number of
-        // bytes that have been written to. Thus, the data up to the given new
-        // length is guaranteed to be initialized.
+        // SAFETY: `new_len` always reflects the number of bytes that have been
+        // written to. Moreover, the buffer provided may not be empty, in which
+        // case `old_len` reflects the number of bytes already there. Thus, the
+        // data up to the given new length is guaranteed to be initialized.
+        //
+        // Note that the addition here is guaranteed not to overflow (and
+        // thus potentially wrap in release mode) since it reflects the total
+        // capacity of `buf`. If it overflowed, then it would imply that the
+        // capacity for `buf` was invalid.
         unsafe {
-            buf.set_len(new_len);
+            buf.set_len(old_len + new_len);
         }
         returned
     }
@@ -1377,5 +1384,43 @@ mod tests {
         let mut buf = ArrayBuffer::<100>::default();
         let mut bbuf = buf.as_borrowed();
         bbuf.write_fraction(None, 1_000_000_000);
+    }
+
+    /// This tests that writing into an empty buffer is okay.
+    ///
+    /// This always worked, but we test it along with a non-empty buffer below
+    /// for completeness.
+    ///
+    /// Ref: https://github.com/BurntSushi/jiff/issues/592
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn spare_capacity_empty_buffer() {
+        use jiff::{civil::date, fmt::temporal::DateTimePrinter};
+
+        let mut s = alloc::string::String::new();
+        let printer = DateTimePrinter::new();
+        let d = date(2024, 6, 15);
+        printer.print_date(&d, &mut s).unwrap();
+        assert_eq!(s.chars().count(), 10);
+    }
+
+    /// This tests that writing into a non-empty buffer is okay.
+    ///
+    /// Previously, this would result in a truncation of the buffer that,
+    /// when provided via a `String`, could result in the `String` containing
+    /// invalid UTF-8. (And just generally incorrect results even if the string
+    /// contained valid UTF-8.)
+    ///
+    /// Ref: https://github.com/BurntSushi/jiff/issues/592
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn spare_capacity_non_empty_buffer() {
+        use jiff::{civil::date, fmt::temporal::DateTimePrinter};
+
+        let mut s = alloc::string::String::from("🎉🎉🎉");
+        let printer = DateTimePrinter::new();
+        let d = date(2024, 6, 15);
+        printer.print_date(&d, &mut s).unwrap();
+        assert_eq!(s.chars().map(|c| c.len_utf8()).sum::<usize>(), 22);
     }
 }

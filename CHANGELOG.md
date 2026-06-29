@@ -9,6 +9,12 @@ Enhancements:
 * [#591](https://github.com/BurntSushi/jiff/pull/591):
 Improve the performance of weekday calculations from Gregorian dates by 30-50%.
 
+Bug fixes:
+
+* [#592](https://github.com/BurntSushi/jiff/issues/592):
+Fix safety soundness bug when using a non-empty `String` destination buffer
+with lower level printing APIs inside of `jiff::fmt`.
+
 
 0.2.29 (2026-06-20)
 ===================
