@@ -1,8 +1,11 @@
 # CHANGELOG
 
-0.2.30 (TBD)
-============
-TODO
+0.2.30 (2026-06-29)
+===================
+This release fixes a safety soundness bug in Jiff's lower level printing
+APIs. There is also a nice performance improvement to `civil::Date::weekday`,
+which also improves downstread routines like `civil::Date::nth_weekday` and
+datetime<-->timestamp conversions in some cases.
 
 Enhancements:
 
