@@ -7,7 +7,7 @@ use crate::{
 };
 
 extern "C" {
-    /// https://emscripten.org/docs/api_reference/emscripten.h.html#c.emscripten_run_script_string
+    /// <https://emscripten.org/docs/api_reference/emscripten.h.html#c.emscripten_run_script_string>
     fn emscripten_run_script_string(script: *const c_char) -> *mut c_char;
 }
 
@@ -21,9 +21,19 @@ pub(super) fn get(db: &TimeZoneDatabase) -> Option<TimeZone> {
 
     // SAFETY: SCRIPT is a valid pointer to a null-terminated string. The
     // result will be a pointer to a null-terminated C string, or null if the
-    // script failed to run. The returned value is valid until the next call to
-    // `emscripten_run_script_string` in the same thread, so it is valid for
-    // the duration of this function.
+    // script failed to run. The returned value is valid until the next call
+    // to `emscripten_run_script_string` in the same thread, so it is valid
+    // for the duration of this function. This likely relies on emscripten
+    // managing its string lifetimes carefully, possibly through TLS or some
+    // other shenanigans. Either way, this usage seems clearly okay even in a
+    // multi-threaded environment according to emscripten docs:
+    //
+    // > This function can be called from a pthread, and it is executed
+    // > in the scope of the Web Worker that is hosting the pthread. To
+    // > evaluate a function in the scope of the main runtime thread,
+    // > see the function emscripten_sync_run_in_main_runtime_thread().
+    //
+    // From: <https://emscripten.org/docs/api_reference/emscripten.h.html#c.emscripten_run_script_string>
     let script_result =
         unsafe { emscripten_run_script_string(SCRIPT.as_ptr()) };
     let script_ptr = match NonNull::new(script_result) {
