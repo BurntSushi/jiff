@@ -525,6 +525,9 @@ impl<'data> BorrowedBuffer<'data> {
         assert!(n <= 999_999_999);
         let mut buf = ArrayBuffer::<MAX_PRECISION>::default();
         for i in (0..MAX_PRECISION).rev() {
+            // SAFETY: Okay since `i` is guaranteed to be a valid index in
+            // `buf`. Namely, `buf` is created with `MAX_PRECISION` slots and
+            // `MAX_PRECISION - 1` is the largest value of `i` possible here.
             unsafe {
                 buf.data.get_unchecked_mut(i).write(b'0' + ((n % 10) as u8));
             }
