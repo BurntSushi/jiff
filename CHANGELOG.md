@@ -1,5 +1,14 @@
 # CHANGELOG
 
+0.2.31 (2026-06-29)
+===================
+This release fixes a minor bug in tests that prevents the crate from running
+through standard build processes in Linux distributions downstream.
+
+* [#594](https://github.com/BurntSushi/jiff/pull/591):
+Fix imports in recently added tests.
+
+
 0.2.30 (2026-06-29)
 ===================
 This release fixes a safety soundness bug in Jiff's lower level printing
