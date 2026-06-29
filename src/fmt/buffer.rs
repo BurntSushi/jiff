@@ -1398,7 +1398,7 @@ mod tests {
     #[cfg(feature = "alloc")]
     #[test]
     fn spare_capacity_empty_buffer() {
-        use jiff::{civil::date, fmt::temporal::DateTimePrinter};
+        use crate::{civil::date, fmt::temporal::DateTimePrinter};
 
         let mut s = alloc::string::String::new();
         let printer = DateTimePrinter::new();
@@ -1418,7 +1418,7 @@ mod tests {
     #[cfg(feature = "alloc")]
     #[test]
     fn spare_capacity_non_empty_buffer() {
-        use jiff::{civil::date, fmt::temporal::DateTimePrinter};
+        use crate::{civil::date, fmt::temporal::DateTimePrinter};
 
         let mut s = alloc::string::String::from("🎉🎉🎉");
         let printer = DateTimePrinter::new();
