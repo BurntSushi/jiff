@@ -4,7 +4,7 @@ use crate::tz::{TimeZone, TimeZoneNameIter};
 pub(crate) struct Database;
 
 impl Database {
-    pub(crate) fn new() -> Database {
+    pub(crate) const fn new() -> Database {
         Database
     }
 
