@@ -32,8 +32,33 @@ pub fn db() -> &'static TimeZoneDatabase {
     // #[cfg(any(not(feature = "std"), miri))]
     #[cfg(not(feature = "std"))]
     {
-        static NONE: TimeZoneDatabase = TimeZoneDatabase::none();
-        &NONE
+        // Without `std` there's no lazily initialized global state. But when
+        // the tzdb is bundled into the binary, we can still hand out a usable
+        // database: the bundled database needs no allocation, so it can be
+        // constructed in a `const`. (Without `std`, the zoneinfo and
+        // concatenated databases are both unavailable, so there's nothing to
+        // prefer over the bundle.)
+        //
+        // Ref: https://github.com/BurntSushi/jiff/issues/533
+        #[cfg(any(
+            feature = "tzdb-bundle-always",
+            all(
+                feature = "tzdb-bundle-platform",
+                any(windows, target_family = "wasm"),
+            ),
+        ))]
+        static DB: TimeZoneDatabase = TimeZoneDatabase {
+            inner: Repr::Bundled(bundled::Database::new()),
+        };
+        #[cfg(not(any(
+            feature = "tzdb-bundle-always",
+            all(
+                feature = "tzdb-bundle-platform",
+                any(windows, target_family = "wasm"),
+            ),
+        )))]
+        static DB: TimeZoneDatabase = TimeZoneDatabase::none();
+        &DB
     }
     // #[cfg(all(feature = "std", not(miri)))]
     #[cfg(feature = "std")]
@@ -727,6 +752,32 @@ fn special_time_zone(name: &str) -> Option<TimeZone> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Tests that the global database returns the bundled tzdb when the bundle
+    /// is enabled but neither the zoneinfo nor concatenated databases are.
+    ///
+    /// This configuration doesn't have `std` (since both `tzdb-zoneinfo` and
+    /// `tzdb-concatenated` imply it), and so without special handling `db()`
+    /// used to return an empty database despite the tzdb being compiled in.
+    ///
+    /// Regression test for: https://github.com/BurntSushi/jiff/issues/533
+    #[cfg(all(
+        feature = "tzdb-bundle-always",
+        not(feature = "tzdb-zoneinfo"),
+        not(feature = "tzdb-concatenated"),
+    ))]
+    #[test]
+    fn bundled_db_when_only_bundle_enabled() {
+        let db = db();
+        assert!(!db.is_definitively_empty());
+        assert!(db.get("America/New_York").is_ok());
+        // The convenience APIs route through the global `db()`, so this is
+        // the symptom originally reported in #533.
+        assert!(crate::civil::date(2024, 7, 4)
+            .at(12, 0, 0, 0)
+            .in_tz("America/New_York")
+            .is_ok());
+    }
 
     /// This tests that the size of a time zone database is kept small.
     ///

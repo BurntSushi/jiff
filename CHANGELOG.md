@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.2.33 (TBD)
+============
+TODO
+
+Enhancements:
+
+* [#533](https://github.com/BurntSushi/jiff/issues/533):
+A bundled `TimeZoneDatabase` is now available when only `alloc` is enabled.
+
+
 0.2.32 (2026-07-08)
 ===================
 This release updates Jiff's bundled copy of the [IANA Time Zone Database]
