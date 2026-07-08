@@ -95,6 +95,7 @@ bak="$TMPDIR/CHANGELOG.md.bak"
 mv CHANGELOG.md "$bak"
 (
   head -n +2 "$bak"
+  # shellcheck disable=SC2116
   release_heading="$(echo "$jiff_next_version ($(bttf time fmt -f '%Y-%m-%d' now))")"
   echo "$release_heading"
   printf '%*s\n' ${#release_heading} '' | tr ' ' '='
