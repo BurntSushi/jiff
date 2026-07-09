@@ -24,7 +24,10 @@ if [ -z "$JIFF_TZDB_UPDATE_ALLOW_DIRTY" ]; then
     echo "repository must be in a clean state"
     exit 1
   fi
-  git pull --quiet --rebase
+  if ! git status | rg -q 'HEAD detached at refs/heads/master'; then
+    echo "repository must be on detached master branch"
+    exit 1
+  fi
 fi
 if rg -q TBD CHANGELOG.md; then
   echo "CHANGELOG cannot have a TBD entry" >&2
@@ -59,8 +62,12 @@ url="https://data.iana.org/time-zones/releases/$nameext"
 version_announcement="$(
   curl -s "$announcements" | \
     rg --max-count 1 -ioUr '$path' \
-      '<a[^>]+name="(?-i)[A-Z0-9]+"[^>]+href="(?<path>[^"]+)"[^>]*>\s*(?:<i[^>]+>[^<]*</i>)?[^<]*'$version'[^<]*</a>'
+      '<a[^>]+name="(?-i)[A-Z0-9]+"[^>]+href="/(?<path>[^"]+)"[^>]*>\s*(?:<i[^>]+>[^<]*</i>)?[^<]*'$version'[^<]*</a>'
 )"
+if [ -z "$version_announcement" ]; then
+  echo "could not extract version announcement URL" >&2
+  exit 1
+fi
 version_announcement_url="$list_host/$version_announcement"
 
 tzdb_data_dir="$TMPDIR/$name"
