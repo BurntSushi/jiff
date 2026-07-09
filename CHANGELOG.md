@@ -1,5 +1,13 @@
 # CHANGELOG
 
+0.2.32 (2026-07-08)
+===================
+This release updates Jiff's bundled copy of the [IANA Time Zone Database]
+to `2026c`. See the [`2026c` release announcement] for more details.
+
+[`2026c` release announcement]: https://lists.iana.org//hyperkitty/list/tz-announce@iana.org/thread/NVHSX2PAQIT44U5FCCEVNJJYXQMMTJSA/
+
+
 0.2.31 (2026-06-29)
 ===================
 This release fixes a minor bug in tests that prevents the crate from running
