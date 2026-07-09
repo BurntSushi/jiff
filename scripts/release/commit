@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+: "${JIFF_ALLOW_DIRTY:=}"
+if [ -z "$JIFF_ALLOW_DIRTY" ]; then
+  if [ -n "$(git status --porcelain)" ]; then
+    echo "repository must be in a clean state"
+    exit 1
+  fi
+fi
+if ! [ -f ./crates/jiff-cli/Cargo.toml ]; then
+  echo "must run in the root of a jiff repository checkout" >&2
+  exit 1
+fi
+
+crate="$1"
+shift
+
+release_dir="$(dirname "$0")"
+case $crate in
+  jiff)
+    next_version="$("$release_dir"/get-next-version ./Cargo.toml)"
+    "$release_dir"/update-version ./Cargo.toml "$next_version"
+    "$release_dir"/update-version ./crates/jiff-static/Cargo.toml "$next_version"
+    sed -i 's/^\(jiff-static = { version = \)"=[0-9.]\+"/\1"='$next_version'"/g' ./Cargo.toml
+    git commit --quiet --all --file - <<EOF
+$next_version
+EOF
+    ;;
+  jiff-tzdb)
+    next_version="$("$release_dir"/get-next-version ./crates/jiff-tzdb/Cargo.toml)"
+    "$release_dir"/update-version ./crates/jiff-tzdb/Cargo.toml "$next_version"
+    sed -i 's/^\(jiff-tzdb = { version = \)"[0-9.]\+"/\1"'$next_version'"/g' ./Cargo.toml
+    git commit --quiet --all --file - <<EOF
+jiff-tzdb-$next_version
+EOF
+esac

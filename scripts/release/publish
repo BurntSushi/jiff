@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+if ! [ -f ./crates/jiff-cli/Cargo.toml ]; then
+  echo "must run in the root of a jiff repository checkout" >&2
+  exit 1
+fi
+
+crate="$1"
+shift
+
+release_dir="$(dirname "$0")"
+case $crate in
+  jiff)
+    current="$("$release_dir"/get-version ./Cargo.toml)"
+    tag="$current"
+    git tag -s -a "$tag" -m "$tag"
+    cargo publish --manifest-path ./crates/jiff-static/Cargo.toml
+    cargo publish --manifest-path ./Cargo.toml
+    ;;
+  jiff-tzdb)
+    current="$("$release_dir"/get-version ./crates/jiff-tzdb/Cargo.toml)"
+    tag="jiff-tzdb-$current"
+    git tag -s -a "$tag" -m "$tag"
+    cargo publish --manifest-path ./crates/jiff-tzdb/Cargo.toml
+    ;;
+  *)
+    echo "unrecognize publish name" >&2
+    exit 1
+    ;;
+esac

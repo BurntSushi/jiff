@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+# Ripped out of:
+# https://github.com/BurntSushi/dotfiles/blob/fb213eebcbeb9423bde476446478d32a81637212/bin/cargo-up
+
+set -euo pipefail
+
+function next_version {
+  cur="$1"
+  nopatch=${cur%.*}
+  patch=${cur##*.}
+  patchplus=$((patch + 1))
+  printf "%s.%s\n" $nopatch $patchplus
+}
+
+if ! [ -f ./crates/jiff-cli/Cargo.toml ]; then
+  echo "must run in the root of a jiff repository checkout" >&2
+  exit 1
+fi
+
+release_dir="$(dirname "$0")"
+cargo_toml="$1"
+if [ -z "$cargo_toml" ]; then
+  echo "Usage: $(basename "$0") <path-to-cargo-toml>" >&2
+  exit 1
+fi
+next_version $("$release_dir"/get-version "$cargo_toml")
