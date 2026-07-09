@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+manifest="$1"
+version="$2"
+if [[ -z "$manifest" ]] || [[ -z "$version" ]]; then
+  echo "Usage: $(basename "$0") <path-to-cargo-toml> <version>" >&2
+fi
+sed -i 's/^version = ".*"\s\+#:version$/version = "'$version'"  #:version/g' "$manifest"

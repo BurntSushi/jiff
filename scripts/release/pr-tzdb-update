@@ -12,14 +12,19 @@
 # 6. Update the CHANGELOG and submit a PR.
 #
 # This should be run without arguments. If you need to test, set
-# `JIFF_TZDB_UPDATE_ALLOW_DIRTY=1`. When set, this will stop just before
+# `JIFF_ALLOW_DIRTY=1`. When set, this will stop just before
 # submitting a PR.
 
 set -euo pipefail
 
+if ! [ -f ./crates/jiff-cli/Cargo.toml ]; then
+  echo "must run in the root of a jiff repository checkout" >&2
+  exit 1
+fi
+
 # Do some sanity checking first to make sure we are in a clean state.
-: "${JIFF_TZDB_UPDATE_ALLOW_DIRTY:=}"
-if [ -z "$JIFF_TZDB_UPDATE_ALLOW_DIRTY" ]; then
+: "${JIFF_ALLOW_DIRTY:=}"
+if [ -z "$JIFF_ALLOW_DIRTY" ]; then
   if [ -n "$(git status --porcelain)" ]; then
     echo "repository must be in a clean state"
     exit 1
@@ -39,7 +44,8 @@ fi
 mkdir -p "$TMPDIR"
 
 # Get the next version of Jiff that will contain the tzdb update.
-jiff_next_version="$(./scripts/get-next-version)"
+release_dir="$(dirname "$0")"
+jiff_next_version="$("$release_dir"/get-next-version ./Cargo.toml)"
 
 # Some URLs used below.
 download="https://www.iana.org/time-zones"
