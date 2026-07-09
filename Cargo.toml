@@ -192,7 +192,7 @@ perf-inline = []
 [dependencies]
 defmt = { version = "1.0.0", optional = true }
 jiff-static = { version = "0.2", path = "crates/jiff-static", optional = true }
-jiff-tzdb = { version = "0.1.6", path = "crates/jiff-tzdb", optional = true }
+jiff-tzdb = { version = "0.1.8", path = "crates/jiff-tzdb", optional = true }
 log = { version = "0.4.21", optional = true, default-features = false }
 serde_core = { version = "1.0.221", optional = true, default-features = false }
 
