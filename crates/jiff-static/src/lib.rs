@@ -64,7 +64,7 @@ pub fn get(input: TokenStream) -> TokenStream {
 /// The entry point for the `include!` macro.
 #[derive(Debug)]
 struct Include {
-    tzif: tzif::TimeZone,
+    tzif: tzif::MaybeNamedTimeZone,
 }
 
 impl Include {
@@ -89,9 +89,11 @@ impl Include {
         let id = TimeZoneId::new_or_heap(id);
         let data = std::fs::read(path)
             .map_err(|e| format!("failed to read {path}: {e}"))?;
-        let tzif = tzif::TimeZone::parse(Some(id), &data).map_err(|e| {
-            format!("failed to parse TZif data from {path}: {e}")
-        })?;
+        let tzif = tzif::TimeZone::parse(&data)
+            .map_err(|e| {
+                format!("failed to parse TZif data from {path}: {e}")
+            })?
+            .into_named(id);
         Ok(Include { tzif })
     }
 
@@ -128,7 +130,7 @@ impl syn::parse::Parse for Include {
 #[cfg(feature = "tzdb")]
 #[derive(Debug)]
 struct Get {
-    tzif: tzif::TimeZone,
+    tzif: tzif::MaybeNamedTimeZone,
 }
 
 #[cfg(feature = "tzdb")]
@@ -138,10 +140,11 @@ impl Get {
             format!("could not find time zone `{id}` in bundled tzdb")
         })?;
         let id = TimeZoneId::statik(id);
-        let tzif =
-            tzif::TimeZone::parse(Some(id.clone()), &data).map_err(|e| {
+        let tzif = tzif::TimeZone::parse(&data)
+            .map_err(|e| {
                 format!("failed to parse TZif data from bundled `{id}`: {e}")
-            })?;
+            })?
+            .into_named(id);
         Ok(Get { tzif })
     }
 
@@ -168,17 +171,17 @@ trait Quote {
     fn quote(&self) -> proc_macro2::TokenStream;
 }
 
-impl Quote for tzif::TimeZone {
+impl Quote for tzif::MaybeNamedTimeZone {
     fn quote(&self) -> proc_macro2::TokenStream {
+        let tzif::MaybeNamedTimeZone { ref name, ref tz } = *self;
         let tzif::TimeZone {
-            ref name,
             version,
             checksum,
             ref designations,
             ref posix_tz,
             ref types,
             ref transitions,
-        } = *self;
+        } = tz;
         // We are guaranteed to always have a name in this context.
         let name = name.as_ref().unwrap().quote();
         let designations = designations.iter().map(Quote::quote);
@@ -193,16 +196,18 @@ impl Quote for tzif::TimeZone {
         let transitions = transitions.quote();
         quote! {{
             static __TZ_DESIGNATIONS: &[jiff::__jcore::tz::Abbreviation] = &[#(#designations),*];
-            static __TZ_INTERNAL: jiff::__jcore::tz::tzif::TimeZone =
-                    jiff::__jcore::tz::tzif::TimeZone {
-                        name: Some(#name),
+            static __TZ_INTERNAL: jiff::__jcore::tz::tzif::MaybeNamedTimeZone =
+                jiff::__jcore::tz::tzif::MaybeNamedTimeZone {
+                    name: Some(#name),
+                    tz: jiff::__jcore::tz::tzif::TimeZone {
                         version: #version,
                         checksum: #checksum,
                         designations: jiff::__jcore::util::MaybeStaticSlice::statik(__TZ_DESIGNATIONS),
                         posix_tz: #posix_tz,
                         types: jiff::__jcore::util::MaybeStaticSlice::statik(&[#(#types),*]),
                         transitions: #transitions,
-                    };
+                    },
+                };
             static TZ: jiff::tz::TimeZone =
                 jiff::tz::TimeZone::__internal_from_tzif(&__TZ_INTERNAL);
             // SAFETY: Since we are guaranteed that the `TimeZone` is

@@ -1,7 +1,7 @@
 use alloc::{string::String, vec, vec::Vec};
 
 use crate::{
-    tz::{self, posix, Abbreviation, Dst, Offset},
+    tz::{posix, Abbreviation, Dst, Offset},
     util::{crc32, MaybeStaticSlice},
 };
 
@@ -43,11 +43,8 @@ impl TimeZone {
     ///
     /// This is only available when the `alloc` feature is enabled because
     /// parsing TZif data requires heap allocation.
-    pub fn parse(
-        name: Option<tz::TimeZoneId>,
-        bytes: &[u8],
-    ) -> Result<TimeZone, ParseError> {
-        ParsedTimeZone::parse(name, bytes)
+    pub fn parse(bytes: &[u8]) -> Result<TimeZone, ParseError> {
+        ParsedTimeZone::parse(bytes)
     }
 }
 
@@ -64,7 +61,6 @@ struct ParsedTimeZone {
 }
 
 struct ParsedFixed {
-    name: Option<tz::TimeZoneId>,
     version: u8,
     checksum: u32,
     designations: Vec<Abbreviation>,
@@ -79,17 +75,14 @@ struct ParsedTransitions {
 }
 
 impl ParsedTimeZone {
-    fn parse(
-        name: Option<tz::TimeZoneId>,
-        bytes: &[u8],
-    ) -> Result<TimeZone, ParseError> {
+    fn parse(bytes: &[u8]) -> Result<TimeZone, ParseError> {
         let original = bytes;
         let (header32, rest) =
             Header::parse(4, bytes).map_err(ParseErrorKind::Header32)?;
         let (mut tzif, rest) = if header32.version == 0 {
-            ParsedTimeZone::parse32(name, header32, rest)?
+            ParsedTimeZone::parse32(header32, rest)?
         } else {
-            ParsedTimeZone::parse64(name, header32, rest)?
+            ParsedTimeZone::parse64(header32, rest)?
         };
         tzif.fatten();
         // This should come after fattening because fattening may add new
@@ -106,10 +99,9 @@ impl ParsedTimeZone {
         tzif.finish()
     }
 
-    fn new(name: Option<tz::TimeZoneId>, version: u8) -> ParsedTimeZone {
+    fn new(version: u8) -> ParsedTimeZone {
         ParsedTimeZone {
             fixed: ParsedFixed {
-                name,
                 version,
                 checksum: 0,
                 designations: vec![],
@@ -127,7 +119,6 @@ impl ParsedTimeZone {
 
     fn finish(self) -> Result<TimeZone, ParseError> {
         Ok(TimeZone {
-            name: self.fixed.name,
             version: self.fixed.version,
             checksum: self.fixed.checksum,
             designations: MaybeStaticSlice::heap(
@@ -153,11 +144,10 @@ impl ParsedTimeZone {
     }
 
     fn parse32<'b>(
-        name: Option<tz::TimeZoneId>,
         header32: Header,
         bytes: &'b [u8],
     ) -> Result<(ParsedTimeZone, &'b [u8]), ParseError> {
-        let mut tzif = ParsedTimeZone::new(name, header32.version);
+        let mut tzif = ParsedTimeZone::new(header32.version);
         let rest = tzif.parse_transitions(&header32, bytes)?;
         let rest = tzif.parse_transition_types(&header32, rest)?;
         let rest = tzif.parse_local_time_types(&header32, rest)?;
@@ -168,7 +158,6 @@ impl ParsedTimeZone {
     }
 
     fn parse64<'b>(
-        name: Option<tz::TimeZoneId>,
         header32: Header,
         bytes: &'b [u8],
     ) -> Result<(ParsedTimeZone, &'b [u8]), ParseError> {
@@ -176,7 +165,7 @@ impl ParsedTimeZone {
             try_split_at(SplitAtError::V1, bytes, header32.data_block_len()?)?;
         let (header64, rest) =
             Header::parse(8, rest).map_err(ParseErrorKind::Header64)?;
-        let mut tzif = ParsedTimeZone::new(name, header64.version);
+        let mut tzif = ParsedTimeZone::new(header64.version);
         let rest = tzif.parse_transitions(&header64, rest)?;
         let rest = tzif.parse_transition_types(&header64, rest)?;
         let rest = tzif.parse_local_time_types(&header64, rest)?;
@@ -554,10 +543,9 @@ impl ParsedTimeZone {
         loop {
             if i > FATTEN_MAX_TRANSITIONS {
                 warn!(
-                    "fattening TZif data for `{name:?}` somehow generated \
-                     more than {max} transitions, so giving up to avoid \
+                    "fattening TZif data for somehow generated more than \
+                     {max} transitions, so giving up to avoid \
                      doing too much work",
-                    name = self.fixed.name,
                     max = FATTEN_MAX_TRANSITIONS,
                 );
                 return;
@@ -1343,10 +1331,8 @@ mod tests {
 
     #[test]
     fn parse_minimal_v1() {
-        let name = Some(tz::TimeZoneId::array("UTC"));
-        let tzif = TimeZone::parse(name, &minimal_v1()).unwrap();
+        let tzif = TimeZone::parse(&minimal_v1()).unwrap();
         assert_eq!(tzif.version, 0);
-        assert_eq!(tzif.name.as_ref().unwrap(), "UTC");
         assert_eq!(tzif.designations.as_ref(), &[Abbreviation::array("UTC")]);
         assert_eq!(tzif.types.len(), 1);
         assert_eq!(tzif.types[0].offset, Offset::UTC);
@@ -1357,8 +1343,7 @@ mod tests {
 
     #[test]
     fn parse_minimal_v2() {
-        let name = Some(tz::TimeZoneId::array("UTC"));
-        let tzif = TimeZone::parse(name, &minimal_v2(b"UTC0")).unwrap();
+        let tzif = TimeZone::parse(&minimal_v2(b"UTC0")).unwrap();
         assert_eq!(tzif.version, b'2');
         assert!(tzif.posix_tz.is_some());
         assert_eq!(tzif.designations.as_ref(), &[Abbreviation::array("UTC")]);
@@ -1369,7 +1354,7 @@ mod tests {
     #[test]
     fn parse_minimal_v2_with_and_without_tz_fat() {
         let bytes = minimal_v2(b"EST5EDT,M3.2.0,M11.1.0");
-        let tzif = TimeZone::parse(None, &bytes).unwrap();
+        let tzif = TimeZone::parse(&bytes).unwrap();
         let expected = if cfg!(feature = "tz-fat") { 302 } else { 1 };
         assert_eq!(tzif.transitions.timestamps.len(), expected);
     }

@@ -112,8 +112,7 @@ impl TzifTestFile {
     /// Parse this test TZif data into a structured representation.
     #[cfg(not(miri))]
     pub(crate) fn parse(self) -> tzif::TimeZone {
-        let name = Some(jcore::tz::TimeZoneId::statik(self.name));
-        tzif::TimeZone::parse(name, self.data).unwrap_or_else(|err| {
+        tzif::TimeZone::parse(self.data).unwrap_or_else(|err| {
             panic!("failed to parse TZif test file for {:?}: {err}", self.name)
         })
     }
@@ -121,10 +120,9 @@ impl TzifTestFile {
     /// Parse this test TZif data as if it were V1.
     #[cfg(not(miri))]
     pub(crate) fn parse_v1(self) -> tzif::TimeZone {
-        let name = Some(jcore::tz::TimeZoneId::statik(self.name));
         let mut data = self.data.to_vec();
         data[4] = 0;
-        tzif::TimeZone::parse(name, &data).unwrap_or_else(|err| {
+        tzif::TimeZone::parse(&data).unwrap_or_else(|err| {
             panic!(
                 "failed to parse V1 TZif test file for {:?}: {err}",
                 self.name
