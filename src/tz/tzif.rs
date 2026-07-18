@@ -58,13 +58,8 @@ mod tests {
         let mut out = tabwriter::TabWriter::new(vec![])
             .alignment(tabwriter::Alignment::Left);
 
-        writeln!(out, "TIME ZONE NAME").unwrap();
-        let name = tzif.name().map(|name| name.as_str()).unwrap_or("UNNAMED");
-        writeln!(out, "  {}", name).unwrap();
-
         writeln!(out, "TIME ZONE VERSION").unwrap();
-        writeln!(out, "  {}", char::try_from(tzif.version).unwrap())
-            .unwrap();
+        writeln!(out, "  {}", char::try_from(tzif.version).unwrap()).unwrap();
 
         writeln!(out, "LOCAL TIME TYPES").unwrap();
         for (i, typ) in tzif.types.iter().enumerate() {
@@ -114,8 +109,7 @@ mod tests {
                     type_index = trans.infos[i].type_index,
                     off = jiff::tz::Offset::from_seconds(typ.offset.seconds())
                         .unwrap(),
-                    desig =
-                        tzif.designations[usize::from(typ.designation)],
+                    desig = tzif.designations[usize::from(typ.designation)],
                     dst = if typ.dst.is_dst() { "dst" } else { "" },
                 )
                 .unwrap();
@@ -153,8 +147,7 @@ mod tests {
         };
         let bytes =
             std::fs::read(&val).with_context(|| alloc::format!("{val:?}"))?;
-        let name = jcore::tz::TimeZoneId::new_or_heap(&val);
-        let tzif = tzif::TimeZone::parse(Some(name), &bytes)?;
+        let tzif = tzif::TimeZone::parse(&bytes)?;
         std::eprint!("{}", tzif_to_human_readable(&tzif));
         Ok(())
     }
@@ -209,18 +202,9 @@ mod tests {
             if !tzif::is_possibly_tzif(&bytes) {
                 continue;
             }
-            let tzname = dent
-                .path()
-                .strip_prefix(TZDIR)
-                .unwrap_or_else(|_| {
-                    panic!("all paths in TZDIR have {TZDIR:?} prefix")
-                })
-                .to_str()
-                .expect("all paths to be valid UTF-8");
-            let tzname = jcore::tz::TimeZoneId::new_or_heap(tzname);
             // OK at this point, we're pretty sure `bytes` should be a TZif
             // binary file. So try to parse it and fail the test if it fails.
-            if let Err(err) = tzif::TimeZone::parse(Some(tzname), &bytes) {
+            if let Err(err) = tzif::TimeZone::parse(&bytes) {
                 panic!("failed to parse TZif file {:?}: {err}", dent.path());
             }
         }

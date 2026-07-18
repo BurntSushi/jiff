@@ -2,7 +2,7 @@ use crate::{
     civil::DateTime,
     tz::{
         posix, Abbreviation, AmbiguousOffset, AmbiguousTimestamp, Offset,
-        OffsetInfo, TimeZoneId, Transition,
+        OffsetInfo, Transition,
     },
     Timestamp,
 };
@@ -14,11 +14,6 @@ use super::{
 };
 
 impl TimeZone {
-    /// Returns the name given to this TZif data in its constructor.
-    pub fn name(&self) -> Option<&TimeZoneId> {
-        self.name.as_ref()
-    }
-
     /// Returns the appropriate time zone offset to use for the given
     /// timestamp.
     pub fn to_offset(&self, timestamp: Timestamp) -> Offset {

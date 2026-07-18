@@ -2,8 +2,6 @@
 source: src/tz/tzif.rs
 expression: tzif_to_human_readable(&tzif_test.parse())
 ---
-TIME ZONE NAME
-  UTC
 TIME ZONE VERSION
   2
 LOCAL TIME TYPES

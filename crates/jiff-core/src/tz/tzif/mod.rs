@@ -29,7 +29,45 @@ mod query;
 #[cfg(feature = "alloc")]
 pub use self::parser::ParseError;
 
-/// A representation of a time zone backed by [TZif] data.
+/// A representation of a possibly named time zone backed by [TZif] data.
+///
+/// It is useful to represent a named time zone as distinct from the time zone
+/// itself because a name is not inherently part of the TZif data. Indeed, there
+/// are a couple reasons why it's important to separate the name:
+///
+/// * It's possible that no meaningful name exists. For example, a
+/// `/etc/localtime` file with no obvious mapping to a name. (e.g., No symlink
+/// and no discoverable Time Zone Database.)
+/// * Some IANA time zone identifiers correspond to different regions, but
+/// share the same TZif data.
+///
+/// [TZif]: https://datatracker.ietf.org/doc/rfc9636/
+#[derive(Clone, Debug, PartialEq)]
+pub struct MaybeNamedTimeZone {
+    /// The name of this TZif time zone. e.g., `America/New_York`.
+    pub name: Option<tz::TimeZoneId>,
+    /// The time zone itself.
+    pub tz: TimeZone,
+}
+
+impl MaybeNamedTimeZone {
+    /// Returns the underlying time zone name as a string.
+    #[inline]
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    /// Returns a reference to the underlying time zone definition.
+    #[inline]
+    pub fn tz(&self) -> &TimeZone {
+        &self.tz
+    }
+}
+
+/// A representation of an unnamed time zone backed by [TZif] data.
+///
+/// Two time zones are considered equivalent when their CRC32 sums are
+/// equivalent.
 ///
 /// [TZif]: https://datatracker.ietf.org/doc/rfc9636/
 #[derive(Clone, Debug)]
@@ -41,19 +79,6 @@ pub use self::parser::ParseError;
 // the type definition at present only has an alignment of 4 bytes.
 #[repr(align(8))]
 pub struct TimeZone {
-    // FIXME: Remove this and move it on to `jiff::tz::TimeZone` proper.
-    // This will require changing how we represent heap allocated time zones.
-    // i.e., something like:
-    //
-    // enum HeapAllocatedTimeZone {
-    //     Tzif { id: Option<tz::TimeZoneId>, tz: tzif::TimeZone },
-    //     Posix { tz: posix::TimeZone },
-    // }
-    //
-    // And then have an `Arc<HeapAllocatedTimeZone>` or some such. This will
-    // also free up one tag value, which is nice.
-    /// The name of this TZif time zone. e.g., `America/New_York`.
-    pub name: Option<tz::TimeZoneId>,
     /// An ASCII byte corresponding to the version number. So, 0x50 is '2'.
     pub version: u8,
     /// A CRC32 checksum of the underlying TZif data.
@@ -78,9 +103,27 @@ pub struct TimeZone {
     pub transitions: Transitions,
 }
 
+impl TimeZone {
+    /// Converts this unnamed time zone into a time zone with the given name.
+    #[inline]
+    pub fn into_named(self, name: tz::TimeZoneId) -> MaybeNamedTimeZone {
+        self.into_maybe_named(Some(name))
+    }
+
+    /// Converts this unnamed time zone into a time zone with the given
+    /// optional name.
+    #[inline]
+    pub fn into_maybe_named(
+        self,
+        name: Option<tz::TimeZoneId>,
+    ) -> MaybeNamedTimeZone {
+        MaybeNamedTimeZone { name, tz: self }
+    }
+}
+
 impl PartialEq for TimeZone {
     fn eq(&self, rhs: &TimeZone) -> bool {
-        self.name == rhs.name && self.checksum == rhs.checksum
+        self.checksum == rhs.checksum
     }
 }
 
