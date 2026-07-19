@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -eo pipefail
 
 : "${JIFF_ALLOW_DIRTY:=}"
 if [ -z "$JIFF_ALLOW_DIRTY" ]; then
@@ -15,8 +15,11 @@ if ! [ -f ./crates/jiff-cli/Cargo.toml ]; then
 fi
 
 crate="$1"
+shift
 next_version="$2"
-shift 2
+if [ -n "$next_version" ]; then
+  shift
+fi
 
 release_dir="$(dirname "$0")"
 case $crate in
