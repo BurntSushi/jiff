@@ -1,8 +1,11 @@
 # CHANGELOG
 
-0.2.34 (TBD)
-============
-TODO
+0.2.34 (2026-07-19)
+===================
+This release contains a few small enhancements. Namely, some error messages
+for parsing datetime values have been improved by removing some redundant
+messaging. Additionally, the `strftime` APIs on datetime values can no longer
+panic. Instead, they'll silently pass through invalid formatting directives.
 
 Enhancements:
 

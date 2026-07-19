@@ -25,11 +25,11 @@ release_dir="$(dirname "$0")"
 case $crate in
   jiff)
     if [ -z "$next_version" ]; then
-      next_version="$("$release_dir"/get-next-version ./Cargo.toml)"
+      next_version="$("$release_dir"/get-next-version ./crates/jiff/Cargo.toml)"
     fi
     "$release_dir"/update-version ./crates/jiff/Cargo.toml "$next_version"
     "$release_dir"/update-version ./crates/jiff-static/Cargo.toml "$next_version"
-    sed -i 's/^\(jiff-static = { version = \)"=[0-9.]\+"/\1"='$next_version'"/g' ./Cargo.toml
+    sed -i 's/^\(jiff-static = { version = \)"=[0-9.]\+"/\1"='$next_version'"/g' ./crates/jiff/Cargo.toml
     git commit --quiet --all --file - <<EOF
 $next_version
 EOF
