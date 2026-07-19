@@ -43,8 +43,8 @@ mod tests {
             }
         }
 
-        fn datetime(dt: tzif::DateTime) -> jiff::civil::DateTime {
-            jiff::civil::DateTime::constant(
+        fn datetime(dt: tzif::DateTime) -> crate::civil::DateTime {
+            crate::civil::DateTime::constant(
                 dt.year(),
                 dt.month(),
                 dt.day(),
@@ -67,7 +67,7 @@ mod tests {
                 out,
                 "  {i:03}:\toffset={off}\t\
                    designation={desig}\t{dst}\tindicator={ind}",
-                off = jiff::tz::Offset::from_seconds(typ.offset.seconds())
+                off = jcore::tz::Offset::from_seconds(typ.offset.seconds())
                     .unwrap(),
                 desig = tzif.designations[usize::from(typ.designation)],
                 dst = if typ.dst.is_dst() { "dst" } else { "" },
@@ -107,8 +107,9 @@ mod tests {
                        {desig}\t{dst}",
                     ts = timestamp.as_second(),
                     type_index = trans.infos[i].type_index,
-                    off = jiff::tz::Offset::from_seconds(typ.offset.seconds())
-                        .unwrap(),
+                    off =
+                        jcore::tz::Offset::from_seconds(typ.offset.seconds())
+                            .unwrap(),
                     desig = tzif.designations[usize::from(typ.designation)],
                     dst = if typ.dst.is_dst() { "dst" } else { "" },
                 )
