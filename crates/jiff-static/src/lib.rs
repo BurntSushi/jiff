@@ -181,7 +181,7 @@ impl Quote for tzif::MaybeNamedTimeZone {
             ref posix_tz,
             ref types,
             ref transitions,
-        } = tz;
+        } = *tz;
         // We are guaranteed to always have a name in this context.
         let name = name.as_ref().unwrap().quote();
         let designations = designations.iter().map(Quote::quote);

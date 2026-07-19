@@ -27,7 +27,7 @@ case $crate in
     if [ -z "$next_version" ]; then
       next_version="$("$release_dir"/get-next-version ./Cargo.toml)"
     fi
-    "$release_dir"/update-version ./Cargo.toml "$next_version"
+    "$release_dir"/update-version ./crates/jiff/Cargo.toml "$next_version"
     "$release_dir"/update-version ./crates/jiff-static/Cargo.toml "$next_version"
     sed -i 's/^\(jiff-static = { version = \)"=[0-9.]\+"/\1"='$next_version'"/g' ./Cargo.toml
     git commit --quiet --all --file - <<EOF

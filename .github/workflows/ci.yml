@@ -298,7 +298,7 @@ jobs:
     - name: Bump rust-version to Rust 1.85
       shell: bash
       run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
-    - run: cargo build --verbose
+    - run: cargo build --all --verbose
     - run: cargo doc --features defmt,serde,static --verbose
     - run: cargo test --verbose --all
 
@@ -315,7 +315,7 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable-x86_64-gnu
-    - run: cargo build --verbose
+    - run: cargo build --all --verbose
     - run: cargo doc --features defmt,serde,static --verbose
     - run: cargo test --verbose --lib
     - run: cargo test --verbose --test integration
@@ -338,6 +338,8 @@ jobs:
     # versions of quickcheck, so downgrade it.
     - name: Downgrade quickcheck
       run: cargo update -p quickcheck --precise 1.0.3
+    - name: Downgrade log
+      run: cargo update -p log --precise 0.4.33
     # We would use `cargo build --all` here, but `jiff-cli` doesn't really
     # track an MSRV and I don't want it to.
     - name: Build jiff
@@ -347,7 +349,7 @@ jobs:
     - name: Build jiff-tzdb-platform
       run: cargo build -p jiff-tzdb-platform --verbose
     - name: Build docs
-      run: cargo doc --verbose
+      run: cargo doc -p jiff --verbose
     # NOTE: We currently don't track some ecosystem integration crates
     # like `jiff-icu`. They don't support Jiff's MSRV at time of writing
     # (2025-02-02), and I think these sorts of integration crates are at very
@@ -374,7 +376,7 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: 1.71.1
-    - run: cargo build --verbose
+    - run: cargo build -p jiff --verbose
 
   # This job tests that examples outside the workspace build.
   #
@@ -468,7 +470,7 @@ jobs:
         cd "$dir"
         curl -LO "https://github.com/cross-rs/cross/releases/download/$CROSS_VERSION/cross-x86_64-unknown-linux-musl.tar.gz"
         tar xf cross-x86_64-unknown-linux-musl.tar.gz
-    - run: cross build --verbose --target ${{ matrix.target }}
+    - run: cross build -p jiff --verbose --target ${{ matrix.target }}
     # I haven't been able to get Insta working in this context, so I guess
     # we just test the build.
     #
@@ -494,7 +496,7 @@ jobs:
     - uses: actions/checkout@v5
     - name: Test the build only
       run: |
-        cargo build --target thumbv7m-none-eabi --features alloc --no-default-features --features defmt
+        cargo build -p jiff --target thumbv7m-none-eabi --features alloc --no-default-features --features defmt
 
   # This is meant to test that Jiff's use of `Arc` from `portable-atomic-util`
   # on targets that don't have `alloc::sync::Arc` in `std` works.
@@ -515,7 +517,7 @@ jobs:
     - uses: actions/checkout@v5
     - name: Test the build only
       run: |
-        cargo build --target riscv32imc-unknown-none-elf --features alloc --no-default-features --features portable-atomic/critical-section
+        cargo build -p jiff --target riscv32imc-unknown-none-elf --features alloc --no-default-features --features portable-atomic/critical-section
 
   # Test the wasm32-wasip1 target via wasmtime.
   wasm32-wasip1:
@@ -558,6 +560,8 @@ jobs:
     env:
       CARGO_BUILD_TARGET: wasm32-unknown-emscripten
       CARGO_TARGET_WASM32_UNKNOWN_EMSCRIPTEN_RUNNER: node
+      INSTA_FORCE_PASS: 1
+      INSTA_UPDATE: no
       RUSTFLAGS: >
         -C link-arg=-sSTACK_SIZE=16777216
         -C link-arg=-sNODERAWFS=1

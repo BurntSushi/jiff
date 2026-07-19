@@ -88,7 +88,8 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
         );
     }
 
-    let mapping_path = jiff.join("src/tz/system/windows/windows_zones.rs");
+    let mapping_path =
+        jiff.join("crates/jiff/src/tz/system/windows/windows_zones.rs");
     write_mappings(&mapping_path, version, &map).with_context(|| {
         format!(
             "failed to write Windows time zone mappings to {}",

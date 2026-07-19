@@ -15,7 +15,7 @@ diesel = { version = "2.2.0", features = [
     "returning_clauses_for_sqlite_3_35",
     "sqlite",
 ] }
-jiff = { path = "../.." }
+jiff = { path = "../../crates/jiff" }
 jiff-diesel = { path = "../../crates/jiff-diesel", features = ["sqlite"] }
 tempfile = "3.16.0"
 

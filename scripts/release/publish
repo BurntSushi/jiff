@@ -21,7 +21,7 @@ case $crate in
   jiff)
     current="$("$release_dir"/get-version ./Cargo.toml)"
     cargo publish --manifest-path ./crates/jiff-static/Cargo.toml
-    cargo publish --manifest-path ./Cargo.toml
+    cargo publish --manifest-path ./crates/jiff/Cargo.toml
     tagit "$current"
     tagit "jiff-static-$current"
     ;;

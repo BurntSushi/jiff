@@ -9,9 +9,9 @@ documentation = "https://docs.rs/jiff-diesel"
 description = "Integration for Jiff with Diesel."
 categories = ["date-and-time"]
 keywords = ["date", "time", "jiff", "diesel", "zone"]
+include = ["/src/*.rs", "COPYING", "LICENSE-MIT", "UNLICENSE"]
 edition = "2021"
 rust-version = "1.70"
-include = ["/src/*.rs", "COPYING", "LICENSE-MIT", "UNLICENSE"]
 
 # Integration crates in Jiff are explicitly isolated from the workspace to
 # avoid dependencies accumulating. I was originally motivated to do this
@@ -33,8 +33,8 @@ postgres = ["diesel/postgres_backend"]
 sqlite = ["diesel/sqlite"]
 
 [dependencies]
-jiff = { version = "0.2.0", path = "../..", default-features = false, features = ["std"] }
+jiff = { version = "0.2.0", path = "../jiff", default-features = false, features = ["std"] }
 diesel = { version = "2.0.0", default-features = false }
 
 [dev-dependencies]
-jiff = { version = "0.2.0", path = "../..", default-features = true }
+jiff = { version = "0.2.0", path = "../jiff", default-features = true }
