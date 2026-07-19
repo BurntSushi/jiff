@@ -2,7 +2,7 @@
 A wrapper around `zic` to generate binary TZif data for `jiff-tzdb`.
 
 It would be nice to abandon using `zic` entirely in favor of our own compiler.
-A substantial part of this is done in `jiff/src/tz/zic.rs` in the form of a
+A substantial part of this is done in `jiff/crates/jiff/src/tz/zic.rs` in the form of a
 complete parser for the zic input format. However, what remains is the actual
 conversion step from the data into time zone transition rules. This was
 non-trivial enough that I gave up, but it would be very nice to have that

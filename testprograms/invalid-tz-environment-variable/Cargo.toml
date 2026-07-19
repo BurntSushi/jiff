@@ -11,7 +11,7 @@ edition = "2021"
 
 [dependencies]
 env_logger = "0.11.0"
-jiff = { path = "../..", features = ["logging"] }
+jiff = { path = "../../crates/jiff", features = ["logging"] }
 
 [[bin]]
 name = "invalid-tz-environment-variable"

@@ -43,7 +43,7 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
     args::configure(p, USAGE, &mut [&mut config])?;
 
     let jiff = config.jiff();
-    let path = jiff.join("src/fmt/friendly/parser_label.rs");
+    let path = jiff.join("crates/jiff/src/fmt/friendly/parser_label.rs");
     write_match(&path).with_context(|| {
         format!("failed to write `match` expression to {}", path.display())
     })?;

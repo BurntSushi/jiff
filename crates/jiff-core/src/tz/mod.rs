@@ -286,13 +286,13 @@ pub const fn offset(hours: i8) -> Offset {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // Don't bother trying to test this on non-64 bit. It's too annoying to
     // keep this test updated.
     #[cfg(target_pointer_width = "64")]
     #[test]
     fn sizes() {
+        use super::*;
+
         #[cfg(feature = "alloc")]
         assert_eq!(24, core::mem::size_of::<Abbreviation>());
         #[cfg(not(feature = "alloc"))]

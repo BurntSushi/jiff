@@ -11,7 +11,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.86"
-jiff = { path = "../.." }
+jiff = { path = "../../crates/jiff" }
 regex-lite = "0.1.6"
 
 [[bin]]

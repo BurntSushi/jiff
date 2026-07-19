@@ -9,9 +9,9 @@ documentation = "https://docs.rs/jiff-icu"
 description = "Conversion routines between Jiff and ICU4X."
 categories = ["date-and-time"]
 keywords = ["date", "time", "temporal", "zone", "icu"]
+include = ["/src/*.rs", "/*.dat", "COPYING", "LICENSE-MIT", "UNLICENSE"]
 edition = "2021"
 rust-version = "1.82"
-include = ["/src/*.rs", "/*.dat", "COPYING", "LICENSE-MIT", "UNLICENSE"]
 
 # Integration crates in Jiff are explicitly isolated from the workspace to
 # avoid dependencies accumulating. I was originally motivated to do this
@@ -35,12 +35,12 @@ time = ["dep:icu_time"]
 zoned = ["time", "icu_time?/compiled_data"]
 
 [dependencies]
-jiff = { version = "0.2.11", path = "../..", default-features = false }
+jiff = { version = "0.2.11", path = "../jiff", default-features = false }
 icu_calendar = { version = "2.0.0", default-features = false }
 icu_time = { version = "2.0.0", optional = true, default-features = false }
 
 [dev-dependencies]
-jiff = { version = "0.2.11", path = "../..", default-features = true }
+jiff = { version = "0.2.11", path = "../jiff", default-features = true }
 icu = { version = "2.0.0" }
 
 [package.metadata.docs.rs]

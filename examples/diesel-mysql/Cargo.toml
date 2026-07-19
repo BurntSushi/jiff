@@ -12,7 +12,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.95"
 diesel = { version = "2.2.0", features = ["mysql"] }
-jiff = { path = "../.." }
+jiff = { path = "../../crates/jiff" }
 jiff-diesel = { path = "../../crates/jiff-diesel", features = ["mysql"] }
 
 [[bin]]

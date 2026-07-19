@@ -56,7 +56,8 @@ pub(super) fn get(db: &TimeZoneDatabase) -> Option<TimeZone> {
             trace!(
                 "executing JavaScript to discover IANA time zone \
                  identifier returned invalid UTF-8: {script_cstr}",
-                script_cstr = escape::Bytes(script_cstr.to_bytes()),
+                script_cstr =
+                    crate::util::escape::Bytes(script_cstr.to_bytes()),
             );
             return None;
         }

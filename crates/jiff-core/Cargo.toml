@@ -10,9 +10,9 @@ description = "Low level datetime primitives for the Jiff library."
 categories = ["date-and-time"]
 keywords = ["date", "time", "civil", "timestamp"]
 workspace = "../.."
-edition = "2021"
-rust-version = "1.70"
 include = ["/src/**/*.rs", "COPYING", "LICENSE-MIT", "UNLICENSE"]
+edition.workspace = true
+rust-version.workspace = true
 
 [lib]
 name = "jiff_core"
@@ -21,7 +21,7 @@ bench = false
 [features]
 default = ["std", "tz-fat"]
 alloc = ["defmt?/alloc"]
-std = ["alloc"]
+std = ["alloc", "log?/std"]
 defmt = ["dep:defmt"]
 logging = ["dep:log"]
 tz-fat = []
