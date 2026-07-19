@@ -1,11 +1,17 @@
 # CHANGELOG
 
-0.2.33 (TBD)
-============
-TODO
+0.2.33 (2026-07-18)
+===================
+This release permits the use of a global time zone database in `alloc`-only
+environments. It also contains a massive internal refactor that introduces a
+new `jiff-core` crate for better code sharing.
 
 Enhancements:
 
+* [#285](https://github.com/BurntSushi/jiff/issues/285):
+Decouple naming of time zones from their TZif data.
+* [#373](https://github.com/BurntSushi/jiff/issues/373):
+Add a new `jiff-core` crate for better code sharing.
 * [#533](https://github.com/BurntSushi/jiff/issues/533):
 A bundled `TimeZoneDatabase` is now available when only `alloc` is enabled.
 
