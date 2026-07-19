@@ -57,9 +57,7 @@ macro_rules! define_one_boundary_type {
 
             #[cold]
             pub(crate) const fn error() -> BoundsError {
-                BoundsError::$name(
-                    RawBoundsWrapperError(RawBoundsError::new()),
-                )
+                BoundsError::$name(RawBoundsError::new())
             }
 
             #[cfg_attr(feature = "perf-inline", inline(always))]
@@ -73,9 +71,7 @@ macro_rules! define_one_boundary_type {
             pub(crate) const fn checkc(n: i64) -> Result<$ty, BoundsError> {
                 match const_check::$ty(n) {
                     Ok(n) => Ok(n),
-                    Err(err) => {
-                        Err(BoundsError::$name(RawBoundsWrapperError(err)))
-                    }
+                    Err(err) => Err(BoundsError::$name(err)),
                 }
             }
 
@@ -145,13 +141,13 @@ macro_rules! define_bounds {
         #[derive(Clone, Debug)]
         #[cfg_attr(feature = "defmt", derive(defmt::Format))]
         pub(crate) enum BoundsError {
-            $($name(RawBoundsWrapperError<$name>),)*
+            $($name(RawBoundsError<$name>),)*
         }
 
         impl core::fmt::Display for BoundsError {
             fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
                 match *self {
-                    $(BoundsError::$name(ref err) => err.0.fmt(f),)*
+                    $(BoundsError::$name(ref err) => err.fmt(f),)*
                 }
             }
         }
@@ -299,58 +295,6 @@ impl From<BoundsError> for Error {
 impl crate::error::IntoError for BoundsError {
     fn into_error(self) -> Error {
         self.into()
-    }
-}
-
-/// A helper type to implement `defmt::Format`.
-///
-/// This avoids implementing it in `jiff-core`.
-#[derive(Eq, PartialEq)]
-pub(crate) struct RawBoundsWrapperError<B>(RawBoundsError<B>);
-
-impl<B> Copy for RawBoundsWrapperError<B> {}
-
-impl<B> Clone for RawBoundsWrapperError<B> {
-    #[inline]
-    fn clone(&self) -> RawBoundsWrapperError<B> {
-        RawBoundsWrapperError(RawBoundsError::new())
-    }
-}
-
-impl<B, P> core::fmt::Debug for RawBoundsWrapperError<B>
-where
-    B: Bounds<Primitive = P>,
-    P: core::fmt::Debug,
-{
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Debug::fmt(&self.0, f)
-    }
-}
-
-impl<B, P> core::fmt::Display for RawBoundsWrapperError<B>
-where
-    B: Bounds<Primitive = P>,
-    P: core::fmt::Display,
-{
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self.0, f)
-    }
-}
-
-#[cfg(feature = "defmt")]
-impl<B, P> defmt::Format for RawBoundsWrapperError<B>
-where
-    B: Bounds<Primitive = P>,
-    P: defmt::Format,
-{
-    fn format(&self, f: defmt::Formatter) {
-        defmt::write!(
-            f,
-            "RawBoundsError {{ what: {=str}, min: {}, max: {} }}",
-            B::WHAT,
-            B::MIN,
-            B::MAX
-        );
     }
 }
 
