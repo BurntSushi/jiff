@@ -2512,7 +2512,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             DateTimeParser::new().parse_date("-000000-01-01").unwrap_err(),
-            @"failed to parse year in date: year zero must be written without a sign or a positive sign, but not a negative sign",
+            @"year zero must be written without a sign or a positive sign, but not a negative sign",
         );
     }
 

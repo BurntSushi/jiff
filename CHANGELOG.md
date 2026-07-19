@@ -6,6 +6,8 @@ TODO
 
 Enhancements:
 
+* [#519](https://github.com/BurntSushi/jiff/issues/519):
+Improve some parsing error messages by removing redundancy.
 * [#585](https://github.com/BurntSushi/jiff/issues/585):
 Change `Timestamp::strftime` (and similar methods) so that they will never
 panic.
