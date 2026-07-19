@@ -182,6 +182,10 @@ jobs:
   # This is useful because Jiff's ranged integers internally track min/max
   # values in debug mode, but don't in release mode. So there may occasionally
   # be a discrepancy that is worth testing here.
+  #
+  # NOTE: The above is no longer true, but Jiff does have some
+  # `cfg(debug_assertions)` in various places, so it's good to test in release
+  # mode too.
   test-release:
     runs-on: ubuntu-latest
     steps:
