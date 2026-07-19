@@ -2433,11 +2433,14 @@ impl DateTime {
     ///
     /// # Errors and panics
     ///
-    /// While this routine itself does not error or panic, using the value
-    /// returned may result in a panic if formatting fails. See the
-    /// documentation on [`fmt::strtime::Display`] for more information.
+    /// This will never error or panic. In particular,
+    /// [lenient mode](crate::fmt::strtime::Config::lenient) is enabled, which
+    /// means that all possible strings have some non-error interpretation.
+    /// Note that because of this, and since Jiff may add new conversion
+    /// specifiers in the future, the behavior of a format string may change
+    /// when it would otherwise be invalid.
     ///
-    /// To format in a way that surfaces errors without panicking, use either
+    /// To format in a way that surfaces errors, use either
     /// [`fmt::strtime::format`] or [`fmt::strtime::BrokenDownTime::format`].
     ///
     /// # Example
@@ -2450,6 +2453,33 @@ impl DateTime {
     /// let dt = date(2024, 7, 15).at(16, 24, 59, 0);
     /// let string = dt.strftime("%A, %B %e, %Y at %H:%M:%S").to_string();
     /// assert_eq!(string, "Monday, July 15, 2024 at 16:24:59");
+    /// ```
+    ///
+    /// # Example: errors are silently ignored
+    ///
+    /// If the formatting string is malformed in some way, then it is silently
+    /// ignored. For example, when using an invalid formatting directive:
+    ///
+    /// ```
+    /// use jiff::civil::date;
+    ///
+    /// let dt = date(2024, 7, 15).at(16, 24, 59, 0);
+    /// let string = dt.strftime("%Y %").to_string();
+    /// assert_eq!(string, "2024 %");
+    /// ```
+    ///
+    /// If one wants to surface errors from a formatting string, use a lower
+    /// level API:
+    ///
+    /// ```
+    /// use jiff::civil::date;
+    ///
+    /// let dt = date(2024, 7, 15).at(16, 24, 59, 0);
+    /// assert_eq!(
+    ///     jiff::fmt::strtime::format("%Y %", dt).unwrap_err().to_string(),
+    ///     "strftime formatting failed: invalid format string, \
+    ///      expected byte after `%`, but found end of format string",
+    /// );
     /// ```
     #[inline]
     pub fn strftime<'f, F: 'f + ?Sized + AsRef<[u8]>>(

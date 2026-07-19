@@ -1,5 +1,16 @@
 # CHANGELOG
 
+0.2.34 (TBD)
+============
+TODO
+
+Enhancements:
+
+* [#585](https://github.com/BurntSushi/jiff/issues/585):
+Change `Timestamp::strftime` (and similar methods) so that they will never
+panic.
+
+
 0.2.33 (2026-07-18)
 ===================
 This release permits the use of a global time zone database in `alloc`-only

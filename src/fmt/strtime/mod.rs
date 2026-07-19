@@ -3278,26 +3278,12 @@ impl From<Time> for BrokenDownTime {
 ///
 /// # Errors and panics
 ///
-/// This trait implementation returns an error when the underlying formatting
-/// can fail. Formatting can fail either because of an invalid format string,
-/// or if formatting requires a field in `BrokenDownTime` to be set that isn't.
-/// For example, trying to format a [`DateTime`] with the `%z` specifier will
-/// fail because a `DateTime` has no time zone or offset information associated
-/// with it.
-///
-/// Note though that the `std::fmt::Display` API doesn't support surfacing
-/// arbitrary errors. All errors collapse into the unit `std::fmt::Error`
-/// struct. To see the actual error, use [`BrokenDownTime::format`],
-/// [`BrokenDownTime::to_string`] or [`strtime::format`](format()).
-/// Unfortunately, the `std::fmt::Display` trait is used in many places where
-/// there is no way to report errors other than panicking.
-///
-/// Therefore, only use this type if you know your formatting string is valid
-/// and that the datetime type being formatted has all of the information
-/// required by the format string. Moreover, the `strftime` implementation in
-/// this crate is specifically designed to never error based on the specific
-/// values. For example, even though `%y` can only _parse_ years in the
-/// `1969-2068` range, it can format any valid year supported by Jiff.
+/// This trait implementation configures formatting to use
+/// [lenient mode](Config::lenient). This avoids panics occuring when using
+/// APIs like [`Timestamp::strftime`] with unsupported or invalid formatting
+/// directives. Without lenient mode, whenever formatting would fail, this
+/// would surface as a panic when converting this display implementation to
+/// a string.
 ///
 /// # Example
 ///
@@ -3326,6 +3312,33 @@ impl From<Time> for BrokenDownTime {
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+///
+/// # Example: errors are silently ignored
+///
+/// If the formatting string is malformed in some way, then it is silently
+/// ignored. For example, when using an invalid formatting directive:
+///
+/// ```
+/// use jiff::Zoned;
+///
+/// let zdt = Zoned::UNIX_EPOCH;
+/// let string = zdt.strftime("%Y %").to_string();
+/// assert_eq!(string, "1970 %");
+/// ```
+///
+/// If one wants to surface errors from a formatting string, use a lower
+/// level API:
+///
+/// ```
+/// use jiff::Zoned;
+///
+/// let zdt = Zoned::UNIX_EPOCH;
+/// assert_eq!(
+///     jiff::fmt::strtime::format("%Y %", &zdt).unwrap_err().to_string(),
+///     "strftime formatting failed: invalid format string, \
+///      expected byte after `%`, but found end of format string",
+/// );
+/// ```
 pub struct Display<'f> {
     pub(crate) fmt: &'f [u8],
     pub(crate) tm: BrokenDownTime,
@@ -3335,7 +3348,13 @@ impl<'f> core::fmt::Display for Display<'f> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         use crate::fmt::StdFmtWrite;
 
-        self.tm.format(self.fmt, StdFmtWrite(f)).map_err(|_| core::fmt::Error)
+        self.tm
+            .format_with_config(
+                &Config::new().lenient(true),
+                self.fmt,
+                &mut StdFmtWrite(f),
+            )
+            .map_err(|_| core::fmt::Error)
     }
 }
 
