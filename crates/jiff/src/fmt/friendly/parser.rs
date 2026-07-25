@@ -677,6 +677,8 @@ mod tests {
         insta::assert_snapshot!(p("1.5secs"), @"PT1.5S");
         insta::assert_snapshot!(p("1.5msecs"), @"PT0.0015S");
         insta::assert_snapshot!(p("1.5µsecs"), @"PT0.0000015S");
+        insta::assert_snapshot!(p("-0.5secs"), @"-PT0.5S");
+        insta::assert_snapshot!(p("0.5secs ago"), @"-PT0.5S");
 
         insta::assert_snapshot!(p("1d 1.5hrs"), @"P1DT1H30M");
         insta::assert_snapshot!(p("1h 1.5mins"), @"PT1H1M30S");
@@ -941,6 +943,8 @@ mod tests {
         insta::assert_snapshot!(p("1.5secs"), @"PT1.5S");
         insta::assert_snapshot!(p("1.5msecs"), @"PT0.0015S");
         insta::assert_snapshot!(p("1.5µsecs"), @"PT0.0000015S");
+        insta::assert_snapshot!(p("-0.5secs"), @"-PT0.5S");
+        insta::assert_snapshot!(p("0.5secs ago"), @"-PT0.5S");
 
         insta::assert_snapshot!(p("1h 1.5mins"), @"PT1H1M30S");
         insta::assert_snapshot!(p("1m 1.5secs"), @"PT1M1.5S");

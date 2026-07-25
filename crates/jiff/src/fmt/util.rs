@@ -155,6 +155,7 @@ impl DurationUnits {
             }
         }
         self.fraction = Some(fraction);
+        self.any_non_zero_units = self.any_non_zero_units || fraction != 0;
         Ok(())
     }
 
