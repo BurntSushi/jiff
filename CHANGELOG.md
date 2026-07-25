@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.2.35 (TBD)
+============
+TODO
+
+Bug fixes:
+
+* [#613](https://github.com/BurntSushi/jiff/issues/613):
+Fixes a bug where the sign in a duration could be ignored while parsing.
+
+
 0.2.34 (2026-07-19)
 ===================
 This release contains a few small enhancements. Namely, some error messages

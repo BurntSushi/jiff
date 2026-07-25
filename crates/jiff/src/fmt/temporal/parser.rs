@@ -1280,6 +1280,8 @@ mod tests {
 
         insta::assert_debug_snapshot!(p(b"PT0s"), @"0s");
         insta::assert_debug_snapshot!(p(b"PT0.000000001s"), @"1ns");
+        insta::assert_debug_snapshot!(p(b"-PT0.000000001s"), @"-1ns");
+        insta::assert_debug_snapshot!(p(b"-PT0.5s"), @"-500000000ns");
         insta::assert_debug_snapshot!(p(b"PT1s"), @"1s");
         insta::assert_debug_snapshot!(p(b"PT59s"), @"59s");
         insta::assert_debug_snapshot!(p(b"PT60s"), @"60s");
@@ -1503,6 +1505,11 @@ mod tests {
         insta::assert_debug_snapshot!(p(b"PT1.123456789m"), @"1m 7s 407ms 407µs 340ns");
 
         insta::assert_debug_snapshot!(p(b"PT0.5s"), @"500ms");
+        insta::assert_debug_snapshot!(p(b"-PT0.5s"), @"500ms ago");
+        insta::assert_debug_snapshot!(
+            p(b"-PT0.000000001s"),
+            @"1ns ago",
+        );
         insta::assert_debug_snapshot!(p(b"PT0.123456789s"), @"123ms 456µs 789ns");
         insta::assert_debug_snapshot!(p(b"PT1.123456789s"), @"1s 123ms 456µs 789ns");
 
