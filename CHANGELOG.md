@@ -1,8 +1,10 @@
 # CHANGELOG
 
-0.2.35 (TBD)
-============
-TODO
+0.2.35 (2026-07-25)
+===================
+This release fixes a bug in duration parsing where, e.g., `-PT0.5S` would be
+parsed as if the `-` sign didn't exist. This bug also affects friendly
+durations such as `-0.5s`.
 
 Bug fixes:
 
