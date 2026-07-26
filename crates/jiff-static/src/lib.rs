@@ -196,10 +196,10 @@ impl Quote for tzif::MaybeNamedTimeZone {
         let transitions = transitions.quote();
         quote! {{
             static __TZ_DESIGNATIONS: &[jiff::__jcore::tz::Abbreviation] = &[#(#designations),*];
-            static __TZ_INTERNAL: jiff::__jcore::tz::tzif::MaybeNamedTimeZone =
+            static __TZ_INTERNAL: jiff::__jcore::tz::tzif::MaybeNamedTimeZone<&'static jiff::__jcore::tz::tzif::TimeZone> =
                 jiff::__jcore::tz::tzif::MaybeNamedTimeZone {
                     name: Some(#name),
-                    tz: jiff::__jcore::tz::tzif::TimeZone {
+                    tz: &jiff::__jcore::tz::tzif::TimeZone {
                         version: #version,
                         checksum: #checksum,
                         designations: jiff::__jcore::util::MaybeStaticSlice::statik(__TZ_DESIGNATIONS),

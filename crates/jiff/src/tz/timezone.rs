@@ -11,7 +11,7 @@ use crate::{
     Timestamp, Zoned,
 };
 
-use self::repr::Repr;
+use self::repr::{Repr, ReprTzifOwned, ReprTzifStatic};
 
 /// A representation of a [time zone].
 ///
@@ -1456,7 +1456,7 @@ impl TimeZone {
             FIXED(_offset) => 0,
             STATIC_TZIF(_tzif) => 0,
             ARC_TZIF(_tzif) => {
-                core::mem::size_of::<tzif::MaybeNamedTimeZone>() +
+                core::mem::size_of::<ReprTzifOwned>() +
                 (core::mem::size_of::<core::sync::atomic::AtomicUsize>() * 2)
             },
             ARC_POSIX(_posix) => {
@@ -1475,7 +1475,7 @@ impl TimeZone {
 impl TimeZone {
     /// Constructs a `TimeZone` from a static TZif time zone from jcore.
     pub const fn __internal_from_tzif(
-        tzif: &'static tzif::MaybeNamedTimeZone,
+        tzif: &'static ReprTzifStatic,
     ) -> TimeZone {
         let repr = Repr::static_tzif(tzif);
         TimeZone { repr }
@@ -2019,6 +2019,11 @@ mod repr {
 
     use super::Offset;
 
+    pub(super) type ReprTzifOwned = tzif::MaybeNamedTimeZone<tzif::TimeZone>;
+
+    pub(super) type ReprTzifStatic =
+        tzif::MaybeNamedTimeZone<&'static tzif::TimeZone>;
+
     // On Rust 1.84+, `StrictProvenancePolyfill` isn't actually used.
     #[allow(unused_imports)]
     use self::polyfill::{without_provenance, StrictProvenancePolyfill};
@@ -2154,13 +2159,10 @@ mod repr {
         /// This can only be correctly called by the `jiff-static` proc macro.
         #[inline]
         pub(super) const fn static_tzif(
-            tzif: &'static tzif::MaybeNamedTimeZone,
+            tzif: &'static ReprTzifStatic,
         ) -> Repr {
-            assert!(
-                core::mem::align_of::<tzif::MaybeNamedTimeZone>()
-                    >= Repr::ALIGN
-            );
-            let tzif = (tzif as *const tzif::MaybeNamedTimeZone).cast::<u8>();
+            assert!(core::mem::align_of::<ReprTzifStatic>() >= Repr::ALIGN);
+            let tzif = (tzif as *const ReprTzifStatic).cast::<u8>();
             // We very specifically do no materialize the pointer address here
             // because 1) it's UB and 2) the compiler generally prevents. This
             // is because in a const context, the specific pointer address
@@ -2183,11 +2185,8 @@ mod repr {
         /// Creates a representation for a TZif time zone.
         #[cfg(feature = "alloc")]
         #[inline]
-        pub(super) fn arc_tzif(tzif: Arc<tzif::MaybeNamedTimeZone>) -> Repr {
-            assert!(
-                core::mem::align_of::<tzif::MaybeNamedTimeZone>()
-                    >= Repr::ALIGN
-            );
+        pub(super) fn arc_tzif(tzif: Arc<ReprTzifOwned>) -> Repr {
+            assert!(core::mem::align_of::<ReprTzifOwned>() >= Repr::ALIGN);
             let tzif = Arc::into_raw(tzif).cast::<u8>();
             assert!(tzif.addr() % 4 == 0);
             let ptr = tzif.map_addr(|addr| addr | Repr::ARC_TZIF);
@@ -2234,7 +2233,7 @@ mod repr {
         #[inline]
         pub(super) unsafe fn get_static_tzif(
             &self,
-        ) -> &'static tzif::MaybeNamedTimeZone {
+        ) -> &'static ReprTzifStatic {
             #[allow(unstable_name_collisions)]
             let ptr = self.ptr.map_addr(|addr| addr & !Repr::BITS);
             // SAFETY: Getting a `STATIC_TZIF` tag is only possible when
@@ -2242,7 +2241,7 @@ mod repr {
             // 4 bytes) `&TzifStatic` borrow. Which must be guaranteed by the
             // caller. We've also removed the tag bits above, so we must now
             // have the original pointer.
-            unsafe { &*ptr.cast::<tzif::MaybeNamedTimeZone>() }
+            unsafe { &*ptr.cast::<ReprTzifStatic>() }
         }
 
         /// Gets the `Arc` TZif representation.
@@ -2252,16 +2251,14 @@ mod repr {
         /// Callers must ensure that the pointer tag is `ARC_TZIF`.
         #[cfg(feature = "alloc")]
         #[inline]
-        pub(super) unsafe fn get_arc_tzif<'a>(
-            &'a self,
-        ) -> &'a tzif::MaybeNamedTimeZone {
+        pub(super) unsafe fn get_arc_tzif<'a>(&'a self) -> &'a ReprTzifOwned {
             let ptr = self.ptr.map_addr(|addr| addr & !Repr::BITS);
             // SAFETY: Getting a `ARC_TZIF` tag is only possible when
             // `self.ptr` was constructed from a valid and aligned (to at least
-            // 4 bytes) `Arc<tzif::MaybeNamedTimeZone>`. We've removed the tag
+            // 4 bytes) `Arc<ReprTzifOwned>`. We've removed the tag
             // bits above, so we must now have the original pointer.
             let arc = ManuallyDrop::new(unsafe {
-                Arc::from_raw(ptr.cast::<tzif::MaybeNamedTimeZone>())
+                Arc::from_raw(ptr.cast::<ReprTzifOwned>())
             });
             // SAFETY: The lifetime of the pointer returned is always
             // valid as long as the strong count on `arc` is at least
@@ -2385,12 +2382,12 @@ mod repr {
                     let ptr = self.ptr.map_addr(|addr| addr & !Repr::BITS);
                     // SAFETY: Getting a `ARC_TZIF` tag is only possible when
                     // `self.ptr` was constructed from a valid and aligned (to
-                    // at least 4 bytes) `Arc<tzif::MaybeNamedTimeZone>`. We've
+                    // at least 4 bytes) `Arc<ReprTzifOwned>`. We've
                     // removed the tag bits above, so we must now have the
                     // original pointer.
                     unsafe {
                         Arc::increment_strong_count(
-                            ptr.cast::<tzif::MaybeNamedTimeZone>(),
+                            ptr.cast::<ReprTzifOwned>(),
                         );
                     }
                     Repr { ptr: self.ptr }
@@ -2439,12 +2436,12 @@ mod repr {
                     // SAFETY: Getting a `ARC_TZIF` tag is only
                     // possible when `self.ptr` was constructed from
                     // a valid and aligned (to at least 4 bytes)
-                    // `Arc<tzif::MaybeNamedTimeZone>`. We've removed the tag
+                    // `Arc<ReprTzifOwned>`. We've removed the tag
                     // bits above, so we must now have the original
                     // pointer.
                     unsafe {
                         Arc::decrement_strong_count(
-                            ptr.cast::<tzif::MaybeNamedTimeZone>(),
+                            ptr.cast::<ReprTzifOwned>(),
                         );
                     }
                 }

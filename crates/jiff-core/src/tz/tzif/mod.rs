@@ -14,6 +14,8 @@ These binary files are the ones commonly found in Unix distributions in the
 [TZif]: https://datatracker.ietf.org/doc/rfc9636/
 */
 
+use core::borrow::Borrow;
+
 use crate::{
     bounds::RangeError,
     civil,
@@ -41,26 +43,43 @@ pub use self::parser::ParseError;
 /// * Some IANA time zone identifiers correspond to different regions, but
 /// share the same TZif data.
 ///
+/// # Type parameter
+///
+/// This type is generic over how the underlying [`TimeZone`] is represented.
+/// Typically, it's just an owned `TimeZone`. But in some cases it can be
+/// useful to give a name to a borrowed `TimeZone`, which the type parameter
+/// permits. Namely, [`MaybeNamedTimeZone::tz`] returns a [`TimeZone`] for any
+/// `T` that one can borrow a `TimeZone` from.
+///
 /// [TZif]: https://datatracker.ietf.org/doc/rfc9636/
 #[derive(Clone, Debug, PartialEq)]
-pub struct MaybeNamedTimeZone {
+// This ensures the alignment of this type is always *at least* 8 bytes. This
+// is required for the pointer tagging inside of `TimeZone` to be sound. At
+// time of writing (2024-02-24), this explicit `repr` isn't required on 64-bit
+// systems since the type definition is such that it will have an alignment of
+// at least 8 bytes anyway. But this *is* required for 32-bit systems, where
+// the type definition at present only has an alignment of 4 bytes.
+#[repr(align(8))]
+pub struct MaybeNamedTimeZone<T = TimeZone> {
     /// The name of this TZif time zone. e.g., `America/New_York`.
     pub name: Option<tz::TimeZoneId>,
     /// The time zone itself.
-    pub tz: TimeZone,
+    pub tz: T,
 }
 
-impl MaybeNamedTimeZone {
+impl<T> MaybeNamedTimeZone<T> {
     /// Returns the underlying time zone name as a string.
     #[inline]
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
+}
 
+impl<T: Borrow<TimeZone>> MaybeNamedTimeZone<T> {
     /// Returns a reference to the underlying time zone definition.
     #[inline]
     pub fn tz(&self) -> &TimeZone {
-        &self.tz
+        self.tz.borrow()
     }
 }
 
