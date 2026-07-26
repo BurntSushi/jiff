@@ -28,8 +28,11 @@ default = []
 anyhow = "1.0.28"
 bstr = "1.9.1"
 jiff = { path = "../jiff", features = ["logging"] }
+jcore = { path = "../jiff-core", package = "jiff-core", features = ["logging"] }
 lexopt = "0.3.0"
 log = { version = "0.4.17", features = ["std"] }
+proc-macro2 = "1.0.80"
+quote = "1.0.47"
 regex-lite = "0.1.6"
 textwrap = { version = "0.16.1", default-features = false }
 walkdir = "2.5.0"

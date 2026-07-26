@@ -167,6 +167,24 @@ pub struct LocalTimeType {
 }
 
 impl LocalTimeType {
+    /// A convenience constructor for building a `LocalTimeType`.
+    ///
+    /// # Panics
+    ///
+    /// When the given offset is not valid.
+    pub const fn constant(
+        offset_seconds: i32,
+        dst: Dst,
+        designation: u8,
+        indicator: Indicator,
+    ) -> LocalTimeType {
+        LocalTimeType {
+            offset: Offset::constant_seconds(offset_seconds),
+            dst,
+            designation,
+            indicator,
+        }
+    }
     fn designation(&self) -> usize {
         usize::from(self.designation)
     }
@@ -282,6 +300,16 @@ pub struct TransitionInfo {
     /// The boundary condition for quickly determining if a given wall clock
     /// time is ambiguous (i.e., falls in a gap or a fold).
     pub kind: TransitionKind,
+}
+
+impl TransitionInfo {
+    /// A convenience constructor for a `TransitionInfo`.
+    pub const fn constant(
+        type_index: u8,
+        kind: TransitionKind,
+    ) -> TransitionInfo {
+        TransitionInfo { type_index, kind }
+    }
 }
 
 /// The kind of a transition.
@@ -434,6 +462,16 @@ impl Timestamp {
         }
     }
 
+    /// Creates a new `Timestamp` from a Unix timestamp integer value.
+    ///
+    /// # Panics
+    ///
+    /// This is like `Timestamp::from_second`, but it panics if the given value
+    /// is not valid.
+    pub const fn constant(second: i64) -> Timestamp {
+        unwrapr!(Timestamp::from_second(second), "valid timestamp seconds")
+    }
+
     /// Returns the second value of this timestamp.
     ///
     /// It is the number of seconds since the Unix epoch
@@ -526,6 +564,26 @@ impl DateTime {
         bits |= (t.second() as u64) << 8;
         // The least significant 8 bits remain 0.
         DateTime { bits: bits as i64 }
+    }
+
+    /// Returns a datetime from its constituent components.
+    ///
+    /// This is like `DateTime::new`, but accepts the components directly.
+    ///
+    /// # Panics
+    ///
+    /// When the given datetime is not valid.
+    pub const fn constant(
+        year: i16,
+        month: i8,
+        day: i8,
+        hour: i8,
+        minute: i8,
+        second: i8,
+    ) -> DateTime {
+        DateTime::new(civil::datetime(
+            year, month, day, hour, minute, second, 0,
+        ))
     }
 
     /// Returns the year component of this civil datetime.

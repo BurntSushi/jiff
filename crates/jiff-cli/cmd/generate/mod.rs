@@ -4,6 +4,7 @@ use crate::args;
 
 mod crc32;
 mod tzdb;
+mod tzdb_structured;
 mod unit_designator_match;
 mod windows_zones;
 mod zoneinfo;
@@ -18,6 +19,7 @@ USAGE:
 COMMANDS:
     crc32                  Generate CRC32 data tables.
     jiff-tzdb              Generate Rust source code from TZif data for jiff-tzdb
+    jiff-tzdb-structured   Generate Rust source code from TZif data for jiff-tzdb
     unit-designator-match  Generate Rust `match` expression for parsing unit labels
     windows-zones          Generate mapping Windows TZ names to IANA names.
     zoneinfo               Generate TZif data for jiff-tzdb
@@ -27,6 +29,7 @@ pub fn run(p: &mut lexopt::Parser) -> anyhow::Result<()> {
     match &*args::next_as_command(USAGE, p)? {
         "crc32" => crc32::run(p),
         "jiff-tzdb" => tzdb::run(p),
+        "jiff-tzdb-structured" => tzdb_structured::run(p),
         "unit-designator-match" => unit_designator_match::run(p),
         "windows-zones" => windows_zones::run(p),
         "zoneinfo" => zoneinfo::run(p),

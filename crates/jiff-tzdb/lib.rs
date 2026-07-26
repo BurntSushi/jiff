@@ -84,7 +84,9 @@ correctly.
 
 #![no_std]
 
+mod timezones;
 mod tzname;
+mod tznamemap;
 
 static TZIF_DATA: &[u8] = include_bytes!("concatenated-zoneinfo.dat");
 
