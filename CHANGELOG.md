@@ -1,5 +1,13 @@
 # CHANGELOG
 
+0.2.36 (TBD)
+============
+TODO
+
+* [#617](https://github.com/BurntSushi/jiff/pull/617):
+Fixes a bug in `jiff_core::tz::Offset` checked subtraction routine.
+
+
 0.2.35 (2026-07-25)
 ===================
 This release fixes a bug in duration parsing where, e.g., `-PT0.5S` would be
