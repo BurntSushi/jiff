@@ -138,8 +138,9 @@ impl Offset {
         self,
         seconds: i32,
     ) -> Result<Offset, RangeError> {
-        let seconds =
-            rtry!(b::OffsetTotalSeconds::checked_add(self.seconds(), seconds));
+        let seconds = rtry!(b::OffsetTotalSeconds::checkc(
+            self.seconds() as i64 - seconds as i64,
+        ));
         Ok(Offset { seconds })
     }
 
@@ -768,3 +769,36 @@ impl core::fmt::Display for AmbiguousError {
 
 #[cfg(feature = "std")]
 impl std::error::Error for AmbiguousError {}
+
+#[cfg(test)]
+mod tests {
+    use super::Offset;
+
+    #[test]
+    fn checked_subtracts_positive_and_negative_seconds() {
+        assert_eq!(
+            Offset::UTC.checked_sub(1).unwrap(),
+            Offset::constant_seconds(-1),
+        );
+        assert_eq!(
+            Offset::UTC.checked_sub(-1).unwrap(),
+            Offset::constant_seconds(1),
+        );
+    }
+
+    #[test]
+    fn checked_sub_rejects_overflow() {
+        assert!(Offset::MIN.checked_sub(1).is_err());
+        assert!(Offset::MAX.checked_sub(-1).is_err());
+        assert!(Offset::UTC.checked_sub(i32::MIN).is_err());
+    }
+
+    #[test]
+    fn subtraction_operators_subtract_seconds() {
+        assert_eq!(Offset::UTC - 1, Offset::constant_seconds(-1));
+
+        let mut offset = Offset::UTC;
+        offset -= 1;
+        assert_eq!(offset, Offset::constant_seconds(-1));
+    }
+}
