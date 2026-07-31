@@ -3279,7 +3279,7 @@ impl From<Time> for BrokenDownTime {
 /// # Errors and panics
 ///
 /// This trait implementation configures formatting to use
-/// [lenient mode](Config::lenient). This avoids panics occuring when using
+/// [lenient mode](Config::lenient). This avoids panics occurring when using
 /// APIs like [`Timestamp::strftime`] with unsupported or invalid formatting
 /// directives. Without lenient mode, whenever formatting would fail, this
 /// would surface as a panic when converting this display implementation to
