@@ -761,7 +761,6 @@ pub(crate) fn parse_temporal_fraction<'i>(
         // OK because parsing is forcefully limited to 9 digits,
         // which can never be greater than `999_999_99`,
         // which is less than `u32::MAX`.
-        let nanoseconds = nanoseconds as u32;
         Ok(Parsed { value: Some(nanoseconds), input })
     }
 
