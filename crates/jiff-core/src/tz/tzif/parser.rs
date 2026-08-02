@@ -825,8 +825,7 @@ enum ParseErrorKind {
     TransitionType(TransitionTypeError),
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for ParseError {}
+impl core::error::Error for ParseError {}
 
 impl core::fmt::Display for ParseError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
