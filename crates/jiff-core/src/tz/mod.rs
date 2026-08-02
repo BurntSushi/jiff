@@ -2,7 +2,7 @@
 Building blocks for supporting time zones.
 */
 
-use crate::{util::SmallStr, Timestamp};
+use crate::{Timestamp, util::SmallStr};
 
 mod offset;
 pub mod posix;
@@ -239,11 +239,7 @@ impl Dst {
 
 impl From<bool> for Dst {
     fn from(is_dst: bool) -> Dst {
-        if is_dst {
-            Dst::Yes
-        } else {
-            Dst::No
-        }
+        if is_dst { Dst::Yes } else { Dst::No }
     }
 }
 

@@ -171,12 +171,12 @@ There is some more [background on Temporal's format] available.
 */
 
 use crate::{
+    SignedDuration, Timestamp, Zoned,
     civil::{self, ISOWeekDate},
     error::Error,
     fmt::Write,
     span::Span,
     tz::{Disambiguation, Offset, OffsetConflict, TimeZone, TimeZoneDatabase},
-    SignedDuration, Timestamp, Zoned,
 };
 
 pub use self::pieces::{

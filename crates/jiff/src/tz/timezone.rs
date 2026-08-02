@@ -1,15 +1,15 @@
 use jcore::tz::{posix, tzif};
 
 use crate::{
+    Timestamp, Zoned,
     civil::DateTime,
-    error::{tz::timezone::Error as E, Error},
+    error::{Error, tz::timezone::Error as E},
     tz::{
         ambiguous::{AmbiguousOffset, AmbiguousTimestamp, AmbiguousZoned},
         db::{find_primary_iana_name, find_tz_location, TimeZoneLocation},
         offset::{Dst, Offset},
     },
     util::sync::Arc,
-    Timestamp, Zoned,
 };
 
 use self::repr::Repr;
@@ -2251,7 +2251,7 @@ mod repr {
 
     // On Rust 1.84+, `StrictProvenancePolyfill` isn't actually used.
     #[allow(unused_imports)]
-    use self::polyfill::{without_provenance, StrictProvenancePolyfill};
+    use self::polyfill::{StrictProvenancePolyfill, without_provenance};
 
     /// A macro for "matching" over the time zone representation variants.
     ///

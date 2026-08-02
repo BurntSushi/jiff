@@ -3,11 +3,12 @@ use core::time::Duration as UnsignedDuration;
 use jcore::{bounds::Sign, civil::DateTime as JDateTime, constants as c};
 
 use crate::{
+    RoundMode, SignedDuration, Span, SpanRound, Unit,
     civil::{
-        datetime, Date, DateWith, Era, ISOWeekDate, Time, TimeWith, Weekday,
+        Date, DateWith, Era, ISOWeekDate, Time, TimeWith, Weekday, datetime,
     },
     duration::{Duration, SDuration},
-    error::{civil::Error as E, Error, ErrorContext},
+    error::{Error, ErrorContext, civil::Error as E},
     fmt::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
@@ -15,7 +16,6 @@ use crate::{
     tz::TimeZone,
     util::round::Increment,
     zoned::Zoned,
-    RoundMode, SignedDuration, Span, SpanRound, Unit,
 };
 
 /// A representation of a civil datetime in the Gregorian calendar.
@@ -1805,11 +1805,7 @@ impl DateTime {
     ) -> DateTime {
         let duration: DateTimeArithmetic = duration.into();
         self.checked_add(duration).unwrap_or_else(|_| {
-            if duration.is_negative() {
-                DateTime::MIN
-            } else {
-                DateTime::MAX
-            }
+            if duration.is_negative() { DateTime::MIN } else { DateTime::MAX }
         })
     }
 
@@ -2793,7 +2789,7 @@ impl core::ops::SubAssign<UnsignedDuration> for DateTime {
 #[cfg(feature = "defmt")]
 impl defmt::Format for DateTime {
     fn format(&self, f: defmt::Formatter) {
-        use crate::fmt::{temporal::DEFAULT_DATETIME_PRINTER, DefmtWrite};
+        use crate::fmt::{DefmtWrite, temporal::DEFAULT_DATETIME_PRINTER};
 
         defmt::unwrap!(
             DEFAULT_DATETIME_PRINTER.print_datetime(self, DefmtWrite(f))
@@ -4407,9 +4403,9 @@ mod tests {
     use std::io::Cursor;
 
     use crate::{
+        RoundMode, ToSpan, Unit,
         civil::{date, time},
         span::span_eq,
-        RoundMode, ToSpan, Unit,
     };
 
     use super::*;

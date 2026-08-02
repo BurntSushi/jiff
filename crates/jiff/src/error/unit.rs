@@ -1,6 +1,6 @@
 use jcore::constants as c;
 
-use crate::{error, Unit};
+use crate::{Unit, error};
 
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

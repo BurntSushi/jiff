@@ -111,11 +111,7 @@ impl Weekday {
     #[inline]
     pub const fn to_sunday_zero_offset(self) -> i8 {
         let offset = self.to_monday_one_offset();
-        if offset == 7 {
-            0
-        } else {
-            offset
-        }
+        if offset == 7 { 0 } else { offset }
     }
 
     /// Returns the weekday as a 1-offset. Sunday corresponds to offset `1`

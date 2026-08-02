@@ -15,11 +15,11 @@ use std::{
 use jcore::util::ArrayStr;
 
 use crate::{
-    error::{tz::db::Error as E, Error},
+    error::{Error, tz::db::Error as E},
     timestamp::Timestamp,
     tz::{
-        concatenated::ConcatenatedTzif, db::special_time_zone, TimeZone,
-        TimeZoneNameIter,
+        TimeZone, TimeZoneNameIter, concatenated::ConcatenatedTzif,
+        db::special_time_zone,
     },
     util::{self, cache::Expiration, utf8},
 };
