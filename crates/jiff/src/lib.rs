@@ -595,9 +595,7 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
   `/usr/share/zoneinfo` on Unix systems for time zone information, or for
   finding your system's default time zone. But if you don't need that (or can
   bundle the Time Zone Database), then Jiff has nearly full functionality
-  without `std` enabled, excepting things like `std::error::Error` trait
-  implementations and a global time zone database (which is required for
-  things like [`Timestamp::in_tz`] to work).
+  without `std` enabled.
 * **alloc** (enabled by default) -
   When enabled, Jiff will depend on the `alloc` crate. In particular, this
   enables functionality that requires or greatly benefits from dynamic memory
