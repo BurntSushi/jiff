@@ -62,12 +62,12 @@ data contains POSIX time zone strings.)
 */
 
 use crate::{
+    Timestamp,
     civil::{Date, DateTime, Time, TimeSecond, Weekday},
     tz::{
         Abbreviation, AmbiguousOffset, AmbiguousTimestamp, Offset, OffsetInfo,
-        TimeZoneId, Transition, REASONABLE_ABBREVIATION_MAX,
+        REASONABLE_ABBREVIATION_MAX, TimeZoneId, Transition,
     },
-    Timestamp,
 };
 
 /// The result of parsing the POSIX `TZ` environment variable.
@@ -1629,9 +1629,9 @@ impl core::fmt::Display for ParseError {
                 core::fmt::Display::fmt(&TimeZoneId::array_capacity_max(), f)?;
                 f.write_str(" bytes)")
             }
-            TzEnvColonInvalidUtf8 => f.write_str(
-                "IANA time zone identifier is invalid UTF-8",
-            ),
+            TzEnvColonInvalidUtf8 => {
+                f.write_str("IANA time zone identifier is invalid UTF-8")
+            }
             TzEnvInvalidUtf8 => f.write_str(
                 "POSIX transition rule or \
                  IANA time zone identifier is invalid UTF-8",
@@ -3715,8 +3715,10 @@ mod tests {
             TimeZone::parse(b"XXX24:59:59YYY25:59:59,M3.2.0,M11.1.0").is_err()
         );
         // Weird, but actually possible if you omit the DST offset!
-        assert!(TimeZone::parse(b"XXX-24:59:59YYY-25:59:59,M3.2.0,M11.1.0")
-            .is_err());
+        assert!(
+            TimeZone::parse(b"XXX-24:59:59YYY-25:59:59,M3.2.0,M11.1.0")
+                .is_err()
+        );
 
         let p = TimeZone::parse(b"XXX24:59:59YYY,M3.2.0,M11.1.0").unwrap();
         // in std
