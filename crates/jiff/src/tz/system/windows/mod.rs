@@ -3,7 +3,7 @@ use core::mem::MaybeUninit;
 use alloc::string::String;
 
 use crate::{
-    error::{tz::system::Error as E, Error, ErrorContext},
+    error::{Error, ErrorContext, tz::system::Error as E},
     tz::{TimeZone, TimeZoneDatabase},
     util::utf8,
 };
@@ -16,7 +16,7 @@ mod windows_zones;
 mod ffi;
 
 use ffi::{
-    GetDynamicTimeZoneInformation, DYNAMIC_TIME_ZONE_INFORMATION,
+    DYNAMIC_TIME_ZONE_INFORMATION, GetDynamicTimeZoneInformation,
     TIME_ZONE_ID_INVALID,
 };
 

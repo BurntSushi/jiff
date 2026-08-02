@@ -230,7 +230,7 @@ pub mod duration {
         /// [`friendly`](crate::fmt::friendly) duration format using compact
         /// designators.
         pub mod compact {
-            use crate::fmt::{friendly, StdFmtWrite};
+            use crate::fmt::{StdFmtWrite, friendly};
 
             struct CompactDuration<'a>(&'a crate::SignedDuration);
 
@@ -385,7 +385,7 @@ pub mod span {
         /// Serialize a `Span` in the [`friendly`](crate::fmt::friendly)
         /// duration format using compact designators.
         pub mod compact {
-            use crate::fmt::{friendly, StdFmtWrite};
+            use crate::fmt::{StdFmtWrite, friendly};
 
             struct CompactSpan<'a>(&'a crate::Span);
 
@@ -1198,7 +1198,7 @@ pub mod timestamp {
 pub mod tz {
     use serde_core::de;
 
-    use crate::fmt::{temporal, StdFmtWrite};
+    use crate::fmt::{StdFmtWrite, temporal};
 
     struct TemporalTimeZone<'a>(&'a crate::tz::TimeZone);
 
@@ -1665,8 +1665,8 @@ pub mod unsigned_duration {
                     f: &mut core::fmt::Formatter,
                 ) -> core::fmt::Result {
                     use crate::fmt::{
-                        friendly::{Designator, SpanPrinter},
                         StdFmtWrite,
+                        friendly::{Designator, SpanPrinter},
                     };
 
                     static PRINTER: SpanPrinter =
@@ -1742,9 +1742,9 @@ pub mod unsigned_duration {
         struct Visitor<V>(V);
 
         impl<
-                'de,
-                V: serde_core::de::Visitor<'de, Value = core::time::Duration>,
-            > serde_core::de::Visitor<'de> for Visitor<V>
+            'de,
+            V: serde_core::de::Visitor<'de, Value = core::time::Duration>,
+        > serde_core::de::Visitor<'de> for Visitor<V>
         {
             type Value = Option<core::time::Duration>;
 
@@ -1871,8 +1871,8 @@ pub mod unsigned_duration {
 #[cfg(test)]
 mod tests {
     use crate::{
-        span::span_eq, tz::TimeZone, SignedDuration, Span, SpanFieldwise,
-        Timestamp, ToSpan,
+        SignedDuration, Span, SpanFieldwise, Timestamp, ToSpan, span::span_eq,
+        tz::TimeZone,
     };
     use core::time::Duration as UnsignedDuration;
 

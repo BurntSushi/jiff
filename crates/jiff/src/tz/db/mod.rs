@@ -1,5 +1,5 @@
 use crate::{
-    error::{tz::db::Error as E, Error},
+    error::{Error, tz::db::Error as E},
     tz::TimeZone,
     util::{sync::Arc, utf8},
 };
@@ -773,10 +773,12 @@ mod tests {
         assert!(db.get("America/New_York").is_ok());
         // The convenience APIs route through the global `db()`, so this is
         // the symptom originally reported in #533.
-        assert!(crate::civil::date(2024, 7, 4)
-            .at(12, 0, 0, 0)
-            .in_tz("America/New_York")
-            .is_ok());
+        assert!(
+            crate::civil::date(2024, 7, 4)
+                .at(12, 0, 0, 0)
+                .in_tz("America/New_York")
+                .is_ok()
+        );
     }
 
     /// This tests that the size of a time zone database is kept small.

@@ -112,16 +112,16 @@ use alloc::{
 use jcore::bounds::Sign;
 
 use crate::{
+    SignedDuration,
     civil::{Date, DateTime, Time, Weekday},
     error::{
-        tz::zic::{Error as E, MAX_LINE_LEN},
         Error, ErrorContext,
+        tz::zic::{Error as E, MAX_LINE_LEN},
     },
     span::ToSpan,
     timestamp::Timestamp,
     tz::{Dst, Offset},
     util::{b, parse, sync::Arc},
-    SignedDuration,
 };
 
 #[derive(Debug, Default, Eq, PartialEq)]
@@ -1635,15 +1635,19 @@ mod tests {
 
     #[test]
     fn parse_rule_err() {
-        assert!(RuleP::parse(&[
-            "US", "1967", "1973", "-", "Apr", "lastSun", "2:00w", "1:00d",
-            "D", "E",
-        ])
-        .is_err());
-        assert!(RuleP::parse(&[
-            "US", "1967", "1973", "-", "Apr", "lastSun", "2:00w", "1:00d",
-        ])
-        .is_err());
+        assert!(
+            RuleP::parse(&[
+                "US", "1967", "1973", "-", "Apr", "lastSun", "2:00w", "1:00d",
+                "D", "E",
+            ])
+            .is_err()
+        );
+        assert!(
+            RuleP::parse(&[
+                "US", "1967", "1973", "-", "Apr", "lastSun", "2:00w", "1:00d",
+            ])
+            .is_err()
+        );
     }
 
     #[cfg(not(miri))]
@@ -1716,10 +1720,12 @@ mod tests {
         assert!(ZoneFirstP::parse(&["foo"]).is_err());
         assert!(ZoneFirstP::parse(&["foo", "-5"]).is_err());
         assert!(ZoneFirstP::parse(&["foo", "-5", "-"]).is_err());
-        assert!(ZoneFirstP::parse(&[
-            "foo", "-5", "-", "EST", "1973", "Apr", "29", "2:00", "w",
-        ])
-        .is_err());
+        assert!(
+            ZoneFirstP::parse(&[
+                "foo", "-5", "-", "EST", "1973", "Apr", "29", "2:00", "w",
+            ])
+            .is_err()
+        );
     }
 
     #[cfg(not(miri))]
@@ -1777,10 +1783,12 @@ mod tests {
         assert!(ZoneContinuationP::parse(&[]).is_err());
         assert!(ZoneContinuationP::parse(&["-5"]).is_err());
         assert!(ZoneContinuationP::parse(&["-5", "-"]).is_err());
-        assert!(ZoneContinuationP::parse(&[
-            "-5", "-", "EST", "1973", "Apr", "29", "2:00", "w",
-        ])
-        .is_err());
+        assert!(
+            ZoneContinuationP::parse(&[
+                "-5", "-", "EST", "1973", "Apr", "29", "2:00", "w",
+            ])
+            .is_err()
+        );
     }
 
     #[test]
@@ -2423,13 +2431,10 @@ mod tests {
         assert!(ZoneUntilP::parse(&["2025", "Jan", "32"]).is_err());
 
         assert!(ZoneUntilP::parse(&["2025", "Jan", "lastSun", "w"]).is_err());
-        assert!(ZoneUntilP::parse(&[
-            "2025",
-            "Jan",
-            "lastSun",
-            "1:1:1.0000000001"
-        ])
-        .is_err());
+        assert!(
+            ZoneUntilP::parse(&["2025", "Jan", "lastSun", "1:1:1.0000000001"])
+                .is_err()
+        );
     }
 
     #[test]

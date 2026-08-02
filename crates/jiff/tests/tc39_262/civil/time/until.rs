@@ -1,6 +1,6 @@
 use jiff::{
-    civil::{time, Time, TimeDifference},
     RoundMode, ToSpan, Unit,
+    civil::{Time, TimeDifference, time},
 };
 
 use crate::tc39_262::Result;
@@ -206,15 +206,15 @@ fn roundingincrement_invalid() -> Result {
     assert!(t1.until(args.smallest(Unit::Hour).increment(24)).is_err());
     assert!(t1.until(args.smallest(Unit::Minute).increment(60)).is_err());
     assert!(t1.until(args.smallest(Unit::Second).increment(60)).is_err());
-    assert!(t1
-        .until(args.smallest(Unit::Millisecond).increment(1000))
-        .is_err());
-    assert!(t1
-        .until(args.smallest(Unit::Microsecond).increment(1000))
-        .is_err());
-    assert!(t1
-        .until(args.smallest(Unit::Nanosecond).increment(1000))
-        .is_err());
+    assert!(
+        t1.until(args.smallest(Unit::Millisecond).increment(1000)).is_err()
+    );
+    assert!(
+        t1.until(args.smallest(Unit::Microsecond).increment(1000)).is_err()
+    );
+    assert!(
+        t1.until(args.smallest(Unit::Nanosecond).increment(1000)).is_err()
+    );
 
     Ok(())
 }

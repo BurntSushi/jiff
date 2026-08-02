@@ -9,7 +9,7 @@
 // of my own devising. However, much of the behavior being tested comes from
 // Temporal.)
 
-use jiff::{civil, tz, SignedDuration, Timestamp, ToSpan, Unit};
+use jiff::{SignedDuration, Timestamp, ToSpan, Unit, civil, tz};
 
 use crate::tc39_262::Result;
 

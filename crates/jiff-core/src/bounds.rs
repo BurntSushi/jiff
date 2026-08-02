@@ -1129,11 +1129,7 @@ impl Sign {
 impl core::fmt::Display for Sign {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        if self.is_negative() {
-            f.write_str("-")
-        } else {
-            Ok(())
-        }
+        if self.is_negative() { f.write_str("-") } else { Ok(()) }
     }
 }
 
@@ -1342,9 +1338,5 @@ const fn next_multiple_of(lhs: i64, rhs: i64) -> i64 {
 
     let r = lhs % rhs;
     let m = if (r > 0 && rhs < 0) || (r < 0 && rhs > 0) { r + rhs } else { r };
-    if m == 0 {
-        lhs
-    } else {
-        lhs + (rhs - m)
-    }
+    if m == 0 { lhs } else { lhs + (rhs - m) }
 }

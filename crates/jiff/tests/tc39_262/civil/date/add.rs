@@ -1,6 +1,6 @@
 use jiff::{
-    civil::{date, Date},
     Span, ToSpan,
+    civil::{Date, date},
 };
 
 use crate::tc39_262::Result;
