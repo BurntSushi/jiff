@@ -3,19 +3,19 @@ use core::time::Duration as UnsignedDuration;
 use jcore::bounds::Sign;
 
 use crate::{
+    RoundMode, SignedDuration, Span, SpanRound, Timestamp, Unit,
     civil::{
         Date, DateTime, DateTimeRound, DateTimeWith, Era, ISOWeekDate, Time,
         Weekday,
     },
     duration::{Duration, SDuration},
-    error::{zoned::Error as E, Error, ErrorContext},
+    error::{Error, ErrorContext, zoned::Error as E},
     fmt::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
     },
     tz::{AmbiguousOffset, Disambiguation, Offset, OffsetConflict, TimeZone},
     util::round::Increment,
-    RoundMode, SignedDuration, Span, SpanRound, Timestamp, Unit,
 };
 
 /// A time zone aware instant in time.
@@ -3497,7 +3497,7 @@ impl core::fmt::Display for Zoned {
 #[cfg(feature = "defmt")]
 impl defmt::Format for Zoned {
     fn format(&self, f: defmt::Formatter) {
-        use crate::fmt::{temporal::DEFAULT_DATETIME_PRINTER, DefmtWrite};
+        use crate::fmt::{DefmtWrite, temporal::DEFAULT_DATETIME_PRINTER};
 
         defmt::unwrap!(
             DEFAULT_DATETIME_PRINTER.print_zoned(self, DefmtWrite(f))
@@ -5837,9 +5837,10 @@ mod tests {
     use alloc::string::ToString;
 
     use crate::{
+        ToSpan,
         civil::{date, datetime},
         span::span_eq,
-        tz, ToSpan,
+        tz,
     };
 
     use super::*;

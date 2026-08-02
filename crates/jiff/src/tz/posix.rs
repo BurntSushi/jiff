@@ -33,8 +33,10 @@ impl<'a> core::fmt::Debug for TimeZoneFormatter<'a> {
 #[cfg(feature = "defmt")]
 impl<'a> defmt::Format for TimeZoneFormatter<'a> {
     fn format(&self, f: defmt::Formatter) {
-        defmt::unwrap!(fmt::temporal::DateTimePrinter::new()
-            .print_posix_time_zone(self.0, fmt::DefmtWrite(f)))
+        defmt::unwrap!(
+            fmt::temporal::DateTimePrinter::new()
+                .print_posix_time_zone(self.0, fmt::DefmtWrite(f))
+        )
     }
 }
 

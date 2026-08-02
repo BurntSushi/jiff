@@ -5,7 +5,7 @@ use alloc::string::ToString;
 use jcore::tz::posix;
 
 use crate::{
-    error::{tz::system::Error as E, Error, ErrorContext},
+    error::{Error, ErrorContext, tz::system::Error as E},
     tz::{TimeZone, TimeZoneDatabase},
     util::cache::Expiration,
 };
@@ -204,7 +204,7 @@ fn get_env_tz(db: &TimeZoneDatabase) -> Result<Option<TimeZone>, Error> {
         }
         Ok(posix::TzEnv::Implementation(string)) => string.to_string(),
         Ok(posix::TzEnv::Rule(tz)) => {
-            return Ok(Some(TimeZone::from_posix_tz(tz)))
+            return Ok(Some(TimeZone::from_posix_tz(tz)));
         }
     };
     // At this point, TZ is set to something that is definitively not a

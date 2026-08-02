@@ -3,16 +3,16 @@ use core::time::Duration;
 use jcore::tz::posix;
 
 use crate::{
+    SignedDuration, Timestamp, Unit, Zoned,
     civil::{Date, DateTime, ISOWeekDate, Time},
-    error::{fmt::temporal::Error as E, Error},
+    error::{Error, fmt::temporal::Error as E},
     fmt::{
+        Write,
         buffer::{ArrayBuffer, BorrowedBuffer, BorrowedWriter},
         temporal::{Pieces, PiecesOffset, TimeZoneAnnotationKind},
-        Write,
     },
     span::{Span, UnitSet},
     tz::{Offset, TimeZone},
-    SignedDuration, Timestamp, Unit, Zoned,
 };
 
 /// Defines the "maximum" possible length (in bytes) of an RFC 9557 zoned
@@ -1127,7 +1127,7 @@ mod tests {
     use alloc::string::{String, ToString};
 
     use crate::{
-        civil::{date, time, Weekday},
+        civil::{Weekday, date, time},
         fmt::StdFmtWrite,
         span::ToSpan,
         util::b,

@@ -3,16 +3,16 @@ use core::time::Duration as UnsignedDuration;
 use jcore::{bounds::Sign, civil::Date as JDate};
 
 use crate::{
+    RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
     civil::{DateTime, Era, ISOWeekDate, Time, Weekday},
     duration::{Duration, SDuration},
-    error::{civil::Error as E, unit::UnitConfigError, Error, ErrorContext},
+    error::{Error, ErrorContext, civil::Error as E, unit::UnitConfigError},
     fmt::{
         self,
         temporal::{DEFAULT_DATETIME_PARSER, DEFAULT_DATETIME_PRINTER},
     },
     tz::TimeZone,
     util::{b, constant},
-    RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
 };
 
 /// A representation of a civil date in the Gregorian calendar.
@@ -1441,11 +1441,7 @@ impl Date {
     pub fn saturating_add<A: Into<DateArithmetic>>(self, duration: A) -> Date {
         let duration: DateArithmetic = duration.into();
         self.checked_add(duration).unwrap_or_else(|_| {
-            if duration.is_negative() {
-                Date::MIN
-            } else {
-                Date::MAX
-            }
+            if duration.is_negative() { Date::MIN } else { Date::MAX }
         })
     }
 
@@ -3430,7 +3426,7 @@ fn month_add_overflowing(month: i8, span: i32) -> (i8, i16) {
 mod tests {
     use std::io::Cursor;
 
-    use crate::{civil::date, span::span_eq, tz::TimeZone, Timestamp, ToSpan};
+    use crate::{Timestamp, ToSpan, civil::date, span::span_eq, tz::TimeZone};
 
     use super::*;
 

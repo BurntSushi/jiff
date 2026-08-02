@@ -1,7 +1,7 @@
 use jiff::{
+    Timestamp,
     civil::date,
     tz::{self, AmbiguousOffset, Offset, TimeZone},
-    Timestamp,
 };
 
 /// Tests Jiff's "static" time zone support via the proc macro.

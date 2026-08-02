@@ -1,14 +1,14 @@
 use jcore::bounds::Sign;
 
 use crate::{
-    error::{fmt::friendly::Error as E, ErrorContext},
+    Error, SignedDuration, Span, Unit,
+    error::{ErrorContext, fmt::friendly::Error as E},
     fmt::{
-        friendly::parser_label,
-        util::{parse_temporal_fraction, DurationUnits},
         Parsed,
+        friendly::parser_label,
+        util::{DurationUnits, parse_temporal_fraction},
     },
     util::parse,
-    Error, SignedDuration, Span, Unit,
 };
 
 /// A parser for Jiff's "friendly" duration format.
