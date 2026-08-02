@@ -863,8 +863,7 @@ impl core::fmt::Display for RangeError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for RangeError {}
+impl core::error::Error for RangeError {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
