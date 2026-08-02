@@ -11,8 +11,8 @@ members = [
 
 [workspace.package]
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
-edition = "2021"
-rust-version = "1.70"
+edition = "2024"
+rust-version = "1.85"
 
 # This is just like the default 'test' profile, but debug_assertions are
 # disabled. This is important to cover for Jiff because we do a lot of extra
