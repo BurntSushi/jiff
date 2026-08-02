@@ -57,19 +57,6 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
-    # In Rust 2024, doc tests are (mostly) all compiled into a single
-    # executable and then run once. This is a lot faster for Jiff, which
-    # has 1000+ doc tests. Since this job is where we run most of our
-    # tests (and we run MSRV on a different job), we just bump to Rust 2024
-    # to take advantage of this.
-    - name: Switch to Rust 2024
-      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
-    # jiff-icu inherits the edition but has its own rust-version, so it
-    # needs the same temporary bump as the workspace for Rust 2024.
-    - name: Bump rust-version to Rust 1.85
-      run: |
-        sed -i.bak -E 's/^rust-version = "1\.(70|82)"$/rust-version = "1.85"/' \
-          Cargo.toml crates/jiff-icu/Cargo.toml
     - run: ./scripts/test-default
 
   # Test all features enabled.
@@ -92,17 +79,6 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
-    # In Rust 2024, doc tests are (mostly) all compiled into a single
-    # executable and then run once. This is a lot faster for Jiff, which
-    # has 1000+ doc tests. Since this job is where we run most of our
-    # tests (and we run MSRV on a different job), we just bump to Rust 2024
-    # to take advantage of this.
-    - name: Switch to Rust 2024
-      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
-    - name: Bump rust-version to Rust 1.85
-      run: |
-        sed -i.bak -E 's/^rust-version = "1\.(70|82)"$/rust-version = "1.85"/' \
-          Cargo.toml crates/jiff-icu/Cargo.toml
     - run: ./scripts/test-all
 
   # Test Jiff when only the bundled tzdb is enabled.
@@ -125,17 +101,6 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
-    # In Rust 2024, doc tests are (mostly) all compiled into a single
-    # executable and then run once. This is a lot faster for Jiff, which
-    # has 1000+ doc tests. Since this job is where we run most of our
-    # tests (and we run MSRV on a different job), we just bump to Rust 2024
-    # to take advantage of this.
-    - name: Switch to Rust 2024
-      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
-    - name: Bump rust-version to Rust 1.85
-      run: |
-        sed -i.bak -E 's/^rust-version = "1\.(70|82)"$/rust-version = "1.85"/' \
-          Cargo.toml crates/jiff-icu/Cargo.toml
     - run: ./scripts/test-only-bundle
 
   # Test Jiff in core-only (including no-alloc) configurations.
@@ -203,16 +168,6 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
-    # In Rust 2024, doc tests are (mostly) all compiled into a single
-    # executable and then run once. This is a lot faster for Jiff, which has
-    # 1000+ doc tests. Since we run doc tests in this job, we just bump to Rust
-    # 2024 to take advantage of this.
-    - name: Switch to Rust 2024
-      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
-    - name: Bump rust-version to Rust 1.85
-      run: |
-        sed -i.bak -E 's/^rust-version = "1\.(70|82)"$/rust-version = "1.85"/' \
-          Cargo.toml crates/jiff-icu/Cargo.toml
     - name: Run tests under release mode
       run: cargo test --verbose --all --profile testrelease
 
@@ -298,18 +253,6 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
-    # In Rust 2024, doc tests are (mostly) all compiled into a single
-    # executable and then run once. This is a lot faster for Jiff, which has
-    # 1000+ doc tests. Since we run doc tests in this job, we just bump to Rust
-    # 2024 to take advantage of this.
-    - name: Switch to Rust 2024
-      shell: bash
-      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
-    - name: Bump rust-version to Rust 1.85
-      shell: bash
-      run: |
-        sed -i.bak -E 's/^rust-version = "1\.(70|82)"$/rust-version = "1.85"/' \
-          Cargo.toml crates/jiff-icu/Cargo.toml
     - run: cargo build --all --verbose
     - run: cargo doc --features defmt,serde,static --verbose
     - run: cargo test --verbose --all
@@ -345,15 +288,14 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: 1.70.0
+        toolchain: 1.85.0
     # Just do a simple check here to ensure we continue to build on MSRV.
     # We don't use `-p jiff` here so that we can avoid having Cargo try to
     # build a dev-dependency graph that works on older versions of Rust.
     # Instead, this strictly limits it to the uptime example.
     - run: cargo build --manifest-path ./examples/uptime/Cargo.toml --verbose
 
-  # Same as above, but for Windows. The MSRV is technically higher because Jiff
-  # inherits the MSRV of system-level dependencies (like `windows-link`).
+  # Same as above, but for Windows.
   msrv-win:
     runs-on: windows-latest
     steps:
@@ -362,7 +304,7 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: 1.71.1
+        toolchain: 1.85.0
     - run: cargo build --manifest-path ./examples/uptime/Cargo.toml --verbose
 
   # This job tests that examples outside the workspace build.
