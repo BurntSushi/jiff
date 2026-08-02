@@ -3,13 +3,13 @@ use core::{cmp::Ordering, time::Duration as UnsignedDuration};
 use jcore::{bounds::Sign, constants as c};
 
 use crate::{
+    RoundMode, SignedDuration, Timestamp, Zoned,
     civil::{Date, DateTime, Time},
     duration::{Duration, SDuration},
-    error::{span::Error as E, unit::UnitConfigError, Error, ErrorContext},
+    error::{Error, ErrorContext, span::Error as E, unit::UnitConfigError},
     fmt::{friendly, temporal},
     tz::TimeZone,
     util::{b, borrow::DumbCow, round::Increment},
-    RoundMode, SignedDuration, Timestamp, Zoned,
 };
 
 /// A macro helper, only used in tests, for comparing spans for equality.
@@ -1797,7 +1797,7 @@ impl Span {
         let start = match relative {
             Some(r) => match r.to_relative(unit)? {
                 None => {
-                    return span1.checked_add_invariant_duration(unit, dur2)
+                    return span1.checked_add_invariant_duration(unit, dur2);
                 }
                 Some(r) => r,
             },
@@ -5760,11 +5760,7 @@ impl UnitSet {
     #[inline]
     const fn set(self, unit: Unit, is_zero: bool) -> UnitSet {
         let bit = 1 << unit as usize;
-        if is_zero {
-            UnitSet(self.0 & !bit)
-        } else {
-            UnitSet(self.0 | bit)
-        }
+        if is_zero { UnitSet(self.0 & !bit) } else { UnitSet(self.0 | bit) }
     }
 
     /// Returns the set constructed from the given slice of units.
@@ -6744,7 +6740,7 @@ mod tests {
 
     use alloc::string::ToString;
 
-    use crate::{civil::date, RoundMode};
+    use crate::{RoundMode, civil::date};
 
     use super::*;
 
@@ -7486,32 +7482,40 @@ mod tests {
         assert!(span.checked_sub(MIN).is_err());
 
         let span = 1.day();
-        assert!(span
-            .checked_add(SpanArithmetic::from(MAX).days_are_24_hours())
-            .is_err());
-        assert!(span
-            .checked_add(SpanArithmetic::from(MIN).days_are_24_hours())
-            .is_err());
-        assert!(span
-            .checked_sub(SpanArithmetic::from(MAX).days_are_24_hours())
-            .is_err());
-        assert!(span
-            .checked_sub(SpanArithmetic::from(MIN).days_are_24_hours())
-            .is_err());
+        assert!(
+            span.checked_add(SpanArithmetic::from(MAX).days_are_24_hours())
+                .is_err()
+        );
+        assert!(
+            span.checked_add(SpanArithmetic::from(MIN).days_are_24_hours())
+                .is_err()
+        );
+        assert!(
+            span.checked_sub(SpanArithmetic::from(MAX).days_are_24_hours())
+                .is_err()
+        );
+        assert!(
+            span.checked_sub(SpanArithmetic::from(MIN).days_are_24_hours())
+                .is_err()
+        );
 
         let span = 1.week();
-        assert!(span
-            .checked_add(SpanArithmetic::from(MAX).days_are_24_hours())
-            .is_err());
-        assert!(span
-            .checked_add(SpanArithmetic::from(MIN).days_are_24_hours())
-            .is_err());
-        assert!(span
-            .checked_sub(SpanArithmetic::from(MAX).days_are_24_hours())
-            .is_err());
-        assert!(span
-            .checked_sub(SpanArithmetic::from(MIN).days_are_24_hours())
-            .is_err());
+        assert!(
+            span.checked_add(SpanArithmetic::from(MAX).days_are_24_hours())
+                .is_err()
+        );
+        assert!(
+            span.checked_add(SpanArithmetic::from(MIN).days_are_24_hours())
+                .is_err()
+        );
+        assert!(
+            span.checked_sub(SpanArithmetic::from(MAX).days_are_24_hours())
+                .is_err()
+        );
+        assert!(
+            span.checked_sub(SpanArithmetic::from(MIN).days_are_24_hours())
+                .is_err()
+        );
     }
 
     /// This is a regression test for a case where adding a duration to a
@@ -7547,20 +7551,24 @@ mod tests {
         assert!(span.checked_sub(MAX).is_err());
 
         let span = 1.day();
-        assert!(span
-            .checked_add(SpanArithmetic::from(MAX).days_are_24_hours())
-            .is_err());
-        assert!(span
-            .checked_sub(SpanArithmetic::from(MAX).days_are_24_hours())
-            .is_err());
+        assert!(
+            span.checked_add(SpanArithmetic::from(MAX).days_are_24_hours())
+                .is_err()
+        );
+        assert!(
+            span.checked_sub(SpanArithmetic::from(MAX).days_are_24_hours())
+                .is_err()
+        );
 
         let span = 1.week();
-        assert!(span
-            .checked_add(SpanArithmetic::from(MAX).days_are_24_hours())
-            .is_err());
-        assert!(span
-            .checked_sub(SpanArithmetic::from(MAX).days_are_24_hours())
-            .is_err());
+        assert!(
+            span.checked_add(SpanArithmetic::from(MAX).days_are_24_hours())
+                .is_err()
+        );
+        assert!(
+            span.checked_sub(SpanArithmetic::from(MAX).days_are_24_hours())
+                .is_err()
+        );
     }
 
     /// Ref: https://github.com/BurntSushi/jiff/issues/685

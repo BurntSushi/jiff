@@ -1,10 +1,10 @@
 use jcore::civil::ISOWeekDate as JISOWeekDate;
 
 use crate::{
+    Zoned,
     civil::{Date, DateTime, Weekday},
     error::Error,
     fmt::temporal::{DEFAULT_DATETIME_PARSER, DEFAULT_DATETIME_PRINTER},
-    Zoned,
 };
 
 /// A type representing an [ISO 8601 week date].

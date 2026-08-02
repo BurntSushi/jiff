@@ -1,8 +1,8 @@
 use alloc::{string::String, vec, vec::Vec};
 
 use crate::{
-    tz::{posix, Abbreviation, Dst, Offset},
-    util::{crc32, MaybeStaticSlice},
+    tz::{Abbreviation, Dst, Offset, posix},
+    util::{MaybeStaticSlice, crc32},
 };
 
 use super::{
@@ -1255,11 +1255,7 @@ fn try_split_at<'b>(
     bytes: &'b [u8],
     at: usize,
 ) -> Result<(&'b [u8], &'b [u8]), SplitAtError> {
-    if at > bytes.len() {
-        Err(what)
-    } else {
-        Ok(bytes.split_at(at))
-    }
+    if at > bytes.len() { Err(what) } else { Ok(bytes.split_at(at)) }
 }
 
 fn from_be_bytes_u32_to_usize(bytes: &[u8]) -> Result<usize, U32UsizeError> {
