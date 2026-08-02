@@ -7,8 +7,8 @@ use jcore::util::ArrayStr;
 
 use crate::{
     error::{
-        tz::concatenated::{Error as E, ALLOC_LIMIT},
         Error, ErrorContext,
+        tz::concatenated::{ALLOC_LIMIT, Error as E},
     },
     tz::TimeZone,
     util::{escape, utf8},
@@ -427,12 +427,12 @@ fn alloc(bytes: &mut Vec<u8>, additional: usize) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use crate::{
+        Timestamp,
         civil::date,
         tz::{
-            offset, testdata::ANDROID_CONCATENATED_TZIF, AmbiguousOffset,
-            Offset,
+            AmbiguousOffset, Offset, offset,
+            testdata::ANDROID_CONCATENATED_TZIF,
         },
-        Timestamp,
     };
 
     use super::*;

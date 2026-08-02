@@ -104,12 +104,12 @@ from [Temporal's hybrid grammar].
 use jcore::{bounds::Sign, constants as c};
 
 use crate::{
-    error::{fmt::offset::Error as E, Error, ErrorContext},
+    error::{Error, ErrorContext, fmt::offset::Error as E},
     fmt::{
+        Parsed,
         buffer::ArrayBuffer,
         temporal::{PiecesNumericOffset, PiecesOffset},
         util::parse_temporal_fraction,
-        Parsed,
     },
     tz::Offset,
     util::{b, parse},

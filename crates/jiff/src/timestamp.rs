@@ -3,9 +3,10 @@ use core::time::Duration as UnsignedDuration;
 use jcore::Timestamp as JTimestamp;
 
 use crate::{
+    RoundMode, SignedDuration, Span, SpanRound, Unit,
     duration::{Duration, SDuration},
     error::{
-        timestamp::Error as E, unit::UnitConfigError, Error, ErrorContext,
+        Error, ErrorContext, timestamp::Error as E, unit::UnitConfigError,
     },
     fmt::{
         self,
@@ -14,7 +15,6 @@ use crate::{
     tz::{Offset, TimeZone},
     util::{constant, round::Increment},
     zoned::Zoned,
-    RoundMode, SignedDuration, Span, SpanRound, Unit,
 };
 
 /// An instant in time represented as the number of nanoseconds since the Unix
@@ -2617,7 +2617,7 @@ impl TryFrom<std::time::SystemTime> for Timestamp {
 #[cfg(feature = "defmt")]
 impl defmt::Format for Timestamp {
     fn format(&self, f: defmt::Formatter) {
-        use crate::fmt::{temporal::DEFAULT_DATETIME_PRINTER, DefmtWrite};
+        use crate::fmt::{DefmtWrite, temporal::DEFAULT_DATETIME_PRINTER};
 
         defmt::unwrap!(
             DEFAULT_DATETIME_PRINTER.print_timestamp(self, DefmtWrite(f))
@@ -2878,11 +2878,7 @@ impl TimestampArithmetic {
             SDuration::Absolute(sdur) => ts.checked_add_duration(sdur),
         };
         Ok(result.unwrap_or_else(|_| {
-            if self.is_negative() {
-                Timestamp::MIN
-            } else {
-                Timestamp::MAX
-            }
+            if self.is_negative() { Timestamp::MIN } else { Timestamp::MAX }
         }))
     }
 
@@ -3490,10 +3486,10 @@ mod tests {
     use std::io::Cursor;
 
     use crate::{
+        ToSpan,
         civil::{self, datetime},
         tz::Offset,
         util::b,
-        ToSpan,
     };
 
     use super::*;

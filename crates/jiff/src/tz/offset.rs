@@ -6,14 +6,13 @@ use core::{
 use jcore::{constants as c, tz::Offset as JOffset};
 
 use crate::{
-    civil,
+    RoundMode, SignedDuration, Unit, civil,
     duration::{Duration, SDuration},
-    error::{tz::offset::Error as E, Error, ErrorContext},
+    error::{Error, ErrorContext, tz::offset::Error as E},
     span::Span,
     timestamp::Timestamp,
     tz::{AmbiguousOffset, AmbiguousTimestamp, AmbiguousZoned, TimeZone},
     util::{b, constant, round::Increment},
-    RoundMode, SignedDuration, Unit,
 };
 
 /// An enum indicating whether a particular datetime is in DST or not.
@@ -66,11 +65,7 @@ impl Dst {
 
 impl From<bool> for Dst {
     fn from(is_dst: bool) -> Dst {
-        if is_dst {
-            Dst::Yes
-        } else {
-            Dst::No
-        }
+        if is_dst { Dst::Yes } else { Dst::No }
     }
 }
 
@@ -728,11 +723,7 @@ impl Offset {
     ) -> Offset {
         let duration: OffsetArithmetic = duration.into();
         self.checked_add(duration).unwrap_or_else(|_| {
-            if duration.is_negative() {
-                Offset::MIN
-            } else {
-                Offset::MAX
-            }
+            if duration.is_negative() { Offset::MIN } else { Offset::MAX }
         })
     }
 

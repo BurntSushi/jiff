@@ -6,7 +6,7 @@ ranged integers. I'm not quite sure where this will go.
 */
 
 use jcore::{
-    bounds::{self, const_check, Bounds, RawBoundsError},
+    bounds::{self, Bounds, RawBoundsError, const_check},
     constants as c,
 };
 

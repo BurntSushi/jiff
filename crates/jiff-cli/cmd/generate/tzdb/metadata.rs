@@ -141,12 +141,18 @@ impl Metadata {
             out,
             "// Sorted in ascending order by time zone identifier."
         )?;
-        writeln!(out, "pub(super) static TIME_ZONE_PRIMARY_IDENTIFIER: &[(&str, &str)] = &[")?;
+        writeln!(
+            out,
+            "pub(super) static TIME_ZONE_PRIMARY_IDENTIFIER: &[(&str, &str)] = &["
+        )?;
         for (name, primary) in &self.primary {
             writeln!(out, "    ({name:?}, {primary:?}),")?;
         }
         writeln!(out, "];\n")?;
-        writeln!(out, "pub(super) static TIME_ZONE_METADATA: &[(&str, TimeZoneLocation)] = &[")?;
+        writeln!(
+            out,
+            "pub(super) static TIME_ZONE_METADATA: &[(&str, TimeZoneLocation)] = &["
+        )?;
         for (name, location) in &self.locations {
             let Location { country, latitude, longitude } = location;
             writeln!(out, "    ({name:?}, TimeZoneLocation {{")?;

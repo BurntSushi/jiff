@@ -166,7 +166,7 @@ and features.)
 */
 
 use crate::{
-    error::{fmt::Error as E, Error},
+    error::{Error, fmt::Error as E},
     util::escape,
 };
 

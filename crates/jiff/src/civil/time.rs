@@ -9,15 +9,15 @@ use jcore::{
 };
 
 use crate::{
+    RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
     civil::{Date, DateTime},
     duration::{Duration, SDuration},
-    error::{civil::Error as E, unit::UnitConfigError, Error},
+    error::{Error, civil::Error as E, unit::UnitConfigError},
     fmt::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
     },
     util::{b, constant, round::Increment},
-    RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
 };
 
 /// A representation of civil "wall clock" time.
@@ -1029,11 +1029,7 @@ impl Time {
     pub fn saturating_add<A: Into<TimeArithmetic>>(self, duration: A) -> Time {
         let duration: TimeArithmetic = duration.into();
         self.checked_add(duration).unwrap_or_else(|_| {
-            if duration.is_negative() {
-                Time::MIN
-            } else {
-                Time::MAX
-            }
+            if duration.is_negative() { Time::MIN } else { Time::MAX }
         })
     }
 
@@ -2046,7 +2042,7 @@ impl<'a> From<&'a Zoned> for Time {
 #[cfg(feature = "defmt")]
 impl defmt::Format for Time {
     fn format(&self, f: defmt::Formatter) {
-        use crate::fmt::{temporal::DEFAULT_DATETIME_PRINTER, DefmtWrite};
+        use crate::fmt::{DefmtWrite, temporal::DEFAULT_DATETIME_PRINTER};
 
         defmt::unwrap!(
             DEFAULT_DATETIME_PRINTER.print_time(self, DefmtWrite(f))
@@ -3198,7 +3194,7 @@ impl TimeWith {
 mod tests {
     use std::io::Cursor;
 
-    use crate::{civil::time, span::span_eq, ToSpan};
+    use crate::{ToSpan, civil::time, span::span_eq};
 
     use super::*;
 

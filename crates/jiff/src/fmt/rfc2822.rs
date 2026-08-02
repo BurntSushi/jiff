@@ -44,12 +44,12 @@ general interchange format for new applications.
 use jcore::bounds::Sign;
 
 use crate::{
+    Error, Timestamp, Zoned,
     civil::{Date, DateTime, Time, Weekday},
-    error::{fmt::rfc2822::Error as E, ErrorContext},
-    fmt::{buffer::BorrowedBuffer, Parsed, Write},
+    error::{ErrorContext, fmt::rfc2822::Error as E},
+    fmt::{Parsed, Write, buffer::BorrowedBuffer},
     tz::{Offset, TimeZone},
     util::{b, parse},
-    Error, Timestamp, Zoned,
 };
 
 /// The default date time parser that we use throughout Jiff.
