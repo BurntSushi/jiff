@@ -1,4 +1,4 @@
-use jiff::{civil::date, tz, Timestamp, ToSpan, Unit};
+use jiff::{Timestamp, ToSpan, Unit, civil::date, tz};
 
 use crate::tc39_262::Result;
 

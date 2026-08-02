@@ -167,8 +167,8 @@ impl Error {
     /// assert!(err.is_invalid_parameter());
     /// ```
     pub fn is_invalid_parameter(&self) -> bool {
-        use self::civil::Error as CivilError;
         use self::ErrorKind::*;
+        use self::civil::Error as CivilError;
 
         matches!(
             *self.root().kind(),

@@ -275,16 +275,16 @@ The following things are currently unsupported:
 */
 
 use crate::{
+    Error, Timestamp, Zoned,
     civil::{Date, DateTime, ISOWeekDate, Time, Weekday},
-    error::{fmt::strtime::Error as E, ErrorContext},
+    error::{ErrorContext, fmt::strtime::Error as E},
     fmt::{
+        Write,
         buffer::{ArrayBuffer, BorrowedWriter},
         strtime::{parse::Parser, printer::Formatter},
-        Write,
     },
     tz::{Offset, OffsetConflict, TimeZone, TimeZoneDatabase},
     util::{self, b, escape},
-    Error, Timestamp, Zoned,
 };
 
 mod parse;
@@ -3396,11 +3396,7 @@ impl Meridiem {
 
 impl From<Time> for Meridiem {
     fn from(t: Time) -> Meridiem {
-        if t.hour() < 12 {
-            Meridiem::AM
-        } else {
-            Meridiem::PM
-        }
+        if t.hour() < 12 { Meridiem::AM } else { Meridiem::PM }
     }
 }
 

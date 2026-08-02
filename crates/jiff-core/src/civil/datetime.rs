@@ -1,9 +1,9 @@
 use crate::{
+    Timestamp,
     bounds::RangeError,
     civil::{Date, Time},
     macros::{ctry, unwrapr},
     tz::Offset,
-    Timestamp,
 };
 
 /// A civil time of a day on a particular Gregorian date.
