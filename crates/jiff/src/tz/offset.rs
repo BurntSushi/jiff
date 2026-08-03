@@ -129,6 +129,7 @@ impl From<bool> for Dst {
 /// since there is no time zone identifier, the offset instead is repeated as
 /// an additional assertion that a fixed offset datetime was intended.
 #[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct Offset {
     inner: JOffset,
 }

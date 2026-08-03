@@ -214,6 +214,7 @@ use crate::{
 ///
 /// See [`DateTime::round`] for more details.
 #[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct DateTime {
     date: Date,
     time: Time,

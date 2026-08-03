@@ -754,6 +754,33 @@ impl core::ops::SubAssign<(i64, i32)> for Timestamp {
     }
 }
 
+#[cfg(feature = "arbitrary")]
+impl<'a> arbitrary::Arbitrary<'a> for Timestamp {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'a>,
+    ) -> arbitrary::Result<Timestamp> {
+        let secs = u.int_in_range(
+            b::UnixEpochSeconds::MIN..=b::UnixEpochSeconds::MAX,
+        )?;
+        let mut nanos = u.int_in_range(
+            b::SignedSubsecNanosecond::MIN..=b::SignedSubsecNanosecond::MAX,
+        )?;
+        // nanoseconds must be zero for the minimum second value,
+        // so just clamp it to 0.
+        if secs == b::UnixEpochSeconds::MIN && nanos < 0 {
+            nanos = 0;
+        }
+        Ok(Timestamp::new(secs, nanos).unwrap_or(Timestamp::UNIX_EPOCH))
+    }
+
+    fn size_hint(depth: usize) -> (usize, Option<usize>) {
+        arbitrary::size_hint::and(
+            <i64 as arbitrary::Arbitrary>::size_hint(depth),
+            <i32 as arbitrary::Arbitrary>::size_hint(depth),
+        )
+    }
+}
+
 #[cfg(test)]
 impl quickcheck::Arbitrary for Timestamp {
     fn arbitrary(g: &mut quickcheck::Gen) -> Timestamp {

@@ -154,6 +154,7 @@ use crate::{
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct ISOWeekDate {
     pub(crate) inner: JISOWeekDate,
 }

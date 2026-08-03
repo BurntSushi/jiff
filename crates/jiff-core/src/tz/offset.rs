@@ -372,6 +372,22 @@ impl defmt::Format for Offset {
     }
 }
 
+#[cfg(feature = "arbitrary")]
+impl<'a> arbitrary::Arbitrary<'a> for Offset {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'a>,
+    ) -> arbitrary::Result<Offset> {
+        let secs = u.int_in_range(
+            b::OffsetTotalSeconds::MIN..=b::OffsetTotalSeconds::MAX,
+        )?;
+        Ok(Offset::from_seconds(secs).unwrap_or(Offset::UTC))
+    }
+
+    fn size_hint(depth: usize) -> (usize, Option<usize>) {
+        <i32 as arbitrary::Arbitrary>::size_hint(depth)
+    }
+}
+
 #[cfg(test)]
 impl quickcheck::Arbitrary for Offset {
     fn arbitrary(g: &mut quickcheck::Gen) -> Offset {
