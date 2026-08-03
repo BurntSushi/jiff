@@ -40,4 +40,4 @@ jcore = { package = "jiff-core", version = "0.1", path = "../jiff-core" }
 jiff-tzdb = { version = "0.1.6", path = "../jiff-tzdb", optional = true }
 proc-macro2 = "1.0.93"
 quote = "1.0.38"
-syn = "3.0.3"
+syn = ">= 2.0.98, < 4"
