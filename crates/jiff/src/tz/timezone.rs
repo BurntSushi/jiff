@@ -2618,6 +2618,56 @@ mod tests {
 
     use super::*;
 
+    #[cfg(feature = "arbitrary")]
+    #[test]
+    fn arbitrary_always_produces_valid_time_zone() {
+        use arbitrary::{Arbitrary, Unstructured};
+
+        for byte in [0x00, 0x7f, 0x80, 0xff] {
+            let buf = [byte; 64];
+            let mut u = Unstructured::new(&buf);
+            // Must never panic.
+            let _ = TimeZone::arbitrary(&mut u).unwrap();
+        }
+
+        let mut state: u64 = 0x1234_5678_9abc_def0;
+        let mut saw_iana = false;
+        let mut saw_fixed = false;
+        for _ in 0..10_000 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let mut buf = [0u8; 32];
+            buf[..8].copy_from_slice(&state.to_le_bytes());
+            state ^= state << 5;
+            buf[8..16].copy_from_slice(&state.to_le_bytes());
+            state ^= state << 13;
+            buf[16..24].copy_from_slice(&state.to_le_bytes());
+            state ^= state >> 7;
+            buf[24..32].copy_from_slice(&state.to_le_bytes());
+
+            let mut u = Unstructured::new(&buf);
+            if let Ok(tz) = TimeZone::arbitrary(&mut u) {
+                if tz.iana_name().is_some() {
+                    saw_iana = true;
+                } else {
+                    saw_fixed = true;
+                }
+                // Every generated time zone must actually be usable for
+                // converting a timestamp to civil time and back.
+                let ts = Timestamp::UNIX_EPOCH;
+                let dt = tz.to_datetime(ts);
+                tz.to_zoned(dt).unwrap();
+            }
+        }
+        // Sanity check that this system's tzdb is non-empty and that we
+        // actually exercised both branches of the impl.
+        if !crate::tz::db().is_definitively_empty() {
+            assert!(saw_iana, "never generated a named IANA time zone");
+        }
+        assert!(saw_fixed, "never generated a fixed-offset time zone");
+    }
+
     fn unambiguous(offset_hours: i8) -> AmbiguousOffset {
         let offset = offset(offset_hours);
         o_unambiguous(offset)

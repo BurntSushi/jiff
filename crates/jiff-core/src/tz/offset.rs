@@ -790,6 +790,33 @@ impl std::error::Error for AmbiguousError {}
 mod tests {
     use super::Offset;
 
+    #[cfg(feature = "arbitrary")]
+    #[test]
+    fn arbitrary_always_produces_valid_offset() {
+        use arbitrary::{Arbitrary, Unstructured};
+
+        for byte in [0x00, 0x7f, 0x80, 0xff] {
+            let buf = [byte; 8];
+            let mut u = Unstructured::new(&buf);
+            let o = Offset::arbitrary(&mut u).unwrap();
+            assert!(o >= Offset::MIN && o <= Offset::MAX);
+        }
+
+        let mut state: u64 = 0x1234_5678_9abc_def0;
+        for _ in 0..10_000 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let mut buf = [0u8; 8];
+            buf.copy_from_slice(&state.to_le_bytes());
+
+            let mut u = Unstructured::new(&buf);
+            if let Ok(o) = Offset::arbitrary(&mut u) {
+                assert!(o >= Offset::MIN && o <= Offset::MAX);
+            }
+        }
+    }
+
     #[test]
     fn checked_subtracts_positive_and_negative_seconds() {
         assert_eq!(

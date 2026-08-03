@@ -474,6 +474,33 @@ mod tests {
         TimeNanosecond::new(nanosecond).unwrap()
     }
 
+    #[cfg(feature = "arbitrary")]
+    #[test]
+    fn arbitrary_always_produces_valid_time() {
+        use arbitrary::{Arbitrary, Unstructured};
+
+        for byte in [0x00, 0x7f, 0x80, 0xff] {
+            let buf = [byte; 16];
+            let mut u = Unstructured::new(&buf);
+            let t = Time::arbitrary(&mut u).unwrap();
+            assert!(t >= Time::MIN && t <= Time::MAX);
+        }
+
+        let mut state: u64 = 0x1234_5678_9abc_def0;
+        for _ in 0..10_000 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let mut buf = [0u8; 8];
+            buf.copy_from_slice(&state.to_le_bytes());
+
+            let mut u = Unstructured::new(&buf);
+            if let Ok(t) = Time::arbitrary(&mut u) {
+                assert!(t >= Time::MIN && t <= Time::MAX);
+            }
+        }
+    }
+
     #[test]
     fn time_to_second_various() {
         let t = time(0, 0, 0);

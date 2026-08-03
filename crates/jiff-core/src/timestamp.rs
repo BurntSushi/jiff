@@ -957,4 +957,33 @@ mod tests {
             got == ts
         }
     }
+
+    #[cfg(feature = "arbitrary")]
+    #[test]
+    fn arbitrary_always_produces_valid_timestamp() {
+        use arbitrary::{Arbitrary, Unstructured};
+
+        for byte in [0x00, 0x7f, 0x80, 0xff] {
+            let buf = [byte; 32];
+            let mut u = Unstructured::new(&buf);
+            let ts = Timestamp::arbitrary(&mut u).unwrap();
+            assert!(ts >= Timestamp::MIN && ts <= Timestamp::MAX);
+        }
+
+        let mut state: u64 = 0x1234_5678_9abc_def0;
+        for _ in 0..10_000 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let mut buf = [0u8; 16];
+            buf[..8].copy_from_slice(&state.to_le_bytes());
+            state ^= state << 5;
+            buf[8..].copy_from_slice(&state.to_le_bytes());
+
+            let mut u = Unstructured::new(&buf);
+            if let Ok(ts) = Timestamp::arbitrary(&mut u) {
+                assert!(ts >= Timestamp::MIN && ts <= Timestamp::MAX);
+            }
+        }
+    }
 }

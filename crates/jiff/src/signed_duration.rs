@@ -3006,6 +3006,40 @@ mod tests {
 
     use super::*;
 
+    #[cfg(feature = "arbitrary")]
+    #[test]
+    fn arbitrary_always_produces_valid_signed_duration() {
+        use arbitrary::{Arbitrary, Unstructured};
+
+        fn check(d: SignedDuration) {
+            assert!(d >= SignedDuration::MIN && d <= SignedDuration::MAX);
+            assert!(d.subsec_nanos() > -NANOS_PER_SEC);
+            assert!(d.subsec_nanos() < NANOS_PER_SEC);
+        }
+
+        for byte in [0x00, 0x7f, 0x80, 0xff] {
+            let buf = [byte; 16];
+            let mut u = Unstructured::new(&buf);
+            check(SignedDuration::arbitrary(&mut u).unwrap());
+        }
+
+        let mut state: u64 = 0x1234_5678_9abc_def0;
+        for _ in 0..10_000 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let mut buf = [0u8; 16];
+            buf[..8].copy_from_slice(&state.to_le_bytes());
+            state ^= state << 5;
+            buf[8..].copy_from_slice(&state.to_le_bytes());
+
+            let mut u = Unstructured::new(&buf);
+            if let Ok(d) = SignedDuration::arbitrary(&mut u) {
+                check(d);
+            }
+        }
+    }
+
     #[test]
     fn new() {
         let d = SignedDuration::new(12, i32::MAX);

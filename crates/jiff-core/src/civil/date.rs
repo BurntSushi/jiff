@@ -1415,6 +1415,70 @@ mod tests {
         assert_eq!(Date::MAX, date(9999, 12, 31));
     }
 
+    #[cfg(feature = "arbitrary")]
+    #[test]
+    fn arbitrary_always_produces_valid_date() {
+        use arbitrary::{Arbitrary, Unstructured};
+
+        for byte in [0x00, 0x7f, 0x80, 0xff] {
+            let buf = [byte; 32];
+            let mut u = Unstructured::new(&buf);
+            let d = Date::arbitrary(&mut u).unwrap();
+            assert!(d >= Date::MIN && d <= Date::MAX);
+        }
+
+        let mut state: u64 = 0x1234_5678_9abc_def0;
+        for _ in 0..10_000 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let mut buf = [0u8; 8];
+            buf.copy_from_slice(&state.to_le_bytes());
+
+            let mut u = Unstructured::new(&buf);
+            if let Ok(d) = Date::arbitrary(&mut u) {
+                assert!(d >= Date::MIN && d <= Date::MAX);
+            }
+        }
+    }
+
+    #[cfg(feature = "arbitrary")]
+    #[test]
+    fn arbitrary_always_produces_valid_iso_week_date() {
+        use arbitrary::{Arbitrary, Unstructured};
+
+        fn check(wd: ISOWeekDate) {
+            // Re-validating the constituent parts must succeed, and the
+            // corresponding `Date` must be in range, since `ISOWeekDate`
+            // and `Date` support an infallible conversion between them.
+            let re =
+                ISOWeekDate::new(wd.year(), wd.week(), wd.weekday()).unwrap();
+            assert_eq!(wd, re);
+            let d = wd.to_date();
+            assert!(d >= Date::MIN && d <= Date::MAX);
+        }
+
+        for byte in [0x00, 0x7f, 0x80, 0xff] {
+            let buf = [byte; 32];
+            let mut u = Unstructured::new(&buf);
+            check(ISOWeekDate::arbitrary(&mut u).unwrap());
+        }
+
+        let mut state: u64 = 0x1234_5678_9abc_def0;
+        for _ in 0..10_000 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let mut buf = [0u8; 8];
+            buf.copy_from_slice(&state.to_le_bytes());
+
+            let mut u = Unstructured::new(&buf);
+            if let Ok(wd) = ISOWeekDate::arbitrary(&mut u) {
+                check(wd);
+            }
+        }
+    }
+
     #[test]
     fn unix_epoch_to_date_and_back_again_min_to_max() {
         for i in 0.. {
