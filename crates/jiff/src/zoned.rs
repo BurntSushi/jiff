@@ -1975,7 +1975,7 @@ impl Zoned {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn iso_week_date(self) -> ISOWeekDate {
+    pub fn iso_week_date(&self) -> ISOWeekDate {
         self.date().iso_week_date()
     }
 
