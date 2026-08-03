@@ -4,6 +4,13 @@
 ============
 TODO
 
+Enhancements:
+
+* [#631](https://github.com/BurntSushi/jiff/issues/631):
+Add optional `Arbitrary` trait implementations from the `arbitrary` crate.
+
+Bug fixes:
+
 * [#617](https://github.com/BurntSushi/jiff/pull/617):
 Fixes a bug in `jiff_core::tz::Offset` checked subtraction routine.
 * [#627](https://github.com/BurntSushi/jiff/issues/627):

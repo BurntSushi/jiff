@@ -48,6 +48,10 @@ alloc = [
   "defmt?/alloc",
 ]
 
+# Enables integration with the `arbitray` crate. This provides implemetations
+# of the `arbitrary::Arbitrary` trait on many of Jiff's core primitives.
+arbitrary = ["dep:arbitrary", "jcore/arbitrary", "std"]
+
 # Enables integration with `serde`. This provides implementations of
 # `Serialize` and `Deserialize` for many of Jiff's core primitives.
 serde = ["dep:serde_core"]
@@ -187,6 +191,7 @@ js = ["dep:wasm-bindgen", "dep:js-sys"]
 perf-inline = []
 
 [dependencies]
+arbitrary = { version = "1.4.2", optional = true, features = ["derive"] }
 defmt = { version = "1.0.0", optional = true }
 # Jiff's only required dependency. The `jiff-core` crate just contains stuff
 # that used to be inside `jiff`, so while it shows up as an additional

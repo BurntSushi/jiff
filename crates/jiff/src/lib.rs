@@ -636,6 +636,9 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
   (2026-06-12), not all public types in this crate implement [`defmt::Format`].
   If there are types for which you need `defmt` support but don't have it in
   Jiff, then please [open a new issue][issue-new].
+* **arbitrary** -
+  When enabled, `Arbitrary` trait implementations (for the `arbitrary` crate)
+  are provided for many of Jiff's core datetime primitives.
 
 ### Time zone features
 

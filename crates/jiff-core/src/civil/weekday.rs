@@ -6,6 +6,7 @@ use crate::{
 /// A representation for the day of the week.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[repr(u8)]
 #[allow(missing_docs)]
 pub enum Weekday {

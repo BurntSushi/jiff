@@ -168,6 +168,7 @@ use crate::{
 ///
 /// [add-date-rounding]: https://github.com/BurntSushi/jiff/issues/1
 #[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct Date {
     inner: JDate,
 }
