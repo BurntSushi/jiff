@@ -241,6 +241,30 @@ impl core::fmt::Debug for Time {
     }
 }
 
+#[cfg(feature = "arbitrary")]
+impl<'a> arbitrary::Arbitrary<'a> for Time {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'a>,
+    ) -> arbitrary::Result<Time> {
+        let hour = u.int_in_range(b::Hour::MIN..=b::Hour::MAX)?;
+        let minute = u.int_in_range(b::Minute::MIN..=b::Minute::MAX)?;
+        let second = u.int_in_range(b::Second::MIN..=b::Second::MAX)?;
+        let subsec_nanosecond = u.int_in_range(
+            b::SubsecNanosecond::MIN..=b::SubsecNanosecond::MAX,
+        )?;
+        Ok(Time::new(hour, minute, second, subsec_nanosecond).unwrap())
+    }
+
+    fn size_hint(depth: usize) -> (usize, Option<usize>) {
+        arbitrary::size_hint::and_all(&[
+            <i8 as arbitrary::Arbitrary>::size_hint(depth),
+            <i8 as arbitrary::Arbitrary>::size_hint(depth),
+            <i8 as arbitrary::Arbitrary>::size_hint(depth),
+            <i32 as arbitrary::Arbitrary>::size_hint(depth),
+        ])
+    }
+}
+
 #[cfg(test)]
 impl quickcheck::Arbitrary for Time {
     fn arbitrary(g: &mut quickcheck::Gen) -> Time {

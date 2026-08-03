@@ -1513,6 +1513,34 @@ impl defmt::Format for TimeZone {
     }
 }
 
+#[cfg(feature = "arbitrary")]
+impl<'a> arbitrary::Arbitrary<'a> for TimeZone {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'a>,
+    ) -> arbitrary::Result<TimeZone> {
+        #[cfg(feature = "alloc")]
+        {
+            if bool::arbitrary(u)? {
+                let names: alloc::vec::Vec<_> =
+                    crate::tz::db().available().collect();
+                if let Ok(name) = u.choose(&names) {
+                    if let Ok(tz) = crate::tz::db().get(name.as_str()) {
+                        return Ok(tz);
+                    }
+                }
+            }
+        }
+        Ok(TimeZone::fixed(Offset::arbitrary(u)?))
+    }
+
+    fn size_hint(depth: usize) -> (usize, Option<usize>) {
+        arbitrary::size_hint::and(
+            <bool as arbitrary::Arbitrary>::size_hint(depth),
+            <Offset as arbitrary::Arbitrary>::size_hint(depth),
+        )
+    }
+}
+
 /// A representation a single time zone transition.
 ///
 /// A time zone transition is an instant in time the marks the beginning of

@@ -645,6 +645,26 @@ impl core::ops::Sub for Date {
     }
 }
 
+#[cfg(feature = "arbitrary")]
+impl<'a> arbitrary::Arbitrary<'a> for Date {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'a>,
+    ) -> arbitrary::Result<Date> {
+        let year = u.int_in_range(b::Year::MIN..=b::Year::MAX)?;
+        let month = u.int_in_range(b::Month::MIN..=b::Month::MAX)?;
+        let day = u.int_in_range(b::Day::MIN..=b::Day::MAX)?;
+        Ok(Date::new_constrain(year, month, day).unwrap())
+    }
+
+    fn size_hint(depth: usize) -> (usize, Option<usize>) {
+        arbitrary::size_hint::and_all(&[
+            <i16 as arbitrary::Arbitrary>::size_hint(depth),
+            <i8 as arbitrary::Arbitrary>::size_hint(depth),
+            <i8 as arbitrary::Arbitrary>::size_hint(depth),
+        ])
+    }
+}
+
 #[cfg(test)]
 impl quickcheck::Arbitrary for Date {
     fn arbitrary(g: &mut quickcheck::Gen) -> Date {
@@ -1331,6 +1351,26 @@ const fn iso_week_start_from_year(year: i16) -> UnixEpochDay {
         epoch_day_in_first_week.checked_sub(diff_from_monday as i32),
         "valid Unix epoch day"
     )
+}
+
+#[cfg(feature = "arbitrary")]
+impl<'a> arbitrary::Arbitrary<'a> for ISOWeekDate {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'a>,
+    ) -> arbitrary::Result<ISOWeekDate> {
+        let year = u.int_in_range(b::ISOYear::MIN..=b::ISOYear::MAX)?;
+        let week = u.int_in_range(b::ISOWeek::MIN..=b::ISOWeek::MAX)?;
+        let weekday = Weekday::arbitrary(u)?;
+        Ok(ISOWeekDate::new_constrain(year, week, weekday).unwrap())
+    }
+
+    fn size_hint(depth: usize) -> (usize, Option<usize>) {
+        arbitrary::size_hint::and_all(&[
+            <i16 as arbitrary::Arbitrary>::size_hint(depth),
+            <i8 as arbitrary::Arbitrary>::size_hint(depth),
+            <Weekday as arbitrary::Arbitrary>::size_hint(depth),
+        ])
+    }
 }
 
 #[cfg(test)]

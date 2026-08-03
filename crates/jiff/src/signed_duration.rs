@@ -2979,6 +2979,25 @@ fn parse_iso_or_friendly(bytes: &[u8]) -> Result<SignedDuration, Error> {
     }
 }
 
+#[cfg(feature = "arbitrary")]
+impl<'a> arbitrary::Arbitrary<'a> for SignedDuration {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'a>,
+    ) -> arbitrary::Result<SignedDuration> {
+        let secs = i64::arbitrary(u)?;
+        let nanos =
+            u.int_in_range(-(NANOS_PER_SEC - 1)..=(NANOS_PER_SEC - 1))?;
+        Ok(SignedDuration::new(secs, nanos))
+    }
+
+    fn size_hint(depth: usize) -> (usize, Option<usize>) {
+        arbitrary::size_hint::and(
+            <i64 as arbitrary::Arbitrary>::size_hint(depth),
+            <i32 as arbitrary::Arbitrary>::size_hint(depth),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;

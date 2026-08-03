@@ -219,6 +219,7 @@ use crate::{
 ///
 /// See [`Time::round`] for more details.
 #[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct Time {
     inner: JTime,
 }
