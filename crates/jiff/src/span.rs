@@ -283,6 +283,27 @@ pub(crate) use span_eq;
 ///
 /// [ISO 8601]: https://www.iso.org/iso-8601-date-and-time-format.html
 ///
+/// # Serialization
+///
+/// With the `serde` feature enabled, the `Serialize` and `Deserialize` trait
+/// implementations use the ISO 8601 duration string format when the
+/// serializer or deserializer is human readable.
+///
+/// For non-human-readable formats, a `Span` is encoded as a 10-element tuple
+/// containing its signed component values in this order and with these exact
+/// integer types:
+///
+/// ```text
+/// (years: i16, months: i32, weeks: i32, days: i32, hours: i32,
+///  minutes: i64, seconds: i64, milliseconds: i64, microseconds: i64,
+///  nanoseconds: i64)
+/// ```
+///
+/// All non-zero components have the same sign. Keeping every component
+/// separate preserves the fieldwise distinction between spans such as
+/// `2.hours()` and `120.minutes()`. This binary representation is part of
+/// Jiff's stable public API.
+///
 /// # Comparisons
 ///
 /// A `Span` does not implement the `PartialEq` or `Eq` traits. These traits
@@ -3343,7 +3364,24 @@ impl serde_core::Serialize for Span {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            return serializer.collect_str(self);
+        }
+
+        use serde_core::ser::SerializeTuple;
+
+        let mut tuple = serializer.serialize_tuple(10)?;
+        tuple.serialize_element(&self.get_years())?;
+        tuple.serialize_element(&self.get_months())?;
+        tuple.serialize_element(&self.get_weeks())?;
+        tuple.serialize_element(&self.get_days())?;
+        tuple.serialize_element(&self.get_hours())?;
+        tuple.serialize_element(&self.get_minutes())?;
+        tuple.serialize_element(&self.get_seconds())?;
+        tuple.serialize_element(&self.get_milliseconds())?;
+        tuple.serialize_element(&self.get_microseconds())?;
+        tuple.serialize_element(&self.get_nanoseconds())?;
+        tuple.end()
     }
 }
 
@@ -3355,33 +3393,128 @@ impl<'de> serde_core::Deserialize<'de> for Span {
     ) -> Result<Span, D::Error> {
         use serde_core::de;
 
-        struct SpanVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for SpanVisitor {
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = Span;
+
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a span duration string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<Span, E> {
+                    parse_iso_or_friendly(value).map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<Span, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
+            }
+
+            return deserializer.deserialize_str(HumanReadableVisitor);
+        }
+
+        struct BinaryVisitor;
+
+        impl<'de> de::Visitor<'de> for BinaryVisitor {
             type Value = Span;
 
             fn expecting(
                 &self,
                 f: &mut core::fmt::Formatter,
             ) -> core::fmt::Result {
-                f.write_str("a span duration string")
+                f.write_str(
+                    "a 10-element tuple containing a Span's signed integer \
+                     components",
+                )
             }
 
             #[inline]
-            fn visit_bytes<E: de::Error>(
+            fn visit_seq<A: de::SeqAccess<'de>>(
                 self,
-                value: &[u8],
-            ) -> Result<Span, E> {
-                parse_iso_or_friendly(value).map_err(de::Error::custom)
-            }
+                mut seq: A,
+            ) -> Result<Span, A::Error> {
+                let years = seq
+                    .next_element::<i16>()?
+                    .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+                let months = seq
+                    .next_element::<i32>()?
+                    .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+                let weeks = seq
+                    .next_element::<i32>()?
+                    .ok_or_else(|| de::Error::invalid_length(2, &self))?;
+                let days = seq
+                    .next_element::<i32>()?
+                    .ok_or_else(|| de::Error::invalid_length(3, &self))?;
+                let hours = seq
+                    .next_element::<i32>()?
+                    .ok_or_else(|| de::Error::invalid_length(4, &self))?;
+                let minutes = seq
+                    .next_element::<i64>()?
+                    .ok_or_else(|| de::Error::invalid_length(5, &self))?;
+                let seconds = seq
+                    .next_element::<i64>()?
+                    .ok_or_else(|| de::Error::invalid_length(6, &self))?;
+                let milliseconds = seq
+                    .next_element::<i64>()?
+                    .ok_or_else(|| de::Error::invalid_length(7, &self))?;
+                let microseconds = seq
+                    .next_element::<i64>()?
+                    .ok_or_else(|| de::Error::invalid_length(8, &self))?;
+                let nanoseconds = seq
+                    .next_element::<i64>()?
+                    .ok_or_else(|| de::Error::invalid_length(9, &self))?;
 
-            #[inline]
-            fn visit_str<E: de::Error>(self, value: &str) -> Result<Span, E> {
-                self.visit_bytes(value.as_bytes())
+                let span = Span::new()
+                    .try_years(years)
+                    .and_then(|span| span.try_months(months))
+                    .and_then(|span| span.try_weeks(weeks))
+                    .and_then(|span| span.try_days(days))
+                    .and_then(|span| span.try_hours(hours))
+                    .and_then(|span| span.try_minutes(minutes))
+                    .and_then(|span| span.try_seconds(seconds))
+                    .and_then(|span| span.try_milliseconds(milliseconds))
+                    .and_then(|span| span.try_microseconds(microseconds))
+                    .and_then(|span| span.try_nanoseconds(nanoseconds))
+                    .map_err(|_| {
+                        de::Error::custom(
+                            "binary Span component is outside Jiff's \
+                             supported range",
+                        )
+                    })?;
+                if span.get_years() != years
+                    || span.get_months() != months
+                    || span.get_weeks() != weeks
+                    || span.get_days() != days
+                    || span.get_hours() != hours
+                    || span.get_minutes() != minutes
+                    || span.get_seconds() != seconds
+                    || span.get_milliseconds() != milliseconds
+                    || span.get_microseconds() != microseconds
+                    || span.get_nanoseconds() != nanoseconds
+                {
+                    return Err(de::Error::custom(
+                        "binary Span non-zero components must all have the \
+                         same sign",
+                    ));
+                }
+                Ok(span)
             }
         }
 
-        deserializer.deserialize_str(SpanVisitor)
+        deserializer.deserialize_tuple(10, BinaryVisitor)
     }
 }
 

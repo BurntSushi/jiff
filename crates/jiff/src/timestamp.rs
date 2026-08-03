@@ -60,6 +60,19 @@ use crate::{
 /// For more information on the specific format supported, see the
 /// [`fmt::temporal`](crate::fmt::temporal) module documentation.
 ///
+/// # Serialization
+///
+/// With the `serde` feature enabled, the `Serialize` and `Deserialize` trait
+/// implementations use the Temporal string format when the serializer or
+/// deserializer is human readable.
+///
+/// For non-human-readable formats, a `Timestamp` is encoded as an
+/// `(i64, i32)` tuple. The `i64` is the number of whole seconds since the Unix
+/// epoch, and the `i32` is the fractional nanosecond component. The two
+/// components always have the same sign unless either is zero, and the
+/// fractional component is in `-999_999_999..=999_999_999`. This binary
+/// representation is part of Jiff's stable public API.
+///
 /// # Default value
 ///
 /// For convenience, this type implements the `Default` trait. Its default
@@ -2632,7 +2645,16 @@ impl serde_core::Serialize for Timestamp {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            return serializer.collect_str(self);
+        }
+
+        use serde_core::ser::SerializeTuple;
+
+        let mut tuple = serializer.serialize_tuple(2)?;
+        tuple.serialize_element(&self.as_second())?;
+        tuple.serialize_element(&self.subsec_nanosecond())?;
+        tuple.end()
     }
 }
 
@@ -2644,38 +2666,87 @@ impl<'de> serde_core::Deserialize<'de> for Timestamp {
     ) -> Result<Timestamp, D::Error> {
         use serde_core::de;
 
-        struct TimestampVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for TimestampVisitor {
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = Timestamp;
+
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a timestamp string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<Timestamp, E> {
+                    DEFAULT_DATETIME_PARSER
+                        .parse_timestamp(value)
+                        .map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<Timestamp, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
+            }
+
+            return deserializer.deserialize_str(HumanReadableVisitor);
+        }
+
+        struct BinaryVisitor;
+
+        impl<'de> de::Visitor<'de> for BinaryVisitor {
             type Value = Timestamp;
 
             fn expecting(
                 &self,
                 f: &mut core::fmt::Formatter,
             ) -> core::fmt::Result {
-                f.write_str("a timestamp string")
+                f.write_str(
+                    "an (i64, i32) tuple containing seconds since the Unix \
+                     epoch and fractional nanoseconds",
+                )
             }
 
             #[inline]
-            fn visit_bytes<E: de::Error>(
+            fn visit_seq<A: de::SeqAccess<'de>>(
                 self,
-                value: &[u8],
-            ) -> Result<Timestamp, E> {
-                DEFAULT_DATETIME_PARSER
-                    .parse_timestamp(value)
-                    .map_err(de::Error::custom)
-            }
-
-            #[inline]
-            fn visit_str<E: de::Error>(
-                self,
-                value: &str,
-            ) -> Result<Timestamp, E> {
-                self.visit_bytes(value.as_bytes())
+                mut seq: A,
+            ) -> Result<Timestamp, A::Error> {
+                let second = seq
+                    .next_element::<i64>()?
+                    .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+                let nanosecond = seq
+                    .next_element::<i32>()?
+                    .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+                let timestamp =
+                    Timestamp::new(second, nanosecond).map_err(|_| {
+                        de::Error::custom(
+                            "binary Timestamp components are invalid or \
+                             outside Jiff's supported range",
+                        )
+                    })?;
+                if timestamp.as_second() != second
+                    || timestamp.subsec_nanosecond() != nanosecond
+                {
+                    return Err(de::Error::custom(
+                        "binary Timestamp components must have the same sign \
+                         unless either is zero",
+                    ));
+                }
+                Ok(timestamp)
             }
         }
 
-        deserializer.deserialize_str(TimestampVisitor)
+        deserializer.deserialize_tuple(2, BinaryVisitor)
     }
 }
 
