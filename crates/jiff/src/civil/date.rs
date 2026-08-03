@@ -58,6 +58,17 @@ use crate::{
 /// For more information on the specific format supported, see the
 /// [`fmt::temporal`](crate::fmt::temporal) module documentation.
 ///
+/// # Serialization
+///
+/// With the `serde` feature enabled, the `Serialize` and `Deserialize` trait
+/// implementations use the Temporal string format when the serializer or
+/// deserializer is human readable.
+///
+/// For non-human-readable formats, a `Date` is encoded as a single `i32` equal
+/// to the number of days since the Unix epoch, `1970-01-01`. Negative values
+/// represent dates before the Unix epoch. This binary representation is part
+/// of Jiff's stable public API.
+///
 /// # Default value
 ///
 /// For convenience, this type implements the `Default` trait. Its default
@@ -2258,7 +2269,11 @@ impl serde_core::Serialize for Date {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            serializer.collect_str(self)
+        } else {
+            serializer.serialize_i32(self.to_unix_epoch_day().day())
+        }
     }
 }
 
@@ -2270,35 +2285,70 @@ impl<'de> serde_core::Deserialize<'de> for Date {
     ) -> Result<Date, D::Error> {
         use serde_core::de;
 
-        struct DateVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for DateVisitor {
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = Date;
+
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a date string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<Date, E> {
+                    DEFAULT_DATETIME_PARSER
+                        .parse_date(value)
+                        .map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<Date, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
+            }
+
+            return deserializer.deserialize_str(HumanReadableVisitor);
+        }
+
+        struct BinaryVisitor;
+
+        impl<'de> de::Visitor<'de> for BinaryVisitor {
             type Value = Date;
 
             fn expecting(
                 &self,
                 f: &mut core::fmt::Formatter,
             ) -> core::fmt::Result {
-                f.write_str("a date string")
+                f.write_str(
+                    "an i32 count of days since 1970-01-01 in Jiff's \
+                     supported range",
+                )
             }
 
             #[inline]
-            fn visit_bytes<E: de::Error>(
-                self,
-                value: &[u8],
-            ) -> Result<Date, E> {
-                DEFAULT_DATETIME_PARSER
-                    .parse_date(value)
-                    .map_err(de::Error::custom)
-            }
-
-            #[inline]
-            fn visit_str<E: de::Error>(self, value: &str) -> Result<Date, E> {
-                self.visit_bytes(value.as_bytes())
+            fn visit_i32<E: de::Error>(self, value: i32) -> Result<Date, E> {
+                let day =
+                    jcore::civil::UnixEpochDay::new(value).map_err(|_| {
+                        E::custom(
+                            "binary Date day is outside Jiff's supported \
+                             range",
+                        )
+                    })?;
+                Ok(Date::from_unix_epoch_day(day))
             }
         }
 
-        deserializer.deserialize_str(DateVisitor)
+        deserializer.deserialize_i32(BinaryVisitor)
     }
 }
 

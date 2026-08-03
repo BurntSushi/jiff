@@ -97,10 +97,10 @@ assert_eq!(serde_json::to_string(&got)?, json);
 
 The [`Span`](crate::Span) and [`SignedDuration`](crate::SignedDuration) types
 in this crate both implement Serde's `Serialize` and `Deserialize` traits. For
-`Serialize`, they both use the [ISO 8601 Temporal duration format], but for
-`Deserialize`, they both support the ISO 8601 Temporal duration format and
-the ["friendly" duration format] simultaneously. In order to serialize either
-type in the "friendly" format, you can either define your own serialization
+human-readable formats, `Serialize` uses the [ISO 8601 Temporal duration
+format], while `Deserialize` supports both the ISO 8601 Temporal duration
+format and the ["friendly" duration format]. In order to serialize either type
+in the "friendly" format, you can either define your own serialization
 functions or use one of the convenience routines provided by this module. For
 example:
 
@@ -128,6 +128,11 @@ assert_eq!(serde_json::to_string(&got).unwrap(), expected);
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+These helpers only change human-readable serialization. For non-human-readable
+formats, they use the same stable binary encoding as the `Serialize`
+implementation on [`Span`](crate::Span#serialization) or
+[`SignedDuration`](crate::SignedDuration#serialization).
+
 [Serde]: https://serde.rs/
 [`with` attribute]: https://serde.rs/field-attrs.html#with
 [`serialize_with` attribute]: https://serde.rs/field-attrs.html#serialize_with
@@ -138,20 +143,23 @@ assert_eq!(serde_json::to_string(&got).unwrap(), expected);
 /// Convenience routines for serializing
 /// [`SignedDuration`](crate::SignedDuration) values.
 ///
-/// These convenience routines exist because the `Serialize` implementation for
-/// `SignedDuration` always uses the ISO 8601 duration format. These routines
-/// provide a way to use the "[friendly](crate::fmt::friendly)" format.
+/// These convenience routines exist because the human-readable `Serialize`
+/// implementation for `SignedDuration` uses the ISO 8601 duration format.
+/// These routines provide a way to use the
+/// "[friendly](crate::fmt::friendly)" format instead.
 ///
 /// Only serialization routines are provided because a `SignedDuration`'s
-/// `Deserialize` implementation automatically handles both the ISO 8601
-/// duration format and the "friendly" format.
+/// human-readable `Deserialize` implementation automatically handles both the
+/// ISO 8601 duration format and the "friendly" format. For non-human-readable
+/// formats, these routines use the stable binary encoding documented on
+/// [`SignedDuration`](crate::SignedDuration#serialization).
 ///
 /// # Advice
 ///
-/// The `Serialize` implementation uses ISO 8601 because it is a widely
-/// accepted interchange format for communicating durations. If you need to
-/// inter-operate with other systems, it is almost certainly the correct
-/// choice.
+/// The human-readable `Serialize` implementation uses ISO 8601 because it is
+/// a widely accepted interchange format for communicating durations. If you
+/// need to inter-operate with other systems, it is almost certainly the
+/// correct choice.
 ///
 /// The "friendly" format does not adhere to any universal specified format.
 /// However, it is perhaps easier to read. Beyond that, its utility for
@@ -177,7 +185,9 @@ assert_eq!(serde_json::to_string(&got).unwrap(), expected);
 /// The recommended approach is to define a function and a type that
 /// implements the `std::fmt::Display` trait. This way, if a serializer can
 /// efficiently support `Display` implementations, then an allocation can be
-/// avoided.
+/// avoided. The function should delegate to `SignedDuration`'s `Serialize`
+/// implementation for non-human-readable formats so that its binary output
+/// matches `SignedDuration`'s `Deserialize` implementation.
 ///
 /// ```
 /// use jiff::SignedDuration;
@@ -199,6 +209,10 @@ assert_eq!(serde_json::to_string(&got).unwrap(), expected);
 ///     duration: &SignedDuration,
 ///     se: S,
 /// ) -> Result<S::Ok, S::Error> {
+///     if !se.is_human_readable() {
+///         return serde::Serialize::serialize(duration, se);
+///     }
+///
 ///     struct Custom<'a>(&'a SignedDuration);
 ///
 ///     impl<'a> std::fmt::Display for Custom<'a> {
@@ -219,16 +233,21 @@ assert_eq!(serde_json::to_string(&got).unwrap(), expected);
 /// }
 /// ```
 ///
-/// Recall from above that you only need a custom serialization routine
-/// for this. Namely, deserialization automatically supports parsing all
-/// configuration options for serialization unconditionally.
+/// Recall from above that you only need a custom serialization routine for
+/// this. Namely, human-readable deserialization automatically supports parsing
+/// all configuration options for string serialization unconditionally.
 pub mod duration {
-    /// Serialize a `SignedDuration` in the [`friendly`](crate::fmt::friendly) duration
-    /// format.
+    /// Serialize a `SignedDuration` in the
+    /// [`friendly`](crate::fmt::friendly) duration format when using a
+    /// human-readable serializer.
     pub mod friendly {
         /// Serialize a `SignedDuration` in the
         /// [`friendly`](crate::fmt::friendly) duration format using compact
-        /// designators.
+        /// designators when the serializer is human readable.
+        ///
+        /// Non-human-readable serializers use the stable binary encoding
+        /// documented on
+        /// [`SignedDuration`](crate::SignedDuration#serialization).
         pub mod compact {
             use crate::fmt::{StdFmtWrite, friendly};
 
@@ -253,22 +272,31 @@ pub mod duration {
                     &self,
                     se: S,
                 ) -> Result<S::Ok, S::Error> {
-                    se.collect_str(self)
+                    if se.is_human_readable() {
+                        se.collect_str(self)
+                    } else {
+                        serde_core::Serialize::serialize(self.0, se)
+                    }
                 }
             }
 
             /// Serialize a required `SignedDuration` in the [`friendly`]
-            /// duration format using compact designators.
+            /// duration format using compact designators for human-readable
+            /// formats, or its stable binary encoding otherwise.
             #[inline]
             pub fn required<S: serde_core::Serializer>(
                 duration: &crate::SignedDuration,
                 se: S,
             ) -> Result<S::Ok, S::Error> {
-                se.collect_str(&CompactDuration(duration))
+                serde_core::Serialize::serialize(
+                    &CompactDuration(duration),
+                    se,
+                )
             }
 
             /// Serialize an optional `SignedDuration` in the [`friendly`]
-            /// duration format using compact designators.
+            /// duration format using compact designators for human-readable
+            /// formats, or its stable binary encoding otherwise.
             #[inline]
             pub fn optional<S: serde_core::Serializer>(
                 duration: &Option<crate::SignedDuration>,
@@ -287,19 +315,22 @@ pub mod duration {
 
 /// Convenience routines for serializing [`Span`](crate::Span) values.
 ///
-/// These convenience routines exist because the `Serialize` implementation for
-/// `Span` always uses the ISO 8601 duration format. These routines provide a
-/// way to use the "[friendly](crate::fmt::friendly)" format.
+/// These convenience routines exist because the human-readable `Serialize`
+/// implementation for `Span` uses the ISO 8601 duration format. These routines
+/// provide a way to use the "[friendly](crate::fmt::friendly)" format instead.
 ///
-/// Only serialization routines are provided because a `Span`'s `Deserialize`
-/// implementation automatically handles both the ISO 8601 duration format and
-/// the "friendly" format.
+/// Only serialization routines are provided because a `Span`'s human-readable
+/// `Deserialize` implementation automatically handles both the ISO 8601
+/// duration format and the "friendly" format. For non-human-readable formats,
+/// these routines use the stable binary encoding documented on
+/// [`Span`](crate::Span#serialization).
 ///
 /// # Advice
 ///
-/// The `Serialize` implementation uses ISO 8601 because it is a widely
-/// accepted interchange format for communicating durations. If you need to
-/// inter-operate with other systems, it is almost certainly the correct choice.
+/// The human-readable `Serialize` implementation uses ISO 8601 because it is
+/// a widely accepted interchange format for communicating durations. If you
+/// need to inter-operate with other systems, it is almost certainly the
+/// correct choice.
 ///
 /// The "friendly" format does not adhere to any universal specified format.
 /// However, it is perhaps easier to read, and crucially, unambiguously
@@ -324,7 +355,9 @@ pub mod duration {
 /// The recommended approach is to define a function and a type that
 /// implements the `std::fmt::Display` trait. This way, if a serializer can
 /// efficiently support `Display` implementations, then an allocation can be
-/// avoided.
+/// avoided. The function should delegate to `Span`'s `Serialize`
+/// implementation for non-human-readable formats so that its binary output
+/// matches `Span`'s `Deserialize` implementation.
 ///
 /// ```
 /// use jiff::{Span, ToSpan};
@@ -349,6 +382,10 @@ pub mod duration {
 ///     span: &Span,
 ///     se: S,
 /// ) -> Result<S::Ok, S::Error> {
+///     if !se.is_human_readable() {
+///         return serde::Serialize::serialize(span, se);
+///     }
+///
 ///     struct Custom<'a>(&'a Span);
 ///
 ///     impl<'a> std::fmt::Display for Custom<'a> {
@@ -375,15 +412,19 @@ pub mod duration {
 /// }
 /// ```
 ///
-/// Recall from above that you only need a custom serialization routine
-/// for this. Namely, deserialization automatically supports parsing all
-/// configuration options for serialization unconditionally.
+/// Recall from above that you only need a custom serialization routine for
+/// this. Namely, human-readable deserialization automatically supports parsing
+/// all configuration options for string serialization unconditionally.
 pub mod span {
     /// Serialize a `Span` in the [`friendly`](crate::fmt::friendly) duration
-    /// format.
+    /// format when using a human-readable serializer.
     pub mod friendly {
         /// Serialize a `Span` in the [`friendly`](crate::fmt::friendly)
-        /// duration format using compact designators.
+        /// duration format using compact designators when the serializer is
+        /// human readable.
+        ///
+        /// Non-human-readable serializers use the stable binary encoding
+        /// documented on [`Span`](crate::Span#serialization).
         pub mod compact {
             use crate::fmt::{StdFmtWrite, friendly};
 
@@ -408,22 +449,28 @@ pub mod span {
                     &self,
                     se: S,
                 ) -> Result<S::Ok, S::Error> {
-                    se.collect_str(self)
+                    if se.is_human_readable() {
+                        se.collect_str(self)
+                    } else {
+                        serde_core::Serialize::serialize(self.0, se)
+                    }
                 }
             }
 
             /// Serialize a required `Span` in the [`friendly`] duration format
-            /// using compact designators.
+            /// using compact designators for human-readable formats, or its
+            /// stable binary encoding otherwise.
             #[inline]
             pub fn required<S: serde_core::Serializer>(
                 span: &crate::Span,
                 se: S,
             ) -> Result<S::Ok, S::Error> {
-                se.collect_str(&CompactSpan(span))
+                serde_core::Serialize::serialize(&CompactSpan(span), se)
             }
 
             /// Serialize an optional `Span` in the [`friendly`] duration
-            /// format using compact designators.
+            /// format using compact designators for human-readable formats,
+            /// or its stable binary encoding otherwise.
             #[inline]
             pub fn optional<S: serde_core::Serializer>(
                 span: &Option<crate::Span>,
@@ -1898,6 +1945,26 @@ mod tests {
     }
 
     #[test]
+    fn duration_friendly_compact_required_postcard() {
+        #[derive(
+            Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize,
+        )]
+        struct Data {
+            #[serde(
+                serialize_with = "crate::fmt::serde::duration::friendly::compact::required"
+            )]
+            duration: SignedDuration,
+        }
+
+        let expected = Data {
+            duration: SignedDuration::new(36 * 60 * 60 + 1, 100_000_000),
+        };
+        let serialized = postcard::to_allocvec(&expected).unwrap();
+        let deserialized: Data = postcard::from_bytes(&serialized).unwrap();
+        assert_eq!(expected, deserialized);
+    }
+
+    #[test]
     fn duration_friendly_compact_optional() {
         #[derive(Debug, serde::Deserialize, serde::Serialize)]
         struct Data {
@@ -1930,14 +1997,14 @@ mod tests {
             ts: Option<SignedDuration>,
         }
 
-        let expected = Data {
-            ts: Some(SignedDuration::new(36 * 60 * 60 + 1, 100_000_000)),
-        };
-
-        let serialized = postcard::to_allocvec(&expected).unwrap();
-        let deserialized: Data = postcard::from_bytes(&serialized).unwrap();
-
-        assert_eq!(expected, deserialized);
+        let duration = SignedDuration::new(36 * 60 * 60 + 1, 100_000_000);
+        for ts in [Some(duration), None] {
+            let expected = Data { ts };
+            let serialized = postcard::to_allocvec(&expected).unwrap();
+            let deserialized: Data =
+                postcard::from_bytes(&serialized).unwrap();
+            assert_eq!(expected, deserialized);
+        }
     }
 
     #[test]
@@ -2092,6 +2159,24 @@ mod tests {
     }
 
     #[test]
+    fn span_friendly_compact_required_postcard() {
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Data {
+            #[serde(
+                serialize_with = "crate::fmt::serde::span::friendly::compact::required"
+            )]
+            span: Span,
+        }
+
+        let expected = Data {
+            span: Span::new().years(1).months(2).hours(36).milliseconds(1100),
+        };
+        let serialized = postcard::to_allocvec(&expected).unwrap();
+        let deserialized: Data = postcard::from_bytes(&serialized).unwrap();
+        assert_eq!(expected.span.fieldwise(), deserialized.span.fieldwise(),);
+    }
+
+    #[test]
     fn span_friendly_compact_optional() {
         #[derive(Debug, serde::Deserialize, serde::Serialize)]
         struct Data {
@@ -2122,19 +2207,17 @@ mod tests {
             ts: Option<Span>,
         }
 
-        let expected = Data {
-            ts: Some(
-                Span::new().years(1).months(2).hours(36).milliseconds(1100),
-            ),
-        };
-
-        let serialized = postcard::to_allocvec(&expected).unwrap();
-        let deserialized: Data = postcard::from_bytes(&serialized).unwrap();
-
-        assert_eq!(
-            expected.ts.map(|span| span.fieldwise()),
-            deserialized.ts.map(|span| span.fieldwise())
-        );
+        let span = Span::new().years(1).months(2).hours(36).milliseconds(1100);
+        for ts in [Some(span), None] {
+            let expected = Data { ts };
+            let serialized = postcard::to_allocvec(&expected).unwrap();
+            let deserialized: Data =
+                postcard::from_bytes(&serialized).unwrap();
+            assert_eq!(
+                expected.ts.map(|span| span.fieldwise()),
+                deserialized.ts.map(|span| span.fieldwise())
+            );
+        }
     }
 
     #[test]
