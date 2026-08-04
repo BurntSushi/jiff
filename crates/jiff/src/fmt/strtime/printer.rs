@@ -79,16 +79,15 @@ pub(super) struct Formatter<
     'buffer,
     'data,
     'write,
-    L,
 > {
-    pub(super) config: &'config Config<L>,
+    pub(super) config: &'config Config<dyn Custom + 'config>,
     pub(super) fmt: &'fmt [u8],
     pub(super) tm: &'tm BrokenDownTime,
     pub(super) wtr: &'writer mut BorrowedWriter<'buffer, 'data, 'write>,
 }
 
-impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
-    Formatter<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L>
+impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write>
+    Formatter<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write>
 {
     #[inline(never)]
     pub(super) fn format(&mut self) -> Result<(), Error> {
