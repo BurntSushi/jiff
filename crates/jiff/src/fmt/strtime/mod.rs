@@ -475,16 +475,18 @@ pub fn format(
 /// [`icu`]: https://docs.rs/icu
 /// [`jiff-icu`]: https://docs.rs/jiff-icu
 #[derive(Clone, Debug)]
-pub struct Config<C> {
-    custom: C,
+pub struct Config<C: ?Sized> {
     lenient: bool,
+    // This must remain the final field so that `Config<C>` can be unsized to
+    // `Config<dyn Custom>`.
+    custom: C,
 }
 
 impl Config<DefaultCustom> {
     /// Create a new default `Config` that uses [`DefaultCustom`].
     #[inline]
     pub const fn new() -> Config<DefaultCustom> {
-        Config { custom: DefaultCustom::new(), lenient: false }
+        Config { lenient: false, custom: DefaultCustom::new() }
     }
 }
 
@@ -493,7 +495,7 @@ impl<C> Config<C> {
     /// that use this configuration.
     #[inline]
     pub fn custom<U: Custom>(self, custom: U) -> Config<U> {
-        Config { custom, lenient: self.lenient }
+        Config { lenient: self.lenient, custom }
     }
 
     /// Enable lenient formatting.
@@ -659,18 +661,38 @@ impl<C> Config<C> {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
+/// # Trait objects
+///
+/// `Custom` is dyn-compatible. A configuration containing a concrete
+/// implementation can be coerced to one containing a `dyn Custom` trait
+/// object without allocating:
+///
+/// ```
+/// use jiff::{civil, fmt::strtime::{BrokenDownTime, PosixCustom, Config, Custom}};
+///
+/// let config = Config::new().custom(PosixCustom::new());
+/// let config: &Config<dyn Custom> = &config;
+/// let tm = BrokenDownTime::from(civil::date(2025, 7, 1).at(17, 30, 0, 0));
+/// assert_eq!(
+///     tm.to_string_with_config(config, "%c")?,
+///     "Tue Jul  1 17:30:00 2025",
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
 /// [`icu`]: https://docs.rs/icu
 /// [`jiff-icu`]: https://docs.rs/jiff-icu
-pub trait Custom: Sized {
+pub trait Custom {
     /// Called when formatting a datetime with the `%c` flag.
     ///
     /// This defaults to the implementation for [`DefaultCustom`].
-    fn format_datetime<W: Write>(
+    fn format_datetime(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         if matches!(ext.flag, Some(Flag::Uppercase)) {
             tm.format_with_config(config, "%Y M%m %-d, %^a %H:%M:%S", wtr)
@@ -682,12 +704,12 @@ pub trait Custom: Sized {
     /// Called when formatting a datetime with the `%x` flag.
     ///
     /// This defaults to the implementation for [`DefaultCustom`].
-    fn format_date<W: Write>(
+    fn format_date(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         _ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         // 2025 M04 27
         tm.format_with_config(config, "%Y M%m %-d", wtr)
@@ -696,12 +718,12 @@ pub trait Custom: Sized {
     /// Called when formatting a datetime with the `%X` flag.
     ///
     /// This defaults to the implementation for [`DefaultCustom`].
-    fn format_time<W: Write>(
+    fn format_time(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         _ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         tm.format_with_config(config, "%H:%M:%S", wtr)
     }
@@ -709,12 +731,12 @@ pub trait Custom: Sized {
     /// Called when formatting a datetime with the `%r` flag.
     ///
     /// This defaults to the implementation for [`DefaultCustom`].
-    fn format_12hour_time<W: Write>(
+    fn format_12hour_time(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         if matches!(ext.flag, Some(Flag::Uppercase)) {
             tm.format_with_config(config, "%-I:%M:%S %^p", wtr)
@@ -796,12 +818,12 @@ impl PosixCustom {
 }
 
 impl Custom for PosixCustom {
-    fn format_datetime<W: Write>(
+    fn format_datetime(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         if matches!(ext.flag, Some(Flag::Uppercase)) {
             tm.format_with_config(config, "%^a %^b %e %H:%M:%S %Y", wtr)
@@ -810,32 +832,32 @@ impl Custom for PosixCustom {
         }
     }
 
-    fn format_date<W: Write>(
+    fn format_date(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         _ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         tm.format_with_config(config, "%m/%d/%y", wtr)
     }
 
-    fn format_time<W: Write>(
+    fn format_time(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         _ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         tm.format_with_config(config, "%H:%M:%S", wtr)
     }
 
-    fn format_12hour_time<W: Write>(
+    fn format_12hour_time(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         if matches!(ext.flag, Some(Flag::Uppercase)) {
             tm.format_with_config(config, "%I:%M:%S %^p", wtr)
@@ -1126,8 +1148,8 @@ impl BrokenDownTime {
     ///
     /// This routine is like [`BrokenDownTime::format`], except that it
     /// permits callers to provide their own configuration instead of using
-    /// the default. This routine also accepts a `&mut W` instead of a `W`,
-    /// which may be more flexible in some situations.
+    /// the default. This routine also accepts a `&mut dyn Write` instead of a
+    /// `W`, which may be more flexible in some situations.
     ///
     /// # Errors
     ///
@@ -1161,11 +1183,11 @@ impl BrokenDownTime {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn format_with_config<W: Write, L: Custom>(
+    pub fn format_with_config(
         &self,
-        config: &Config<L>,
+        config: &Config<dyn Custom + '_>,
         format: impl AsRef<[u8]>,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         let fmt = format.as_ref();
         let mut buf = ArrayBuffer::<100>::default();
@@ -1265,9 +1287,9 @@ impl BrokenDownTime {
     /// ```
     #[cfg(feature = "alloc")]
     #[inline]
-    pub fn to_string_with_config<L: Custom>(
+    pub fn to_string_with_config(
         &self,
-        config: &Config<L>,
+        config: &Config<dyn Custom + '_>,
         format: impl AsRef<[u8]>,
     ) -> Result<alloc::string::String, Error> {
         let format = format.as_ref();
