@@ -1388,7 +1388,7 @@ impl Span {
     /// The number returned is `-1` when this span is negative,
     /// `0` when this span is zero and `1` when this span is positive.
     #[inline]
-    pub fn signum(self) -> i8 {
+    pub fn signum(&self) -> i8 {
         self.sign.signum()
     }
 
@@ -1405,7 +1405,7 @@ impl Span {
     /// assert!((-2.months()).is_negative());
     /// ```
     #[inline]
-    pub fn is_positive(self) -> bool {
+    pub fn is_positive(&self) -> bool {
         self.get_sign().is_positive()
     }
 
@@ -1422,7 +1422,7 @@ impl Span {
     /// assert!((-2.months()).is_negative());
     /// ```
     #[inline]
-    pub fn is_negative(self) -> bool {
+    pub fn is_negative(&self) -> bool {
         self.get_sign().is_negative()
     }
 
@@ -1440,7 +1440,7 @@ impl Span {
     /// assert!(0.seconds().seconds(1).seconds(0).is_zero());
     /// ```
     #[inline]
-    pub fn is_zero(self) -> bool {
+    pub fn is_zero(&self) -> bool {
         self.sign.is_zero()
     }
 
@@ -1517,13 +1517,14 @@ impl Span {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn checked_mul(mut self, rhs: i64) -> Result<Span, Error> {
+    pub fn checked_mul(&self, rhs: i64) -> Result<Span, Error> {
+        let mut this = *self;
         if rhs == 0 {
             return Ok(Span::default());
         } else if rhs == 1 {
-            return Ok(self);
+            return Ok(this);
         }
-        self.sign = self.sign * Sign::from(rhs);
+        this.sign = this.sign * Sign::from(rhs);
         // This can only fail when `rhs == i64::MIN`, which is out of bounds
         // for all possible span units (including nanoseconds).
         let rhs = rhs.checked_abs().ok_or_else(b::SpanMultiple::error)?;
@@ -1536,52 +1537,52 @@ impl Span {
         // actually going to multiply with it. If our span has non-zero years,
         // then our multiple can't exceed the bounds of `SpanYears`, otherwise
         // it is guaranteed to overflow.
-        if self.years != 0 {
+        if this.years != 0 {
             let rhs = b::SpanYears::check(rhs)?;
-            self.years = b::SpanYears::checked_mul(self.years, rhs)?;
+            this.years = b::SpanYears::checked_mul(this.years, rhs)?;
         }
-        if self.months != 0 {
+        if this.months != 0 {
             let rhs = b::SpanMonths::check(rhs)?;
-            self.months = b::SpanMonths::checked_mul(self.months, rhs)?;
+            this.months = b::SpanMonths::checked_mul(this.months, rhs)?;
         }
-        if self.weeks != 0 {
+        if this.weeks != 0 {
             let rhs = b::SpanWeeks::check(rhs)?;
-            self.weeks = b::SpanWeeks::checked_mul(self.weeks, rhs)?;
+            this.weeks = b::SpanWeeks::checked_mul(this.weeks, rhs)?;
         }
-        if self.days != 0 {
+        if this.days != 0 {
             let rhs = b::SpanDays::check(rhs)?;
-            self.days = b::SpanDays::checked_mul(self.days, rhs)?;
+            this.days = b::SpanDays::checked_mul(this.days, rhs)?;
         }
-        if self.hours != 0 {
+        if this.hours != 0 {
             let rhs = b::SpanHours::check(rhs)?;
-            self.hours = b::SpanHours::checked_mul(self.hours, rhs)?;
+            this.hours = b::SpanHours::checked_mul(this.hours, rhs)?;
         }
-        if self.minutes != 0 {
-            self.minutes = b::SpanMinutes::checked_mul(self.minutes, rhs)?;
+        if this.minutes != 0 {
+            this.minutes = b::SpanMinutes::checked_mul(this.minutes, rhs)?;
         }
-        if self.seconds != 0 {
-            self.seconds = b::SpanSeconds::checked_mul(self.seconds, rhs)?;
+        if this.seconds != 0 {
+            this.seconds = b::SpanSeconds::checked_mul(this.seconds, rhs)?;
         }
-        if self.milliseconds != 0 {
-            self.milliseconds =
-                b::SpanMilliseconds::checked_mul(self.milliseconds, rhs)?;
+        if this.milliseconds != 0 {
+            this.milliseconds =
+                b::SpanMilliseconds::checked_mul(this.milliseconds, rhs)?;
         }
-        if self.microseconds != 0 {
-            self.microseconds =
-                b::SpanMicroseconds::checked_mul(self.microseconds, rhs)?;
+        if this.microseconds != 0 {
+            this.microseconds =
+                b::SpanMicroseconds::checked_mul(this.microseconds, rhs)?;
         }
-        if self.nanoseconds != 0 {
-            self.nanoseconds =
-                b::SpanNanoseconds::checked_mul(self.nanoseconds, rhs)?;
+        if this.nanoseconds != 0 {
+            this.nanoseconds =
+                b::SpanNanoseconds::checked_mul(this.nanoseconds, rhs)?;
         }
-        // N.B. We don't need to update `self.units` here since it shouldn't
+        // N.B. We don't need to update `this.units` here since it shouldn't
         // change. The only way it could is if a unit goes from zero to
         // non-zero (which can't happen, because multiplication by zero is
         // always zero), or if a unit goes from non-zero to zero. That also
         // can't happen because we handle the case of the factor being zero
         // specially above, and it returns a `Span` will all units zero
         // correctly.
-        Ok(self)
+        Ok(this)
     }
 
     /// Adds a span to this one and returns the sum as a new span.
