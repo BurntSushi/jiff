@@ -6,6 +6,8 @@ TODO
 
 * [#617](https://github.com/BurntSushi/jiff/pull/617):
 Fixes a bug in `jiff_core::tz::Offset` checked subtraction routine.
+* [#627](https://github.com/BurntSushi/jiff/issues/627):
+Use `serialize_some` for optional Serde helpers in `jiff::fmt::serde`.
 
 
 0.2.35 (2026-07-25)

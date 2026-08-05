@@ -248,6 +248,15 @@ pub mod duration {
                 }
             }
 
+            impl<'a> serde_core::Serialize for CompactDuration<'a> {
+                fn serialize<S: serde_core::Serializer>(
+                    &self,
+                    se: S,
+                ) -> Result<S::Ok, S::Error> {
+                    se.collect_str(self)
+                }
+            }
+
             /// Serialize a required `SignedDuration` in the [`friendly`]
             /// duration format using compact designators.
             #[inline]
@@ -267,7 +276,9 @@ pub mod duration {
             ) -> Result<S::Ok, S::Error> {
                 match *duration {
                     None => se.serialize_none(),
-                    Some(ref duration) => required(duration, se),
+                    Some(ref duration) => {
+                        se.serialize_some(&CompactDuration(duration))
+                    }
                 }
             }
         }
@@ -392,6 +403,15 @@ pub mod span {
                 }
             }
 
+            impl<'a> serde_core::Serialize for CompactSpan<'a> {
+                fn serialize<S: serde_core::Serializer>(
+                    &self,
+                    se: S,
+                ) -> Result<S::Ok, S::Error> {
+                    se.collect_str(self)
+                }
+            }
+
             /// Serialize a required `Span` in the [`friendly`] duration format
             /// using compact designators.
             #[inline]
@@ -411,7 +431,7 @@ pub mod span {
             ) -> Result<S::Ok, S::Error> {
                 match *span {
                     None => se.serialize_none(),
-                    Some(ref span) => required(span, se),
+                    Some(ref span) => se.serialize_some(&CompactSpan(span)),
                 }
             }
         }
@@ -620,7 +640,7 @@ pub mod timestamp {
             ) -> Result<S::Ok, S::Error> {
                 match *timestamp {
                     None => se.serialize_none(),
-                    Some(ref ts) => super::required::serialize(ts, se),
+                    Some(ref ts) => se.serialize_some(&ts.as_second()),
                 }
             }
 
@@ -790,7 +810,7 @@ pub mod timestamp {
             ) -> Result<S::Ok, S::Error> {
                 match *timestamp {
                     None => se.serialize_none(),
-                    Some(ref ts) => super::required::serialize(ts, se),
+                    Some(ref ts) => se.serialize_some(&ts.as_millisecond()),
                 }
             }
 
@@ -960,7 +980,7 @@ pub mod timestamp {
             ) -> Result<S::Ok, S::Error> {
                 match *timestamp {
                     None => se.serialize_none(),
-                    Some(ref ts) => super::required::serialize(ts, se),
+                    Some(ref ts) => se.serialize_some(&&ts.as_microsecond()),
                 }
             }
 
@@ -1069,7 +1089,7 @@ pub mod timestamp {
             ) -> Result<S::Ok, S::Error> {
                 match *timestamp {
                     None => se.serialize_none(),
-                    Some(ref ts) => super::required::serialize(ts, se),
+                    Some(ref ts) => se.serialize_some(&ts.as_nanosecond()),
                 }
             }
 
@@ -1192,6 +1212,31 @@ pub mod tz {
         }
     }
 
+    impl<'a> serde_core::Serialize for TemporalTimeZone<'a> {
+        fn serialize<S: serde_core::Serializer>(
+            &self,
+            se: S,
+        ) -> Result<S::Ok, S::Error> {
+            se.collect_str(self)
+        }
+    }
+
+    fn check_succinct_serialization<S: serde_core::Serializer>(
+        tz: &crate::tz::TimeZone,
+    ) -> Result<&crate::tz::TimeZone, S::Error> {
+        if tz.has_succinct_serialization() {
+            Ok(tz)
+        } else {
+            Err(<S::Error as serde_core::ser::Error>::custom(
+                "time zones without IANA identifiers that aren't either \
+                 fixed offsets or a POSIX time zone can't be serialized \
+                 (this typically occurs when this is a system time zone \
+                 derived from `/etc/localtime` on Unix systems that \
+                 isn't symlinked to an entry in `/usr/share/zoneinfo)",
+            ))
+        }
+    }
+
     /// A required visitor for `TimeZone`.
     struct Visitor;
 
@@ -1279,15 +1324,7 @@ pub mod tz {
             tz: &crate::tz::TimeZone,
             se: S,
         ) -> Result<S::Ok, S::Error> {
-            if !tz.has_succinct_serialization() {
-                return Err(<S::Error as serde_core::ser::Error>::custom(
-                    "time zones without IANA identifiers that aren't either \
-                     fixed offsets or a POSIX time zone can't be serialized \
-                     (this typically occurs when this is a system time zone \
-                      derived from `/etc/localtime` on Unix systems that \
-                      isn't symlinked to an entry in `/usr/share/zoneinfo)",
-                ));
-            }
+            let tz = super::check_succinct_serialization::<S>(tz)?;
             se.collect_str(&super::TemporalTimeZone(tz))
         }
 
@@ -1321,7 +1358,10 @@ pub mod tz {
         ) -> Result<S::Ok, S::Error> {
             match *tz {
                 None => se.serialize_none(),
-                Some(ref tz) => super::required::serialize(tz, se),
+                Some(ref tz) => {
+                    let tz = super::check_succinct_serialization::<S>(tz)?;
+                    se.serialize_some(&super::TemporalTimeZone(tz))
+                }
             }
         }
 
@@ -1589,9 +1629,9 @@ pub mod unsigned_duration {
                 ) -> Result<S::Ok, S::Error> {
                     match *duration {
                         None => se.serialize_none(),
-                        Some(ref duration) => {
-                            super::required::serialize(duration, se)
-                        }
+                        Some(ref duration) => se.serialize_some(
+                            &super::DisplayFriendlyCompact(duration),
+                        ),
                     }
                 }
 
@@ -1609,6 +1649,15 @@ pub mod unsigned_duration {
             /// A helper for printing a `std::time::Duration` in the friendly
             /// format using compact unit designators.
             struct DisplayFriendlyCompact<'a>(&'a core::time::Duration);
+
+            impl<'a> serde_core::Serialize for DisplayFriendlyCompact<'a> {
+                fn serialize<S: serde_core::Serializer>(
+                    &self,
+                    se: S,
+                ) -> Result<S::Ok, S::Error> {
+                    se.collect_str(self)
+                }
+            }
 
             impl<'a> core::fmt::Display for DisplayFriendlyCompact<'a> {
                 fn fmt(
@@ -1731,7 +1780,9 @@ pub mod unsigned_duration {
         ) -> Result<S::Ok, S::Error> {
             match *duration {
                 None => se.serialize_none(),
-                Some(ref duration) => super::required::serialize(duration, se),
+                Some(ref duration) => {
+                    se.serialize_some(&super::DisplayISO8601(duration))
+                }
             }
         }
 
@@ -1747,6 +1798,15 @@ pub mod unsigned_duration {
 
     /// A helper for printing a `std::time::Duration` in ISO 8601 format.
     struct DisplayISO8601<'a>(&'a core::time::Duration);
+
+    impl<'a> serde_core::Serialize for DisplayISO8601<'a> {
+        fn serialize<S: serde_core::Serializer>(
+            &self,
+            se: S,
+        ) -> Result<S::Ok, S::Error> {
+            se.collect_str(self)
+        }
+    }
 
     impl<'a> core::fmt::Display for DisplayISO8601<'a> {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -1811,7 +1871,8 @@ pub mod unsigned_duration {
 #[cfg(test)]
 mod tests {
     use crate::{
-        span::span_eq, SignedDuration, Span, SpanFieldwise, Timestamp, ToSpan,
+        span::span_eq, tz::TimeZone, SignedDuration, Span, SpanFieldwise,
+        Timestamp, ToSpan,
     };
     use core::time::Duration as UnsignedDuration;
 
@@ -1855,6 +1916,28 @@ mod tests {
 
         let expected = r#"{"duration":"36h 1s 100ms"}"#;
         assert_eq!(serde_json::to_string(&got).unwrap(), expected);
+    }
+
+    #[test]
+    fn duration_friendly_compact_optional_postcard() {
+        #[derive(
+            Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize,
+        )]
+        struct Data {
+            #[serde(
+                serialize_with = "crate::fmt::serde::duration::friendly::compact::optional"
+            )]
+            ts: Option<SignedDuration>,
+        }
+
+        let expected = Data {
+            ts: Some(SignedDuration::new(36 * 60 * 60 + 1, 100_000_000)),
+        };
+
+        let serialized = postcard::to_allocvec(&expected).unwrap();
+        let deserialized: Data = postcard::from_bytes(&serialized).unwrap();
+
+        assert_eq!(expected, deserialized);
     }
 
     #[test]
@@ -1911,6 +1994,26 @@ mod tests {
     }
 
     #[test]
+    fn unsigned_duration_optional_postcard() {
+        #[derive(
+            Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize,
+        )]
+        struct Data {
+            #[serde(with = "crate::fmt::serde::unsigned_duration::optional")]
+            ts: Option<UnsignedDuration>,
+        }
+
+        let expected = Data {
+            ts: Some(UnsignedDuration::new(36 * 60 * 60 + 1, 100_000_000)),
+        };
+
+        let serialized = postcard::to_allocvec(&expected).unwrap();
+        let deserialized: Data = postcard::from_bytes(&serialized).unwrap();
+
+        assert_eq!(expected, deserialized);
+    }
+
+    #[test]
     fn unsigned_duration_compact_required() {
         #[derive(Debug, serde::Deserialize, serde::Serialize)]
         struct Data {
@@ -1946,6 +2049,28 @@ mod tests {
             Some(UnsignedDuration::new(36 * 60 * 60 + 1, 100_000_000))
         );
         assert_eq!(serde_json::to_string(&got).unwrap(), json);
+    }
+
+    #[test]
+    fn unsigned_duration_compact_optional_postcard() {
+        #[derive(
+            Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize,
+        )]
+        struct Data {
+            #[serde(
+                with = "crate::fmt::serde::unsigned_duration::friendly::compact::optional"
+            )]
+            ts: Option<UnsignedDuration>,
+        }
+
+        let expected = Data {
+            ts: Some(UnsignedDuration::new(36 * 60 * 60 + 1, 100_000_000)),
+        };
+
+        let serialized = postcard::to_allocvec(&expected).unwrap();
+        let deserialized: Data = postcard::from_bytes(&serialized).unwrap();
+
+        assert_eq!(expected, deserialized);
     }
 
     #[test]
@@ -1988,6 +2113,31 @@ mod tests {
     }
 
     #[test]
+    fn span_friendly_compact_optional_postcard() {
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Data {
+            #[serde(
+                serialize_with = "crate::fmt::serde::span::friendly::compact::optional"
+            )]
+            ts: Option<Span>,
+        }
+
+        let expected = Data {
+            ts: Some(
+                Span::new().years(1).months(2).hours(36).milliseconds(1100),
+            ),
+        };
+
+        let serialized = postcard::to_allocvec(&expected).unwrap();
+        let deserialized: Data = postcard::from_bytes(&serialized).unwrap();
+
+        assert_eq!(
+            expected.ts.map(|span| span.fieldwise()),
+            deserialized.ts.map(|span| span.fieldwise())
+        );
+    }
+
+    #[test]
     fn timestamp_second_required() {
         #[derive(Debug, serde::Deserialize, serde::Serialize)]
         struct Data {
@@ -2013,6 +2163,24 @@ mod tests {
         let got: Data = serde_json::from_str(&json).unwrap();
         assert_eq!(got.ts, Some(Timestamp::from_second(1517644800).unwrap()));
         assert_eq!(serde_json::to_string(&got).unwrap(), json);
+    }
+
+    #[test]
+    fn timestamp_second_optional_postcard() {
+        #[derive(
+            Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize,
+        )]
+        struct Data {
+            #[serde(with = "crate::fmt::serde::timestamp::second::optional")]
+            ts: Option<Timestamp>,
+        }
+
+        let expected = Data { ts: Some(Timestamp::constant(123_456_789, 0)) };
+
+        let serialized = postcard::to_allocvec(&expected).unwrap();
+        let deserialized: Data = postcard::from_bytes(&serialized).unwrap();
+
+        assert_eq!(expected, deserialized);
     }
 
     #[test]
@@ -2070,6 +2238,26 @@ mod tests {
     }
 
     #[test]
+    fn timestamp_millisecond_optional_postcard() {
+        #[derive(
+            Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize,
+        )]
+        struct Data {
+            #[serde(
+                with = "crate::fmt::serde::timestamp::millisecond::optional"
+            )]
+            ts: Option<Timestamp>,
+        }
+
+        let expected = Data { ts: Some(Timestamp::constant(123_456_789, 0)) };
+
+        let serialized = postcard::to_allocvec(&expected).unwrap();
+        let deserialized: Data = postcard::from_bytes(&serialized).unwrap();
+
+        assert_eq!(expected, deserialized);
+    }
+
+    #[test]
     fn timestamp_microsecond_required() {
         #[derive(Debug, serde::Deserialize, serde::Serialize)]
         struct Data {
@@ -2124,6 +2312,26 @@ mod tests {
     }
 
     #[test]
+    fn timestamp_microsecond_optional_postcard() {
+        #[derive(
+            Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize,
+        )]
+        struct Data {
+            #[serde(
+                with = "crate::fmt::serde::timestamp::microsecond::optional"
+            )]
+            ts: Option<Timestamp>,
+        }
+
+        let expected = Data { ts: Some(Timestamp::constant(123_456_789, 0)) };
+
+        let serialized = postcard::to_allocvec(&expected).unwrap();
+        let deserialized: Data = postcard::from_bytes(&serialized).unwrap();
+
+        assert_eq!(expected, deserialized);
+    }
+
+    #[test]
     fn timestamp_nanosecond_required() {
         #[derive(Debug, serde::Deserialize, serde::Serialize)]
         struct Data {
@@ -2175,5 +2383,82 @@ mod tests {
             Some(Timestamp::from_nanosecond(1517644800_123456789).unwrap())
         );
         assert_eq!(serde_json::to_string(&got).unwrap(), json);
+    }
+
+    #[test]
+    fn timestamp_nanosecond_optional_postcard() {
+        #[derive(
+            Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize,
+        )]
+        struct Data {
+            #[serde(
+                with = "crate::fmt::serde::timestamp::nanosecond::optional"
+            )]
+            ts: Option<Timestamp>,
+        }
+
+        let expected = Data { ts: Some(Timestamp::constant(123_456_789, 0)) };
+
+        let serialized = postcard::to_allocvec(&expected).unwrap();
+        let deserialized: Data = postcard::from_bytes(&serialized).unwrap();
+
+        assert_eq!(expected, deserialized);
+    }
+
+    #[test]
+    fn timezone_required() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Record {
+            #[serde(with = "crate::fmt::serde::tz::required")]
+            tz: TimeZone,
+        }
+
+        let json = r#"{"tz":"America/Nuuk"}"#;
+        let got: Record = serde_json::from_str(&json).unwrap();
+        assert_eq!(got.tz, TimeZone::get("America/Nuuk").unwrap());
+        assert_eq!(serde_json::to_string(&got).unwrap(), json);
+    }
+
+    #[test]
+    fn timezone_optional() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Record {
+            #[serde(with = "crate::fmt::serde::tz::optional")]
+            tz: Option<TimeZone>,
+        }
+
+        let json = r#"{"tz":"America/Nuuk"}"#;
+        let got: Record = serde_json::from_str(&json).unwrap();
+        assert_eq!(got.tz, Some(TimeZone::get("America/Nuuk").unwrap()));
+        assert_eq!(serde_json::to_string(&got).unwrap(), json);
+    }
+
+    #[test]
+    fn timezone_optional_postcard() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        #[derive(
+            Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize,
+        )]
+        struct Data {
+            #[serde(with = "crate::fmt::serde::tz::optional")]
+            tz: Option<TimeZone>,
+        }
+
+        let expected =
+            Data { tz: Some(TimeZone::get("America/Nuuk").unwrap()) };
+        let serialized = postcard::to_allocvec(&expected).unwrap();
+        let deserialized: Data = postcard::from_bytes(&serialized).unwrap();
+        assert_eq!(expected, deserialized);
     }
 }
