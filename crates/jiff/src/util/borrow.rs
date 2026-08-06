@@ -21,6 +21,19 @@ impl<'a, T> DumbCow<'a, T> {
             DumbCow::Borrowed(ref this) => DumbCow::Borrowed(this),
         }
     }
+
+    /// Converts this cow into an "owned" variant, cloning if necessary.
+    ///
+    /// If this cow is already an "owned" variant, then this is a no-op.
+    pub(crate) fn into_owned(self) -> DumbCow<'static, T>
+    where
+        T: Clone,
+    {
+        match self {
+            DumbCow::Owned(value) => DumbCow::Owned(value),
+            DumbCow::Borrowed(value) => DumbCow::Owned(value.clone()),
+        }
+    }
 }
 
 impl<'a, T> core::ops::Deref for DumbCow<'a, T> {
