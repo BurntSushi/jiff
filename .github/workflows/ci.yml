@@ -560,6 +560,7 @@ jobs:
     env:
       CARGO_BUILD_TARGET: wasm32-unknown-emscripten
       CARGO_TARGET_WASM32_UNKNOWN_EMSCRIPTEN_RUNNER: node
+      CARGO_TARGET_WASM32_UNKNOWN_EMSCRIPTEN_LINKER: em++
       INSTA_FORCE_PASS: 1
       INSTA_UPDATE: no
       RUSTFLAGS: >
@@ -583,7 +584,7 @@ jobs:
       - name: Build jiff-tzdb-platform
         run: cargo build --verbose -p jiff-tzdb-platform
       - name: Run library tests
-        run: cargo test --lib -- --nocapture
+        run: cargo test -p jiff --lib -- --nocapture
       - name: Run integration tests
         run: cargo test --test integration -- --nocapture
 

@@ -14,4 +14,4 @@ cd "$(dirname "$0")/.."
 # likely to see it with the bundled database while missing it completely with
 # the system database.
 echo "===== WITH ONLY THE BUNDLED TIME ZONE DATABASE ====="
-cargo test --no-default-features --features std,tz-system,tzdb-bundle-always
+cargo test -p jiff --no-default-features --features std,tz-system,tzdb-bundle-always
