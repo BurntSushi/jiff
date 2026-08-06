@@ -25,7 +25,7 @@ features=(
 )
 for f in "${features[@]}"; do
     echo "===== FEATURES: '$f' ====="
-    cargo build --no-default-features --features "$f"
-    cargo test --lib --no-default-features --features "$f"
-    cargo test --test integration --no-default-features --features "$f"
+    cargo build -p jiff --no-default-features --features "$f"
+    cargo test -p jiff --lib --no-default-features --features "$f"
+    cargo test -p jiff --test integration --no-default-features --features "$f"
 done

@@ -16,9 +16,9 @@ cd "$(dirname "$0")/.."
 # We accept this risk because this still runs a lot of tests, and the tests
 # that aren't covered are run in other configurations. Still, it's not ideal.
 echo "===== CORE ONLY ====="
-cargo build --no-default-features
-INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test --lib --no-default-features
-INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test --test integration --no-default-features
+cargo build -p jiff --no-default-features
+INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test -p jiff --lib --no-default-features
+INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test -p jiff --test integration --no-default-features
 
 # More core-only tests, when combined with compatible features.
 features=(
@@ -31,6 +31,6 @@ features=(
 for f in "${features[@]}"; do
     echo "===== COREONLY PLUS '$f' ====="
     cargo build --no-default-features --features "$f"
-    INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test --lib --no-default-features --features "$f"
-    INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test --test integration --no-default-features --features "$f"
+    INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test -p jiff --lib --no-default-features --features "$f"
+    INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test -p jiff --test integration --no-default-features --features "$f"
 done
