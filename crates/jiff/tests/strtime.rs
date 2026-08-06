@@ -16,7 +16,7 @@ fn custom_trait_object() {
             &self,
             _config: &Config<dyn Custom + '_>,
             _ext: &Extension,
-            _tm: &BrokenDownTime,
+            _tm: &BrokenDownTime<'_>,
             wtr: &mut dyn Write,
         ) -> Result<(), Error> {
             wtr.write_str(self.0)
@@ -28,4 +28,23 @@ fn custom_trait_object() {
     let config: &Config<dyn Custom + '_> = &config;
     let tm = BrokenDownTime::from(civil::date(2025, 7, 1));
     assert_eq!(tm.to_string_with_config(config, "%x").unwrap(), formatted);
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn broken_down_time_into_owned() {
+    if jiff::tz::db().is_definitively_empty() {
+        return;
+    }
+
+    let tm: BrokenDownTime<'static> = {
+        let zdt = civil::date(2024, 7, 15)
+            .at(16, 24, 59, 0)
+            .in_tz("America/New_York")
+            .unwrap();
+        let tm = BrokenDownTime::from(&zdt);
+        assert_eq!(tm.to_string("%Q %Z").unwrap(), "America/New_York EDT");
+        tm.into_owned()
+    };
+    assert_eq!(tm.to_string("%Q %Z").unwrap(), "America/New_York EDT");
 }
