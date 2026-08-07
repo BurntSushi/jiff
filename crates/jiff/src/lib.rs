@@ -800,13 +800,13 @@ mod zoned;
 
 /// Longer form documentation for Jiff.
 pub mod _documentation {
-    #[doc = include_str!("../COMPARE.md")]
+    #[doc = include_str!("../../../COMPARE.md")]
     pub mod comparison {}
-    #[doc = include_str!("../DESIGN.md")]
+    #[doc = include_str!("../../../DESIGN.md")]
     pub mod design {}
-    #[doc = include_str!("../PLATFORM.md")]
+    #[doc = include_str!("../../../PLATFORM.md")]
     pub mod platform {}
-    #[doc = include_str!("../CHANGELOG.md")]
+    #[doc = include_str!("../../../CHANGELOG.md")]
     pub mod changelog {}
 }
 
