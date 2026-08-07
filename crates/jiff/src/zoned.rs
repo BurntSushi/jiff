@@ -5919,7 +5919,7 @@ impl ZonedWith {
     /// assert_eq!(zdt3.datetime(), date(1947, 6, 8).at(1, 55, 0, 0));
     /// assert_eq!(
     ///     zdt3.offset(),
-    ///     tz::offset(-10).saturating_sub(30.minutes()),
+    ///     tz::offset(-10).saturating_sub(30.minutes())?,
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
