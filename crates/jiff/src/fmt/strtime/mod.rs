@@ -1188,7 +1188,7 @@ impl BrokenDownTime {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    #[inline]
+    #[inline(never)]
     pub fn format_with_config(
         &self,
         config: &Config<dyn Custom + '_>,
