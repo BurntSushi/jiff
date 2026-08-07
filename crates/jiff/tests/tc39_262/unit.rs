@@ -887,12 +887,13 @@ fn offset_checked_add_calendar() -> Result {
 
 #[test]
 fn offset_saturating_add_calendar() -> Result {
-    // TODO: This is weird and should change.
     // See: https://github.com/BurntSushi/jiff/issues/499
-    let offset = tz::Offset::MIN.saturating_add(1.day());
-    assert_eq!(offset, tz::Offset::MAX);
+    insta::assert_snapshot!(
+        tz::Offset::MIN.saturating_add(1.day()).unwrap_err(),
+        @"operation can only be performed with units of hours or smaller, but found non-zero 'day' units (operations on `jiff::Timestamp`, `jiff::tz::Offset` and `jiff::civil::Time` don't support calendar units in a `jiff::Span`)",
+    );
 
-    let offset = tz::Offset::MIN.saturating_add(24.hours());
+    let offset = tz::Offset::MIN.saturating_add(24.hours())?;
     assert_eq!(offset, tz::Offset::from_seconds(-(1 * 3600 + 59 * 60 + 59))?);
 
     Ok(())
