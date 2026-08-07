@@ -1166,13 +1166,13 @@ fn main() -> anyhow::Result<()> {
 Jiff, however, [does not support leap seconds][jiff-leap-seconds]:
 
 ```rust
-use jiff::{Timestamp, ToSpan};
+use jiff::{SignedDuration, Timestamp};
 
 fn main() -> anyhow::Result<()> {
     let ts1: Timestamp = "2015-06-30T23:00:00Z".parse()?;
     let ts2: Timestamp = "2015-07-01T00:00:00Z".parse()?;
     let span = ts2 - ts1;
-    assert_eq!(span, 3_600.seconds().fieldwise());
+    assert_eq!(span, SignedDuration::from_secs(3_600));
 
     Ok(())
 }
