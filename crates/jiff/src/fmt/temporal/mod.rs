@@ -494,7 +494,7 @@ impl DateTimeParser {
     /// // jump to 01:55 *and* our offset is corrected to -10:30.
     /// let zdt = zdt.checked_sub(10.minutes())?;
     /// assert_eq!(zdt.datetime(), date(1947, 6, 8).at(1, 55, 0, 0));
-    /// assert_eq!(zdt.offset(), tz::offset(-10).saturating_sub(30.minutes()));
+    /// assert_eq!(zdt.offset(), tz::offset(-10).saturating_sub(30.minutes())?);
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
