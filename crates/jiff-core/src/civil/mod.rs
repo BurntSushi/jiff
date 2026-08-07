@@ -179,11 +179,7 @@ pub const fn is_leap_year(year: i16) -> bool {
 /// This is guaranteed to either return `365` or `366`.
 #[inline]
 pub const fn days_in_year(year: i16) -> i16 {
-    if is_leap_year(year) {
-        366
-    } else {
-        365
-    }
+    if is_leap_year(year) { 366 } else { 365 }
 }
 
 /// Return the number of days in the given month.
@@ -193,11 +189,7 @@ pub const fn days_in_year(year: i16) -> i16 {
 pub const fn days_in_month(year: i16, month: i8) -> i8 {
     // From: https://github.com/BurntSushi/jiff/pull/23
     if month == 2 {
-        if is_leap_year(year) {
-            29
-        } else {
-            28
-        }
+        if is_leap_year(year) { 29 } else { 28 }
     } else {
         30 | (month ^ month >> 3)
     }
@@ -225,11 +217,7 @@ pub const fn is_long_iso_week_year(year: i16) -> bool {
 /// returns `true`.
 #[inline]
 pub const fn weeks_in_iso_week_year(year: i16) -> i8 {
-    if is_long_iso_week_year(year) {
-        53
-    } else {
-        52
-    }
+    if is_long_iso_week_year(year) { 53 } else { 52 }
 }
 
 #[cfg(test)]

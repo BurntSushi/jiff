@@ -6,14 +6,13 @@ use core::{
 use jcore::{constants as c, tz::Offset as JOffset};
 
 use crate::{
-    civil,
+    RoundMode, SignedDuration, Unit, civil,
     duration::{Duration, SDuration},
-    error::{tz::offset::Error as E, Error, ErrorContext},
+    error::{Error, ErrorContext, tz::offset::Error as E},
     span::Span,
     timestamp::Timestamp,
     tz::{AmbiguousOffset, AmbiguousTimestamp, AmbiguousZoned, TimeZone},
     util::{b, constant, round::Increment},
-    RoundMode, SignedDuration, Unit,
 };
 
 /// An enum indicating whether a particular datetime is in DST or not.
@@ -66,11 +65,7 @@ impl Dst {
 
 impl From<bool> for Dst {
     fn from(is_dst: bool) -> Dst {
-        if is_dst {
-            Dst::Yes
-        } else {
-            Dst::No
-        }
+        if is_dst { Dst::Yes } else { Dst::No }
     }
 }
 
@@ -699,6 +694,11 @@ impl Offset {
     /// result saturates on overflow. That is, instead of overflow, either
     /// [`Offset::MIN`] or [`Offset::MAX`] is returned.
     ///
+    /// # Errors
+    ///
+    /// This returns an error if the given `Span` contains any non-zero units
+    /// greater than hours.
+    ///
     /// # Example
     ///
     /// This example shows some cases where saturation will occur.
@@ -706,38 +706,39 @@ impl Offset {
     /// ```
     /// use jiff::{tz::Offset, SignedDuration, ToSpan};
     ///
-    /// // Adding units above 'day' always results in saturation.
-    /// assert_eq!(Offset::UTC.saturating_add(1.weeks()), Offset::MAX);
-    /// assert_eq!(Offset::UTC.saturating_add(1.months()), Offset::MAX);
-    /// assert_eq!(Offset::UTC.saturating_add(1.years()), Offset::MAX);
+    /// // Spans with non-zero calendar units return an error.
+    /// assert!(Offset::UTC.saturating_add(1.weeks()).is_err());
+    /// assert!(Offset::UTC.saturating_add(1.months()).is_err());
+    /// assert!(Offset::UTC.saturating_add(1.years()).is_err());
     ///
     /// // Adding even 1 second to the max, or subtracting 1 from the min,
-    /// // will result in saturationg.
-    /// assert_eq!(Offset::MIN.saturating_add(-1.seconds()), Offset::MIN);
-    /// assert_eq!(Offset::MAX.saturating_add(1.seconds()), Offset::MAX);
+    /// // will result in saturation.
+    /// assert_eq!(Offset::MIN.saturating_add(-1.seconds())?, Offset::MIN);
+    /// assert_eq!(Offset::MAX.saturating_add(1.seconds())?, Offset::MAX);
     ///
     /// // Adding absolute durations also saturates as expected.
-    /// assert_eq!(Offset::UTC.saturating_add(SignedDuration::MAX), Offset::MAX);
-    /// assert_eq!(Offset::UTC.saturating_add(SignedDuration::MIN), Offset::MIN);
-    /// assert_eq!(Offset::UTC.saturating_add(std::time::Duration::MAX), Offset::MAX);
+    /// assert_eq!(Offset::UTC.saturating_add(SignedDuration::MAX)?, Offset::MAX);
+    /// assert_eq!(Offset::UTC.saturating_add(SignedDuration::MIN)?, Offset::MIN);
+    /// assert_eq!(Offset::UTC.saturating_add(std::time::Duration::MAX)?, Offset::MAX);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
     pub fn saturating_add<A: Into<OffsetArithmetic>>(
         self,
         duration: A,
-    ) -> Offset {
+    ) -> Result<Offset, Error> {
         let duration: OffsetArithmetic = duration.into();
-        self.checked_add(duration).unwrap_or_else(|_| {
-            if duration.is_negative() {
-                Offset::MIN
-            } else {
-                Offset::MAX
-            }
-        })
+        duration.saturating_add(self)
     }
 
-    /// This routine is identical to [`Offset::saturating_add`] with the span
-    /// parameter negated.
+    /// This routine is identical to [`Offset::saturating_add`] with the
+    /// duration parameter negated.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given `Span` contains any non-zero units
+    /// greater than hours.
     ///
     /// # Example
     ///
@@ -746,28 +747,32 @@ impl Offset {
     /// ```
     /// use jiff::{tz::Offset, SignedDuration, ToSpan};
     ///
-    /// // Adding units above 'day' always results in saturation.
-    /// assert_eq!(Offset::UTC.saturating_sub(1.weeks()), Offset::MIN);
-    /// assert_eq!(Offset::UTC.saturating_sub(1.months()), Offset::MIN);
-    /// assert_eq!(Offset::UTC.saturating_sub(1.years()), Offset::MIN);
+    /// // Spans with non-zero calendar units return an error.
+    /// assert!(Offset::UTC.saturating_sub(1.weeks()).is_err());
+    /// assert!(Offset::UTC.saturating_sub(1.months()).is_err());
+    /// assert!(Offset::UTC.saturating_sub(1.years()).is_err());
     ///
-    /// // Adding even 1 second to the max, or subtracting 1 from the min,
-    /// // will result in saturationg.
-    /// assert_eq!(Offset::MIN.saturating_sub(1.seconds()), Offset::MIN);
-    /// assert_eq!(Offset::MAX.saturating_sub(-1.seconds()), Offset::MAX);
+    /// // Subtracting even 1 second from the min, or adding 1 to the max,
+    /// // will result in saturation.
+    /// assert_eq!(Offset::MIN.saturating_sub(1.seconds())?, Offset::MIN);
+    /// assert_eq!(Offset::MAX.saturating_sub(-1.seconds())?, Offset::MAX);
     ///
     /// // Adding absolute durations also saturates as expected.
-    /// assert_eq!(Offset::UTC.saturating_sub(SignedDuration::MAX), Offset::MIN);
-    /// assert_eq!(Offset::UTC.saturating_sub(SignedDuration::MIN), Offset::MAX);
-    /// assert_eq!(Offset::UTC.saturating_sub(std::time::Duration::MAX), Offset::MIN);
+    /// assert_eq!(Offset::UTC.saturating_sub(SignedDuration::MAX)?, Offset::MIN);
+    /// assert_eq!(Offset::UTC.saturating_sub(SignedDuration::MIN)?, Offset::MAX);
+    /// assert_eq!(Offset::UTC.saturating_sub(std::time::Duration::MAX)?, Offset::MIN);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
     pub fn saturating_sub<A: Into<OffsetArithmetic>>(
         self,
         duration: A,
-    ) -> Offset {
+    ) -> Result<Offset, Error> {
         let duration: OffsetArithmetic = duration.into();
-        let Ok(duration) = duration.checked_neg() else { return Offset::MIN };
+        let Ok(duration) = duration.checked_neg() else {
+            return Ok(Offset::MIN);
+        };
         self.saturating_add(duration)
     }
 
@@ -1426,6 +1431,26 @@ impl OffsetArithmetic {
             SDuration::Span(span) => offset.checked_add_span(span),
             SDuration::Absolute(sdur) => offset.checked_add_duration(sdur),
         }
+    }
+
+    #[inline]
+    fn saturating_add(self, offset: Offset) -> Result<Offset, Error> {
+        let Ok(signed) = self.duration.to_signed() else {
+            return Ok(Offset::MAX);
+        };
+        let result = match signed {
+            SDuration::Span(span) => {
+                if let Some(err) = span.smallest_non_time_non_zero_unit_error()
+                {
+                    return Err(err);
+                }
+                offset.checked_add_span(span)
+            }
+            SDuration::Absolute(sdur) => offset.checked_add_duration(sdur),
+        };
+        Ok(result.unwrap_or_else(|_| {
+            if self.is_negative() { Offset::MIN } else { Offset::MAX }
+        }))
     }
 
     #[inline]

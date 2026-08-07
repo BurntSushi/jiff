@@ -110,11 +110,7 @@ impl Date {
             rbail!(b::Day::error());
         } else if day > 28 {
             let days_in_month = civil::days_in_month(year, month);
-            if day <= days_in_month {
-                day
-            } else {
-                days_in_month
-            }
+            if day <= days_in_month { day } else { days_in_month }
         } else {
             day
         };
@@ -283,11 +279,7 @@ impl Date {
     /// It is guaranteed that the value returned is either `365` or `366`.
     #[inline]
     pub const fn days_in_year(self) -> i16 {
-        if self.in_leap_year() {
-            366
-        } else {
-            365
-        }
+        if self.in_leap_year() { 366 } else { 365 }
     }
 
     /// Returns true when this date is in a leap year.
@@ -750,11 +742,7 @@ impl UnixEpochDay {
                 const fn div_ceil(lhs: u64, rhs: u64) -> u64 {
                     let d = lhs / rhs;
                     let r = lhs % rhs;
-                    if r > 0 {
-                        d + 1
-                    } else {
-                        d
-                    }
+                    if r > 0 { d + 1 } else { d }
                 }
 
                 let n = div_ceil(1u64 << 32, 7) as u32;
@@ -1187,11 +1175,7 @@ impl ISOWeekDate {
     /// returns `true`.
     #[inline]
     pub const fn days_in_year(self) -> i16 {
-        if self.in_long_year() {
-            371
-        } else {
-            364
-        }
+        if self.in_long_year() { 371 } else { 364 }
     }
 
     /// Returns the total number of weeks in the year of this ISO 8601 week

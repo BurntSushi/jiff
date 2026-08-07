@@ -6,16 +6,16 @@ use std::{
     io::Read,
     path::{Component, Path, PathBuf},
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc, RwLock,
+        atomic::{AtomicUsize, Ordering},
     },
     time::Duration,
 };
 
 use crate::{
-    error::{tz::db::Error as E, Error},
+    error::{Error, tz::db::Error as E},
     timestamp::Timestamp,
-    tz::{db::special_time_zone, TimeZone, TimeZoneNameIter},
+    tz::{TimeZone, TimeZoneNameIter, db::special_time_zone},
     util::{self, cache::Expiration, parse, utf8},
 };
 

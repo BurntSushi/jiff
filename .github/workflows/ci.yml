@@ -52,20 +52,11 @@ jobs:
           rust: stable
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
-    # In Rust 2024, doc tests are (mostly) all compiled into a single
-    # executable and then run once. This is a lot faster for Jiff, which
-    # has 1000+ doc tests. Since this job is where we run most of our
-    # tests (and we run MSRV on a different job), we just bump to Rust 2024
-    # to take advantage of this.
-    - name: Switch to Rust 2024
-      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
-    - name: Bump rust-version to Rust 1.85
-      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
     - run: ./scripts/test-default
 
   # Test all features enabled.
@@ -83,20 +74,11 @@ jobs:
           rust: nightly
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
-    # In Rust 2024, doc tests are (mostly) all compiled into a single
-    # executable and then run once. This is a lot faster for Jiff, which
-    # has 1000+ doc tests. Since this job is where we run most of our
-    # tests (and we run MSRV on a different job), we just bump to Rust 2024
-    # to take advantage of this.
-    - name: Switch to Rust 2024
-      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
-    - name: Bump rust-version to Rust 1.85
-      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
     - run: ./scripts/test-all
 
   # Test Jiff when only the bundled tzdb is enabled.
@@ -114,20 +96,11 @@ jobs:
           rust: nightly
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
-    # In Rust 2024, doc tests are (mostly) all compiled into a single
-    # executable and then run once. This is a lot faster for Jiff, which
-    # has 1000+ doc tests. Since this job is where we run most of our
-    # tests (and we run MSRV on a different job), we just bump to Rust 2024
-    # to take advantage of this.
-    - name: Switch to Rust 2024
-      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
-    - name: Bump rust-version to Rust 1.85
-      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
     - run: ./scripts/test-only-bundle
 
   # Test Jiff in core-only (including no-alloc) configurations.
@@ -145,7 +118,7 @@ jobs:
           rust: nightly
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -170,7 +143,7 @@ jobs:
           rust: nightly
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -190,19 +163,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
-    # In Rust 2024, doc tests are (mostly) all compiled into a single
-    # executable and then run once. This is a lot faster for Jiff, which has
-    # 1000+ doc tests. Since we run doc tests in this job, we just bump to Rust
-    # 2024 to take advantage of this.
-    - name: Switch to Rust 2024
-      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
-    - name: Bump rust-version to Rust 1.85
-      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
     - name: Run tests under release mode
       run: cargo test --verbose --all --profile testrelease
 
@@ -211,7 +176,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -224,7 +189,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -241,7 +206,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -263,7 +228,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -283,21 +248,11 @@ jobs:
     runs-on: windows-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
-    # In Rust 2024, doc tests are (mostly) all compiled into a single
-    # executable and then run once. This is a lot faster for Jiff, which has
-    # 1000+ doc tests. Since we run doc tests in this job, we just bump to Rust
-    # 2024 to take advantage of this.
-    - name: Switch to Rust 2024
-      shell: bash
-      run: sed -i.bak 's/^edition = "2021"$/edition = "2024"/' Cargo.toml
-    - name: Bump rust-version to Rust 1.85
-      shell: bash
-      run: sed -i.bak 's/^rust-version = "1\.70"$/rust-version = "1.85"/' Cargo.toml
     - run: cargo build --all --verbose
     - run: cargo doc --features defmt,serde,static --verbose
     - run: cargo test --verbose --all
@@ -310,7 +265,7 @@ jobs:
     runs-on: windows-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -329,21 +284,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: 1.70.0
-    # quickcheck 1.1.0 requires Rust 1.85+. But we still work with older
-    # versions of quickcheck, so downgrade it.
-    - name: Downgrade quickcheck
-      run: cargo update -p quickcheck --precise 1.0.3
-    - name: Downgrade log
-      run: cargo update -p log --precise 0.4.33
+        toolchain: 1.85.0
     # We would use `cargo build --all` here, but `jiff-cli` doesn't really
     # track an MSRV and I don't want it to.
     - name: Build jiff
       run: cargo build -p jiff --verbose
+    - name: Build jiff with jiff-static
+      run: cargo build -p jiff --features static --verbose
     - name: Build jiff-tzdb
       run: cargo build -p jiff-tzdb --verbose
     - name: Build jiff-tzdb-platform
@@ -365,17 +316,16 @@ jobs:
     # - name: Run integration tests
       # run: cargo test --test integration
 
-  # Same as above, but for Windows. The MSRV is technically higher because Jiff
-  # inherits the MSRV of system-level dependencies (like `windows-link`).
+  # Same as above, but for Windows.
   msrv-win:
     runs-on: windows-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: 1.71.1
+        toolchain: 1.85.0
     - run: cargo build -p jiff --verbose
 
   # This job tests that examples outside the workspace build.
@@ -386,7 +336,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -406,7 +356,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -428,7 +378,7 @@ jobs:
         - os: windows-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -458,7 +408,7 @@ jobs:
         - aarch64-linux-android
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install and configure Cross
       run: |
         # In the past, new releases of 'cross' have broken CI. So for now, we
@@ -493,7 +443,7 @@ jobs:
       with:
         toolchain: stable
         targets: thumbv7m-none-eabi
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
     - name: Test the build only
       run: |
         cargo build -p jiff --target thumbv7m-none-eabi --features alloc --no-default-features --features defmt
@@ -514,7 +464,7 @@ jobs:
       with:
         toolchain: stable
         targets: riscv32imc-unknown-none-elf
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v7
     - name: Test the build only
       run: |
         cargo build -p jiff --target riscv32imc-unknown-none-elf --features alloc --no-default-features --features portable-atomic/critical-section
@@ -529,7 +479,7 @@ jobs:
       WASMTIME_BACKTRACE_DETAILS: 1
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -568,7 +518,7 @@ jobs:
         -C link-arg=-sNODERAWFS=1
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
       - name: Install Rust
         uses: dtolnay/rust-toolchain@nightly
         with:
@@ -598,8 +548,8 @@ jobs:
       # logs.
       TZ: America/New_York
     steps:
-    - uses: dtolnay/rust-toolchain@1.81.0
-    - uses: actions/checkout@v5
+    - uses: dtolnay/rust-toolchain@1.85.0
+    - uses: actions/checkout@v7
     - name: Install wasm-pack
       run: |
         curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
@@ -618,7 +568,7 @@ jobs:
       RUSTDOCFLAGS: "-D rustdoc::broken_intra_doc_links --cfg docsrs_jiff"
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -631,7 +581,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -646,7 +596,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:

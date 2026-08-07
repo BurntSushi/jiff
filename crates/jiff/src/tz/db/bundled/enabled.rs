@@ -1,4 +1,4 @@
-use crate::tz::{db::special_time_zone, TimeZone, TimeZoneNameIter};
+use crate::tz::{TimeZone, TimeZoneNameIter, db::special_time_zone};
 
 #[derive(Clone)]
 pub(crate) struct Database;

@@ -1,11 +1,11 @@
 use jcore::constants as c;
 
 use crate::{
-    fmt::{
-        buffer::{ArrayBuffer, BorrowedBuffer},
-        Write,
-    },
     Error, SignedDuration, Span, Unit,
+    fmt::{
+        Write,
+        buffer::{ArrayBuffer, BorrowedBuffer},
+    },
 };
 
 const SECS_PER_HOUR: u64 = c::SECS_PER_HOUR as u64;
@@ -1641,11 +1641,7 @@ impl Designators {
     fn designator(&self, unit: impl Into<Unit>, plural: bool) -> &'static str {
         let unit = unit.into();
         let index = unit as usize;
-        if plural {
-            self.plural[index]
-        } else {
-            self.singular[index]
-        }
+        if plural { self.plural[index] } else { self.singular[index] }
     }
 }
 

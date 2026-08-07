@@ -95,11 +95,11 @@ including by returning an error if it isn't supported.
 //   UTCOffsetMinutePrecision
 
 use crate::{
-    error::{fmt::rfc9557::Error as E, Error},
+    error::{Error, fmt::rfc9557::Error as E},
     fmt::{
+        Parsed,
         offset::{self, ParsedOffset},
         temporal::{TimeZoneAnnotation, TimeZoneAnnotationKind},
-        Parsed,
     },
     util::parse,
 };

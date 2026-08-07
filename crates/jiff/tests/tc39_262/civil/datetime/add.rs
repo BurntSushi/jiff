@@ -1,4 +1,4 @@
-use jiff::{civil::date, ToSpan};
+use jiff::{ToSpan, civil::date};
 
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/PlainDateTime/prototype/add/ambiguous-date.js
 ///

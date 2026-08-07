@@ -3,13 +3,13 @@ use core::{cmp::Ordering, time::Duration as UnsignedDuration};
 use jcore::{bounds::Sign, constants as c};
 
 use crate::{
+    RoundMode, SignedDuration, Timestamp, Zoned,
     civil::{Date, DateTime, Time},
     duration::{Duration, SDuration},
-    error::{span::Error as E, unit::UnitConfigError, Error, ErrorContext},
+    error::{Error, ErrorContext, span::Error as E, unit::UnitConfigError},
     fmt::{friendly, temporal},
     tz::TimeZone,
     util::{b, borrow::DumbCow, round::Increment},
-    RoundMode, SignedDuration, Timestamp, Zoned,
 };
 
 /// A macro helper, only used in tests, for comparing spans for equality.
@@ -282,6 +282,27 @@ pub(crate) use span_eq;
 /// [`fmt::friendly`](friendly) modules.
 ///
 /// [ISO 8601]: https://www.iso.org/iso-8601-date-and-time-format.html
+///
+/// # Serialization
+///
+/// With the `serde` feature enabled, the `Serialize` and `Deserialize` trait
+/// implementations use the ISO 8601 duration string format when the
+/// serializer or deserializer is human readable.
+///
+/// For non-human-readable formats, a `Span` is encoded as a 10-element tuple
+/// containing its signed component values in this order and with these exact
+/// integer types:
+///
+/// ```text
+/// (years: i16, months: i32, weeks: i32, days: i32, hours: i32,
+///  minutes: i64, seconds: i64, milliseconds: i64, microseconds: i64,
+///  nanoseconds: i64)
+/// ```
+///
+/// All non-zero components have the same sign. Keeping every component
+/// separate preserves the fieldwise distinction between spans such as
+/// `2.hours()` and `120.minutes()`. This binary representation is part of
+/// Jiff's stable public API.
 ///
 /// # Comparisons
 ///
@@ -1367,7 +1388,7 @@ impl Span {
     /// The number returned is `-1` when this span is negative,
     /// `0` when this span is zero and `1` when this span is positive.
     #[inline]
-    pub fn signum(self) -> i8 {
+    pub fn signum(&self) -> i8 {
         self.sign.signum()
     }
 
@@ -1384,7 +1405,7 @@ impl Span {
     /// assert!((-2.months()).is_negative());
     /// ```
     #[inline]
-    pub fn is_positive(self) -> bool {
+    pub fn is_positive(&self) -> bool {
         self.get_sign().is_positive()
     }
 
@@ -1401,7 +1422,7 @@ impl Span {
     /// assert!((-2.months()).is_negative());
     /// ```
     #[inline]
-    pub fn is_negative(self) -> bool {
+    pub fn is_negative(&self) -> bool {
         self.get_sign().is_negative()
     }
 
@@ -1419,7 +1440,7 @@ impl Span {
     /// assert!(0.seconds().seconds(1).seconds(0).is_zero());
     /// ```
     #[inline]
-    pub fn is_zero(self) -> bool {
+    pub fn is_zero(&self) -> bool {
         self.sign.is_zero()
     }
 
@@ -1496,13 +1517,14 @@ impl Span {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn checked_mul(mut self, rhs: i64) -> Result<Span, Error> {
+    pub fn checked_mul(&self, rhs: i64) -> Result<Span, Error> {
+        let mut this = *self;
         if rhs == 0 {
             return Ok(Span::default());
         } else if rhs == 1 {
-            return Ok(self);
+            return Ok(this);
         }
-        self.sign = self.sign * Sign::from(rhs);
+        this.sign = this.sign * Sign::from(rhs);
         // This can only fail when `rhs == i64::MIN`, which is out of bounds
         // for all possible span units (including nanoseconds).
         let rhs = rhs.checked_abs().ok_or_else(b::SpanMultiple::error)?;
@@ -1515,52 +1537,52 @@ impl Span {
         // actually going to multiply with it. If our span has non-zero years,
         // then our multiple can't exceed the bounds of `SpanYears`, otherwise
         // it is guaranteed to overflow.
-        if self.years != 0 {
+        if this.years != 0 {
             let rhs = b::SpanYears::check(rhs)?;
-            self.years = b::SpanYears::checked_mul(self.years, rhs)?;
+            this.years = b::SpanYears::checked_mul(this.years, rhs)?;
         }
-        if self.months != 0 {
+        if this.months != 0 {
             let rhs = b::SpanMonths::check(rhs)?;
-            self.months = b::SpanMonths::checked_mul(self.months, rhs)?;
+            this.months = b::SpanMonths::checked_mul(this.months, rhs)?;
         }
-        if self.weeks != 0 {
+        if this.weeks != 0 {
             let rhs = b::SpanWeeks::check(rhs)?;
-            self.weeks = b::SpanWeeks::checked_mul(self.weeks, rhs)?;
+            this.weeks = b::SpanWeeks::checked_mul(this.weeks, rhs)?;
         }
-        if self.days != 0 {
+        if this.days != 0 {
             let rhs = b::SpanDays::check(rhs)?;
-            self.days = b::SpanDays::checked_mul(self.days, rhs)?;
+            this.days = b::SpanDays::checked_mul(this.days, rhs)?;
         }
-        if self.hours != 0 {
+        if this.hours != 0 {
             let rhs = b::SpanHours::check(rhs)?;
-            self.hours = b::SpanHours::checked_mul(self.hours, rhs)?;
+            this.hours = b::SpanHours::checked_mul(this.hours, rhs)?;
         }
-        if self.minutes != 0 {
-            self.minutes = b::SpanMinutes::checked_mul(self.minutes, rhs)?;
+        if this.minutes != 0 {
+            this.minutes = b::SpanMinutes::checked_mul(this.minutes, rhs)?;
         }
-        if self.seconds != 0 {
-            self.seconds = b::SpanSeconds::checked_mul(self.seconds, rhs)?;
+        if this.seconds != 0 {
+            this.seconds = b::SpanSeconds::checked_mul(this.seconds, rhs)?;
         }
-        if self.milliseconds != 0 {
-            self.milliseconds =
-                b::SpanMilliseconds::checked_mul(self.milliseconds, rhs)?;
+        if this.milliseconds != 0 {
+            this.milliseconds =
+                b::SpanMilliseconds::checked_mul(this.milliseconds, rhs)?;
         }
-        if self.microseconds != 0 {
-            self.microseconds =
-                b::SpanMicroseconds::checked_mul(self.microseconds, rhs)?;
+        if this.microseconds != 0 {
+            this.microseconds =
+                b::SpanMicroseconds::checked_mul(this.microseconds, rhs)?;
         }
-        if self.nanoseconds != 0 {
-            self.nanoseconds =
-                b::SpanNanoseconds::checked_mul(self.nanoseconds, rhs)?;
+        if this.nanoseconds != 0 {
+            this.nanoseconds =
+                b::SpanNanoseconds::checked_mul(this.nanoseconds, rhs)?;
         }
-        // N.B. We don't need to update `self.units` here since it shouldn't
+        // N.B. We don't need to update `this.units` here since it shouldn't
         // change. The only way it could is if a unit goes from zero to
         // non-zero (which can't happen, because multiplication by zero is
         // always zero), or if a unit goes from non-zero to zero. That also
         // can't happen because we handle the case of the factor being zero
         // specially above, and it returns a `Span` will all units zero
         // correctly.
-        Ok(self)
+        Ok(this)
     }
 
     /// Adds a span to this one and returns the sum as a new span.
@@ -1797,7 +1819,7 @@ impl Span {
         let start = match relative {
             Some(r) => match r.to_relative(unit)? {
                 None => {
-                    return span1.checked_add_invariant_duration(unit, dur2)
+                    return span1.checked_add_invariant_duration(unit, dur2);
                 }
                 Some(r) => r,
             },
@@ -3343,7 +3365,24 @@ impl serde_core::Serialize for Span {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            return serializer.collect_str(self);
+        }
+
+        use serde_core::ser::SerializeTuple;
+
+        let mut tuple = serializer.serialize_tuple(10)?;
+        tuple.serialize_element(&self.get_years())?;
+        tuple.serialize_element(&self.get_months())?;
+        tuple.serialize_element(&self.get_weeks())?;
+        tuple.serialize_element(&self.get_days())?;
+        tuple.serialize_element(&self.get_hours())?;
+        tuple.serialize_element(&self.get_minutes())?;
+        tuple.serialize_element(&self.get_seconds())?;
+        tuple.serialize_element(&self.get_milliseconds())?;
+        tuple.serialize_element(&self.get_microseconds())?;
+        tuple.serialize_element(&self.get_nanoseconds())?;
+        tuple.end()
     }
 }
 
@@ -3355,33 +3394,128 @@ impl<'de> serde_core::Deserialize<'de> for Span {
     ) -> Result<Span, D::Error> {
         use serde_core::de;
 
-        struct SpanVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for SpanVisitor {
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = Span;
+
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a span duration string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<Span, E> {
+                    parse_iso_or_friendly(value).map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<Span, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
+            }
+
+            return deserializer.deserialize_str(HumanReadableVisitor);
+        }
+
+        struct BinaryVisitor;
+
+        impl<'de> de::Visitor<'de> for BinaryVisitor {
             type Value = Span;
 
             fn expecting(
                 &self,
                 f: &mut core::fmt::Formatter,
             ) -> core::fmt::Result {
-                f.write_str("a span duration string")
+                f.write_str(
+                    "a 10-element tuple containing a Span's signed integer \
+                     components",
+                )
             }
 
             #[inline]
-            fn visit_bytes<E: de::Error>(
+            fn visit_seq<A: de::SeqAccess<'de>>(
                 self,
-                value: &[u8],
-            ) -> Result<Span, E> {
-                parse_iso_or_friendly(value).map_err(de::Error::custom)
-            }
+                mut seq: A,
+            ) -> Result<Span, A::Error> {
+                let years = seq
+                    .next_element::<i16>()?
+                    .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+                let months = seq
+                    .next_element::<i32>()?
+                    .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+                let weeks = seq
+                    .next_element::<i32>()?
+                    .ok_or_else(|| de::Error::invalid_length(2, &self))?;
+                let days = seq
+                    .next_element::<i32>()?
+                    .ok_or_else(|| de::Error::invalid_length(3, &self))?;
+                let hours = seq
+                    .next_element::<i32>()?
+                    .ok_or_else(|| de::Error::invalid_length(4, &self))?;
+                let minutes = seq
+                    .next_element::<i64>()?
+                    .ok_or_else(|| de::Error::invalid_length(5, &self))?;
+                let seconds = seq
+                    .next_element::<i64>()?
+                    .ok_or_else(|| de::Error::invalid_length(6, &self))?;
+                let milliseconds = seq
+                    .next_element::<i64>()?
+                    .ok_or_else(|| de::Error::invalid_length(7, &self))?;
+                let microseconds = seq
+                    .next_element::<i64>()?
+                    .ok_or_else(|| de::Error::invalid_length(8, &self))?;
+                let nanoseconds = seq
+                    .next_element::<i64>()?
+                    .ok_or_else(|| de::Error::invalid_length(9, &self))?;
 
-            #[inline]
-            fn visit_str<E: de::Error>(self, value: &str) -> Result<Span, E> {
-                self.visit_bytes(value.as_bytes())
+                let span = Span::new()
+                    .try_years(years)
+                    .and_then(|span| span.try_months(months))
+                    .and_then(|span| span.try_weeks(weeks))
+                    .and_then(|span| span.try_days(days))
+                    .and_then(|span| span.try_hours(hours))
+                    .and_then(|span| span.try_minutes(minutes))
+                    .and_then(|span| span.try_seconds(seconds))
+                    .and_then(|span| span.try_milliseconds(milliseconds))
+                    .and_then(|span| span.try_microseconds(microseconds))
+                    .and_then(|span| span.try_nanoseconds(nanoseconds))
+                    .map_err(|_| {
+                        de::Error::custom(
+                            "binary Span component is outside Jiff's \
+                             supported range",
+                        )
+                    })?;
+                if span.get_years() != years
+                    || span.get_months() != months
+                    || span.get_weeks() != weeks
+                    || span.get_days() != days
+                    || span.get_hours() != hours
+                    || span.get_minutes() != minutes
+                    || span.get_seconds() != seconds
+                    || span.get_milliseconds() != milliseconds
+                    || span.get_microseconds() != microseconds
+                    || span.get_nanoseconds() != nanoseconds
+                {
+                    return Err(de::Error::custom(
+                        "binary Span non-zero components must all have the \
+                         same sign",
+                    ));
+                }
+                Ok(span)
             }
         }
 
-        deserializer.deserialize_str(SpanVisitor)
+        deserializer.deserialize_tuple(10, BinaryVisitor)
     }
 }
 
@@ -5564,11 +5698,7 @@ impl UnitSet {
     #[inline]
     const fn set(self, unit: Unit, is_zero: bool) -> UnitSet {
         let bit = 1 << unit as usize;
-        if is_zero {
-            UnitSet(self.0 & !bit)
-        } else {
-            UnitSet(self.0 | bit)
-        }
+        if is_zero { UnitSet(self.0 & !bit) } else { UnitSet(self.0 | bit) }
     }
 
     /// Returns the set constructed from the given slice of units.
@@ -6548,7 +6678,7 @@ mod tests {
 
     use alloc::string::ToString;
 
-    use crate::{civil::date, RoundMode};
+    use crate::{RoundMode, civil::date};
 
     use super::*;
 

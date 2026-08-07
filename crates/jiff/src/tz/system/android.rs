@@ -248,7 +248,7 @@ fn cstr(string: &'static str) -> &'static CStr {
 // this. We're only doing it for one platform, so it doesn't seem like a huge
 // deal. But if this turns out to be a problem in practice, I'm fine accepting
 // a target specific dependency on `libc` for Android.
-extern "C" {
+unsafe extern "C" {
     fn dlopen(filename: *const c_char, flag: i32) -> *mut c_void;
     fn dlclose(handle: *mut c_void) -> i32;
     fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;

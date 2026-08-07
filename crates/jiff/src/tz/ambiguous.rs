@@ -1,10 +1,10 @@
 use jcore::tz::AmbiguousOffset as JAmbiguousOffset;
 
 use crate::{
-    civil::DateTime,
-    error::{tz::ambiguous::Error as E, Error, ErrorContext},
-    tz::{Offset, TimeZone},
     Timestamp, Zoned,
+    civil::DateTime,
+    error::{Error, ErrorContext, tz::ambiguous::Error as E},
+    tz::{Offset, TimeZone},
 };
 
 /// Configuration for resolving ambiguous datetimes in a particular time zone.

@@ -1,6 +1,6 @@
 use core::mem::MaybeUninit;
 
-use crate::{fmt::Write, Error};
+use crate::{Error, fmt::Write};
 
 const MAX_CAPACITY: usize = u16::MAX as usize;
 // From `u64::MAX.to_string().len()`.
