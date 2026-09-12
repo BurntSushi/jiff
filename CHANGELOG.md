@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.2.37 (2026-09-12)
+===================
+This is a redux release of `0.2.36` that fixes a compilation bug.
+
+Bug fixes:
+
+* [#647](https://github.com/BurntSushi/jiff/issues/647):
+Fixes a compilation bug due to incorrect include paths.
+
+
 0.2.36 (2026-09-12)
 ===================
 This release has a couple bug fixes and adds opt-in integration with the
