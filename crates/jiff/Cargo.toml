@@ -17,6 +17,10 @@ autoexamples = false
 # We include `/tests/lib.rs` to squash a `cargo package` warning that the
 # `integration` test target is being ignored. We don't include anything else
 # so tests obviously won't work, but it makes `cargo package` quiet.
+#
+# The Markdown files at this package root are symlinks to the canonical files
+# at the workspace root. Cargo flattens them when creating the package archive,
+# which lets `include_str!` use the same path in a checkout and in a package.
 include = [
   "/src/**/*.rs",
   "/tests/lib.rs",
