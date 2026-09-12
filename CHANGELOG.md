@@ -1,8 +1,9 @@
 # CHANGELOG
 
-0.2.36 (TBD)
-============
-TODO
+0.2.36 (2026-09-12)
+===================
+This release has a couple bug fixes and adds opt-in integration with the
+`arbitrary` crate.
 
 Enhancements:
 
