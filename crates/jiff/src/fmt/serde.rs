@@ -2052,6 +2052,36 @@ mod tests {
     }
 
     #[test]
+    fn unsigned_duration_compact_optional_flatten() {
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Outer {
+            id: u32,
+            #[serde(flatten)]
+            inner: Inner,
+        }
+
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Inner {
+            #[serde(
+                default,
+                with = "crate::fmt::serde::unsigned_duration::friendly::compact::optional"
+            )]
+            duration: Option<UnsignedDuration>,
+        }
+
+        let json = r#"{"id":1,"duration":null}"#;
+        let got: Outer = serde_json::from_str(json).unwrap();
+        assert_eq!(got.inner.duration, None);
+
+        let json = r#"{"id":1,"duration":"36h 1s 100ms"}"#;
+        let got: Outer = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            got.inner.duration,
+            Some(UnsignedDuration::new(36 * 60 * 60 + 1, 100_000_000))
+        );
+    }
+
+    #[test]
     fn unsigned_duration_compact_optional_postcard() {
         #[derive(
             Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize,
@@ -2163,6 +2193,36 @@ mod tests {
         let got: Data = serde_json::from_str(&json).unwrap();
         assert_eq!(got.ts, Some(Timestamp::from_second(1517644800).unwrap()));
         assert_eq!(serde_json::to_string(&got).unwrap(), json);
+    }
+
+    #[test]
+    fn timestamp_second_optional_flatten() {
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Outer {
+            id: u32,
+            #[serde(flatten)]
+            inner: Inner,
+        }
+
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Inner {
+            #[serde(
+                default,
+                with = "crate::fmt::serde::timestamp::second::optional"
+            )]
+            ts: Option<Timestamp>,
+        }
+
+        let json = r#"{"id":1,"ts":null}"#;
+        let got: Outer = serde_json::from_str(json).unwrap();
+        assert_eq!(got.inner.ts, None);
+
+        let json = r#"{"id":1,"ts":1517644800}"#;
+        let got: Outer = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            got.inner.ts,
+            Some(Timestamp::from_second(1517644800).unwrap())
+        );
     }
 
     #[test]
@@ -2439,6 +2499,34 @@ mod tests {
         let got: Record = serde_json::from_str(&json).unwrap();
         assert_eq!(got.tz, Some(TimeZone::get("America/Nuuk").unwrap()));
         assert_eq!(serde_json::to_string(&got).unwrap(), json);
+    }
+
+    #[test]
+    fn timezone_optional_flatten() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Outer {
+            id: u32,
+            #[serde(flatten)]
+            inner: Inner,
+        }
+
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Inner {
+            #[serde(default, with = "crate::fmt::serde::tz::optional")]
+            tz: Option<TimeZone>,
+        }
+
+        let json = r#"{"id":1,"tz":null}"#;
+        let got: Outer = serde_json::from_str(json).unwrap();
+        assert_eq!(got.inner.tz, None);
+
+        let json = r#"{"id":1,"tz":"America/Nuuk"}"#;
+        let got: Outer = serde_json::from_str(json).unwrap();
+        assert_eq!(got.inner.tz, Some(TimeZone::get("America/Nuuk").unwrap()));
     }
 
     #[test]
