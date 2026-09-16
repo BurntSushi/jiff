@@ -488,6 +488,18 @@ pub mod timestamp {
         ) -> Result<Option<crate::Timestamp>, E> {
             Ok(None)
         }
+
+        // Some self-describing formats (notably, the buffered
+        // representation used internally by `#[serde(flatten)]`) represent
+        // an absent value as a "unit" rather than routing through
+        // `deserialize_option`'s `None` case. Treat it the same as
+        // `visit_none` so this plays well with `#[serde(flatten)]`.
+        #[inline]
+        fn visit_unit<E: de::Error>(
+            self,
+        ) -> Result<Option<crate::Timestamp>, E> {
+            Ok(None)
+        }
     }
 
     /// (De)serialize an integer number of seconds from the Unix epoch.
@@ -1306,6 +1318,15 @@ pub mod tz {
         ) -> Result<Option<crate::tz::TimeZone>, E> {
             Ok(None)
         }
+
+        // See the comment on the analogous `visit_unit` impl in
+        // `fmt::serde::timestamp::OptionalVisitor` for why this is needed.
+        #[inline]
+        fn visit_unit<E: de::Error>(
+            self,
+        ) -> Result<Option<crate::tz::TimeZone>, E> {
+            Ok(None)
+        }
     }
 
     /// (De)serialize a required [`TimeZone`](crate::tz::TimeZone).
@@ -1765,6 +1786,15 @@ pub mod unsigned_duration {
 
             #[inline]
             fn visit_none<E: serde_core::de::Error>(
+                self,
+            ) -> Result<Option<core::time::Duration>, E> {
+                Ok(None)
+            }
+
+            // See the comment on the analogous `visit_unit` impl in
+            // `fmt::serde::timestamp::OptionalVisitor` for why this is needed.
+            #[inline]
+            fn visit_unit<E: serde_core::de::Error>(
                 self,
             ) -> Result<Option<core::time::Duration>, E> {
                 Ok(None)
