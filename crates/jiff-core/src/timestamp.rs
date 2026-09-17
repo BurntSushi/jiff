@@ -178,9 +178,12 @@ impl Timestamp {
         if !(i64::MIN as i128 <= secs && secs <= i64::MAX as i128) {
             rbail!(b::SpecialBoundsError::UnixEpochNanoseconds);
         }
-        let secs64 = secs as i64;
+        let secs64 = rtry!(b::UnixEpochSeconds::checkc(secs as i64));
         // OK because NANOS_PER_SEC!={-1,0}.
         let nanosecond = (nanosecond % NANOS_PER_SEC) as i32;
+        if secs64 == b::UnixEpochSeconds::MIN && nanosecond < 0 {
+            rbail!(b::UnixEpochSeconds::error());
+        }
         Ok(Timestamp::new_unchecked(secs64, nanosecond))
     }
 
@@ -903,6 +906,24 @@ mod tests {
         assert!(Timestamp::new(0, i32::MIN).is_err());
         assert!(Timestamp::new(-377705023201, -1).is_err());
         assert!(Timestamp::new(253402207201, 0).is_err());
+    }
+
+    // Regression test for #645: `Timestamp::from_nanosecond` panicked
+    // instead of returning an error when the given nanosecond count fell
+    // just outside of `Timestamp::MIN..=Timestamp::MAX`, even though its
+    // signature (and docs) promise a `Result`.
+    #[test]
+    fn from_nanosecond_err() {
+        let min = Timestamp::MIN.as_nanosecond();
+        assert_eq!(Timestamp::from_nanosecond(min).unwrap(), Timestamp::MIN);
+        assert!(Timestamp::from_nanosecond(min - 1).is_err());
+
+        let max = Timestamp::MAX.as_nanosecond();
+        assert_eq!(Timestamp::from_nanosecond(max).unwrap(), Timestamp::MAX);
+        assert!(Timestamp::from_nanosecond(max + 1).is_err());
+
+        assert!(Timestamp::from_nanosecond(i128::MIN).is_err());
+        assert!(Timestamp::from_nanosecond(i128::MAX).is_err());
     }
 
     #[test]
