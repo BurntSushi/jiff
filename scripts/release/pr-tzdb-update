@@ -11,9 +11,9 @@
 # 5. Do the actual embedding.
 # 6. Update the CHANGELOG and submit a PR.
 #
-# This should be run without arguments. If you need to test, set
-# `JIFF_ALLOW_DIRTY=1`. When set, this will stop just before
-# submitting a PR.
+# This should be run with a single argument: the tzdb version to update to.
+# For example, `./scripts/release/pr-tzdb-update 2026e`. If you need to make
+# changes to this script, set `JIFF_ALLOW_DIRTY=1`.
 
 set -euo pipefail
 
@@ -21,6 +21,11 @@ if ! [ -f ./crates/jiff-cli/Cargo.toml ]; then
   echo "must run in the root of a jiff repository checkout" >&2
   exit 1
 fi
+if [ $# != 1 ]; then
+  echo "Usage: $(basename "$0") <tzdb-version>" >&2
+  exit 1
+fi
+version="$1"
 
 # Do some sanity checking first to make sure we are in a clean state.
 : "${JIFF_ALLOW_DIRTY:=}"
@@ -29,10 +34,10 @@ if [ -z "$JIFF_ALLOW_DIRTY" ]; then
     echo "repository must be in a clean state"
     exit 1
   fi
-  if ! git status | rg -q 'HEAD detached at refs/heads/master'; then
-    echo "repository must be on detached master branch"
-    exit 1
-  fi
+fi
+if ! git status | rg -q 'HEAD detached at refs/heads/master'; then
+  echo "repository must be on detached master branch"
+  exit 1
 fi
 if rg -q TBD CHANGELOG.md; then
   echo "CHANGELOG cannot have a TBD entry" >&2
@@ -45,19 +50,13 @@ mkdir -p "$TMPDIR"
 
 # Get the next version of Jiff that will contain the tzdb update.
 release_dir="$(dirname "$0")"
-jiff_next_version="$("$release_dir"/get-next-version ./Cargo.toml)"
+jiff_next_version="$("$release_dir"/get-next-version ./crates/jiff/Cargo.toml)"
 
 # Some URLs used below.
-download="https://www.iana.org/time-zones"
 list_host="https://lists.iana.org"
 announcements="$list_host/hyperkitty/list/tz-announce@iana.org/latest"
 
-# Get the latest version of tzdb. Parsing HTML with ripgrep... ¯\_(ツ)_/¯
-version="$(
-  curl -s "$download" | \
-    rg --max-count 1 -ior '$version' \
-      '<span id="version">(?<version>[0-9]{4}[a-z]+)</span>'
-)"
+# Build the release URL based on the version.
 name="tzdb-$version"
 nameext="$name.tar.lz"
 url="https://data.iana.org/time-zones/releases/$nameext"

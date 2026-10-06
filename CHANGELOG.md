@@ -1,5 +1,13 @@
 # CHANGELOG
 
+0.2.38 (2026-10-06)
+===================
+This release updates Jiff's bundled copy of the [IANA Time Zone Database]
+to `2026e`. See the [`2026e` release announcement] for more details.
+
+[`2026e` release announcement]: https://lists.iana.org/hyperkitty/list/tz-announce@iana.org/thread/VXIA4AU73OQL3OZ3ZBZHWIASIIVBGUJV/
+
+
 0.2.37 (2026-09-12)
 ===================
 This is a redux release of `0.2.36` that fixes a compilation bug.
