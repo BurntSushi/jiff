@@ -3,19 +3,19 @@ use core::time::Duration as UnsignedDuration;
 use jcore::bounds::Sign;
 
 use crate::{
+    RoundMode, SignedDuration, Span, SpanRound, Timestamp, Unit,
     civil::{
         Date, DateTime, DateTimeRound, DateTimeWith, Era, ISOWeekDate, Time,
         Weekday,
     },
     duration::{Duration, SDuration},
-    error::{zoned::Error as E, Error, ErrorContext},
+    error::{Error, ErrorContext, zoned::Error as E},
     fmt::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
     },
     tz::{AmbiguousOffset, Disambiguation, Offset, OffsetConflict, TimeZone},
     util::round::Increment,
-    RoundMode, SignedDuration, Span, SpanRound, Timestamp, Unit,
 };
 
 /// A time zone aware instant in time.
@@ -1975,7 +1975,7 @@ impl Zoned {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn iso_week_date(self) -> ISOWeekDate {
+    pub fn iso_week_date(&self) -> ISOWeekDate {
         self.date().iso_week_date()
     }
 
@@ -3376,10 +3376,10 @@ impl Zoned {
     /// );
     /// ```
     #[inline]
-    pub fn strftime<'f, F: 'f + ?Sized + AsRef<[u8]>>(
-        &self,
+    pub fn strftime<'z, 'f, F: 'f + ?Sized + AsRef<[u8]>>(
+        &'z self,
         format: &'f F,
-    ) -> fmt::strtime::Display<'f> {
+    ) -> fmt::strtime::Display<'f, 'z> {
         fmt::strtime::Display { fmt: format.as_ref(), tm: self.into() }
     }
 }
@@ -3497,7 +3497,7 @@ impl core::fmt::Display for Zoned {
 #[cfg(feature = "defmt")]
 impl defmt::Format for Zoned {
     fn format(&self, f: defmt::Formatter) {
-        use crate::fmt::{temporal::DEFAULT_DATETIME_PRINTER, DefmtWrite};
+        use crate::fmt::{DefmtWrite, temporal::DEFAULT_DATETIME_PRINTER};
 
         defmt::unwrap!(
             DEFAULT_DATETIME_PRINTER.print_zoned(self, DefmtWrite(f))
@@ -5744,7 +5744,7 @@ impl ZonedWith {
     /// // jump to 01:55 *and* our offset is corrected to -10:30.
     /// let zdt3 = zdt2.checked_sub(10.minutes())?;
     /// assert_eq!(zdt3.datetime(), date(1947, 6, 8).at(1, 55, 0, 0));
-    /// assert_eq!(zdt3.offset(), tz::offset(-10).saturating_sub(30.minutes()));
+    /// assert_eq!(zdt3.offset(), tz::offset(-10).saturating_sub(30.minutes())?);
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -5837,9 +5837,10 @@ mod tests {
     use alloc::string::ToString;
 
     use crate::{
+        ToSpan,
         civil::{date, datetime},
         span::span_eq,
-        tz, ToSpan,
+        tz,
     };
 
     use super::*;

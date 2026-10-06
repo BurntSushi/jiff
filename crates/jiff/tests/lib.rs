@@ -6,6 +6,8 @@
 
 mod init;
 mod procmacro;
+mod serde_tests;
+mod strtime;
 mod tc39_262;
 
 /// The simplest possible logger that logs to stderr.

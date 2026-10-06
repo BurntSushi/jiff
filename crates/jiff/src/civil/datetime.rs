@@ -3,11 +3,12 @@ use core::time::Duration as UnsignedDuration;
 use jcore::{bounds::Sign, civil::DateTime as JDateTime, constants as c};
 
 use crate::{
+    RoundMode, SignedDuration, Span, SpanRound, Unit,
     civil::{
-        datetime, Date, DateWith, Era, ISOWeekDate, Time, TimeWith, Weekday,
+        Date, DateWith, Era, ISOWeekDate, Time, TimeWith, Weekday, datetime,
     },
     duration::{Duration, SDuration},
-    error::{civil::Error as E, Error, ErrorContext},
+    error::{Error, ErrorContext, civil::Error as E},
     fmt::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
@@ -15,7 +16,6 @@ use crate::{
     tz::TimeZone,
     util::round::Increment,
     zoned::Zoned,
-    RoundMode, SignedDuration, Span, SpanRound, Unit,
 };
 
 /// A representation of a civil datetime in the Gregorian calendar.
@@ -63,6 +63,18 @@ use crate::{
 ///
 /// For more information on the specific format supported, see the
 /// [`fmt::temporal`](crate::fmt::temporal) module documentation.
+///
+/// # Serialization
+///
+/// With the `serde` feature enabled, the `Serialize` and `Deserialize` trait
+/// implementations use the Temporal string format when the serializer or
+/// deserializer is human readable.
+///
+/// For non-human-readable formats, a `DateTime` is encoded as an
+/// `(i32, u64)` tuple. The `i32` is the date's number of days since the Unix
+/// epoch, `1970-01-01`, and the `u64` is the time's number of nanoseconds
+/// since midnight. This binary representation is part of Jiff's stable public
+/// API.
 ///
 /// # Default value
 ///
@@ -1805,11 +1817,7 @@ impl DateTime {
     ) -> DateTime {
         let duration: DateTimeArithmetic = duration.into();
         self.checked_add(duration).unwrap_or_else(|_| {
-            if duration.is_negative() {
-                DateTime::MIN
-            } else {
-                DateTime::MAX
-            }
+            if duration.is_negative() { DateTime::MIN } else { DateTime::MAX }
         })
     }
 
@@ -2486,7 +2494,7 @@ impl DateTime {
     pub fn strftime<'f, F: 'f + ?Sized + AsRef<[u8]>>(
         &self,
         format: &'f F,
-    ) -> fmt::strtime::Display<'f> {
+    ) -> fmt::strtime::Display<'f, 'static> {
         fmt::strtime::Display { fmt: format.as_ref(), tm: (*self).into() }
     }
 }
@@ -2793,7 +2801,7 @@ impl core::ops::SubAssign<UnsignedDuration> for DateTime {
 #[cfg(feature = "defmt")]
 impl defmt::Format for DateTime {
     fn format(&self, f: defmt::Formatter) {
-        use crate::fmt::{temporal::DEFAULT_DATETIME_PRINTER, DefmtWrite};
+        use crate::fmt::{DefmtWrite, temporal::DEFAULT_DATETIME_PRINTER};
 
         defmt::unwrap!(
             DEFAULT_DATETIME_PRINTER.print_datetime(self, DefmtWrite(f))
@@ -2808,7 +2816,16 @@ impl serde_core::Serialize for DateTime {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            return serializer.collect_str(self);
+        }
+
+        use serde_core::ser::SerializeTuple;
+
+        let mut tuple = serializer.serialize_tuple(2)?;
+        tuple.serialize_element(&self.date.to_unix_epoch_day().day())?;
+        tuple.serialize_element(&(self.time.to_nanosecond() as u64))?;
+        tuple.end()
     }
 }
 
@@ -2820,38 +2837,94 @@ impl<'de> serde_core::Deserialize<'de> for DateTime {
     ) -> Result<DateTime, D::Error> {
         use serde_core::de;
 
-        struct DateTimeVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for DateTimeVisitor {
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = DateTime;
+
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a datetime string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<DateTime, E> {
+                    DEFAULT_DATETIME_PARSER
+                        .parse_datetime(value)
+                        .map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<DateTime, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
+            }
+
+            return deserializer.deserialize_str(HumanReadableVisitor);
+        }
+
+        struct BinaryVisitor;
+
+        impl<'de> de::Visitor<'de> for BinaryVisitor {
             type Value = DateTime;
 
             fn expecting(
                 &self,
                 f: &mut core::fmt::Formatter,
             ) -> core::fmt::Result {
-                f.write_str("a datetime string")
+                f.write_str(
+                    "an (i32, u64) tuple containing a Unix epoch day and \
+                     nanoseconds since midnight",
+                )
             }
 
             #[inline]
-            fn visit_bytes<E: de::Error>(
+            fn visit_seq<A: de::SeqAccess<'de>>(
                 self,
-                value: &[u8],
-            ) -> Result<DateTime, E> {
-                DEFAULT_DATETIME_PARSER
-                    .parse_datetime(value)
-                    .map_err(de::Error::custom)
-            }
+                mut seq: A,
+            ) -> Result<DateTime, A::Error> {
+                let epoch_day = seq
+                    .next_element::<i32>()?
+                    .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+                let nanosecond = seq
+                    .next_element::<u64>()?
+                    .ok_or_else(|| de::Error::invalid_length(1, &self))?;
 
-            #[inline]
-            fn visit_str<E: de::Error>(
-                self,
-                value: &str,
-            ) -> Result<DateTime, E> {
-                self.visit_bytes(value.as_bytes())
+                let epoch_day = jcore::civil::UnixEpochDay::new(epoch_day)
+                    .map_err(|_| {
+                        de::Error::custom(
+                            "binary DateTime day is outside Jiff's \
+                             supported range",
+                        )
+                    })?;
+                let date = Date::from_unix_epoch_day(epoch_day);
+                let nanosecond = i64::try_from(nanosecond).map_err(|_| {
+                    de::Error::custom(
+                        "binary DateTime time is outside \
+                         0..=86,399,999,999,999 nanoseconds",
+                    )
+                })?;
+                let time =
+                    Time::from_nanosecond(nanosecond).map_err(|_| {
+                        de::Error::custom(
+                            "binary DateTime time is outside \
+                             0..=86,399,999,999,999 nanoseconds",
+                        )
+                    })?;
+                Ok(DateTime::from_parts(date, time))
             }
         }
 
-        deserializer.deserialize_str(DateTimeVisitor)
+        deserializer.deserialize_tuple(2, BinaryVisitor)
     }
 }
 
@@ -4407,9 +4480,9 @@ mod tests {
     use std::io::Cursor;
 
     use crate::{
+        RoundMode, ToSpan, Unit,
         civil::{date, time},
         span::span_eq,
-        RoundMode, ToSpan, Unit,
     };
 
     use super::*;

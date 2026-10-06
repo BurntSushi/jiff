@@ -3,15 +3,15 @@ use core::time::Duration;
 use jcore::bounds::Sign;
 
 use crate::{
+    Error, RoundMode, Timestamp, Unit, Zoned,
     civil::{Date, DateTime, Time},
-    error::{signed_duration::Error as E, ErrorContext},
+    error::{ErrorContext, signed_duration::Error as E},
     fmt::{friendly, temporal},
     tz::Offset,
     util::{
         b::{self, SpecialBoundsError},
         round::Increment,
     },
-    Error, RoundMode, Timestamp, Unit, Zoned,
 };
 
 // We define our own constants here instead of using `jcore` to try and make
@@ -136,6 +136,19 @@ const DAYS_PER_CIVIL_WEEK: i64 = 7;
 ///
 /// [ISO 8601]: https://www.iso.org/iso-8601-date-and-time-format.html
 ///
+/// # Serialization
+///
+/// With the `serde` feature enabled, the `Serialize` and `Deserialize` trait
+/// implementations use the ISO 8601 duration string format when the
+/// serializer or deserializer is human readable.
+///
+/// For non-human-readable formats, a `SignedDuration` is encoded as an
+/// `(i64, i32)` tuple. The `i64` is the number of whole seconds and the `i32`
+/// is the fractional nanosecond component. The two components always have the
+/// same sign unless either is zero, and the fractional component is in
+/// `-999_999_999..=999_999_999`. This binary representation is part of Jiff's
+/// stable public API.
+///
 /// # API design
 ///
 /// A `SignedDuration` is, as much as is possible, a replica of the
@@ -160,14 +173,12 @@ const DAYS_PER_CIVIL_WEEK: i64 = 7;
 /// * Fallible constructors are provided, where as the standard library lacks
 /// them.
 /// * Unlike the standard library, this type implements the `std::fmt::Display`
-/// and `std::str::FromStr` traits via the ISO 8601 duration format, just
-/// like the [`Span`](crate::Span) type does. Also like `Span`, the ISO
-/// 8601 duration format is used to implement the serde `Serialize` and
-/// `Deserialize` traits when the `serde` crate feature is enabled.
-/// Additionally, the Jiff-specific [`friendly`] format is supported when
-/// parsing (or deserializing) automatically. And is available as an alternate
-/// via the `std::fmt::Display` implementation, i.e.,
-/// `format!("{duration:#}")`.
+/// and `std::str::FromStr` traits via the ISO 8601 duration format, just like
+/// the [`Span`](crate::Span) type does. The ISO 8601 duration format is also
+/// used for human-readable serde serialization. Additionally, the
+/// Jiff-specific [`friendly`] format is supported when parsing (or
+/// deserializing) automatically. And is available as an alternate via the
+/// `std::fmt::Display` implementation, i.e., `format!("{duration:#}")`.
 /// * The `std::fmt::Debug` trait implementation is a bit different. If you
 /// have a problem with it, please file an issue.
 /// * At present, there is no `SignedDuration::abs_diff` since there are some
@@ -2715,7 +2726,16 @@ impl serde_core::Serialize for SignedDuration {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            return serializer.collect_str(self);
+        }
+
+        use serde_core::ser::SerializeTuple;
+
+        let mut tuple = serializer.serialize_tuple(2)?;
+        tuple.serialize_element(&self.as_secs())?;
+        tuple.serialize_element(&self.subsec_nanos())?;
+        tuple.end()
     }
 }
 
@@ -2727,36 +2747,86 @@ impl<'de> serde_core::Deserialize<'de> for SignedDuration {
     ) -> Result<SignedDuration, D::Error> {
         use serde_core::de;
 
-        struct SignedDurationVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for SignedDurationVisitor {
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = SignedDuration;
+
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a signed duration string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<SignedDuration, E> {
+                    parse_iso_or_friendly(value).map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<SignedDuration, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
+            }
+
+            return deserializer.deserialize_str(HumanReadableVisitor);
+        }
+
+        struct BinaryVisitor;
+
+        impl<'de> de::Visitor<'de> for BinaryVisitor {
             type Value = SignedDuration;
 
             fn expecting(
                 &self,
                 f: &mut core::fmt::Formatter,
             ) -> core::fmt::Result {
-                f.write_str("a signed duration string")
+                f.write_str(
+                    "an (i64, i32) tuple containing whole seconds and \
+                     fractional nanoseconds",
+                )
             }
 
             #[inline]
-            fn visit_bytes<E: de::Error>(
+            fn visit_seq<A: de::SeqAccess<'de>>(
                 self,
-                value: &[u8],
-            ) -> Result<SignedDuration, E> {
-                parse_iso_or_friendly(value).map_err(de::Error::custom)
-            }
-
-            #[inline]
-            fn visit_str<E: de::Error>(
-                self,
-                value: &str,
-            ) -> Result<SignedDuration, E> {
-                self.visit_bytes(value.as_bytes())
+                mut seq: A,
+            ) -> Result<SignedDuration, A::Error> {
+                let second = seq
+                    .next_element::<i64>()?
+                    .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+                let nanosecond = seq
+                    .next_element::<i32>()?
+                    .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+                if !(-NANOS_PER_SEC < nanosecond && nanosecond < NANOS_PER_SEC)
+                {
+                    return Err(de::Error::custom(
+                        "binary SignedDuration nanosecond must be in \
+                         -999,999,999..=999,999,999",
+                    ));
+                }
+                let duration = SignedDuration::new(second, nanosecond);
+                if duration.as_secs() != second
+                    || duration.subsec_nanos() != nanosecond
+                {
+                    return Err(de::Error::custom(
+                        "binary SignedDuration components must have the same \
+                         sign unless either is zero",
+                    ));
+                }
+                Ok(duration)
             }
         }
 
-        deserializer.deserialize_str(SignedDurationVisitor)
+        deserializer.deserialize_tuple(2, BinaryVisitor)
     }
 }
 

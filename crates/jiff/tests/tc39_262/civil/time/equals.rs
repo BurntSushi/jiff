@@ -1,7 +1,7 @@
 use jiff::{
-    civil::{time, Time},
-    tz::TimeZone,
     Timestamp, Zoned,
+    civil::{Time, time},
+    tz::TimeZone,
 };
 
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/PlainTime/prototype/equals/argument-string-calendar-annotation-invalid-key.js

@@ -18,7 +18,7 @@ use crate::{
     bounds::RangeError,
     civil,
     macros::unwrapr,
-    tz::{self, posix, Abbreviation, Dst, Offset},
+    tz::{self, Abbreviation, Dst, Offset, posix},
     util::MaybeStaticSlice,
 };
 

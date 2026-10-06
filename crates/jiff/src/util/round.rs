@@ -1,11 +1,11 @@
 use crate::{
+    SignedDuration, Unit,
     error::{
+        Error, ErrorContext,
         unit::{MustDivide, UnitConfigError},
         util::RoundingIncrementError,
-        Error, ErrorContext,
     },
     util::b,
-    SignedDuration, Unit,
 };
 
 /// A representation of a rounding increment in a particular unit.

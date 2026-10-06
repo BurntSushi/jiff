@@ -1,4 +1,4 @@
-use core::ffi::{c_char, CStr};
+use core::ffi::{CStr, c_char};
 use core::ptr::NonNull;
 
 use crate::{
@@ -6,7 +6,7 @@ use crate::{
     util::constant::unwrapr,
 };
 
-extern "C" {
+unsafe extern "C" {
     /// <https://emscripten.org/docs/api_reference/emscripten.h.html#c.emscripten_run_script_string>
     fn emscripten_run_script_string(script: *const c_char) -> *mut c_char;
 }

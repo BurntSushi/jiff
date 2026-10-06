@@ -595,9 +595,7 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
   `/usr/share/zoneinfo` on Unix systems for time zone information, or for
   finding your system's default time zone. But if you don't need that (or can
   bundle the Time Zone Database), then Jiff has nearly full functionality
-  without `std` enabled, excepting things like `std::error::Error` trait
-  implementations and a global time zone database (which is required for
-  things like [`Timestamp::in_tz`] to work).
+  without `std` enabled.
 * **alloc** (enabled by default) -
   When enabled, Jiff will depend on the `alloc` crate. In particular, this
   enables functionality that requires or greatly benefits from dynamic memory
@@ -613,10 +611,11 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
   default time zone.
 * **serde** -
   When enabled, all of the datetime and span types in Jiff implement
-  serde's `Serialize` and `Deserialize` traits. The format used is specified by
-  Temporal, but it's a mix of the "best" parts of RFC 3339, RFC 9557 and
-  ISO 8601. See the [`fmt::temporal`] module for more details on the format
-  used.
+  serde's `Serialize` and `Deserialize` traits. Human-readable serializers use
+  a format specified by Temporal that mixes the "best" parts of RFC 3339, RFC
+  9557 and ISO 8601. Non-human-readable serializers use compact, type-specific
+  integer representations documented on each type. See the [`fmt::temporal`]
+  module for more details on the human-readable format.
 * **js** -
   On _only_ the `wasm32-unknown-unknown` and `wasm64-unknown-unknown` targets,
   the `js` feature will add dependencies on `js-sys` and `wasm-bindgen`.

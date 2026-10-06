@@ -9,15 +9,15 @@ use jcore::{
 };
 
 use crate::{
+    RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
     civil::{Date, DateTime},
     duration::{Duration, SDuration},
-    error::{civil::Error as E, unit::UnitConfigError, Error},
+    error::{Error, civil::Error as E, unit::UnitConfigError},
     fmt::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
     },
     util::{b, constant, round::Increment},
-    RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
 };
 
 /// A representation of civil "wall clock" time.
@@ -65,6 +65,17 @@ use crate::{
 ///
 /// For more information on the specific format supported, see the
 /// [`fmt::temporal`](crate::fmt::temporal) module documentation.
+///
+/// # Serialization
+///
+/// With the `serde` feature enabled, the `Serialize` and `Deserialize` trait
+/// implementations use the Temporal string format when the serializer or
+/// deserializer is human readable.
+///
+/// For non-human-readable formats, a `Time` is encoded as a single `u64`
+/// equal to the number of nanoseconds since midnight. The value is in the
+/// inclusive range `0..=86_399_999_999_999`. This binary representation is
+/// part of Jiff's stable public API.
 ///
 /// # Default value
 ///
@@ -1029,11 +1040,7 @@ impl Time {
     pub fn saturating_add<A: Into<TimeArithmetic>>(self, duration: A) -> Time {
         let duration: TimeArithmetic = duration.into();
         self.checked_add(duration).unwrap_or_else(|_| {
-            if duration.is_negative() {
-                Time::MIN
-            } else {
-                Time::MAX
-            }
+            if duration.is_negative() { Time::MIN } else { Time::MAX }
         })
     }
 
@@ -1674,7 +1681,7 @@ impl Time {
     pub fn strftime<'f, F: 'f + ?Sized + AsRef<[u8]>>(
         &self,
         format: &'f F,
-    ) -> fmt::strtime::Display<'f> {
+    ) -> fmt::strtime::Display<'f, 'static> {
         fmt::strtime::Display { fmt: format.as_ref(), tm: (*self).into() }
     }
 }
@@ -1742,7 +1749,7 @@ impl Time {
     /// The maximum possible value that can be returned represents the time
     /// `23:59:59.999999999`.
     #[inline]
-    fn to_nanosecond(&self) -> i64 {
+    pub(crate) fn to_nanosecond(&self) -> i64 {
         self.inner.to_nanosecond().nanosecond()
     }
 
@@ -1752,7 +1759,7 @@ impl Time {
     ///
     /// This returns an error when the given `nanosecond` is invalid.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn from_nanosecond(nanosecond: i64) -> Result<Time, Error> {
+    pub(crate) fn from_nanosecond(nanosecond: i64) -> Result<Time, Error> {
         JTimeNanosecond::new(nanosecond)
             .map(|nano| nano.to_time())
             .map(Time::from_jcore)
@@ -2046,7 +2053,7 @@ impl<'a> From<&'a Zoned> for Time {
 #[cfg(feature = "defmt")]
 impl defmt::Format for Time {
     fn format(&self, f: defmt::Formatter) {
-        use crate::fmt::{temporal::DEFAULT_DATETIME_PRINTER, DefmtWrite};
+        use crate::fmt::{DefmtWrite, temporal::DEFAULT_DATETIME_PRINTER};
 
         defmt::unwrap!(
             DEFAULT_DATETIME_PRINTER.print_time(self, DefmtWrite(f))
@@ -2061,7 +2068,11 @@ impl serde_core::Serialize for Time {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
+        if serializer.is_human_readable() {
+            serializer.collect_str(self)
+        } else {
+            serializer.serialize_u64(self.to_nanosecond() as u64)
+        }
     }
 }
 
@@ -2073,35 +2084,74 @@ impl<'de> serde_core::Deserialize<'de> for Time {
     ) -> Result<Time, D::Error> {
         use serde_core::de;
 
-        struct TimeVisitor;
+        if deserializer.is_human_readable() {
+            struct HumanReadableVisitor;
 
-        impl<'de> de::Visitor<'de> for TimeVisitor {
+            impl<'de> de::Visitor<'de> for HumanReadableVisitor {
+                type Value = Time;
+
+                fn expecting(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    f.write_str("a time string")
+                }
+
+                #[inline]
+                fn visit_bytes<E: de::Error>(
+                    self,
+                    value: &[u8],
+                ) -> Result<Time, E> {
+                    DEFAULT_DATETIME_PARSER
+                        .parse_time(value)
+                        .map_err(de::Error::custom)
+                }
+
+                #[inline]
+                fn visit_str<E: de::Error>(
+                    self,
+                    value: &str,
+                ) -> Result<Time, E> {
+                    self.visit_bytes(value.as_bytes())
+                }
+            }
+
+            return deserializer.deserialize_str(HumanReadableVisitor);
+        }
+
+        struct BinaryVisitor;
+
+        impl<'de> de::Visitor<'de> for BinaryVisitor {
             type Value = Time;
 
             fn expecting(
                 &self,
                 f: &mut core::fmt::Formatter,
             ) -> core::fmt::Result {
-                f.write_str("a time string")
+                f.write_str(
+                    "a u64 count of nanoseconds since midnight in \
+                     0..=86,399,999,999,999",
+                )
             }
 
             #[inline]
-            fn visit_bytes<E: de::Error>(
-                self,
-                value: &[u8],
-            ) -> Result<Time, E> {
-                DEFAULT_DATETIME_PARSER
-                    .parse_time(value)
-                    .map_err(de::Error::custom)
-            }
-
-            #[inline]
-            fn visit_str<E: de::Error>(self, value: &str) -> Result<Time, E> {
-                self.visit_bytes(value.as_bytes())
+            fn visit_u64<E: de::Error>(self, value: u64) -> Result<Time, E> {
+                let nanosecond = i64::try_from(value).map_err(|_| {
+                    E::custom(
+                        "binary Time nanosecond is outside \
+                         0..=86,399,999,999,999",
+                    )
+                })?;
+                Time::from_nanosecond(nanosecond).map_err(|_| {
+                    E::custom(
+                        "binary Time nanosecond is outside \
+                         0..=86,399,999,999,999",
+                    )
+                })
             }
         }
 
-        deserializer.deserialize_str(TimeVisitor)
+        deserializer.deserialize_u64(BinaryVisitor)
     }
 }
 
@@ -3198,7 +3248,7 @@ impl TimeWith {
 mod tests {
     use std::io::Cursor;
 
-    use crate::{civil::time, span::span_eq, ToSpan};
+    use crate::{ToSpan, civil::time, span::span_eq};
 
     use super::*;
 
