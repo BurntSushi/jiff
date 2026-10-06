@@ -220,7 +220,7 @@ mod enabled {
                 FailedLinkLine => f.write_str("failed to parse `Link` line"),
                 FailedParseDay => f.write_str("failed to parse day"),
                 FailedParseFieldAt => {
-                    f.write_str("failed to parse `NAME` field")
+                    f.write_str("failed to parse `AT` field")
                 }
                 FailedParseFieldFormat => {
                     f.write_str("failed to parse `FORMAT` field")
