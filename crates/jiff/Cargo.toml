@@ -205,7 +205,7 @@ defmt = { version = "1.0.0", optional = true }
 # `jiff-static`.)
 jcore = { version = "0.1.0", package = "jiff-core", path = "../jiff-core", default-features = false }
 jiff-static = { version = "0.2", path = "../jiff-static", optional = true }
-jiff-tzdb = { version = "0.1.8", path = "../jiff-tzdb", optional = true }
+jiff-tzdb = { version = "0.1.9", path = "../jiff-tzdb", optional = true }
 log = { version = "0.4.21", optional = true, default-features = false }
 serde_core = { version = "1.0.221", optional = true, default-features = false }
 
