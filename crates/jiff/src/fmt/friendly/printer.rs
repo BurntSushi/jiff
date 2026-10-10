@@ -50,8 +50,9 @@ const MAX_SIGNED_DURATION_LEN: usize = 194;
 ///
 /// Note that this is shorter than `MAX_SIGNED_DURATION` because one cannot
 /// get a negative formatted duration from a `std::time::Duration`. So there's
-/// no way to get an ` ago` suffix (or a `-` prefix).
-const MAX_UNSIGNED_DURATION_LEN: usize = 190;
+/// no way to get an ` ago` suffix (or a `-` prefix). It can still get a `+`
+/// prefix with `Direction::ForceSign` though, which is counted here.
+const MAX_UNSIGNED_DURATION_LEN: usize = 191;
 
 /// Configuration for [`SpanPrinter::designator`].
 ///
@@ -4168,6 +4169,12 @@ mod tests {
         insta::assert_snapshot!(
             p.unsigned_duration_to_string(&udur),
             @"00005124095576030430 hours, 00000000000000000059 minutes, 00000000000000000059 seconds, 00000000000000000999 milliseconds, 00000000000000000999 microseconds, 00000000000000000999 nanoseconds",
+        );
+
+        let p = p.direction(Direction::ForceSign);
+        insta::assert_snapshot!(
+            p.unsigned_duration_to_string(&udur),
+            @"+00005124095576030430 hours, 00000000000000000059 minutes, 00000000000000000059 seconds, 00000000000000000999 milliseconds, 00000000000000000999 microseconds, 00000000000000000999 nanoseconds",
         );
     }
 }
