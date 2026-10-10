@@ -134,9 +134,11 @@ const MAX_SPAN_LEN: usize = 78;
 /// Defines the maximum possible length (in bytes) of a duration printed in the
 /// Temporal ISO 8601 format.
 ///
-/// This applies to both signed and unsigned durations. Unsigned durations have
-/// one more digit, but signed durations can have a negative sign.
-const MAX_DURATION_LEN: usize = 35;
+/// This applies to both signed and unsigned durations. The longest one isn't
+/// at either extreme. It's a negative duration with 16 digits of hours and
+/// two digit minutes and seconds, e.g.,
+/// `-PT2562047788015214H59M59.999999999S`.
+const MAX_DURATION_LEN: usize = 36;
 
 #[derive(Clone, Debug)]
 pub(super) struct DateTimePrinter {
@@ -1897,6 +1899,15 @@ mod tests {
             p(i64::MAX, 999_999_999),
             @"PT2562047788015215H30M7.999999999S",
         );
+
+        insta::assert_snapshot!(
+            p(-(2_562_047_788_015_214 * 3_600 + 3_599), -999_999_999),
+            @"-PT2562047788015214H59M59.999999999S",
+        );
+        insta::assert_snapshot!(
+            p(2_562_047_788_015_214 * 3_600 + 3_599, 999_999_999),
+            @"PT2562047788015214H59M59.999999999S",
+        );
     }
 
     #[cfg(not(miri))]
@@ -1928,6 +1939,10 @@ mod tests {
         insta::assert_snapshot!(
             p(u64::MAX, 999_999_999),
             @"PT5124095576030431H15.999999999S",
+        );
+        insta::assert_snapshot!(
+            p(5_124_095_576_030_430 * 3_600 + 3_599, 999_999_999),
+            @"PT5124095576030430H59M59.999999999S",
         );
     }
 }
