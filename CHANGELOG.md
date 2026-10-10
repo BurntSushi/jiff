@@ -1,5 +1,15 @@
 # CHANGELOG
 
+0.2.39 (TBD)
+============
+TODO
+
+Bug fixes:
+
+* [#654](https://github.com/BurntSushi/jiff/issues/654):
+Fixes a panic when printing some very large durations.
+
+
 0.2.38 (2026-10-06)
 ===================
 This release updates Jiff's bundled copy of the [IANA Time Zone Database]
