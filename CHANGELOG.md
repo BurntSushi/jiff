@@ -4,6 +4,11 @@
 ============
 TODO
 
+Enhancements:
+
+* [#659](https://github.com/BurntSushi/jiff/pull/659):
+Update the Windows time zone names.
+
 Bug fixes:
 
 * [#654](https://github.com/BurntSushi/jiff/issues/654):
