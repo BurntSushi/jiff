@@ -174,20 +174,14 @@ impl Offset {
         const DAY_SHIFT: i32 = 30 * 146097;
         const SEC_SHIFT: i64 = (DAY_SHIFT as i64) * 86_400;
 
-        let pos_sec = (second + (offset.seconds() as i64) + SEC_SHIFT) as u64;
-        let mut epoch_day = (pos_sec / 86_400) as i32;
-        let mut second = (pos_sec % 86_400) as i32;
+        let mut pos_sec = (second + (offset.seconds() as i64) + SEC_SHIFT) as u64;
 
-        if nanosecond < 0 {
-            if second > 0 {
-                second -= 1;
-                nanosecond += 1_000_000_000;
-            } else {
-                epoch_day -= 1;
-                second += 86_399;
-                nanosecond += 1_000_000_000;
-            }
-        }
+        let is_neg_nano: bool = nanosecond < 0;
+        pos_sec -= is_neg_nano as u64;
+        nanosecond += if is_neg_nano { 1_000_000_000 } else { 0 };
+        
+        let mut epoch_day = (pos_sec / 86_400) as i32;
+        let second = (pos_sec % 86_400) as i32;
 
         epoch_day -= DAY_SHIFT;
 
