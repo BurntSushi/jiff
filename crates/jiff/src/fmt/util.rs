@@ -1,10 +1,10 @@
 use jcore::{bounds::Sign, constants as c};
 
 use crate::{
-    error::{fmt::util::Error as E, ErrorContext},
+    Error, SignedDuration, Span, Unit,
+    error::{ErrorContext, fmt::util::Error as E},
     fmt::Parsed,
     util::{b, parse},
-    Error, SignedDuration, Span, Unit,
 };
 
 /// A container for holding a partially parsed duration.
@@ -685,11 +685,7 @@ impl DurationUnits {
 
     /// Returns the sign that should be applied to each individual unit.
     fn get_sign(&self) -> Sign {
-        if self.any_non_zero_units {
-            self.sign
-        } else {
-            Sign::Zero
-        }
+        if self.any_non_zero_units { self.sign } else { Sign::Zero }
     }
 }
 
@@ -999,7 +995,7 @@ fn duration_unit_value(
         unsupported => {
             return Err(Error::from(E::NotAllowedCalendarUnit {
                 unit: unsupported,
-            }))
+            }));
         }
     };
     Ok(sdur)

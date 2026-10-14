@@ -1,19 +1,19 @@
 use crate::{
+    Error,
     error::{
-        fmt::strtime::{Error as E, FormatError as FE},
         ErrorContext,
+        fmt::strtime::{Error as E, FormatError as FE},
     },
     fmt::{
         buffer::BorrowedWriter,
         strtime::{
+            BrokenDownTime, Config, Custom, Extension, Flag, Meridiem,
             month_name_abbrev, month_name_full, weekday_name_abbrev,
-            weekday_name_full, BrokenDownTime, Config, Custom, Extension,
-            Flag, Meridiem,
+            weekday_name_full,
         },
     },
     tz::Offset,
     util::utf8,
-    Error,
 };
 
 enum Item {
@@ -79,16 +79,16 @@ pub(super) struct Formatter<
     'buffer,
     'data,
     'write,
-    L,
+    'zoned,
 > {
-    pub(super) config: &'config Config<L>,
+    pub(super) config: &'config Config<dyn Custom + 'config>,
     pub(super) fmt: &'fmt [u8],
-    pub(super) tm: &'tm BrokenDownTime,
+    pub(super) tm: &'tm BrokenDownTime<'zoned>,
     pub(super) wtr: &'writer mut BorrowedWriter<'buffer, 'data, 'write>,
 }
 
-impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
-    Formatter<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L>
+impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, 'zoned>
+    Formatter<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, 'zoned>
 {
     #[inline(never)]
     pub(super) fn format(&mut self) -> Result<(), Error> {
@@ -369,11 +369,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
             Some(meridiem) => meridiem,
             None => {
                 let hour = self.tm.hour().ok_or(FE::RequiresTime)?;
-                if hour < 12 {
-                    Meridiem::AM
-                } else {
-                    Meridiem::PM
-                }
+                if hour < 12 { Meridiem::AM } else { Meridiem::PM }
             }
         };
         let s = match meridiem {
@@ -389,11 +385,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
             Some(meridiem) => meridiem,
             None => {
                 let hour = self.tm.hour().ok_or(FE::RequiresTime)?;
-                if hour < 12 {
-                    Meridiem::AM
-                } else {
-                    Meridiem::PM
-                }
+                if hour < 12 { Meridiem::AM } else { Meridiem::PM }
             }
         };
         // Manually specialize this case to avoid hitting `write_str_cold`.
@@ -1105,10 +1097,10 @@ impl Case {
 #[cfg(test)]
 mod tests {
     use crate::{
-        civil::{date, time, Date, DateTime, Time},
-        fmt::strtime::{format, BrokenDownTime, Config, PosixCustom},
-        tz::Offset,
         Timestamp, Zoned,
+        civil::{Date, DateTime, Time, date, time},
+        fmt::strtime::{BrokenDownTime, Config, PosixCustom, format},
+        tz::Offset,
     };
 
     #[test]
@@ -1667,9 +1659,9 @@ mod tests {
 
     #[test]
     fn lenient() {
-        fn f(
+        fn f<'a>(
             fmt: impl AsRef<[u8]>,
-            tm: impl Into<BrokenDownTime>,
+            tm: impl Into<BrokenDownTime<'a>>,
         ) -> alloc::string::String {
             let config = Config::new().lenient(true);
             tm.into().to_string_with_config(&config, fmt).unwrap()

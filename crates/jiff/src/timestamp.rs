@@ -3,9 +3,10 @@ use core::time::Duration as UnsignedDuration;
 use jcore::Timestamp as JTimestamp;
 
 use crate::{
+    RoundMode, SignedDuration, Span, SpanRound, Unit,
     duration::{Duration, SDuration},
     error::{
-        timestamp::Error as E, unit::UnitConfigError, Error, ErrorContext,
+        Error, ErrorContext, timestamp::Error as E, unit::UnitConfigError,
     },
     fmt::{
         self,
@@ -14,7 +15,6 @@ use crate::{
     tz::{Offset, TimeZone},
     util::{constant, round::Increment},
     zoned::Zoned,
-    RoundMode, SignedDuration, Span, SpanRound, Unit,
 };
 
 /// An instant in time represented as the number of nanoseconds since the Unix
@@ -126,15 +126,15 @@ use crate::{
 ///
 /// One can compute the span of time between two timestamps using either
 /// [`Timestamp::until`] or [`Timestamp::since`]. It's also possible to
-/// subtract two `Timestamp` values directly via a `Sub` trait implementation:
+/// subtract two `Timestamp` values directly via a `Sub` trait implementation
+/// (which returns a `SignedDuration`):
 ///
 /// ```
-/// use jiff::{Timestamp, ToSpan};
+/// use jiff::{SignedDuration, Timestamp};
 ///
 /// let ts1: Timestamp = "2024-05-03 23:30:00.123Z".parse()?;
 /// let ts2: Timestamp = "2024-02-25 07Z".parse()?;
-/// // The default is to return spans with units no bigger than seconds.
-/// assert_eq!(ts1 - ts2, 5934600.seconds().milliseconds(123).fieldwise());
+/// assert_eq!(ts1 - ts2, SignedDuration::new(5_934_600, 123_000_000));
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -1784,11 +1784,11 @@ impl Timestamp {
     /// between any two possible timestamps, it will never panic.
     ///
     /// ```
-    /// use jiff::{Timestamp, ToSpan};
+    /// use jiff::{SignedDuration, Timestamp};
     ///
     /// let earlier: Timestamp = "2006-08-24T22:30:00Z".parse()?;
     /// let later: Timestamp = "2019-01-31 21:00:00Z".parse()?;
-    /// assert_eq!(later - earlier, 392509800.seconds().fieldwise());
+    /// assert_eq!(later - earlier, SignedDuration::from_secs(392_509_800));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2179,7 +2179,7 @@ impl Timestamp {
     pub fn strftime<'f, F: 'f + ?Sized + AsRef<[u8]>>(
         &self,
         format: &'f F,
-    ) -> fmt::strtime::Display<'f> {
+    ) -> fmt::strtime::Display<'f, 'static> {
         fmt::strtime::Display { fmt: format.as_ref(), tm: (*self).into() }
     }
 
@@ -2448,20 +2448,17 @@ impl core::ops::SubAssign<Span> for Timestamp {
 
 /// Computes the span of time between two timestamps.
 ///
-/// This will return a negative span when the timestamp being subtracted is
+/// This will return a negative duration when the timestamp being subtracted is
 /// greater.
 ///
-/// Since this uses the default configuration for calculating a span between
-/// two timestamps (no rounding and largest units is seconds), this will never
-/// panic or fail in any way.
-///
-/// To configure the largest unit or enable rounding, use [`Timestamp::since`].
+/// To get a [`Span`] or configure the largest unit or enable rounding, use
+/// [`Timestamp::since`].
 impl core::ops::Sub for Timestamp {
-    type Output = Span;
+    type Output = SignedDuration;
 
     #[inline]
-    fn sub(self, rhs: Timestamp) -> Span {
-        self.since(rhs).expect("since never fails when given Timestamp")
+    fn sub(self, rhs: Timestamp) -> SignedDuration {
+        self.duration_since(rhs)
     }
 }
 
@@ -2617,7 +2614,7 @@ impl TryFrom<std::time::SystemTime> for Timestamp {
 #[cfg(feature = "defmt")]
 impl defmt::Format for Timestamp {
     fn format(&self, f: defmt::Formatter) {
-        use crate::fmt::{temporal::DEFAULT_DATETIME_PRINTER, DefmtWrite};
+        use crate::fmt::{DefmtWrite, temporal::DEFAULT_DATETIME_PRINTER};
 
         defmt::unwrap!(
             DEFAULT_DATETIME_PRINTER.print_timestamp(self, DefmtWrite(f))
@@ -2878,11 +2875,7 @@ impl TimestampArithmetic {
             SDuration::Absolute(sdur) => ts.checked_add_duration(sdur),
         };
         Ok(result.unwrap_or_else(|_| {
-            if self.is_negative() {
-                Timestamp::MIN
-            } else {
-                Timestamp::MAX
-            }
+            if self.is_negative() { Timestamp::MIN } else { Timestamp::MAX }
         }))
     }
 
@@ -3490,10 +3483,10 @@ mod tests {
     use std::io::Cursor;
 
     use crate::{
+        ToSpan,
         civil::{self, datetime},
         tz::Offset,
         util::b,
-        ToSpan,
     };
 
     use super::*;

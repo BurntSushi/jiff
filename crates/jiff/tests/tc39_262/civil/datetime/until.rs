@@ -1,6 +1,6 @@
 use jiff::{
-    civil::{date, DateTime, DateTimeDifference},
     RoundMode, ToSpan, Unit,
+    civil::{DateTime, DateTimeDifference, date},
 };
 
 use crate::tc39_262::Result;

@@ -127,7 +127,7 @@ pub use self::{
     ambiguous::{
         AmbiguousOffset, AmbiguousTimestamp, AmbiguousZoned, Disambiguation,
     },
-    db::{db, TimeZoneDatabase, TimeZoneName, TimeZoneNameIter},
+    db::{TimeZoneDatabase, TimeZoneName, TimeZoneNameIter, db},
     offset::{Dst, Offset, OffsetArithmetic, OffsetConflict, OffsetRound},
     timezone::{
         TimeZone, TimeZoneFollowingTransitions, TimeZoneOffsetInfo,

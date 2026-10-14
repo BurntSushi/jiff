@@ -246,10 +246,11 @@ higher level APIs like [`Timestamp::round`] or [`Zoned::round`].
 
 # Conditionally unsupported
 
-Jiff does not support `%Q` or `%:Q` (IANA time zone identifier) when the
-`alloc` crate feature is not enabled. This is because a time zone identifier
-is variable width data. If you have a use case for this, please
-[detail it in a new issue](https://github.com/BurntSushi/jiff/issues/new).
+Jiff does not support parsing `%Q` or `%:Q` (IANA time zone identifier) when
+the `alloc` crate feature is not enabled. This is because a parsed time zone
+identifier is variable width data that must be owned. Formatting these
+directives is supported without `alloc` when the identifier can be borrowed,
+such as when formatting a [`Zoned`] value.
 
 # Unsupported
 
@@ -275,16 +276,20 @@ The following things are currently unsupported:
 */
 
 use crate::{
+    Error, Timestamp, Zoned,
     civil::{Date, DateTime, ISOWeekDate, Time, Weekday},
-    error::{fmt::strtime::Error as E, ErrorContext},
+    error::{ErrorContext, fmt::strtime::Error as E},
     fmt::{
+        Write,
         buffer::{ArrayBuffer, BorrowedWriter},
         strtime::{parse::Parser, printer::Formatter},
-        Write,
     },
     tz::{Offset, OffsetConflict, TimeZone, TimeZoneDatabase},
-    util::{self, b, escape},
-    Error, Timestamp, Zoned,
+    util::{
+        self, b,
+        borrow::{DumbCow, StringCow},
+        escape,
+    },
 };
 
 mod parse;
@@ -349,7 +354,7 @@ mod printer;
 pub fn parse(
     format: impl AsRef<[u8]>,
     input: impl AsRef<[u8]>,
-) -> Result<BrokenDownTime, Error> {
+) -> Result<BrokenDownTime<'static>, Error> {
     BrokenDownTime::parse(format, input)
 }
 
@@ -423,11 +428,11 @@ pub fn parse(
 /// ```
 #[cfg(any(test, feature = "alloc"))]
 #[inline]
-pub fn format(
+pub fn format<'a>(
     format: impl AsRef<[u8]>,
-    broken_down_time: impl Into<BrokenDownTime>,
+    broken_down_time: impl Into<BrokenDownTime<'a>>,
 ) -> Result<alloc::string::String, Error> {
-    let broken_down_time: BrokenDownTime = broken_down_time.into();
+    let broken_down_time: BrokenDownTime<'a> = broken_down_time.into();
 
     let format = format.as_ref();
     let mut buf = alloc::string::String::with_capacity(format.len());
@@ -475,16 +480,18 @@ pub fn format(
 /// [`icu`]: https://docs.rs/icu
 /// [`jiff-icu`]: https://docs.rs/jiff-icu
 #[derive(Clone, Debug)]
-pub struct Config<C> {
-    custom: C,
+pub struct Config<C: ?Sized> {
     lenient: bool,
+    // This must remain the final field so that `Config<C>` can be unsized to
+    // `Config<dyn Custom>`.
+    custom: C,
 }
 
 impl Config<DefaultCustom> {
     /// Create a new default `Config` that uses [`DefaultCustom`].
     #[inline]
     pub const fn new() -> Config<DefaultCustom> {
-        Config { custom: DefaultCustom::new(), lenient: false }
+        Config { lenient: false, custom: DefaultCustom::new() }
     }
 }
 
@@ -493,7 +500,7 @@ impl<C> Config<C> {
     /// that use this configuration.
     #[inline]
     pub fn custom<U: Custom>(self, custom: U) -> Config<U> {
-        Config { custom, lenient: self.lenient }
+        Config { lenient: self.lenient, custom }
     }
 
     /// Enable lenient formatting.
@@ -659,18 +666,38 @@ impl<C> Config<C> {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
+/// # Trait objects
+///
+/// `Custom` is dyn-compatible. A configuration containing a concrete
+/// implementation can be coerced to one containing a `dyn Custom` trait
+/// object without allocating:
+///
+/// ```
+/// use jiff::{civil, fmt::strtime::{BrokenDownTime, PosixCustom, Config, Custom}};
+///
+/// let config = Config::new().custom(PosixCustom::new());
+/// let config: &Config<dyn Custom> = &config;
+/// let tm = BrokenDownTime::from(civil::date(2025, 7, 1).at(17, 30, 0, 0));
+/// assert_eq!(
+///     tm.to_string_with_config(config, "%c")?,
+///     "Tue Jul  1 17:30:00 2025",
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
 /// [`icu`]: https://docs.rs/icu
 /// [`jiff-icu`]: https://docs.rs/jiff-icu
-pub trait Custom: Sized {
+pub trait Custom {
     /// Called when formatting a datetime with the `%c` flag.
     ///
     /// This defaults to the implementation for [`DefaultCustom`].
-    fn format_datetime<W: Write>(
+    fn format_datetime(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         ext: &Extension,
-        tm: &BrokenDownTime,
-        wtr: &mut W,
+        tm: &BrokenDownTime<'_>,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         if matches!(ext.flag, Some(Flag::Uppercase)) {
             tm.format_with_config(config, "%Y M%m %-d, %^a %H:%M:%S", wtr)
@@ -682,12 +709,12 @@ pub trait Custom: Sized {
     /// Called when formatting a datetime with the `%x` flag.
     ///
     /// This defaults to the implementation for [`DefaultCustom`].
-    fn format_date<W: Write>(
+    fn format_date(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         _ext: &Extension,
-        tm: &BrokenDownTime,
-        wtr: &mut W,
+        tm: &BrokenDownTime<'_>,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         // 2025 M04 27
         tm.format_with_config(config, "%Y M%m %-d", wtr)
@@ -696,12 +723,12 @@ pub trait Custom: Sized {
     /// Called when formatting a datetime with the `%X` flag.
     ///
     /// This defaults to the implementation for [`DefaultCustom`].
-    fn format_time<W: Write>(
+    fn format_time(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         _ext: &Extension,
-        tm: &BrokenDownTime,
-        wtr: &mut W,
+        tm: &BrokenDownTime<'_>,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         tm.format_with_config(config, "%H:%M:%S", wtr)
     }
@@ -709,12 +736,12 @@ pub trait Custom: Sized {
     /// Called when formatting a datetime with the `%r` flag.
     ///
     /// This defaults to the implementation for [`DefaultCustom`].
-    fn format_12hour_time<W: Write>(
+    fn format_12hour_time(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         ext: &Extension,
-        tm: &BrokenDownTime,
-        wtr: &mut W,
+        tm: &BrokenDownTime<'_>,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         if matches!(ext.flag, Some(Flag::Uppercase)) {
             tm.format_with_config(config, "%-I:%M:%S %^p", wtr)
@@ -796,12 +823,12 @@ impl PosixCustom {
 }
 
 impl Custom for PosixCustom {
-    fn format_datetime<W: Write>(
+    fn format_datetime(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         ext: &Extension,
-        tm: &BrokenDownTime,
-        wtr: &mut W,
+        tm: &BrokenDownTime<'_>,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         if matches!(ext.flag, Some(Flag::Uppercase)) {
             tm.format_with_config(config, "%^a %^b %e %H:%M:%S %Y", wtr)
@@ -810,32 +837,32 @@ impl Custom for PosixCustom {
         }
     }
 
-    fn format_date<W: Write>(
+    fn format_date(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         _ext: &Extension,
-        tm: &BrokenDownTime,
-        wtr: &mut W,
+        tm: &BrokenDownTime<'_>,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         tm.format_with_config(config, "%m/%d/%y", wtr)
     }
 
-    fn format_time<W: Write>(
+    fn format_time(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         _ext: &Extension,
-        tm: &BrokenDownTime,
-        wtr: &mut W,
+        tm: &BrokenDownTime<'_>,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         tm.format_with_config(config, "%H:%M:%S", wtr)
     }
 
-    fn format_12hour_time<W: Write>(
+    fn format_12hour_time(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         ext: &Extension,
-        tm: &BrokenDownTime,
-        wtr: &mut W,
+        tm: &BrokenDownTime<'_>,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         if matches!(ext.flag, Some(Flag::Uppercase)) {
             tm.format_with_config(config, "%I:%M:%S %^p", wtr)
@@ -854,6 +881,13 @@ impl Custom for PosixCustom {
 ///
 /// Otherwise, typical use of this module happens indirectly via APIs like
 /// [`Zoned::strptime`] and [`Zoned::strftime`].
+///
+/// A broken down time converted from a borrowed [`Zoned`] value also borrows
+/// its time zone and IANA time zone identifier. This avoids cloning either
+/// value during formatting. When the `alloc` feature is enabled,
+/// [`BrokenDownTime::into_owned`] can be used to obtain a `'static` value.
+/// Broken down times produced by parsing or from copyable datetime types are
+/// already `'static`.
 ///
 /// # Design
 ///
@@ -889,7 +923,7 @@ impl Custom for PosixCustom {
 // also have to parse hours.
 #[derive(Debug, Default)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct BrokenDownTime {
+pub struct BrokenDownTime<'a> {
     year: Option<i16>,
     month: Option<i8>,
     day: Option<i8>,
@@ -917,14 +951,13 @@ pub struct BrokenDownTime {
     timestamp: Option<Timestamp>,
     // The time zone. Currently used only when
     // formatting a `Zoned`.
-    tz: Option<TimeZone>,
+    tz: Option<DumbCow<'a, TimeZone>>,
     // The IANA time zone identifier. Used only when
     // formatting a `Zoned`.
-    #[cfg(feature = "alloc")]
-    iana: Option<alloc::string::String>,
+    iana: Option<StringCow<'a>>,
 }
 
-impl BrokenDownTime {
+impl<'a> BrokenDownTime<'a> {
     /// Parse the given `input` according to the given `format` string.
     ///
     /// See the [module documentation](self) for details on what's supported.
@@ -953,12 +986,15 @@ impl BrokenDownTime {
     pub fn parse(
         format: impl AsRef<[u8]>,
         input: impl AsRef<[u8]>,
-    ) -> Result<BrokenDownTime, Error> {
+    ) -> Result<BrokenDownTime<'static>, Error> {
         BrokenDownTime::parse_mono(format.as_ref(), input.as_ref())
     }
 
     #[inline]
-    fn parse_mono(fmt: &[u8], inp: &[u8]) -> Result<BrokenDownTime, Error> {
+    fn parse_mono(
+        fmt: &[u8],
+        inp: &[u8],
+    ) -> Result<BrokenDownTime<'static>, Error> {
         let mut pieces = BrokenDownTime::default();
         let mut p = Parser { fmt, inp, tm: &mut pieces };
         p.parse().context(E::FailedStrptime)?;
@@ -1054,7 +1090,7 @@ impl BrokenDownTime {
     pub fn parse_prefix(
         format: impl AsRef<[u8]>,
         input: impl AsRef<[u8]>,
-    ) -> Result<(BrokenDownTime, usize), Error> {
+    ) -> Result<(BrokenDownTime<'static>, usize), Error> {
         BrokenDownTime::parse_prefix_mono(format.as_ref(), input.as_ref())
     }
 
@@ -1062,13 +1098,56 @@ impl BrokenDownTime {
     fn parse_prefix_mono(
         fmt: &[u8],
         inp: &[u8],
-    ) -> Result<(BrokenDownTime, usize), Error> {
+    ) -> Result<(BrokenDownTime<'static>, usize), Error> {
         let mkoffset = util::parse::offseter(inp);
         let mut pieces = BrokenDownTime::default();
         let mut p = Parser { fmt, inp, tm: &mut pieces };
         p.parse().context(E::FailedStrptime)?;
         let remainder = mkoffset(p.inp);
         Ok((pieces, remainder))
+    }
+
+    /// Converts this broken down time into an owned value whose lifetime is
+    /// `'static`.
+    ///
+    /// A `BrokenDownTime` created from a borrowed [`Zoned`] value borrows its
+    /// time zone and IANA time zone identifier. This avoids cloning the time
+    /// zone or allocating a copy of its identifier when the broken down time
+    /// is only used temporarily. Calling this method clones that borrowed
+    /// data so that the broken down time can outlive the `Zoned` value.
+    ///
+    /// If the time zone and identifier are already owned, then they are
+    /// reused without cloning.
+    ///
+    /// # Example
+    ///
+    /// This creates a broken down time that outlives the zoned datetime it
+    /// was made from:
+    ///
+    /// ```
+    /// use jiff::{civil::date, fmt::strtime::BrokenDownTime};
+    ///
+    /// let tm = {
+    ///     let zdt = date(2024, 7, 15)
+    ///         .at(16, 24, 59, 0)
+    ///         .in_tz("America/New_York")?;
+    ///     BrokenDownTime::from(&zdt).into_owned()
+    /// };
+    /// assert_eq!(
+    ///     tm.to_string("%F %T %Q %Z")?,
+    ///     "2024-07-15 16:24:59 America/New_York EDT",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[cfg(feature = "alloc")]
+    #[inline]
+    pub fn into_owned(self) -> BrokenDownTime<'static> {
+        BrokenDownTime {
+            tz: self.tz.map(DumbCow::into_owned),
+            iana: self.iana.map(StringCow::into_owned),
+            ..self
+        }
     }
 
     /// Format this broken down time using the format string given.
@@ -1126,8 +1205,8 @@ impl BrokenDownTime {
     ///
     /// This routine is like [`BrokenDownTime::format`], except that it
     /// permits callers to provide their own configuration instead of using
-    /// the default. This routine also accepts a `&mut W` instead of a `W`,
-    /// which may be more flexible in some situations.
+    /// the default. This routine also accepts a `&mut dyn Write` instead of a
+    /// `W`, which may be more flexible in some situations.
     ///
     /// # Errors
     ///
@@ -1160,12 +1239,12 @@ impl BrokenDownTime {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    #[inline]
-    pub fn format_with_config<W: Write, L: Custom>(
+    #[inline(never)]
+    pub fn format_with_config(
         &self,
-        config: &Config<L>,
+        config: &Config<dyn Custom + '_>,
         format: impl AsRef<[u8]>,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         let fmt = format.as_ref();
         let mut buf = ArrayBuffer::<100>::default();
@@ -1265,9 +1344,9 @@ impl BrokenDownTime {
     /// ```
     #[cfg(feature = "alloc")]
     #[inline]
-    pub fn to_string_with_config<L: Custom>(
+    pub fn to_string_with_config(
         &self,
-        config: &Config<L>,
+        config: &Config<dyn Custom + '_>,
         format: impl AsRef<[u8]>,
     ) -> Result<alloc::string::String, Error> {
         let format = format.as_ref();
@@ -1679,7 +1758,7 @@ impl BrokenDownTime {
     pub fn to_date(&self) -> Result<Date, Error> {
         #[cold]
         #[inline(never)]
-        fn to_date(tm: &BrokenDownTime) -> Result<Date, Error> {
+        fn to_date(tm: &BrokenDownTime<'_>) -> Result<Date, Error> {
             let Some(year) = tm.year else {
                 // The Gregorian year and ISO week year may be parsed
                 // separately. That is, they are two different fields. So if
@@ -2390,8 +2469,9 @@ impl BrokenDownTime {
 
     /// Returns the time zone IANA identifier, if available.
     ///
-    /// Note that when `alloc` is disabled, this always returns `None`. (And
-    /// there is no way to set it.)
+    /// When the `alloc` feature is disabled, an identifier can be borrowed
+    /// from a [`Zoned`] value, but cannot be parsed or set with
+    /// [`BrokenDownTime::set_iana_time_zone`].
     ///
     /// # Example
     ///
@@ -2415,14 +2495,7 @@ impl BrokenDownTime {
     /// ```
     #[inline]
     pub fn iana_time_zone(&self) -> Option<&str> {
-        #[cfg(feature = "alloc")]
-        {
-            self.iana.as_deref()
-        }
-        #[cfg(not(feature = "alloc"))]
-        {
-            None
-        }
+        self.iana.as_deref()
     }
 
     /// Returns the parsed weekday, if available.
@@ -3037,7 +3110,7 @@ impl BrokenDownTime {
     #[cfg(feature = "alloc")]
     #[inline]
     pub fn set_iana_time_zone(&mut self, id: Option<alloc::string::String>) {
-        self.iana = id;
+        self.iana = id.map(StringCow::Owned);
     }
 
     /// Set the weekday on this broken down time.
@@ -3185,27 +3258,21 @@ impl BrokenDownTime {
     }
 }
 
-impl<'a> From<&'a Zoned> for BrokenDownTime {
-    fn from(zdt: &'a Zoned) -> BrokenDownTime {
-        // let offset_info = zdt.time_zone().to_offset_info(zdt.timestamp());
-        #[cfg(feature = "alloc")]
-        let iana = {
-            use alloc::string::ToString;
-            zdt.time_zone().iana_name().map(|s| s.to_string())
-        };
+impl<'a> From<&'a Zoned> for BrokenDownTime<'a> {
+    fn from(zdt: &'a Zoned) -> BrokenDownTime<'a> {
+        let tz = zdt.time_zone();
         BrokenDownTime {
             offset: Some(zdt.offset()),
             timestamp: Some(zdt.timestamp()),
-            tz: Some(zdt.time_zone().clone()),
-            #[cfg(feature = "alloc")]
-            iana,
+            tz: Some(DumbCow::Borrowed(tz)),
+            iana: tz.iana_name().map(StringCow::Borrowed),
             ..BrokenDownTime::from(zdt.datetime())
         }
     }
 }
 
-impl From<Timestamp> for BrokenDownTime {
-    fn from(ts: Timestamp) -> BrokenDownTime {
+impl From<Timestamp> for BrokenDownTime<'static> {
+    fn from(ts: Timestamp) -> BrokenDownTime<'static> {
         let dt = Offset::UTC.to_datetime(ts);
         BrokenDownTime {
             offset: Some(Offset::UTC),
@@ -3215,8 +3282,8 @@ impl From<Timestamp> for BrokenDownTime {
     }
 }
 
-impl From<DateTime> for BrokenDownTime {
-    fn from(dt: DateTime) -> BrokenDownTime {
+impl From<DateTime> for BrokenDownTime<'static> {
+    fn from(dt: DateTime) -> BrokenDownTime<'static> {
         let (d, t) = (dt.date(), dt.time());
         BrokenDownTime {
             year: Some(d.year()),
@@ -3232,8 +3299,8 @@ impl From<DateTime> for BrokenDownTime {
     }
 }
 
-impl From<Date> for BrokenDownTime {
-    fn from(d: Date) -> BrokenDownTime {
+impl From<Date> for BrokenDownTime<'static> {
+    fn from(d: Date) -> BrokenDownTime<'static> {
         BrokenDownTime {
             year: Some(d.year()),
             month: Some(d.month()),
@@ -3243,8 +3310,8 @@ impl From<Date> for BrokenDownTime {
     }
 }
 
-impl From<ISOWeekDate> for BrokenDownTime {
-    fn from(wd: ISOWeekDate) -> BrokenDownTime {
+impl From<ISOWeekDate> for BrokenDownTime<'static> {
+    fn from(wd: ISOWeekDate) -> BrokenDownTime<'static> {
         BrokenDownTime {
             iso_week_year: Some(wd.year()),
             iso_week: Some(wd.week()),
@@ -3254,8 +3321,8 @@ impl From<ISOWeekDate> for BrokenDownTime {
     }
 }
 
-impl From<Time> for BrokenDownTime {
-    fn from(t: Time) -> BrokenDownTime {
+impl From<Time> for BrokenDownTime<'static> {
+    fn from(t: Time) -> BrokenDownTime<'static> {
         BrokenDownTime {
             hour: Some(t.hour()),
             minute: Some(t.minute()),
@@ -3275,6 +3342,11 @@ impl From<Time> for BrokenDownTime {
 /// A `Display` captures the information needed from the datetime and waits to
 /// do the actual formatting when this type's `std::fmt::Display` trait
 /// implementation is actually used.
+///
+/// A `Display` created by [`Zoned::strftime`] borrows the zoned datetime's
+/// time zone and IANA time zone identifier, and therefore cannot outlive the
+/// `Zoned` value. Displays created from copyable datetime types contain a
+/// `'static` broken down time instead.
 ///
 /// # Errors and panics
 ///
@@ -3339,12 +3411,12 @@ impl From<Time> for BrokenDownTime {
 ///      expected byte after `%`, but found end of format string",
 /// );
 /// ```
-pub struct Display<'f> {
+pub struct Display<'f, 't> {
     pub(crate) fmt: &'f [u8],
-    pub(crate) tm: BrokenDownTime,
+    pub(crate) tm: BrokenDownTime<'t>,
 }
 
-impl<'f> core::fmt::Display for Display<'f> {
+impl<'f, 't> core::fmt::Display for Display<'f, 't> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         use crate::fmt::StdFmtWrite;
 
@@ -3358,7 +3430,7 @@ impl<'f> core::fmt::Display for Display<'f> {
     }
 }
 
-impl<'f> core::fmt::Debug for Display<'f> {
+impl<'f, 't> core::fmt::Debug for Display<'f, 't> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         f.debug_struct("Display")
             .field("fmt", &escape::Bytes(self.fmt))
@@ -3396,11 +3468,7 @@ impl Meridiem {
 
 impl From<Time> for Meridiem {
     fn from(t: Time) -> Meridiem {
-        if t.hour() < 12 {
-            Meridiem::AM
-        } else {
-            Meridiem::PM
-        }
+        if t.hour() < 12 { Meridiem::AM } else { Meridiem::PM }
     }
 }
 
@@ -3618,5 +3686,34 @@ mod tests {
             DateTime::strptime(fmt, "2022年02月04日，03时58分59秒").unwrap(),
             @"2022-02-04T03:58:59",
         );
+    }
+
+    #[test]
+    fn broken_down_time_borrows_zoned_data() {
+        let zdt = Zoned::UNIX_EPOCH;
+        let tm = BrokenDownTime::from(&zdt);
+        assert!(matches!(tm.tz.as_ref(), Some(DumbCow::Borrowed(_))));
+        assert!(matches!(tm.iana.as_ref(), Some(StringCow::Borrowed("UTC"))));
+        assert_eq!(format("%Q %Z", tm).unwrap(), "UTC UTC");
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn broken_down_time_into_owned_owns_zoned_data() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let zdt = crate::civil::date(2024, 7, 15)
+            .at(16, 24, 59, 0)
+            .in_tz("America/New_York")
+            .unwrap();
+        let tm = BrokenDownTime::from(&zdt);
+        assert!(matches!(tm.tz.as_ref(), Some(DumbCow::Borrowed(_))));
+        assert!(matches!(tm.iana.as_ref(), Some(StringCow::Borrowed(_))));
+
+        let tm = tm.into_owned();
+        assert!(matches!(tm.tz.as_ref(), Some(DumbCow::Owned(_))));
+        assert!(matches!(tm.iana.as_ref(), Some(StringCow::Owned(_))));
     }
 }

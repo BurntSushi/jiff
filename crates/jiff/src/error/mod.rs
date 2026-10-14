@@ -29,13 +29,12 @@ pub(crate) mod zoned;
 ///
 /// # Introspection is limited
 ///
-/// Other than implementing the [`std::error::Error`] trait when the
-/// `std` feature is enabled, the [`core::fmt::Debug`] trait and the
-/// [`core::fmt::Display`] trait, this error type currently provides
-/// very limited introspection capabilities. Simple predicates like
-/// `Error::is_range` are provided, but the predicates are not
-/// exhaustive. That is, there exist some errors that do not return
-/// `true` for any of the `Error::is_*` predicates.
+/// Other than implementing the [`core::error::Error`], [`core::fmt::Debug`]
+/// and [`core::fmt::Display`] traits, this error type currently provides very
+/// limited introspection capabilities. Simple predicates like
+/// `Error::is_range` are provided, but the predicates are not exhaustive.
+/// That is, there exist some errors that do not return `true` for any of the
+/// `Error::is_*` predicates.
 ///
 /// # Design
 ///
@@ -167,8 +166,8 @@ impl Error {
     /// assert!(err.is_invalid_parameter());
     /// ```
     pub fn is_invalid_parameter(&self) -> bool {
-        use self::civil::Error as CivilError;
         use self::ErrorKind::*;
+        use self::civil::Error as CivilError;
 
         matches!(
             *self.root().kind(),
@@ -365,8 +364,7 @@ impl Error {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for Error {}
+impl core::error::Error for Error {}
 
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -574,8 +572,7 @@ impl AdhocError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for AdhocError {}
+impl core::error::Error for AdhocError {}
 
 impl core::fmt::Display for AdhocError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -650,8 +647,7 @@ struct IOError {
     err: std::io::Error,
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for IOError {}
+impl core::error::Error for IOError {}
 
 impl core::fmt::Display for IOError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -702,8 +698,7 @@ struct FilePathError {
     path: std::path::PathBuf,
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for FilePathError {}
+impl core::error::Error for FilePathError {}
 
 impl core::fmt::Display for FilePathError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
