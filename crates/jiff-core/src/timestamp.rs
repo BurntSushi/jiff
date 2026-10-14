@@ -181,7 +181,15 @@ impl Timestamp {
         let secs64 = secs as i64;
         // OK because NANOS_PER_SEC!={-1,0}.
         let nanosecond = (nanosecond % NANOS_PER_SEC) as i32;
-        Ok(Timestamp::new_unchecked(secs64, nanosecond))
+        // We can't use `Timestamp::new_unchecked` here: `secs64` has only
+        // been checked to fit in an `i64` above, not that it's within
+        // `Timestamp`'s actual (narrower) range. Calling `new_unchecked`
+        // with an out-of-range `secs64` violates its safety invariants and
+        // either panics (in debug builds, via its `debug_assert`s) or
+        // produces a corrupt `Timestamp` (in release builds, where the
+        // asserts are compiled out). `Timestamp::new` performs the bounds
+        // check that this function's own docs promise.
+        Timestamp::new(secs64, nanosecond)
     }
 
     /// Returns this timestamp as a number of seconds since the Unix epoch.
@@ -903,6 +911,24 @@ mod tests {
         assert!(Timestamp::new(0, i32::MIN).is_err());
         assert!(Timestamp::new(-377705023201, -1).is_err());
         assert!(Timestamp::new(253402207201, 0).is_err());
+    }
+
+    // Regression test for #645: `Timestamp::from_nanosecond` panicked
+    // instead of returning an error when the given nanosecond count fell
+    // just outside of `Timestamp::MIN..=Timestamp::MAX`, even though its
+    // signature (and docs) promise a `Result`.
+    #[test]
+    fn from_nanosecond_err() {
+        let min = Timestamp::MIN.as_nanosecond();
+        assert_eq!(Timestamp::from_nanosecond(min).unwrap(), Timestamp::MIN);
+        assert!(Timestamp::from_nanosecond(min - 1).is_err());
+
+        let max = Timestamp::MAX.as_nanosecond();
+        assert_eq!(Timestamp::from_nanosecond(max).unwrap(), Timestamp::MAX);
+        assert!(Timestamp::from_nanosecond(max + 1).is_err());
+
+        assert!(Timestamp::from_nanosecond(i128::MIN).is_err());
+        assert!(Timestamp::from_nanosecond(i128::MAX).is_err());
     }
 
     #[test]
