@@ -728,6 +728,47 @@ mod tests {
         // parse due to overflowing i64.
     }
 
+    // When a time unit exceeds its limit, the excess is carried over into
+    // smaller units. This tests that the excess is combined with any smaller
+    // units that were also parsed, instead of one clobbering the other.
+    //
+    // Regression test for: https://github.com/BurntSushi/jiff/issues/660
+    #[test]
+    fn parse_span_boundaries_carry() {
+        // This also checks that the span parsed is consistent with parsing
+        // the same input into a `SignedDuration`.
+        let p = |s: &str| {
+            let span = SpanParser::new().parse_span(s).unwrap();
+            let dur = SpanParser::new().parse_duration(s).unwrap();
+            assert_eq!(dur, SignedDuration::try_from(span).unwrap(), "{s}");
+            span
+        };
+        let pe = |s: &str| SpanParser::new().parse_span(s).unwrap_err();
+
+        insta::assert_snapshot!(p("175307617h 1m"), @"PT175307616H61M");
+        insta::assert_snapshot!(p("175307617h 1m ago"), @"-PT175307616H61M");
+        insta::assert_snapshot!(p("200000000h 30m"), @"PT175307616H1481543070M");
+        insta::assert_snapshot!(p("200000000:30:00"), @"PT175307616H1481543070M");
+        insta::assert_snapshot!(p("200000000h 30.5m"), @"PT175307616H1481543070M30S");
+        insta::assert_snapshot!(p("10518456961m 1s"), @"PT10518456960M61S");
+        insta::assert_snapshot!(p("631107417601s 1ms"), @"PT631107417601.001S");
+        insta::assert_snapshot!(p("631107417600001ms 1us"), @"PT631107417600.001001S");
+        insta::assert_snapshot!(p("631107417600000001us 1ns"), @"PT631107417600.000001001S");
+
+        // The minutes are already at their limit, so the extra hour needs to
+        // skip over them and get added to the seconds.
+        insta::assert_snapshot!(
+            p("175307617h 10518456960m 1s"),
+            @"PT175307616H10518456960M3601S",
+        );
+
+        // Combining the excess with the seconds overflows an `i64`.
+        insta::assert_snapshot!(
+            pe("10518456961m 9223372036854775807s"),
+            @r#"failed to parse input in the "friendly" duration format: failed to set value for second unit on span: failed to set nanosecond value from fractional component"#,
+        );
+    }
+
     #[test]
     fn err_span_basic() {
         let p = |s: &str| SpanParser::new().parse_span(s).unwrap_err();

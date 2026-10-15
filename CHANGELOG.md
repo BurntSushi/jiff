@@ -13,6 +13,8 @@ Bug fixes:
 
 * [#654](https://github.com/BurntSushi/jiff/issues/654):
 Fixes a panic when printing some very large durations.
+* [#660](https://github.com/BurntSushi/jiff/issues/660):
+Fixes a bug where parsing some very large spans gave an incorrect result.
 
 
 0.2.38 (2026-10-06)
