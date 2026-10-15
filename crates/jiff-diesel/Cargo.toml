@@ -11,7 +11,7 @@ categories = ["date-and-time"]
 keywords = ["date", "time", "jiff", "diesel", "zone"]
 include = ["/src/*.rs", "COPYING", "LICENSE-MIT", "UNLICENSE"]
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.71"
 
 # Integration crates in Jiff are explicitly isolated from the workspace to
 # avoid dependencies accumulating. I was originally motivated to do this

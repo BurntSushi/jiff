@@ -197,7 +197,7 @@ boundaries has a lot of overhead in my experience.)
 
 ### Minimum Rust version policy
 
-This crate's minimum supported `rustc` version (MSRV) is `1.70.0`. Jiff
+This crate's minimum supported `rustc` version (MSRV) is `1.71`. Jiff
 itself, and any dependencies of Jiff within this repository, will never use a
 Rust version that requires a Rust compiler released in the previous 1 year.
 (Dependents of Jiff in this repository, e.g., `jiff-icu`, may use a newer MSRV,
