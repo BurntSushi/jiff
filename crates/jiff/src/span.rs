@@ -6577,6 +6577,50 @@ mod tests {
         assert_eq!(total, 3.7944444444444443);
     }
 
+    // A zero span used to panic when totaled in a calendar unit relative to
+    // a date, since the span's sign is zero and so the length of the unit
+    // couldn't be measured.
+    #[test]
+    fn test_total_zero() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let d = date(2023, 10, 9);
+        let dt = d.at(0, 0, 0, 0);
+        let zdt = dt.in_tz("America/New_York").unwrap();
+        for unit in [Unit::Year, Unit::Month, Unit::Week, Unit::Day] {
+            assert_eq!(Span::new().total((unit, d)).unwrap(), 0.0);
+            assert_eq!(Span::new().total((unit, dt)).unwrap(), 0.0);
+            assert_eq!(Span::new().total((unit, &zdt)).unwrap(), 0.0);
+        }
+        assert_eq!(d.since(d).unwrap().total((Unit::Day, d)).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn test_round_zero() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let d = date(2023, 10, 9);
+        let dt = d.at(0, 0, 0, 0);
+        let zdt = dt.in_tz("America/New_York").unwrap();
+        for smallest in [Unit::Year, Unit::Month, Unit::Week, Unit::Day] {
+            let opts = SpanRound::new().smallest(smallest);
+            span_eq!(
+                Span::new().round(opts.relative(d)).unwrap(),
+                Span::new()
+            );
+            span_eq!(
+                Span::new().round(opts.relative(&zdt)).unwrap(),
+                Span::new()
+            );
+        }
+        let opts = SpanRound::new().smallest(Unit::Hour).largest(Unit::Day);
+        span_eq!(Span::new().round(opts.relative(&zdt)).unwrap(), Span::new());
+    }
+
     #[test]
     fn test_compare() {
         if crate::tz::db().is_definitively_empty() {
