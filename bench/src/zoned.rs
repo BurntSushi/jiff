@@ -10,10 +10,70 @@ use jiff::{
 use crate::{benchmark, convert::ConvertFrom};
 
 pub(super) fn define(c: &mut Criterion) {
+    add_calendar(c);
     default(c);
     fixed_offset_add_time(c);
     fixed_offset_to_civil_datetime(c);
     fixed_offset_to_timestamp(c);
+}
+
+/// Measures adding calendar units to a datetime in an IANA time zone.
+///
+/// Calendar-only additions can reuse the offset from civil datetime
+/// resolution. Gap, fold and mixed calendar/time cases are also included.
+///
+/// Ref: https://github.com/BurntSushi/jiff/pull/666
+fn add_calendar(c: &mut Criterion) {
+    const NAME: &str = "zoned/add_calendar";
+
+    let tz = TimeZone::get("America/New_York").unwrap();
+    for (label, start, span, expected) in [
+        (
+            "day",
+            civil::date(2024, 6, 30).at(9, 46, 0, 0),
+            1.day(),
+            civil::date(2024, 7, 1).at(9, 46, 0, 0),
+        ),
+        (
+            "month",
+            civil::date(2024, 1, 31).at(2, 30, 0, 0),
+            1.month(),
+            civil::date(2024, 2, 29).at(2, 30, 0, 0),
+        ),
+        (
+            "dst",
+            civil::date(2024, 3, 9).at(12, 0, 0, 0),
+            1.day(),
+            civil::date(2024, 3, 10).at(12, 0, 0, 0),
+        ),
+        (
+            "gap",
+            civil::date(2024, 3, 9).at(2, 30, 0, 0),
+            1.day(),
+            civil::date(2024, 3, 10).at(3, 30, 0, 0),
+        ),
+        (
+            "fold",
+            civil::date(2024, 11, 2).at(1, 30, 0, 0),
+            1.day(),
+            civil::date(2024, 11, 3).at(1, 30, 0, 0),
+        ),
+        (
+            "mixed",
+            civil::date(2024, 6, 30).at(9, 46, 0, 0),
+            1.day().hours(1),
+            civil::date(2024, 7, 1).at(10, 46, 0, 0),
+        ),
+    ] {
+        let start = start.to_zoned(tz.clone()).unwrap();
+        let expected = expected.to_zoned(tz.clone()).unwrap();
+        benchmark(c, format!("{NAME}/{label}/jiff"), |b| {
+            b.iter(|| {
+                let end = bb(&start).checked_add(bb(span)).unwrap();
+                assert_eq!(bb(end), expected);
+            })
+        });
+    }
 }
 
 /// Measures the time that `Zoned::default()` takes.
