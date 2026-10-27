@@ -2311,6 +2311,12 @@ impl Zoned {
             .context(E::AddDateTime)?;
 
         let tz = self.inner.time_zone;
+        // `DateTime::to_zoned` uses the same "compatible" disambiguation, but
+        // skips the second offset lookup (in `ts.to_zoned()` below) in the
+        // unambiguous case.
+        if span_time.is_zero() {
+            return dt.to_zoned(tz).context(E::ConvertDateTimeToTimestamp);
+        }
         let mut ts = tz
             .to_ambiguous_timestamp(dt)
             .compatible()
@@ -6445,6 +6451,44 @@ mod tests {
         assert_eq!(
             zdt4.to_string(),
             "2016-10-30T02:01:00+01:00[Europe/Amsterdam]"
+        );
+    }
+
+    /// Adding only calendar units resolves the resulting civil datetime with
+    /// "compatible" disambiguation. This checks the unambiguous, gap and fold
+    /// cases, with and without a time component in the span.
+    #[test]
+    fn zoned_add_calendar_units_dst() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let zdt: Zoned = "2024-01-31T02:30[America/New_York]".parse().unwrap();
+        assert_eq!(
+            zdt.checked_add(1.month()).unwrap().to_string(),
+            "2024-02-29T02:30:00-05:00[America/New_York]"
+        );
+
+        // Lands in a gap, so it's moved forward by the length of the gap.
+        let zdt: Zoned = "2024-03-09T02:30[America/New_York]".parse().unwrap();
+        assert_eq!(
+            zdt.checked_add(1.day()).unwrap().to_string(),
+            "2024-03-10T03:30:00-04:00[America/New_York]"
+        );
+        assert_eq!(
+            zdt.checked_add(1.day().minutes(1)).unwrap().to_string(),
+            "2024-03-10T03:31:00-04:00[America/New_York]"
+        );
+
+        // Lands in a fold, so the earlier offset is picked.
+        let zdt: Zoned = "2024-11-02T01:30[America/New_York]".parse().unwrap();
+        assert_eq!(
+            zdt.checked_add(1.day()).unwrap().to_string(),
+            "2024-11-03T01:30:00-04:00[America/New_York]"
+        );
+        assert_eq!(
+            zdt.checked_add(1.day().hours(1)).unwrap().to_string(),
+            "2024-11-03T01:30:00-05:00[America/New_York]"
         );
     }
 }
