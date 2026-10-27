@@ -4641,6 +4641,12 @@ impl<'a> SpanTotal<'a> {
 
         assert!(self.unit >= Unit::Day);
         let sign = relspan.span.get_sign();
+        // A zero span has no direction in which to measure the length of
+        // `self.unit` below, so `unit_start_and_end` would be asked to add
+        // zero units and fail its assertion. The total is always zero anyway.
+        if sign.is_zero() {
+            return Ok(0.0);
+        }
         let (relative_start, relative_end) = match relspan.kind {
             RelativeSpanKind::Civil { start, end } => {
                 let start = Relative::Civil(start);
