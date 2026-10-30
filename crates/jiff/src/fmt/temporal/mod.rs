@@ -920,8 +920,8 @@ impl DateTimeParser {
     ///     TimeZone::get("America/New_York")?,
     /// );
     /// assert_eq!(
-    ///     PARSER.parse_time_zone("Israel")?,
-    ///     TimeZone::get("Israel")?,
+    ///     PARSER.parse_time_zone("Asia/Jerusalem")?,
+    ///     TimeZone::get("Asia/Jerusalem")?,
     /// );
     /// assert_eq!(
     ///     PARSER.parse_time_zone("EST5EDT,M3.2.0,M11.1.0")?,
@@ -1281,12 +1281,14 @@ impl DateTimePrinter {
     /// const PRINTER: DateTimePrinter =
     ///     DateTimePrinter::new().precision(Some(3));
     ///
-    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 123_456_789).in_tz("US/Eastern")?;
+    /// let zdt = date(2024, 6, 15)
+    ///     .at(7, 0, 0, 123_456_789)
+    ///     .in_tz("America/New_York")?;
     ///
     /// let mut buf = String::new();
     /// // Printing to a `String` can never fail.
     /// PRINTER.print_zoned(&zdt, &mut buf).unwrap();
-    /// assert_eq!(buf, "2024-06-15T07:00:00.123-04:00[US/Eastern]");
+    /// assert_eq!(buf, "2024-06-15T07:00:00.123-04:00[America/New_York]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1300,21 +1302,23 @@ impl DateTimePrinter {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt = date(2024, 6, 15).at(7, 0, 0, 123_000_000).in_tz("US/Eastern")?;
+    /// let zdt = date(2024, 6, 15)
+    ///     .at(7, 0, 0, 123_000_000)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(
     ///     format!("{zdt:.6}"),
-    ///     "2024-06-15T07:00:00.123000-04:00[US/Eastern]",
+    ///     "2024-06-15T07:00:00.123000-04:00[America/New_York]",
     /// );
     /// // Precision values greater than 9 are clamped to 9.
     /// assert_eq!(
     ///     format!("{zdt:.300}"),
-    ///     "2024-06-15T07:00:00.123000000-04:00[US/Eastern]",
+    ///     "2024-06-15T07:00:00.123000000-04:00[America/New_York]",
     /// );
     /// // A precision of 0 implies the entire fractional
     /// // component is always truncated.
     /// assert_eq!(
     ///     format!("{zdt:.0}"),
-    ///     "2024-06-15T07:00:00-04:00[US/Eastern]",
+    ///     "2024-06-15T07:00:00-04:00[America/New_York]",
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1553,8 +1557,8 @@ impl DateTimePrinter {
     /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
     ///
     /// // IANA time zone
-    /// let tz = TimeZone::get("US/Eastern")?;
-    /// assert_eq!(PRINTER.time_zone_to_string(&tz)?, "US/Eastern");
+    /// let tz = TimeZone::get("America/New_York")?;
+    /// assert_eq!(PRINTER.time_zone_to_string(&tz)?, "America/New_York");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1910,10 +1914,10 @@ impl DateTimePrinter {
     /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
     ///
     /// // IANA time zone
-    /// let tz = TimeZone::get("US/Eastern")?;
+    /// let tz = TimeZone::get("America/New_York")?;
     /// let mut buf = String::new();
     /// PRINTER.print_time_zone(&tz, &mut buf)?;
-    /// assert_eq!(buf, "US/Eastern");
+    /// assert_eq!(buf, "America/New_York");
     ///
     /// // Fixed offset
     /// let tz = TimeZone::fixed(tz::offset(-5));
@@ -1975,12 +1979,12 @@ impl DateTimePrinter {
     /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
     ///
     /// let pieces = Pieces::from(date(2024, 6, 15))
-    ///     .with_time_zone_name("US/Eastern");
+    ///     .with_time_zone_name("America/New_York");
     ///
     /// let mut buf = String::new();
     /// // Printing to a `String` can never fail.
     /// PRINTER.print_pieces(&pieces, &mut buf).unwrap();
-    /// assert_eq!(buf, "2024-06-15[US/Eastern]");
+    /// assert_eq!(buf, "2024-06-15[America/New_York]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```

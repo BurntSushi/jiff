@@ -429,18 +429,21 @@ impl<'n> Pieces<'n> {
     /// Note that the `Pieces` returned is parameterized by the lifetime of
     /// `input`. This is because it might borrow a sub-slice of `input` for
     /// a time zone annotation name. For example,
-    /// `Canada/Yukon` in `2025-01-03T16:42-07[Canada/Yukon]`.
+    /// `America/Whitehorse` in `2025-01-03T16:42-07[America/Whitehorse]`.
     ///
     /// # Example
     ///
     /// ```
     /// use jiff::{civil, fmt::temporal::Pieces, tz::TimeZone};
     ///
-    /// let pieces = Pieces::parse("2025-01-03T16:42[Canada/Yukon]")?;
+    /// let pieces = Pieces::parse("2025-01-03T16:42[America/Whitehorse]")?;
     /// assert_eq!(pieces.date(), civil::date(2025, 1, 3));
     /// assert_eq!(pieces.time(), Some(civil::time(16, 42, 0, 0)));
     /// assert_eq!(pieces.to_numeric_offset(), None);
-    /// assert_eq!(pieces.to_time_zone()?, Some(TimeZone::get("Canada/Yukon")?));
+    /// assert_eq!(
+    ///     pieces.to_time_zone()?,
+    ///     Some(TimeZone::get("America/Whitehorse")?),
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1541,11 +1544,11 @@ impl<'n> TimeZoneAnnotation<'n> {
     /// ```
     /// use jiff::{fmt::temporal::Pieces, tz::TimeZone};
     ///
-    /// let pieces = Pieces::parse("2025-01-02T16:47-05[Australia/Tasmania]")?;
+    /// let pieces = Pieces::parse("2025-01-02T16:47-05[Australia/Hobart]")?;
     /// let ann = pieces.time_zone_annotation().unwrap();
     /// assert_eq!(
     ///     ann.to_time_zone().unwrap(),
-    ///     TimeZone::get("Australia/Tasmania").unwrap(),
+    ///     TimeZone::get("Australia/Hobart").unwrap(),
     /// );
     ///
     /// let pieces = Pieces::parse("2025-01-02T16:47-05[Australia/Bluey]")?;
@@ -1578,11 +1581,11 @@ impl<'n> TimeZoneAnnotation<'n> {
     /// ```
     /// use jiff::{fmt::temporal::Pieces, tz::TimeZone};
     ///
-    /// let pieces = Pieces::parse("2025-01-02T16:47-05[Australia/Tasmania]")?;
+    /// let pieces = Pieces::parse("2025-01-02T16:47-05[Australia/Hobart]")?;
     /// let ann = pieces.time_zone_annotation().unwrap();
     /// assert_eq!(
     ///     ann.to_time_zone_with(jiff::tz::db()).unwrap(),
-    ///     TimeZone::get("Australia/Tasmania").unwrap(),
+    ///     TimeZone::get("Australia/Hobart").unwrap(),
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())

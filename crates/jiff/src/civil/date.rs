@@ -1083,8 +1083,11 @@ impl Date {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt = date(2024, 3, 10).in_tz("Cuba")?;
-    /// assert_eq!(zdt.to_string(), "2024-03-10T01:00:00-04:00[Cuba]");
+    /// let zdt = date(2024, 3, 10).in_tz("America/Havana")?;
+    /// assert_eq!(
+    ///     zdt.to_string(),
+    ///     "2024-03-10T01:00:00-04:00[America/Havana]",
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1103,10 +1106,13 @@ impl Date {
     /// ```
     /// use jiff::{civil::date, tz::TimeZone};
     ///
-    /// let tz = TimeZone::get("Cuba")?;
+    /// let tz = TimeZone::get("America/Havana")?;
     /// let dt = date(2024, 3, 10).at(0, 0, 0, 0);
     /// let zdt = tz.to_ambiguous_zoned(dt).earlier()?;
-    /// assert_eq!(zdt.to_string(), "2024-03-09T23:00:00-05:00[Cuba]");
+    /// assert_eq!(
+    ///     zdt.to_string(),
+    ///     "2024-03-09T23:00:00-05:00[America/Havana]",
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```

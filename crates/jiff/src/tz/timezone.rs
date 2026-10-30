@@ -72,8 +72,8 @@ use self::repr::Repr;
 ///
 /// let dt = date(2024, 7, 15).at(21, 27, 0, 0);
 /// let zdt1 = dt.in_tz("America/New_York")?;
-/// let zdt2 = zdt1.in_tz("Israel")?;
-/// assert_eq!(zdt2.to_string(), "2024-07-16T04:27:00+03:00[Israel]");
+/// let zdt2 = zdt1.in_tz("Asia/Jerusalem")?;
+/// assert_eq!(zdt2.to_string(), "2024-07-16T04:27:00+03:00[Asia/Jerusalem]");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -418,7 +418,7 @@ impl TimeZone {
     /// ```
     /// use jiff::{tz::TimeZone, Timestamp};
     ///
-    /// let tz = TimeZone::get("Japan")?;
+    /// let tz = TimeZone::get("Asia/Tokyo")?;
     /// assert_eq!(
     ///     tz.to_datetime(Timestamp::UNIX_EPOCH).to_string(),
     ///     "1970-01-01T09:00:00",
@@ -1247,7 +1247,7 @@ impl TimeZone {
     /// ```
     /// use jiff::{Unit, Zoned};
     ///
-    /// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+    /// let now: Zoned = "2024-12-31 18:25-05[America/New_York]".parse()?;
     /// let trans = now.time_zone().preceding(now.timestamp()).next().unwrap();
     /// let prev_at = trans.timestamp().to_zoned(now.time_zone().clone());
     /// let span = now.since((Unit::Year, &prev_at))?;
@@ -1264,7 +1264,7 @@ impl TimeZone {
     /// ```
     /// use jiff::{tz::offset, Zoned};
     ///
-    /// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+    /// let now: Zoned = "2024-12-31 18:25-05[America/New_York]".parse()?;
     /// let transitions = now
     ///     .time_zone()
     ///     .preceding(now.timestamp())
@@ -1276,11 +1276,31 @@ impl TimeZone {
     ///     ))
     ///     .collect::<Vec<_>>();
     /// assert_eq!(transitions, vec![
-    ///     ("2024-11-03 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
-    ///     ("2024-03-10 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
-    ///     ("2023-11-05 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
-    ///     ("2023-03-12 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
-    ///     ("2022-11-06 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
+    ///     (
+    ///         "2024-11-03 01:00-05[America/New_York]".parse()?,
+    ///         offset(-5),
+    ///         "EST".to_string(),
+    ///     ),
+    ///     (
+    ///         "2024-03-10 03:00-04[America/New_York]".parse()?,
+    ///         offset(-4),
+    ///         "EDT".to_string(),
+    ///     ),
+    ///     (
+    ///         "2023-11-05 01:00-05[America/New_York]".parse()?,
+    ///         offset(-5),
+    ///         "EST".to_string(),
+    ///     ),
+    ///     (
+    ///         "2023-03-12 03:00-04[America/New_York]".parse()?,
+    ///         offset(-4),
+    ///         "EDT".to_string(),
+    ///     ),
+    ///     (
+    ///         "2022-11-06 01:00-05[America/New_York]".parse()?,
+    ///         offset(-5),
+    ///         "EST".to_string(),
+    ///     ),
     /// ]);
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1327,7 +1347,7 @@ impl TimeZone {
     /// ```
     /// use jiff::{Unit, Zoned};
     ///
-    /// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+    /// let now: Zoned = "2024-12-31 18:25-05[America/New_York]".parse()?;
     /// let trans = now.time_zone().following(now.timestamp()).next().unwrap();
     /// let next_at = trans.timestamp().to_zoned(now.time_zone().clone());
     /// let span = now.until((Unit::Year, &next_at))?;
@@ -1344,7 +1364,7 @@ impl TimeZone {
     /// ```
     /// use jiff::{tz::offset, Zoned};
     ///
-    /// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+    /// let now: Zoned = "2024-12-31 18:25-05[America/New_York]".parse()?;
     /// let transitions = now
     ///     .time_zone()
     ///     .following(now.timestamp())
@@ -1356,11 +1376,31 @@ impl TimeZone {
     ///     ))
     ///     .collect::<Vec<_>>();
     /// assert_eq!(transitions, vec![
-    ///     ("2025-03-09 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
-    ///     ("2025-11-02 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
-    ///     ("2026-03-08 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
-    ///     ("2026-11-01 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
-    ///     ("2027-03-14 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
+    ///     (
+    ///         "2025-03-09 03:00-04[America/New_York]".parse()?,
+    ///         offset(-4),
+    ///         "EDT".to_string(),
+    ///     ),
+    ///     (
+    ///         "2025-11-02 01:00-05[America/New_York]".parse()?,
+    ///         offset(-5),
+    ///         "EST".to_string(),
+    ///     ),
+    ///     (
+    ///         "2026-03-08 03:00-04[America/New_York]".parse()?,
+    ///         offset(-4),
+    ///         "EDT".to_string(),
+    ///     ),
+    ///     (
+    ///         "2026-11-01 01:00-05[America/New_York]".parse()?,
+    ///         offset(-5),
+    ///         "EST".to_string(),
+    ///     ),
+    ///     (
+    ///         "2027-03-14 03:00-04[America/New_York]".parse()?,
+    ///         offset(-4),
+    ///         "EDT".to_string(),
+    ///     ),
     /// ]);
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1608,14 +1648,14 @@ impl<'t> TimeZoneTransition<'t> {
     /// ```
     /// use jiff::{civil, tz::TimeZone};
     ///
-    /// let tz = TimeZone::get("US/Eastern")?;
-    /// // Look for the first time zone transition in `US/Eastern` following
-    /// // 2023-03-09 00:00:00.
+    /// let tz = TimeZone::get("America/New_York")?;
+    /// // Look for the first time zone transition in `America/New_York`
+    /// // following 2023-03-09 00:00:00.
     /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
     /// let next = tz.following(start).next().unwrap();
     /// assert_eq!(
     ///     next.timestamp().to_zoned(tz.clone()).to_string(),
-    ///     "2024-03-10T03:00:00-04:00[US/Eastern]",
+    ///     "2024-03-10T03:00:00-04:00[America/New_York]",
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1635,7 +1675,7 @@ impl<'t> TimeZoneTransition<'t> {
     /// ```
     /// use jiff::{civil, tz::{TimeZone, offset}};
     ///
-    /// let tz = TimeZone::get("US/Eastern")?;
+    /// let tz = TimeZone::get("America/New_York")?;
     /// // Get the offset of the next transition after
     /// // 2023-03-09 00:00:00.
     /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
@@ -1672,7 +1712,7 @@ impl<'t> TimeZoneTransition<'t> {
     /// ```
     /// use jiff::{civil, tz::TimeZone};
     ///
-    /// let tz = TimeZone::get("US/Eastern")?;
+    /// let tz = TimeZone::get("America/New_York")?;
     /// // Get the abbreviation of the next transition after
     /// // 2023-03-09 00:00:00.
     /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
@@ -1702,7 +1742,7 @@ impl<'t> TimeZoneTransition<'t> {
     /// ```
     /// use jiff::{civil, tz::{Dst, TimeZone}};
     ///
-    /// let tz = TimeZone::get("US/Eastern")?;
+    /// let tz = TimeZone::get("America/New_York")?;
     /// // Get the DST status of the next transition after
     /// // 2023-03-09 00:00:00.
     /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
@@ -1812,7 +1852,7 @@ impl<'t> TimeZoneOffsetInfo<'t> {
     /// ```
     /// use jiff::{civil, tz::{TimeZone, offset}};
     ///
-    /// let tz = TimeZone::get("US/Eastern")?;
+    /// let tz = TimeZone::get("America/New_York")?;
     /// // Get the offset for 2023-03-10 00:00:00.
     /// let start = civil::date(2024, 3, 10).to_zoned(tz.clone())?.timestamp();
     /// let info = tz.to_offset_info(start);
@@ -1844,7 +1884,7 @@ impl<'t> TimeZoneOffsetInfo<'t> {
     /// ```
     /// use jiff::{civil, tz::TimeZone};
     ///
-    /// let tz = TimeZone::get("US/Eastern")?;
+    /// let tz = TimeZone::get("America/New_York")?;
     /// // Get the time zone abbreviation for 2023-03-10 00:00:00.
     /// let start = civil::date(2024, 3, 10).to_zoned(tz.clone())?.timestamp();
     /// let info = tz.to_offset_info(start);
@@ -1874,7 +1914,7 @@ impl<'t> TimeZoneOffsetInfo<'t> {
     /// ```
     /// use jiff::{civil, tz::{Dst, TimeZone}};
     ///
-    /// let tz = TimeZone::get("US/Eastern")?;
+    /// let tz = TimeZone::get("America/New_York")?;
     /// // Get the DST status of 2023-03-11 00:00:00.
     /// let start = civil::date(2024, 3, 11).to_zoned(tz.clone())?.timestamp();
     /// let info = tz.to_offset_info(start);
@@ -1910,7 +1950,7 @@ impl<'t> TimeZoneOffsetInfo<'t> {
 /// ```
 /// use jiff::{tz::offset, Zoned};
 ///
-/// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+/// let now: Zoned = "2024-12-31 18:25-05[America/New_York]".parse()?;
 /// let transitions = now
 ///     .time_zone()
 ///     .preceding(now.timestamp())
@@ -1922,11 +1962,31 @@ impl<'t> TimeZoneOffsetInfo<'t> {
 ///     ))
 ///     .collect::<Vec<_>>();
 /// assert_eq!(transitions, vec![
-///     ("2024-11-03 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
-///     ("2024-03-10 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
-///     ("2023-11-05 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
-///     ("2023-03-12 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
-///     ("2022-11-06 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
+///     (
+///         "2024-11-03 01:00-05[America/New_York]".parse()?,
+///         offset(-5),
+///         "EST".to_string(),
+///     ),
+///     (
+///         "2024-03-10 03:00-04[America/New_York]".parse()?,
+///         offset(-4),
+///         "EDT".to_string(),
+///     ),
+///     (
+///         "2023-11-05 01:00-05[America/New_York]".parse()?,
+///         offset(-5),
+///         "EST".to_string(),
+///     ),
+///     (
+///         "2023-03-12 03:00-04[America/New_York]".parse()?,
+///         offset(-4),
+///         "EDT".to_string(),
+///     ),
+///     (
+///         "2022-11-06 01:00-05[America/New_York]".parse()?,
+///         offset(-5),
+///         "EST".to_string(),
+///     ),
 /// ]);
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1961,7 +2021,7 @@ impl<'t> core::iter::FusedIterator for TimeZonePrecedingTransitions<'t> {}
 /// ```
 /// use jiff::{tz::offset, Zoned};
 ///
-/// let now: Zoned = "2024-12-31 18:25-05[US/Eastern]".parse()?;
+/// let now: Zoned = "2024-12-31 18:25-05[America/New_York]".parse()?;
 /// let transitions = now
 ///     .time_zone()
 ///     .following(now.timestamp())
@@ -1973,11 +2033,31 @@ impl<'t> core::iter::FusedIterator for TimeZonePrecedingTransitions<'t> {}
 ///     ))
 ///     .collect::<Vec<_>>();
 /// assert_eq!(transitions, vec![
-///     ("2025-03-09 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
-///     ("2025-11-02 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
-///     ("2026-03-08 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
-///     ("2026-11-01 01:00-05[US/Eastern]".parse()?, offset(-5), "EST".to_string()),
-///     ("2027-03-14 03:00-04[US/Eastern]".parse()?, offset(-4), "EDT".to_string()),
+///     (
+///         "2025-03-09 03:00-04[America/New_York]".parse()?,
+///         offset(-4),
+///         "EDT".to_string(),
+///     ),
+///     (
+///         "2025-11-02 01:00-05[America/New_York]".parse()?,
+///         offset(-5),
+///         "EST".to_string(),
+///     ),
+///     (
+///         "2026-03-08 03:00-04[America/New_York]".parse()?,
+///         offset(-4),
+///         "EDT".to_string(),
+///     ),
+///     (
+///         "2026-11-01 01:00-05[America/New_York]".parse()?,
+///         offset(-5),
+///         "EST".to_string(),
+///     ),
+///     (
+///         "2027-03-14 03:00-04[America/New_York]".parse()?,
+///         offset(-4),
+///         "EDT".to_string(),
+///     ),
 /// ]);
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())

@@ -1198,11 +1198,11 @@ mod tests {
         );
 
         let dt = date(-9999, 3, 1).at(23, 59, 59, 999_999_999);
-        let zdt = dt.in_tz("America/Argentina/ComodRivadavia").unwrap();
+        let zdt = dt.in_tz("America/Argentina/Buenos_Aires").unwrap();
         let got = to_string(p().precision(Some(9)), zdt);
         assert_eq!(
             got,
-            "-009999-03-01T23:59:59.999999999-04:23[America/Argentina/ComodRivadavia]",
+            "-009999-03-01T23:59:59.999999999-03:54[America/Argentina/Buenos_Aires]",
         );
 
         // Inject a very long IANA tzdb identifier to ensure it's handled

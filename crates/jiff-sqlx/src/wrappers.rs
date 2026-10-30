@@ -24,7 +24,7 @@ pub trait ToSqlx {
 // We currently don't support `Zoned` integration in this wrapper crate. To
 // briefly explain why, a `Zoned` is _both_ a timestamp and a time zone. And
 // it isn't necessarily a dumb time zone like `-05:00`. It is intended to be a
-// real time zone like `America/New_York` or `Australia/Tasmania`.
+// real time zone like `America/New_York` or `Australia/Hobart`.
 //
 // However, PostgreSQL doesn't really have a primitive type that specifically
 // supports "timestamp with time zone." Comically, it does have a `TIMESTAMP

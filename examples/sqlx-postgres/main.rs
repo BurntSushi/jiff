@@ -76,7 +76,7 @@ async fn example_span_decode(pool: &PgPool) -> anyhow::Result<()> {
 async fn example_time_zone_setting(pool: &PgPool) -> anyhow::Result<()> {
     use sqlx::{Executor, Row};
 
-    sqlx::query("SET TIME ZONE 'Australia/Tasmania'")
+    sqlx::query("SET TIME ZONE 'Australia/Hobart'")
         .fetch_optional(pool)
         .await?;
 

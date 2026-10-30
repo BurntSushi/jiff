@@ -89,9 +89,9 @@ Summarizing POSIX (and common extensions supported by GNU libc and musl), the
 * `/usr/share/zoneinfo/America/New_York` sets the time zone by providing a path
 to a TZif formatted file.
 * `EST5EDT,M3.2.0,M11.1.0` sets the time zone using a POSIX daylight saving
-time rule. The rule shown here is for `US/Eastern` at time of writing (2024).
-This is useful for specifying a custom time zone without generating TZif data,
-but is rarely used in practice.
+time rule. The rule shown here is for `America/New_York` at time of writing
+(2024). This is useful for specifying a custom time zone without generating
+TZif data, but is rarely used in practice.
 
 When `TZ` isn't set, then Jiff uses heuristics to detect the system's
 configured time zone. If this automatic detection fails, please first check

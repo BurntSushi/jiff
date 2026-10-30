@@ -360,8 +360,8 @@ impl<C: IcuAsCalendar> ConvertTryFrom<IcuDate<C>> for JiffDate {
     type Error = Error;
 
     fn convert_try_from(v: IcuDate<C>) -> Result<JiffDate, Error> {
-        let v = v.to_iso();
-        let year = v.extended_year();
+        let v = v.to_calendar(Iso);
+        let year = v.year().extended_year();
         let year = i16::try_from(year).map_err(|_| {
             err!("failed to convert `icu` year of {year} to `i16`")
         })?;
@@ -621,7 +621,7 @@ impl ConvertTryFrom<JiffOffset> for IcuUtcOffset {
 ///     "TimeZone(Subtag(\"usnyc\"))",
 /// );
 ///
-/// let jiff_tz = jiff::tz::TimeZone::get("us/eastern")?;
+/// let jiff_tz = jiff::tz::TimeZone::get("america/new_york")?;
 /// let icu_tz = icu_time::TimeZone::convert_from(jiff_tz);
 /// assert_eq!(
 ///     format!("{icu_tz:?}"),
@@ -709,7 +709,7 @@ impl<'a> ConvertFrom<&'a JiffZoned>
         let tz = IcuTimeZone::convert_from(v.time_zone());
         let offset = IcuUtcOffset::convert_try_from(v.offset()).ok();
         let tz_info_base = tz.with_offset(offset);
-        let zone = tz_info_base.at_date_time_iso(datetime);
+        let zone = tz_info_base.at_date_time(datetime);
         IcuZonedDateTime { date, time, zone }
     }
 }

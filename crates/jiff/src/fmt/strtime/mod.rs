@@ -38,7 +38,7 @@ And this shows how to format a zoned datetime with a time zone abbreviation:
 ```
 use jiff::civil::date;
 
-let zdt = date(2024, 7, 15).at(17, 30, 59, 0).in_tz("Australia/Tasmania")?;
+let zdt = date(2024, 7, 15).at(17, 30, 59, 0).in_tz("Australia/Hobart")?;
 // %-I instead of %I means no padding.
 let string = zdt.strftime("%A, %B %d, %Y at %-I:%M%P %Z").to_string();
 assert_eq!(string, "Monday, July 15, 2024 at 5:30pm AEST");
@@ -53,11 +53,11 @@ use jiff::{civil::date, Zoned};
 
 let zdt = Zoned::strptime(
     "%A, %B %d, %Y at %-I:%M%P %:Q",
-    "Monday, July 15, 2024 at 5:30pm Australia/Tasmania",
+    "Monday, July 15, 2024 at 5:30pm Australia/Hobart",
 )?;
 assert_eq!(
     zdt,
-    date(2024, 7, 15).at(17, 30, 0, 0).in_tz("Australia/Tasmania")?,
+    date(2024, 7, 15).at(17, 30, 0, 0).in_tz("Australia/Hobart")?,
 );
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1329,9 +1329,12 @@ impl BrokenDownTime {
     ///
     /// let zdt = strtime::parse(
     ///     "%F %H:%M %:z %:Q",
-    ///     "2024-07-14 21:14 -04:00 US/Eastern",
+    ///     "2024-07-14 21:14 -04:00 America/New_York",
     /// )?.to_zoned()?;
-    /// assert_eq!(zdt.to_string(), "2024-07-14T21:14:00-04:00[US/Eastern]");
+    /// assert_eq!(
+    ///     zdt.to_string(),
+    ///     "2024-07-14T21:14:00-04:00[America/New_York]",
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1339,22 +1342,22 @@ impl BrokenDownTime {
     /// # Example: time zone inconsistent with offset
     ///
     /// This shows that an error is returned when the offset is inconsistent
-    /// with the time zone. For example, `US/Eastern` is in daylight saving
-    /// time in July 2024:
+    /// with the time zone. For example, `America/New_York` is in daylight
+    /// saving time in July 2024:
     ///
     /// ```
     /// use jiff::fmt::strtime;
     ///
     /// let result = strtime::parse(
     ///     "%F %H:%M %:z %:Q",
-    ///     "2024-07-14 21:14 -05:00 US/Eastern",
+    ///     "2024-07-14 21:14 -05:00 America/New_York",
     /// )?.to_zoned();
     /// assert_eq!(
     ///     result.unwrap_err().to_string(),
     ///     "datetime could not resolve to a timestamp since `reject` \
     ///      conflict resolution was chosen, and because \
     ///      datetime has offset `-05`, \
-    ///      but the time zone `US/Eastern` for the given datetime \
+    ///      but the time zone `America/New_York` for the given datetime \
     ///      unambiguously has offset `-04`",
     /// );
     ///
@@ -1434,9 +1437,12 @@ impl BrokenDownTime {
     ///
     /// let zdt = strtime::parse(
     ///     "%F %H:%M %:z %:Q",
-    ///     "2024-07-14 21:14 -04:00 US/Eastern",
+    ///     "2024-07-14 21:14 -04:00 America/New_York",
     /// )?.to_zoned_with(jiff::tz::db())?;
-    /// assert_eq!(zdt.to_string(), "2024-07-14T21:14:00-04:00[US/Eastern]");
+    /// assert_eq!(
+    ///     zdt.to_string(),
+    ///     "2024-07-14T21:14:00-04:00[America/New_York]",
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2400,8 +2406,8 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::{fmt::strtime::BrokenDownTime, tz};
     ///
-    /// let tm = BrokenDownTime::parse("%Q", "US/Eastern")?;
-    /// assert_eq!(tm.iana_time_zone(), Some("US/Eastern"));
+    /// let tm = BrokenDownTime::parse("%Q", "America/New_York")?;
+    /// assert_eq!(tm.iana_time_zone(), Some("America/New_York"));
     /// assert_eq!(tm.offset(), None);
     ///
     /// // Note that %Q (and %:Q) also support parsing an offset
@@ -2956,12 +2962,14 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::{civil::date, fmt::strtime::BrokenDownTime, tz};
     ///
-    /// let zdt = date(2024, 8, 28).at(14, 56, 0, 0).in_tz("US/Eastern")?;
+    /// let zdt = date(2024, 8, 28)
+    ///     .at(14, 56, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// let mut tm = BrokenDownTime::from(&zdt);
     /// tm.set_offset(Some(tz::offset(12)));
     /// assert_eq!(
     ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %Q %:z")?,
-    ///     "2024-08-28 at 14:56:00 in US/Eastern +12:00",
+    ///     "2024-08-28 at 14:56:00 in America/New_York +12:00",
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -2993,14 +3001,14 @@ impl BrokenDownTime {
     ///     "%Y-%m-%d at %H:%M:%S",
     ///     "1970-01-01 at 01:00:00",
     /// )?;
-    /// tm.set_iana_time_zone(Some(String::from("US/Eastern")));
+    /// tm.set_iana_time_zone(Some(String::from("America/New_York")));
     /// // Normally this would fail since the parse
     /// // itself doesn't include an offset or a time
     /// // zone. It only works here because we
     /// // explicitly set the time zone after parsing.
     /// assert_eq!(
     ///     tm.to_zoned()?.to_string(),
-    ///     "1970-01-01T01:00:00-05:00[US/Eastern]",
+    ///     "1970-01-01T01:00:00-05:00[America/New_York]",
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -3015,12 +3023,14 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::{civil::date, fmt::strtime::BrokenDownTime};
     ///
-    /// let zdt = date(2024, 8, 28).at(14, 56, 0, 0).in_tz("US/Eastern")?;
+    /// let zdt = date(2024, 8, 28)
+    ///     .at(14, 56, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// let mut tm = BrokenDownTime::from(&zdt);
-    /// tm.set_iana_time_zone(Some(String::from("Australia/Tasmania")));
+    /// tm.set_iana_time_zone(Some(String::from("Australia/Hobart")));
     /// assert_eq!(
     ///     tm.to_string("%Y-%m-%d at %H:%M:%S in %Q %:z")?,
-    ///     "2024-08-28 at 14:56:00 in Australia/Tasmania -04:00",
+    ///     "2024-08-28 at 14:56:00 in Australia/Hobart -04:00",
     /// );
     ///
     /// // In fact, it's not even required that the string

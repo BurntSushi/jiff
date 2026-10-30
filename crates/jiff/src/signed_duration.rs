@@ -87,7 +87,7 @@ const DAYS_PER_CIVIL_WEEK: i64 = 7;
 /// use jiff::{civil::date, Span};
 ///
 /// let span: Span = "P1d".parse()?;
-/// let relative = date(2024, 11, 3).in_tz("US/Eastern")?;
+/// let relative = date(2024, 11, 3).in_tz("America/New_York")?;
 /// let duration = span.to_duration(&relative)?;
 /// // This example also motivates *why* a relative date
 /// // is required. Not all days are the same length!
@@ -242,23 +242,23 @@ const DAYS_PER_CIVIL_WEEK: i64 = 7;
 /// # Interaction with daylight saving time and time zone transitions
 ///
 /// A `SignedDuration` always corresponds to a specific number of nanoseconds.
-/// Since a [`Zoned`] is always a precise instant in time, adding a `SignedDuration`
-/// to a `Zoned` always behaves by adding the nanoseconds from the duration to
-/// the timestamp inside of `Zoned`. Consider `2024-03-10` in `US/Eastern`.
-/// At `02:00:00`, daylight saving time came into effect, switching the UTC
-/// offset for the region from `-05` to `-04`. This has the effect of skipping
-/// an hour on the clocks:
+/// Since a [`Zoned`] is always a precise instant in time, adding a
+/// `SignedDuration` to a `Zoned` always behaves by adding the nanoseconds from
+/// the duration to the timestamp inside of `Zoned`. Consider `2024-03-10` in
+/// `America/New_York`. At `02:00:00`, daylight saving time came into effect,
+/// switching the UTC offset for the region from `-05` to `-04`. This has the
+/// effect of skipping an hour on the clocks:
 ///
 /// ```
 /// use jiff::{civil::date, SignedDuration};
 ///
-/// let zdt = date(2024, 3, 10).at(1, 59, 0, 0).in_tz("US/Eastern")?;
+/// let zdt = date(2024, 3, 10).at(1, 59, 0, 0).in_tz("America/New_York")?;
 /// assert_eq!(
 ///     zdt.checked_add(SignedDuration::from_hours(1))?,
 ///     // Time on the clock skipped an hour, but in this time
 ///     // zone, 03:59 is actually precisely 1 hour later than
 ///     // 01:59.
-///     date(2024, 3, 10).at(3, 59, 0, 0).in_tz("US/Eastern")?,
+///     date(2024, 3, 10).at(3, 59, 0, 0).in_tz("America/New_York")?,
 /// );
 /// // The same would apply if you used a `Span`:
 /// assert_eq!(
@@ -266,7 +266,7 @@ const DAYS_PER_CIVIL_WEEK: i64 = 7;
 ///     // Time on the clock skipped an hour, but in this time
 ///     // zone, 03:59 is actually precisely 1 hour later than
 ///     // 01:59.
-///     date(2024, 3, 10).at(3, 59, 0, 0).in_tz("US/Eastern")?,
+///     date(2024, 3, 10).at(3, 59, 0, 0).in_tz("America/New_York")?,
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -274,18 +274,18 @@ const DAYS_PER_CIVIL_WEEK: i64 = 7;
 ///
 /// Where time zones might have a more interesting effect is in the definition
 /// of the "day" itself. If, for example, you encode the notion that a day is
-/// always 24 hours into your arithmetic, you might get unexpected results.
-/// For example, let's say you want to find the datetime precisely one week
-/// after `2024-03-08T17:00` in the `US/Eastern` time zone. You might be
+/// always 24 hours into your arithmetic, you might get unexpected results. For
+/// example, let's say you want to find the datetime precisely one week after
+/// `2024-03-08T17:00` in the `America/New_York` time zone. You might be
 /// tempted to just ask for the time that is `7 * 24` hours later:
 ///
 /// ```
 /// use jiff::{civil::date, SignedDuration};
 ///
-/// let zdt = date(2024, 3, 8).at(17, 0, 0, 0).in_tz("US/Eastern")?;
+/// let zdt = date(2024, 3, 8).at(17, 0, 0, 0).in_tz("America/New_York")?;
 /// assert_eq!(
 ///     zdt.checked_add(SignedDuration::from_hours(7 * 24))?,
-///     date(2024, 3, 15).at(18, 0, 0, 0).in_tz("US/Eastern")?,
+///     date(2024, 3, 15).at(18, 0, 0, 0).in_tz("America/New_York")?,
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -300,11 +300,11 @@ const DAYS_PER_CIVIL_WEEK: i64 = 7;
 /// ```
 /// use jiff::{civil::date, ToSpan};
 ///
-/// let zdt = date(2024, 3, 8).at(17, 0, 0, 0).in_tz("US/Eastern")?;
+/// let zdt = date(2024, 3, 8).at(17, 0, 0, 0).in_tz("America/New_York")?;
 /// assert_eq!(
 ///     zdt.checked_add(1.week())?,
 ///     // The expected time!
-///     date(2024, 3, 15).at(17, 0, 0, 0).in_tz("US/Eastern")?,
+///     date(2024, 3, 15).at(17, 0, 0, 0).in_tz("America/New_York")?,
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
