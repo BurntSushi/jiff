@@ -1612,7 +1612,7 @@ mod tests {
         insta::assert_snapshot!(f("%03s", ts), @"000");
         insta::assert_snapshot!(f("%2s", ts), @" 0");
 
-        let ts = "2025-01-20T13:09-05[US/Eastern]".parse().unwrap();
+        let ts = "2025-01-20T13:09-05[America/New_York]".parse().unwrap();
         insta::assert_snapshot!(f("%s", ts), @"1737396540");
     }
 

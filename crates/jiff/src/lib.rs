@@ -485,7 +485,7 @@ or email). Parsing and printing of RFC 2822 datetimes is done via the
 use jiff::fmt::rfc2822;
 
 let zdt1 = rfc2822::parse("Thu, 29 Feb 2024 05:34 -0500")?;
-let zdt2 = zdt1.in_tz("Australia/Tasmania")?;
+let zdt2 = zdt1.in_tz("Australia/Hobart")?;
 assert_eq!(rfc2822::to_string(&zdt2)?, "Thu, 29 Feb 2024 21:34:00 +1100");
 let zdt3 = zdt1.in_tz("Asia/Kolkata")?;
 assert_eq!(rfc2822::to_string(&zdt3)?, "Thu, 29 Feb 2024 16:04:00 +0530");
@@ -508,9 +508,9 @@ use jiff::Zoned;
 
 let zdt = Zoned::strptime(
     "%A, %B %d, %Y at %I:%M%p %Q",
-    "Monday, July 15, 2024 at 5:30pm US/Eastern",
+    "Monday, July 15, 2024 at 5:30pm America/New_York",
 )?;
-assert_eq!(zdt.to_string(), "2024-07-15T17:30:00-04:00[US/Eastern]");
+assert_eq!(zdt.to_string(), "2024-07-15T17:30:00-04:00[America/New_York]");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -522,7 +522,7 @@ available) instead of an offset (`%Z` can't be used for parsing):
 ```
 use jiff::civil::date;
 
-let zdt = date(2024, 7, 15).at(17, 30, 59, 0).in_tz("Australia/Tasmania")?;
+let zdt = date(2024, 7, 15).at(17, 30, 59, 0).in_tz("Australia/Hobart")?;
 // %-I instead of %I means no padding.
 let string = zdt.strftime("%A, %B %d, %Y at %-I:%M%P %Z").to_string();
 assert_eq!(string, "Monday, July 15, 2024 at 5:30pm AEST");
@@ -538,10 +538,10 @@ IANA time zone identifier (which can be parsed, as shown above):
 ```
 use jiff::civil::date;
 
-let zdt = date(2024, 7, 15).at(17, 30, 59, 0).in_tz("Australia/Tasmania")?;
+let zdt = date(2024, 7, 15).at(17, 30, 59, 0).in_tz("Australia/Hobart")?;
 // %-I instead of %I means no padding.
 let string = zdt.strftime("%A, %B %d, %Y at %-I:%M%P %Q").to_string();
-assert_eq!(string, "Monday, July 15, 2024 at 5:30pm Australia/Tasmania");
+assert_eq!(string, "Monday, July 15, 2024 at 5:30pm Australia/Hobart");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -681,8 +681,8 @@ For more, see the [`fmt::serde`] sub-module. (This requires enabling Jiff's
   re-exports them. This also enables `static-tz`.
 * **static-tz** -
   When enabled, a `jiff::tz::include` procedural macro will become available.
-  This takes a TZif file path, like `/usr/share/zoneinfo/Israel`, as input and
-  returns a `TimeZone` value at compile time.
+  This takes a TZif file path, like `/usr/share/zoneinfo/Asia/Jerusalem`, as
+  input and returns a `TimeZone` value at compile time.
 
 ### Performance features
 

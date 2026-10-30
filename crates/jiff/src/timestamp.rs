@@ -1238,14 +1238,14 @@ impl Timestamp {
     /// ```
     ///
     /// This can be used to answer questions like, "What time was it at the
-    /// Unix epoch in Tasmania?"
+    /// Unix epoch in Hobart?"
     ///
     /// ```
     /// use jiff::Timestamp;
     ///
     /// // Time zone database lookups are case insensitive!
-    /// let zdt = Timestamp::UNIX_EPOCH.in_tz("australia/tasmania")?;
-    /// assert_eq!(zdt.to_string(), "1970-01-01T11:00:00+11:00[Australia/Tasmania]");
+    /// let zdt = Timestamp::UNIX_EPOCH.in_tz("australia/hobart")?;
+    /// assert_eq!(zdt.to_string(), "1970-01-01T11:00:00+11:00[Australia/Hobart]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1277,7 +1277,7 @@ impl Timestamp {
     /// a gap, typically DST starting).
     ///
     /// In the common case of a time zone being represented as a name string,
-    /// like `Australia/Tasmania`, consider using [`Timestamp::in_tz`]
+    /// like `Australia/Hobart`, consider using [`Timestamp::in_tz`]
     /// instead.
     ///
     /// # Example

@@ -108,7 +108,10 @@ use crate::{
 /// // ... although it isn't always midnight, in the case of a time zone
 /// // transition at midnight!
 /// let zdt: Zoned = "2015-10-18[America/Sao_Paulo]".parse()?;
-/// assert_eq!(zdt.to_string(), "2015-10-18T01:00:00-02:00[America/Sao_Paulo]");
+/// assert_eq!(
+///     zdt.to_string(),
+///     "2015-10-18T01:00:00-02:00[America/Sao_Paulo]",
+/// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -132,7 +135,7 @@ use crate::{
 /// ```
 /// use jiff::{civil::date, Zoned};
 ///
-/// let zdt: Zoned = "2016-12-31 23:59:60[Australia/Tasmania]".parse()?;
+/// let zdt: Zoned = "2016-12-31 23:59:60[Australia/Hobart]".parse()?;
 /// assert_eq!(zdt.datetime(), date(2016, 12, 31).at(23, 59, 59, 0));
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -487,11 +490,11 @@ impl Zoned {
     /// ```
     /// use jiff::{tz::TimeZone, Timestamp, Zoned};
     ///
-    /// let tz = TimeZone::get("Australia/Tasmania")?;
+    /// let tz = TimeZone::get("Australia/Hobart")?;
     /// let zdt = Zoned::new(Timestamp::UNIX_EPOCH, tz);
     /// assert_eq!(
     ///     zdt.to_string(),
-    ///     "1970-01-01T11:00:00+11:00[Australia/Tasmania]",
+    ///     "1970-01-01T11:00:00+11:00[Australia/Hobart]",
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -568,7 +571,9 @@ impl Zoned {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt1 = date(2024, 10, 31).at(0, 0, 0, 0).in_tz("America/New_York")?;
+    /// let zdt1 = date(2024, 10, 31)
+    ///     .at(0, 0, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// let zdt2 = zdt1.with().month(11).day(30).build()?;
     /// assert_eq!(
     ///     zdt2,
@@ -691,7 +696,9 @@ impl Zoned {
     /// let zdt1 = date(2024, 3, 9).at(7, 30, 0, 0).in_tz("America/New_York")?;
     /// assert_eq!(zdt1.year(), 2024);
     ///
-    /// let zdt2 = date(-2024, 3, 9).at(7, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt2 = date(-2024, 3, 9)
+    ///     .at(7, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt2.year(), -2024);
     ///
     /// let zdt3 = date(0, 3, 9).at(7, 30, 0, 0).in_tz("America/New_York")?;
@@ -737,7 +744,9 @@ impl Zoned {
     /// let zdt = date(-10, 10, 3).at(7, 30, 0, 0).in_tz("America/New_York")?;
     /// assert_eq!(zdt.era_year(), (11, Era::BCE));
     ///
-    /// let zdt = date(-9_999, 10, 3).at(7, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(-9_999, 10, 3)
+    ///     .at(7, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt.era_year(), (10_000, Era::BCE));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1028,13 +1037,19 @@ impl Zoned {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt = date(2006, 8, 24).at(7, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2006, 8, 24)
+    ///     .at(7, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt.day_of_year(), 236);
     ///
-    /// let zdt = date(2023, 12, 31).at(7, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2023, 12, 31)
+    ///     .at(7, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt.day_of_year(), 365);
     ///
-    /// let zdt = date(2024, 12, 31).at(7, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2024, 12, 31)
+    ///     .at(7, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt.day_of_year(), 366);
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1062,10 +1077,14 @@ impl Zoned {
     /// let zdt = date(2006, 8, 24).at(7, 30, 0, 0).in_tz("America/New_York")?;
     /// assert_eq!(zdt.day_of_year_no_leap(), Some(236));
     ///
-    /// let zdt = date(2023, 12, 31).at(7, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2023, 12, 31)
+    ///     .at(7, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt.day_of_year_no_leap(), Some(365));
     ///
-    /// let zdt = date(2024, 12, 31).at(7, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2024, 12, 31)
+    ///     .at(7, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt.day_of_year_no_leap(), Some(365));
     ///
     /// let zdt = date(2024, 2, 29).at(7, 30, 0, 0).in_tz("America/New_York")?;
@@ -1090,7 +1109,9 @@ impl Zoned {
     /// ```
     /// use jiff::{civil::date, Zoned};
     ///
-    /// let zdt = date(2015, 10, 18).at(12, 0, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2015, 10, 18)
+    ///     .at(12, 0, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(
     ///     zdt.start_of_day()?.to_string(),
     ///     "2015-10-18T00:00:00-04:00[America/New_York]",
@@ -1108,7 +1129,9 @@ impl Zoned {
     /// ```
     /// use jiff::{civil::date, Zoned};
     ///
-    /// let zdt = date(2015, 10, 18).at(12, 0, 0, 0).in_tz("America/Sao_Paulo")?;
+    /// let zdt = date(2015, 10, 18)
+    ///     .at(12, 0, 0, 0)
+    ///     .in_tz("America/Sao_Paulo")?;
     /// assert_eq!(
     ///     zdt.start_of_day()?.to_string(),
     ///     // not midnight!
@@ -1452,7 +1475,9 @@ impl Zoned {
     /// let zdt = date(2024, 1, 1).at(7, 30, 0, 0).in_tz("America/New_York")?;
     /// assert!(zdt.in_leap_year());
     ///
-    /// let zdt = date(2023, 12, 31).at(7, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2023, 12, 31)
+    ///     .at(7, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert!(!zdt.in_leap_year());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1547,7 +1572,12 @@ impl Zoned {
     /// );
     ///
     /// // The min doesn't have a yesterday.
-    /// assert!(Timestamp::MIN.in_tz("America/New_York")?.yesterday().is_err());
+    /// assert!(
+    ///     Timestamp::MIN
+    ///         .in_tz("America/New_York")?
+    ///         .yesterday()
+    ///         .is_err()
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1868,7 +1898,9 @@ impl Zoned {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt = date(2024, 3, 14).at(18, 45, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2024, 3, 14)
+    ///     .at(18, 45, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt.timestamp().as_second(), 1_710_456_300);
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1885,7 +1917,9 @@ impl Zoned {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt = date(2024, 3, 14).at(18, 45, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2024, 3, 14)
+    ///     .at(18, 45, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt.datetime(), date(2024, 3, 14).at(18, 45, 0, 0));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1902,7 +1936,9 @@ impl Zoned {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt = date(2024, 3, 14).at(18, 45, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2024, 3, 14)
+    ///     .at(18, 45, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt.date(), date(2024, 3, 14));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1919,7 +1955,9 @@ impl Zoned {
     /// ```
     /// use jiff::civil::{date, time};
     ///
-    /// let zdt = date(2024, 3, 14).at(18, 45, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2024, 3, 14)
+    ///     .at(18, 45, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt.time(), time(18, 45, 0, 0));
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1948,25 +1986,29 @@ impl Zoned {
     /// ```
     /// use jiff::civil::{Date, Time, Weekday, date};
     ///
-    /// let zdt = date(1995, 1, 1).at(18, 45, 0, 0).in_tz("US/Eastern")?;
+    /// let zdt = date(1995, 1, 1).at(18, 45, 0, 0).in_tz("America/New_York")?;
     /// let weekdate = zdt.iso_week_date();
     /// assert_eq!(weekdate.year(), 1994);
     /// assert_eq!(weekdate.week(), 52);
     /// assert_eq!(weekdate.weekday(), Weekday::Sunday);
     ///
-    /// let zdt = date(1996, 12, 31).at(18, 45, 0, 0).in_tz("US/Eastern")?;
+    /// let zdt = date(1996, 12, 31)
+    ///     .at(18, 45, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// let weekdate = zdt.iso_week_date();
     /// assert_eq!(weekdate.year(), 1997);
     /// assert_eq!(weekdate.week(), 1);
     /// assert_eq!(weekdate.weekday(), Weekday::Tuesday);
     ///
-    /// let zdt = date(2019, 12, 30).at(18, 45, 0, 0).in_tz("US/Eastern")?;
+    /// let zdt = date(2019, 12, 30)
+    ///     .at(18, 45, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// let weekdate = zdt.iso_week_date();
     /// assert_eq!(weekdate.year(), 2020);
     /// assert_eq!(weekdate.week(), 1);
     /// assert_eq!(weekdate.weekday(), Weekday::Monday);
     ///
-    /// let zdt = date(2024, 3, 9).at(18, 45, 0, 0).in_tz("US/Eastern")?;
+    /// let zdt = date(2024, 3, 9).at(18, 45, 0, 0).in_tz("America/New_York")?;
     /// let weekdate = zdt.iso_week_date();
     /// assert_eq!(weekdate.year(), 2024);
     /// assert_eq!(weekdate.week(), 10);
@@ -1986,11 +2028,15 @@ impl Zoned {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt = date(2024, 2, 14).at(18, 45, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2024, 2, 14)
+    ///     .at(18, 45, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// // -05 because New York is in "standard" time at this point.
     /// assert_eq!(zdt.offset(), jiff::tz::offset(-5));
     ///
-    /// let zdt = date(2024, 7, 14).at(18, 45, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2024, 7, 14)
+    ///     .at(18, 45, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// // But we get -04 once "summer" or "daylight saving time" starts.
     /// assert_eq!(zdt.offset(), jiff::tz::offset(-4));
     ///
@@ -2051,7 +2097,9 @@ impl Zoned {
     ///     date(2016, 4, 7).at(3, 24, 30, 4_000).in_tz("America/New_York")?,
     /// );
     ///
-    /// let zdt = date(2019, 1, 31).at(15, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2019, 1, 31)
+    ///     .at(15, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// let got = zdt.checked_add(1.months())?;
     /// assert_eq!(
     ///     got,
@@ -2176,7 +2224,9 @@ impl Zoned {
     /// ```
     /// use jiff::{civil::date, ToSpan};
     ///
-    /// let zdt = date(2024, 3, 31).at(13, 13, 13, 13).in_tz("America/New_York")?;
+    /// let zdt = date(2024, 3, 31)
+    ///     .at(13, 13, 13, 13)
+    ///     .in_tz("America/New_York")?;
     /// assert!(zdt.checked_add(9000.years()).is_err());
     /// assert!(zdt.checked_add(-19000.years()).is_err());
     ///
@@ -2193,28 +2243,28 @@ impl Zoned {
     ///
     /// use jiff::{civil::date, SignedDuration};
     ///
-    /// let zdt = date(2024, 2, 29).at(0, 0, 0, 0).in_tz("US/Eastern")?;
+    /// let zdt = date(2024, 2, 29).at(0, 0, 0, 0).in_tz("America/New_York")?;
     ///
     /// let dur = SignedDuration::from_hours(25);
     /// assert_eq!(
     ///     zdt.checked_add(dur)?,
-    ///     date(2024, 3, 1).at(1, 0, 0, 0).in_tz("US/Eastern")?,
+    ///     date(2024, 3, 1).at(1, 0, 0, 0).in_tz("America/New_York")?,
     /// );
     /// assert_eq!(
     ///     zdt.checked_add(-dur)?,
-    ///     date(2024, 2, 27).at(23, 0, 0, 0).in_tz("US/Eastern")?,
+    ///     date(2024, 2, 27).at(23, 0, 0, 0).in_tz("America/New_York")?,
     /// );
     ///
     /// let dur = Duration::from_secs(25 * 60 * 60);
     /// assert_eq!(
     ///     zdt.checked_add(dur)?,
-    ///     date(2024, 3, 1).at(1, 0, 0, 0).in_tz("US/Eastern")?,
+    ///     date(2024, 3, 1).at(1, 0, 0, 0).in_tz("America/New_York")?,
     /// );
     /// // One cannot negate an unsigned duration,
     /// // but you can subtract it!
     /// assert_eq!(
     ///     zdt.checked_sub(dur)?,
-    ///     date(2024, 2, 27).at(23, 0, 0, 0).in_tz("US/Eastern")?,
+    ///     date(2024, 2, 27).at(23, 0, 0, 0).in_tz("America/New_York")?,
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -2358,12 +2408,29 @@ impl Zoned {
     /// ```
     /// use jiff::{civil::date, SignedDuration, Timestamp, ToSpan};
     ///
-    /// let zdt = date(2024, 3, 31).at(13, 13, 13, 13).in_tz("America/New_York")?;
-    /// assert_eq!(Timestamp::MAX, zdt.saturating_add(9000.years()).timestamp());
-    /// assert_eq!(Timestamp::MIN, zdt.saturating_add(-19000.years()).timestamp());
-    /// assert_eq!(Timestamp::MAX, zdt.saturating_add(SignedDuration::MAX).timestamp());
-    /// assert_eq!(Timestamp::MIN, zdt.saturating_add(SignedDuration::MIN).timestamp());
-    /// assert_eq!(Timestamp::MAX, zdt.saturating_add(std::time::Duration::MAX).timestamp());
+    /// let zdt = date(2024, 3, 31)
+    ///     .at(13, 13, 13, 13)
+    ///     .in_tz("America/New_York")?;
+    /// assert_eq!(
+    ///     Timestamp::MAX,
+    ///     zdt.saturating_add(9000.years()).timestamp(),
+    /// );
+    /// assert_eq!(
+    ///     Timestamp::MIN,
+    ///     zdt.saturating_add(-19000.years()).timestamp(),
+    /// );
+    /// assert_eq!(
+    ///     Timestamp::MAX,
+    ///     zdt.saturating_add(SignedDuration::MAX).timestamp(),
+    /// );
+    /// assert_eq!(
+    ///     Timestamp::MIN,
+    ///     zdt.saturating_add(SignedDuration::MIN).timestamp(),
+    /// );
+    /// assert_eq!(
+    ///     Timestamp::MAX,
+    ///     zdt.saturating_add(std::time::Duration::MAX).timestamp(),
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2391,12 +2458,29 @@ impl Zoned {
     /// ```
     /// use jiff::{civil::date, SignedDuration, Timestamp, ToSpan};
     ///
-    /// let zdt = date(2024, 3, 31).at(13, 13, 13, 13).in_tz("America/New_York")?;
-    /// assert_eq!(Timestamp::MIN, zdt.saturating_sub(19000.years()).timestamp());
-    /// assert_eq!(Timestamp::MAX, zdt.saturating_sub(-9000.years()).timestamp());
-    /// assert_eq!(Timestamp::MIN, zdt.saturating_sub(SignedDuration::MAX).timestamp());
-    /// assert_eq!(Timestamp::MAX, zdt.saturating_sub(SignedDuration::MIN).timestamp());
-    /// assert_eq!(Timestamp::MIN, zdt.saturating_sub(std::time::Duration::MAX).timestamp());
+    /// let zdt = date(2024, 3, 31)
+    ///     .at(13, 13, 13, 13)
+    ///     .in_tz("America/New_York")?;
+    /// assert_eq!(
+    ///     Timestamp::MIN,
+    ///     zdt.saturating_sub(19000.years()).timestamp(),
+    /// );
+    /// assert_eq!(
+    ///     Timestamp::MAX,
+    ///     zdt.saturating_sub(-9000.years()).timestamp(),
+    /// );
+    /// assert_eq!(
+    ///     Timestamp::MIN,
+    ///     zdt.saturating_sub(SignedDuration::MAX).timestamp(),
+    /// );
+    /// assert_eq!(
+    ///     Timestamp::MAX,
+    ///     zdt.saturating_sub(SignedDuration::MIN).timestamp(),
+    /// );
+    /// assert_eq!(
+    ///     Timestamp::MIN,
+    ///     zdt.saturating_sub(std::time::Duration::MAX).timestamp(),
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2473,8 +2557,12 @@ impl Zoned {
     /// ```
     /// use jiff::{civil::date, ToSpan};
     ///
-    /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0).in_tz("America/New_York")?;
-    /// let later = date(2019, 1, 31).at(21, 0, 0, 0).in_tz("America/New_York")?;
+    /// let earlier = date(2006, 8, 24)
+    ///     .at(22, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
+    /// let later = date(2019, 1, 31)
+    ///     .at(21, 0, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(
     ///     earlier.until(&later)?,
     ///     109_031.hours().minutes(30).fieldwise(),
@@ -2498,8 +2586,12 @@ impl Zoned {
     /// ```
     /// use jiff::{civil::date, Unit, ToSpan};
     ///
-    /// let zdt1 = date(1995, 12, 07).at(3, 24, 30, 3500).in_tz("America/New_York")?;
-    /// let zdt2 = date(2019, 01, 31).at(15, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt1 = date(1995, 12, 07)
+    ///     .at(3, 24, 30, 3500)
+    ///     .in_tz("America/New_York")?;
+    /// let zdt2 = date(2019, 01, 31)
+    ///     .at(15, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     ///
     /// // The default limits durations to using "hours" as the biggest unit.
     /// let span = zdt1.until(&zdt2)?;
@@ -2507,7 +2599,10 @@ impl Zoned {
     ///
     /// // But we can ask for units all the way up to years.
     /// let span = zdt1.until((Unit::Year, &zdt2))?;
-    /// assert_eq!(format!("{span:#}"), "23y 1mo 24d 12h 5m 29s 999ms 996µs 500ns");
+    /// assert_eq!(
+    ///     format!("{span:#}"),
+    ///     "23y 1mo 24d 12h 5m 29s 999ms 996µs 500ns",
+    /// );
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
@@ -2523,8 +2618,12 @@ impl Zoned {
     /// ```
     /// use jiff::{civil::date, Unit, ToSpan, ZonedDifference};
     ///
-    /// let zdt1 = date(1995, 12, 07).at(3, 24, 30, 3500).in_tz("America/New_York")?;
-    /// let zdt2 = date(2019, 01, 31).at(15, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt1 = date(1995, 12, 07)
+    ///     .at(3, 24, 30, 3500)
+    ///     .in_tz("America/New_York")?;
+    /// let zdt2 = date(2019, 01, 31)
+    ///     .at(15, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     ///
     /// let span = zdt1.until(
     ///     ZonedDifference::from(&zdt2).smallest(Unit::Second),
@@ -2611,8 +2710,12 @@ impl Zoned {
     /// ```
     /// use jiff::{civil::date, ToSpan};
     ///
-    /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0).in_tz("America/New_York")?;
-    /// let later = date(2019, 1, 31).at(21, 0, 0, 0).in_tz("America/New_York")?;
+    /// let earlier = date(2006, 8, 24)
+    ///     .at(22, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
+    /// let later = date(2019, 1, 31)
+    ///     .at(21, 0, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(&later - &earlier, 109_031.hours().minutes(30).fieldwise());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -2662,17 +2765,23 @@ impl Zoned {
     /// ```
     /// use jiff::{civil::date, SignedDuration};
     ///
-    /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0).in_tz("US/Eastern")?;
-    /// let later = date(2019, 1, 31).at(21, 0, 0, 0).in_tz("US/Eastern")?;
+    /// let earlier = date(2006, 8, 24)
+    ///     .at(22, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
+    /// let later = date(2019, 1, 31)
+    ///     .at(21, 0, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(
     ///     earlier.duration_until(&later),
-    ///     SignedDuration::from_hours(109_031) + SignedDuration::from_mins(30),
+    ///     SignedDuration::from_hours(109_031)
+    ///         + SignedDuration::from_mins(30),
     /// );
     ///
     /// // Flipping the dates is fine, but you'll get a negative span.
     /// assert_eq!(
     ///     later.duration_until(&earlier),
-    ///     -SignedDuration::from_hours(109_031) + -SignedDuration::from_mins(30),
+    ///     -SignedDuration::from_hours(109_031)
+    ///         + -SignedDuration::from_mins(30),
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -2691,8 +2800,8 @@ impl Zoned {
     /// ```
     /// use jiff::{civil::date, SignedDuration, Span, SpanRound, ToSpan, Unit};
     ///
-    /// let zdt1 = date(2024, 3, 10).at(0, 0, 0, 0).in_tz("US/Eastern")?;
-    /// let zdt2 = date(2024, 3, 11).at(0, 0, 0, 0).in_tz("US/Eastern")?;
+    /// let zdt1 = date(2024, 3, 10).at(0, 0, 0, 0).in_tz("America/New_York")?;
+    /// let zdt2 = date(2024, 3, 11).at(0, 0, 0, 0).in_tz("America/New_York")?;
     ///
     /// let span = zdt1.until((Unit::Day, &zdt2))?;
     /// assert_eq!(format!("{span:#}"), "1d");
@@ -2722,8 +2831,8 @@ impl Zoned {
     ///
     /// use jiff::civil::date;
     ///
-    /// let zdt1 = date(2024, 7, 1).at(0, 0, 0, 0).in_tz("US/Eastern")?;
-    /// let zdt2 = date(2024, 8, 1).at(0, 0, 0, 0).in_tz("US/Eastern")?;
+    /// let zdt1 = date(2024, 7, 1).at(0, 0, 0, 0).in_tz("America/New_York")?;
+    /// let zdt2 = date(2024, 8, 1).at(0, 0, 0, 0).in_tz("America/New_York")?;
     /// let duration = Duration::try_from(zdt1.duration_until(&zdt2))?;
     /// assert_eq!(duration, Duration::from_secs(31 * 24 * 60 * 60));
     ///
@@ -2747,11 +2856,16 @@ impl Zoned {
     /// ```
     /// use jiff::{civil::date, SignedDuration};
     ///
-    /// let earlier = date(2006, 8, 24).at(22, 30, 0, 0).in_tz("US/Eastern")?;
-    /// let later = date(2019, 1, 31).at(21, 0, 0, 0).in_tz("US/Eastern")?;
+    /// let earlier = date(2006, 8, 24)
+    ///     .at(22, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
+    /// let later = date(2019, 1, 31)
+    ///     .at(21, 0, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(
     ///     later.duration_since(&earlier),
-    ///     SignedDuration::from_hours(109_031) + SignedDuration::from_mins(30),
+    ///     SignedDuration::from_hours(109_031)
+    ///         + SignedDuration::from_mins(30),
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -3036,7 +3150,8 @@ impl Zoned {
     /// ```
     /// use jiff::{civil::datetime, ToSpan};
     ///
-    /// let start = datetime(2023, 7, 15, 16, 30, 0, 0).in_tz("America/New_York")?;
+    /// let start = datetime(2023, 7, 15, 16, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// let end = start.checked_add(2.days())?;
     /// let mut scan_times = vec![];
     /// for zdt in start.series(5.hours()).take_while(|zdt| zdt <= end) {
@@ -3288,8 +3403,14 @@ impl Zoned {
     /// ```
     /// use jiff::Zoned;
     ///
-    /// let zdt = Zoned::strptime("%F %H:%M %:Q", "2024-07-14 21:14 US/Eastern")?;
-    /// assert_eq!(zdt.to_string(), "2024-07-14T21:14:00-04:00[US/Eastern]");
+    /// let zdt = Zoned::strptime(
+    ///     "%F %H:%M %:Q",
+    ///     "2024-07-14 21:14 America/New_York",
+    /// )?;
+    /// assert_eq!(
+    ///     zdt.to_string(),
+    ///     "2024-07-14T21:14:00-04:00[America/New_York]",
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -3342,7 +3463,9 @@ impl Zoned {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt = date(2024, 7, 15).at(16, 24, 59, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2024, 7, 15)
+    ///     .at(16, 24, 59, 0)
+    ///     .in_tz("America/New_York")?;
     /// let string = zdt.strftime("%a %b %e %I:%M:%S %p %Z %Y").to_string();
     /// assert_eq!(string, "Mon Jul 15 04:24:59 PM EDT 2024");
     ///
@@ -3406,21 +3529,23 @@ impl Default for Zoned {
 /// ```
 /// use jiff::civil::date;
 ///
-/// let zdt = date(2024, 6, 15).at(7, 0, 0, 123_000_000).in_tz("US/Eastern")?;
+/// let zdt = date(2024, 6, 15)
+///     .at(7, 0, 0, 123_000_000)
+///     .in_tz("America/New_York")?;
 /// assert_eq!(
 ///     format!("{zdt:.6?}"),
-///     "2024-06-15T07:00:00.123000-04:00[US/Eastern]",
+///     "2024-06-15T07:00:00.123000-04:00[America/New_York]",
 /// );
 /// // Precision values greater than 9 are clamped to 9.
 /// assert_eq!(
 ///     format!("{zdt:.300?}"),
-///     "2024-06-15T07:00:00.123000000-04:00[US/Eastern]",
+///     "2024-06-15T07:00:00.123000000-04:00[America/New_York]",
 /// );
 /// // A precision of 0 implies the entire fractional
 /// // component is always truncated.
 /// assert_eq!(
 ///     format!("{zdt:.0?}"),
-///     "2024-06-15T07:00:00-04:00[US/Eastern]",
+///     "2024-06-15T07:00:00-04:00[America/New_York]",
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -3447,12 +3572,20 @@ impl core::fmt::Debug for Zoned {
 /// use jiff::civil::date;
 ///
 /// // No fractional seconds:
-/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("US/Eastern")?;
-/// assert_eq!(format!("{zdt}"), "2024-06-15T07:00:00-04:00[US/Eastern]");
+/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("America/New_York")?;
+/// assert_eq!(
+///     format!("{zdt}"),
+///     "2024-06-15T07:00:00-04:00[America/New_York]",
+/// );
 ///
 /// // With fractional seconds:
-/// let zdt = date(2024, 6, 15).at(7, 0, 0, 123_000_000).in_tz("US/Eastern")?;
-/// assert_eq!(format!("{zdt}"), "2024-06-15T07:00:00.123-04:00[US/Eastern]");
+/// let zdt = date(2024, 6, 15)
+///     .at(7, 0, 0, 123_000_000)
+///     .in_tz("America/New_York")?;
+/// assert_eq!(
+///     format!("{zdt}"),
+///     "2024-06-15T07:00:00.123-04:00[America/New_York]",
+/// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -3462,21 +3595,23 @@ impl core::fmt::Debug for Zoned {
 /// ```
 /// use jiff::civil::date;
 ///
-/// let zdt = date(2024, 6, 15).at(7, 0, 0, 123_000_000).in_tz("US/Eastern")?;
+/// let zdt = date(2024, 6, 15)
+///     .at(7, 0, 0, 123_000_000)
+///     .in_tz("America/New_York")?;
 /// assert_eq!(
 ///     format!("{zdt:.6}"),
-///     "2024-06-15T07:00:00.123000-04:00[US/Eastern]",
+///     "2024-06-15T07:00:00.123000-04:00[America/New_York]",
 /// );
 /// // Precision values greater than 9 are clamped to 9.
 /// assert_eq!(
 ///     format!("{zdt:.300}"),
-///     "2024-06-15T07:00:00.123000000-04:00[US/Eastern]",
+///     "2024-06-15T07:00:00.123000000-04:00[America/New_York]",
 /// );
 /// // A precision of 0 implies the entire fractional
 /// // component is always truncated.
 /// assert_eq!(
 ///     format!("{zdt:.0}"),
-///     "2024-06-15T07:00:00-04:00[US/Eastern]",
+///     "2024-06-15T07:00:00-04:00[America/New_York]",
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -4179,7 +4314,8 @@ impl<'a> From<&'a UnsignedDuration> for ZonedArithmetic {
 /// ```
 /// use jiff::{RoundMode, ToSpan, Unit, Zoned, ZonedDifference};
 ///
-/// let zdt1 = "2024-03-15 08:14:00.123456789[America/New_York]".parse::<Zoned>()?;
+/// let zdt1 =
+///     "2024-03-15 08:14:00.123456789[America/New_York]".parse::<Zoned>()?;
 /// let zdt2 = "2030-03-22 15:00[America/New_York]".parse::<Zoned>()?;
 /// let span = zdt1.until(
 ///     ZonedDifference::new(&zdt2)
@@ -4561,7 +4697,9 @@ impl ZonedRound {
     /// ```
     /// use jiff::{civil::date, Unit, ZonedRound};
     ///
-    /// let zdt = date(2024, 6, 20).at(3, 25, 30, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2024, 6, 20)
+    ///     .at(3, 25, 30, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(
     ///     zdt.round(ZonedRound::new().smallest(Unit::Minute))?,
     ///     date(2024, 6, 20).at(3, 26, 0, 0).in_tz("America/New_York")?,
@@ -4840,10 +4978,14 @@ impl ZonedWith {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt = date(2024, 11, 30).at(15, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2024, 11, 30)
+    ///     .at(15, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert!(zdt.with().day(31).build().is_err());
     ///
-    /// let zdt = date(2024, 2, 29).at(15, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt = date(2024, 2, 29)
+    ///     .at(15, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert!(zdt.with().year(2023).build().is_err());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -4868,7 +5010,9 @@ impl ZonedWith {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt1 = date(2005, 11, 5).at(15, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt1 = date(2005, 11, 5)
+    ///     .at(15, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// let zdt2 = zdt1.with().date(date(2017, 10, 31)).build()?;
     /// // The date changes but the time remains the same.
     /// assert_eq!(
@@ -4896,7 +5040,9 @@ impl ZonedWith {
     /// ```
     /// use jiff::civil::{date, time};
     ///
-    /// let zdt1 = date(2005, 11, 5).at(15, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt1 = date(2005, 11, 5)
+    ///     .at(15, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// let zdt2 = zdt1.with().time(time(23, 59, 59, 123_456_789)).build()?;
     /// // The time changes but the date remains the same.
     /// assert_eq!(
@@ -4932,7 +5078,9 @@ impl ZonedWith {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt1 = date(2005, 11, 5).at(15, 30, 0, 0).in_tz("America/New_York")?;
+    /// let zdt1 = date(2005, 11, 5)
+    ///     .at(15, 30, 0, 0)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt1.year(), 2005);
     /// let zdt2 = zdt1.with().year(2007).build()?;
     /// assert_eq!(zdt2.year(), 2007);
@@ -5022,7 +5170,9 @@ impl ZonedWith {
     /// ```
     /// use jiff::civil::{Era, date};
     ///
-    /// let zdt1 = date(2024, 7, 2).at(10, 27, 10, 123).in_tz("America/New_York")?;
+    /// let zdt1 = date(2024, 7, 2)
+    ///     .at(10, 27, 10, 123)
+    ///     .in_tz("America/New_York")?;
     /// let zdt2 = zdt1.with().year(2000).era_year(1900, Era::CE).build()?;
     /// assert_eq!(
     ///     zdt2,
@@ -5122,7 +5272,9 @@ impl ZonedWith {
     /// ```
     /// use jiff::civil::date;
     ///
-    /// let zdt1 = date(2024, 2, 5).at(21, 59, 1, 999).in_tz("America/New_York")?;
+    /// let zdt1 = date(2024, 2, 5)
+    ///     .at(21, 59, 1, 999)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt1.day(), 5);
     /// let zdt2 = zdt1.with().day(10).build()?;
     /// assert_eq!(zdt2.day(), 10);
@@ -5358,7 +5510,9 @@ impl ZonedWith {
     /// ```
     /// use jiff::civil::time;
     ///
-    /// let zdt1 = time(15, 21, 59, 0).on(2010, 6, 1).in_tz("America/New_York")?;
+    /// let zdt1 = time(15, 21, 59, 0)
+    ///     .on(2010, 6, 1)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt1.hour(), 15);
     /// let zdt2 = zdt1.with().hour(3).build()?;
     /// assert_eq!(zdt2.hour(), 3);
@@ -5386,7 +5540,9 @@ impl ZonedWith {
     /// ```
     /// use jiff::civil::time;
     ///
-    /// let zdt1 = time(15, 21, 59, 0).on(2010, 6, 1).in_tz("America/New_York")?;
+    /// let zdt1 = time(15, 21, 59, 0)
+    ///     .on(2010, 6, 1)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt1.minute(), 21);
     /// let zdt2 = zdt1.with().minute(3).build()?;
     /// assert_eq!(zdt2.minute(), 3);
@@ -5414,7 +5570,9 @@ impl ZonedWith {
     /// ```
     /// use jiff::civil::time;
     ///
-    /// let zdt1 = time(15, 21, 59, 0).on(2010, 6, 1).in_tz("America/New_York")?;
+    /// let zdt1 = time(15, 21, 59, 0)
+    ///     .on(2010, 6, 1)
+    ///     .in_tz("America/New_York")?;
     /// assert_eq!(zdt1.second(), 59);
     /// let zdt2 = zdt1.with().second(3).build()?;
     /// assert_eq!(zdt2.second(), 3);
@@ -5451,7 +5609,9 @@ impl ZonedWith {
     /// ```
     /// use jiff::civil::time;
     ///
-    /// let zdt1 = time(15, 21, 35, 0).on(2010, 6, 1).in_tz("America/New_York")?;
+    /// let zdt1 = time(15, 21, 35, 0)
+    ///     .on(2010, 6, 1)
+    ///     .in_tz("America/New_York")?;
     /// let zdt2 = zdt1.with().millisecond(123).build()?;
     /// assert_eq!(zdt2.subsec_nanosecond(), 123_000_000);
     ///
@@ -5490,7 +5650,9 @@ impl ZonedWith {
     /// ```
     /// use jiff::civil::time;
     ///
-    /// let zdt1 = time(15, 21, 35, 0).on(2010, 6, 1).in_tz("America/New_York")?;
+    /// let zdt1 = time(15, 21, 35, 0)
+    ///     .on(2010, 6, 1)
+    ///     .in_tz("America/New_York")?;
     /// let zdt2 = zdt1.with().microsecond(123).build()?;
     /// assert_eq!(zdt2.subsec_nanosecond(), 123_000);
     ///
@@ -5529,7 +5691,9 @@ impl ZonedWith {
     /// ```
     /// use jiff::civil::time;
     ///
-    /// let zdt1 = time(15, 21, 35, 0).on(2010, 6, 1).in_tz("America/New_York")?;
+    /// let zdt1 = time(15, 21, 35, 0)
+    ///     .on(2010, 6, 1)
+    ///     .in_tz("America/New_York")?;
     /// let zdt2 = zdt1.with().nanosecond(123).build()?;
     /// assert_eq!(zdt2.subsec_nanosecond(), 123);
     ///
@@ -5571,7 +5735,9 @@ impl ZonedWith {
     /// ```
     /// use jiff::civil::time;
     ///
-    /// let zdt1 = time(15, 21, 35, 0).on(2010, 6, 1).in_tz("America/New_York")?;
+    /// let zdt1 = time(15, 21, 35, 0)
+    ///     .on(2010, 6, 1)
+    ///     .in_tz("America/New_York")?;
     /// let zdt2 = zdt1.with().subsec_nanosecond(123_456_789).build()?;
     /// assert_eq!(zdt2.millisecond(), 123);
     /// assert_eq!(zdt2.microsecond(), 456);
@@ -5744,7 +5910,10 @@ impl ZonedWith {
     /// // jump to 01:55 *and* our offset is corrected to -10:30.
     /// let zdt3 = zdt2.checked_sub(10.minutes())?;
     /// assert_eq!(zdt3.datetime(), date(1947, 6, 8).at(1, 55, 0, 0));
-    /// assert_eq!(zdt3.offset(), tz::offset(-10).saturating_sub(30.minutes()));
+    /// assert_eq!(
+    ///     zdt3.offset(),
+    ///     tz::offset(-10).saturating_sub(30.minutes()),
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -6018,28 +6187,46 @@ mod tests {
     ///
     /// See: <https://github.com/BurntSushi/jiff/issues/211>
     #[test]
-    fn zoned_with_time_dst_us_eastern() {
+    fn zoned_with_time_dst_america_new_york() {
         if crate::tz::db().is_definitively_empty() {
             return;
         }
 
-        let zdt1: Zoned = "2024-03-10T01:30[US/Eastern]".parse().unwrap();
-        assert_eq!(zdt1.to_string(), "2024-03-10T01:30:00-05:00[US/Eastern]");
+        let zdt1: Zoned =
+            "2024-03-10T01:30[America/New_York]".parse().unwrap();
+        assert_eq!(
+            zdt1.to_string(),
+            "2024-03-10T01:30:00-05:00[America/New_York]"
+        );
         let zdt2 = zdt1.with().hour(2).build().unwrap();
-        assert_eq!(zdt2.to_string(), "2024-03-10T03:30:00-04:00[US/Eastern]");
+        assert_eq!(
+            zdt2.to_string(),
+            "2024-03-10T03:30:00-04:00[America/New_York]"
+        );
 
-        let zdt1: Zoned = "2024-03-10T03:30[US/Eastern]".parse().unwrap();
-        assert_eq!(zdt1.to_string(), "2024-03-10T03:30:00-04:00[US/Eastern]");
+        let zdt1: Zoned =
+            "2024-03-10T03:30[America/New_York]".parse().unwrap();
+        assert_eq!(
+            zdt1.to_string(),
+            "2024-03-10T03:30:00-04:00[America/New_York]"
+        );
         let zdt2 = zdt1.with().hour(2).build().unwrap();
-        assert_eq!(zdt2.to_string(), "2024-03-10T03:30:00-04:00[US/Eastern]");
+        assert_eq!(
+            zdt2.to_string(),
+            "2024-03-10T03:30:00-04:00[America/New_York]"
+        );
 
         // I originally thought that this was difference from Temporal. Namely,
         // I thought that Temporal ignored the disambiguation setting (and the
         // bad offset). But it doesn't. I was holding it wrong.
         //
         // See: https://github.com/tc39/proposal-temporal/issues/3078
-        let zdt1: Zoned = "2024-03-10T01:30[US/Eastern]".parse().unwrap();
-        assert_eq!(zdt1.to_string(), "2024-03-10T01:30:00-05:00[US/Eastern]");
+        let zdt1: Zoned =
+            "2024-03-10T01:30[America/New_York]".parse().unwrap();
+        assert_eq!(
+            zdt1.to_string(),
+            "2024-03-10T01:30:00-05:00[America/New_York]"
+        );
         let zdt2 = zdt1
             .with()
             .offset(tz::offset(10))
@@ -6047,21 +6234,31 @@ mod tests {
             .disambiguation(Disambiguation::Earlier)
             .build()
             .unwrap();
-        assert_eq!(zdt2.to_string(), "2024-03-10T01:30:00-05:00[US/Eastern]");
+        assert_eq!(
+            zdt2.to_string(),
+            "2024-03-10T01:30:00-05:00[America/New_York]"
+        );
 
         // This should also respect the disambiguation setting even without
         // explicitly specifying an invalid offset. This is because `02:30-05`
         // is regarded as invalid since `02:30` isn't a valid civil time on
         // this date in this time zone.
-        let zdt1: Zoned = "2024-03-10T01:30[US/Eastern]".parse().unwrap();
-        assert_eq!(zdt1.to_string(), "2024-03-10T01:30:00-05:00[US/Eastern]");
+        let zdt1: Zoned =
+            "2024-03-10T01:30[America/New_York]".parse().unwrap();
+        assert_eq!(
+            zdt1.to_string(),
+            "2024-03-10T01:30:00-05:00[America/New_York]"
+        );
         let zdt2 = zdt1
             .with()
             .hour(2)
             .disambiguation(Disambiguation::Earlier)
             .build()
             .unwrap();
-        assert_eq!(zdt2.to_string(), "2024-03-10T01:30:00-05:00[US/Eastern]");
+        assert_eq!(
+            zdt2.to_string(),
+            "2024-03-10T01:30:00-05:00[America/New_York]"
+        );
     }
 
     #[test]

@@ -42,7 +42,7 @@ fn time_zone_static_tzif_to_ambiguous_timestamp() {
             ],
         ),
         (
-            tz::get!("Australia/Tasmania"),
+            tz::get!("Australia/Hobart"),
             &[
                 ((1970, 1, 1, 11, 0, 0, 0), unambiguous(11)),
                 ((2024, 4, 7, 1, 59, 59, 999_999_999), unambiguous(11)),
@@ -262,7 +262,7 @@ fn time_zone_static_tzif_to_datetime() {
             ],
         ),
         (
-            tz::get!("Australia/Tasmania"),
+            tz::get!("Australia/Hobart"),
             &[
                 ((0, 0), o(11), "AEDT", (1970, 1, 1, 11, 0, 0, 0)),
                 ((1728142200, 0), o(10), "AEST", (2024, 10, 6, 1, 30, 0, 0)),

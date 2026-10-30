@@ -106,7 +106,7 @@ const PRINTER_MAX_BYTES_RFC9110: usize = 29;
 /// ```
 /// use jiff::{civil::date, fmt::rfc2822};
 ///
-/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("Australia/Tasmania")?;
+/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("Australia/Hobart")?;
 /// assert_eq!(rfc2822::to_string(&zdt)?, "Sat, 15 Jun 2024 07:00:00 +1000");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -935,7 +935,7 @@ impl DateTimeParser {
 ///
 /// const PRINTER: DateTimePrinter = DateTimePrinter::new();
 ///
-/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("Australia/Tasmania")?;
+/// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("Australia/Hobart")?;
 ///
 /// let mut buf = String::new();
 /// PRINTER.print_zoned(&zdt, &mut buf)?;

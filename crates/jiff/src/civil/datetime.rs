@@ -1424,7 +1424,7 @@ impl DateTime {
     /// // isn't enough to fit into timestamp limits.
     /// assert!(dt.in_tz("UTC").is_err());
     /// assert!(dt.in_tz("America/New_York").is_err());
-    /// assert!(dt.in_tz("Australia/Tasmania").is_err());
+    /// assert!(dt.in_tz("Australia/Hobart").is_err());
     /// // In fact, the only valid offset one can use to turn the maximum civil
     /// // datetime into a Zoned value is the maximum offset:
     /// let tz = Offset::from_seconds(93_599).unwrap().to_time_zone();
@@ -1463,7 +1463,7 @@ impl DateTime {
     /// strategy, use [`TimeZone::to_ambiguous_zoned`].
     ///
     /// In the common case of a time zone being represented as a name string,
-    /// like `Australia/Tasmania`, consider using [`DateTime::in_tz`]
+    /// like `Australia/Hobart`, consider using [`DateTime::in_tz`]
     /// instead.
     ///
     /// # Errors

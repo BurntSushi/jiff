@@ -326,7 +326,7 @@ fn example_span_decode(conn: &mut PgConnection) -> anyhow::Result<()> {
 ///
 /// Ref: https://github.com/launchbadge/sqlx/issues/703#issuecomment-939133588
 fn example_time_zone_setting(conn: &mut PgConnection) -> anyhow::Result<()> {
-    sql_query("SET TIME ZONE 'Australia/Tasmania'").execute(conn)?;
+    sql_query("SET TIME ZONE 'Australia/Hobart'").execute(conn)?;
 
     let ts = "2020-01-01T05:01:01Z".parse::<jiff::Timestamp>()?.to_diesel();
     let query = select(sql::<sql_types::Timestamptz>(
