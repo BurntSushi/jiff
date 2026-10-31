@@ -316,40 +316,59 @@ impl DurationUnits {
                 span.try_hours(value)
             })?;
         }
+        // For the units below, a bigger unit may have exceeded its limit and
+        // overflowed into them. So we need to add to whatever is already on
+        // the span. Otherwise, we'd clobber the excess from the bigger unit.
         if self.values[Unit::Minute.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Minute)?;
             span = set_time_unit(Unit::Minute, value, span, |span| {
+                let value =
+                    b::SpanMinutes::checked_add(value, span.get_minutes())?;
                 span.try_minutes(value)
             })?;
         }
         if self.values[Unit::Second.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Second)?;
             span = set_time_unit(Unit::Second, value, span, |span| {
+                let value =
+                    b::SpanSeconds::checked_add(value, span.get_seconds())?;
                 span.try_seconds(value)
             })?;
         }
         if self.values[Unit::Millisecond.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Millisecond)?;
             span = set_time_unit(Unit::Millisecond, value, span, |span| {
+                let value = b::SpanMilliseconds::checked_add(
+                    value,
+                    span.get_milliseconds(),
+                )?;
                 span.try_milliseconds(value)
             })?;
         }
         if self.values[Unit::Microsecond.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Microsecond)?;
             span = set_time_unit(Unit::Microsecond, value, span, |span| {
+                let value = b::SpanMicroseconds::checked_add(
+                    value,
+                    span.get_microseconds(),
+                )?;
                 span.try_microseconds(value)
             })?;
         }
         if self.values[Unit::Nanosecond.as_usize()] != 0 {
             let value = self.get_unit_value(Unit::Nanosecond)?;
             span = set_time_unit(Unit::Nanosecond, value, span, |span| {
+                let value = b::SpanNanoseconds::checked_add(
+                    value,
+                    span.get_nanoseconds(),
+                )?;
                 span.try_nanoseconds(value)
             })?;
         }
 
         if let Some(fraction) = self.get_fraction()? {
-            let value = self.get_unit_value(min)?;
-            span = fractional_time_to_span(min, value, fraction, span)?;
+            // The whole number part of `min` was already set above.
+            span = fractional_time_to_span(min, 0, fraction, span)?;
         }
 
         Ok(span)
@@ -778,6 +797,10 @@ pub(crate) fn parse_temporal_fraction<'i>(
 /// `500_000_000`. The span given would just be `1d`. The span returned would
 /// be `P1dT1h30m`.
 ///
+/// The time is added to whatever is already in the span given. For example,
+/// if the span given above were `P1dT5m`, then the span returned would be
+/// `P1dT1h35m`.
+///
 /// Note that `fraction` can be a fractional hour, minute, second, millisecond
 /// or microsecond (even though its type suggests its only a fraction of a
 /// second). When milliseconds or microseconds, the given fraction has any
@@ -822,11 +845,16 @@ fn fractional_time_to_span(
     // out anything over the limit and carry it over to the lesser units. If
     // our value is truly too big, then the final call to set nanoseconds will
     // fail.
+    //
+    // Each unit is added to whatever is already in the span. We use saturating
+    // arithmetic for this so that overflow is never a concern. In practice,
+    // only seconds can saturate, and when they do, our value is truly too big.
     let mut sdur = fractional_time_to_duration(unit, value, fraction)?;
 
     if unit >= Unit::Hour && !sdur.is_zero() {
         let (mut hours, rem) = sdur.as_hours_with_remainder();
         sdur = rem;
+        hours = hours.saturating_add(i64::from(span.get_hours()));
         if hours > MAX_HOURS {
             sdur += SignedDuration::from_hours(hours - MAX_HOURS);
             hours = MAX_HOURS;
@@ -840,6 +868,7 @@ fn fractional_time_to_span(
     if unit >= Unit::Minute && !sdur.is_zero() {
         let (mut mins, rem) = sdur.as_mins_with_remainder();
         sdur = rem;
+        mins = mins.saturating_add(span.get_minutes());
         if mins > MAX_MINS {
             sdur += SignedDuration::from_mins(mins - MAX_MINS);
             mins = MAX_MINS;
@@ -853,6 +882,7 @@ fn fractional_time_to_span(
     if unit >= Unit::Second && !sdur.is_zero() {
         let (mut secs, rem) = sdur.as_secs_with_remainder();
         sdur = rem;
+        secs = secs.saturating_add(span.get_seconds());
         if secs > MAX_SECS {
             sdur += SignedDuration::from_secs(secs - MAX_SECS);
             secs = MAX_SECS;
@@ -866,6 +896,7 @@ fn fractional_time_to_span(
     if unit >= Unit::Millisecond && !sdur.is_zero() {
         let (mut millis, rem) = sdur.as_millis_with_remainder();
         sdur = rem;
+        millis = millis.saturating_add(i128::from(span.get_milliseconds()));
         if millis > MAX_MILLIS {
             sdur += SignedDuration::from_millis_i128(millis - MAX_MILLIS);
             millis = MAX_MILLIS;
@@ -879,6 +910,7 @@ fn fractional_time_to_span(
     if unit >= Unit::Microsecond && !sdur.is_zero() {
         let (mut micros, rem) = sdur.as_micros_with_remainder();
         sdur = rem;
+        micros = micros.saturating_add(i128::from(span.get_microseconds()));
         if micros > MAX_MICROS {
             sdur += SignedDuration::from_micros_i128(micros - MAX_MICROS);
             micros = MAX_MICROS;
@@ -890,7 +922,8 @@ fn fractional_time_to_span(
         span = span.microseconds(i64::try_from(micros).unwrap());
     }
     if !sdur.is_zero() {
-        let nanos = sdur.as_nanos();
+        let nanos =
+            sdur.as_nanos().saturating_add(i128::from(span.get_nanoseconds()));
         let nanos64 =
             i64::try_from(nanos).map_err(|_| E::InvalidFractionNanos)?;
         span =

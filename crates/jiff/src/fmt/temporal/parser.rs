@@ -1533,6 +1533,13 @@ mod tests {
             p(b"Pt843517082H"), @"175307616h 10518456960m 631107417600s 631107417600000ms 512231824800000000µs");
         insta::assert_debug_snapshot!(
             p(b"Pt843517081H"), @"175307616h 10518456960m 631107417600s 631107417600000ms 512231821200000000µs");
+
+        // The excess from a unit over its limit should be combined with
+        // smaller units instead of one clobbering the other.
+        insta::assert_debug_snapshot!(p(b"PT175307617h1m"), @"175307616h 61m");
+        insta::assert_debug_snapshot!(p(b"-PT175307617h1m"), @"175307616h 61m ago");
+        insta::assert_debug_snapshot!(p(b"PT175307617h1.5m"), @"175307616h 61m 30s");
+        insta::assert_debug_snapshot!(p(b"PT10518456961m1s"), @"10518456960m 61s");
     }
 
     #[test]
