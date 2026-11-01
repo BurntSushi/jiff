@@ -1646,6 +1646,21 @@ mod tests {
         .is_err());
     }
 
+    #[test]
+    fn parse_rule_err_at_field() {
+        // A rule whose `AT` field fails to parse should report an error
+        // about the `AT` field. It previously blamed the `NAME` field
+        // because of a copy/paste mistake in the error message.
+        let err = RuleP::parse(&[
+            "US", "1967", "1973", "-", "Apr", "lastSun", "w", "1:00d", "D",
+        ])
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("failed to parse `AT` field"),
+            "unexpected error message: {err}",
+        );
+    }
+
     #[cfg(not(miri))]
     #[test]
     fn parse_zone_first_ok() {
