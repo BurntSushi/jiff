@@ -62,6 +62,7 @@ itself.
 
 * **postgres** - Enables the `sqlx-postgres` dependency.
 * **sqlite** - Enables the `sqlx-sqlite` dependency.
+* **serde** - Enables Serde implementations for wrapper types.
 
 [sqlx]: https://docs.rs/sqlx/0.8
 [examples]: https://github.com/BurntSushi/jiff/tree/master/examples
