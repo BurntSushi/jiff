@@ -36,12 +36,7 @@ serde = ["dep:serde", "jiff/serde"]
 # The `std` feature is necessary for the `std::error::Error` impl.
 jiff = { version = "0.2.0", path = "../jiff", default-features = false, features = ["std"] }
 sqlx = { version = "0.9.0", default-features = false }
-
-serde = {
-    version = "1.0",
-    optional = true,
-    default-features = false
-}
+serde = { version = "1.0", optional = true, default-features = false }
 
 [dev-dependencies]
 jiff = { version = "0.2.0", path = "../jiff", default-features = true }
