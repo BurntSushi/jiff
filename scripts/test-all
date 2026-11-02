@@ -7,4 +7,4 @@ set -e
 cd "$(dirname "$0")/.."
 
 echo "===== ALL FEATURES ====="
-cargo test --all-features
+cargo test --workspace --all-features

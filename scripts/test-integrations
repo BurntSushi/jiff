@@ -41,7 +41,7 @@ integrations=(
 for v in "${integrations[@]}"; do
   crate="$(echo $v | awk '{print $1}')"
   feature="$(echo $v | awk '{print $2}')"
-  echo "===== TESTING INTEGRATION CRATE (--lib only): $crate[$feature] ====="
+  echo "===== TESTING INTEGRATION CRATE (--lib only): ${crate}[$feature] ====="
   cargo test \
     --lib \
     --no-default-features \

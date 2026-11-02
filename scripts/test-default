@@ -7,4 +7,4 @@ set -e
 cd "$(dirname "$0")/.."
 
 echo "===== DEFAULT FEATURES ====="
-cargo test --all
+cargo test --workspace
