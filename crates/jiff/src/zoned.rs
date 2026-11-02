@@ -3717,19 +3717,31 @@ impl TryFrom<std::time::SystemTime> for Zoned {
     }
 }
 
+/// Converts a zoned datetime to a system time.
+///
+/// This is equivalent to converting its timestamp to a system time, including
+/// its platform-dependent range and precision limits.
 #[cfg(feature = "std")]
-impl From<Zoned> for std::time::SystemTime {
+impl TryFrom<Zoned> for std::time::SystemTime {
+    type Error = Error;
+
     #[inline]
-    fn from(time: Zoned) -> std::time::SystemTime {
-        time.timestamp().into()
+    fn try_from(time: Zoned) -> Result<std::time::SystemTime, Error> {
+        time.timestamp().try_into()
     }
 }
 
+/// Converts a borrowed zoned datetime to a system time.
+///
+/// This is equivalent to converting its timestamp to a system time, including
+/// its platform-dependent range and precision limits.
 #[cfg(feature = "std")]
-impl<'a> From<&'a Zoned> for std::time::SystemTime {
+impl<'a> TryFrom<&'a Zoned> for std::time::SystemTime {
+    type Error = Error;
+
     #[inline]
-    fn from(time: &'a Zoned) -> std::time::SystemTime {
-        time.timestamp().into()
+    fn try_from(time: &'a Zoned) -> Result<std::time::SystemTime, Error> {
+        time.timestamp().try_into()
     }
 }
 
