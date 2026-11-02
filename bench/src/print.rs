@@ -549,14 +549,15 @@ fn print_iso8601_duration(c: &mut Criterion) {
     }
 }
 
-/// Measures the time it takes to print a `Zoned` in the RFC 2822 format.
+/// Measures the time it takes to print a `ZonedDateTime` in the RFC 2822
+/// format.
 fn print_rfc2822(c: &mut Criterion) {
     const NAME: &str = "print/rfc2822";
     const TZ: TimeZone = TimeZone::fixed(Offset::constant(-4));
     const EXPECTED: &str = "Sat, 13 Jul 2024 17:24:59 -0400";
     const START: Timestamp = Timestamp::constant(1720905899, 0);
 
-    let start = START.to_zoned(TZ.clone());
+    let start = START.to_zoned_datetime(TZ.clone());
     let mut buf = String::with_capacity(1024);
 
     {
@@ -566,7 +567,7 @@ fn print_rfc2822(c: &mut Criterion) {
                 static PRINTER: jiff::fmt::rfc2822::DateTimePrinter =
                     jiff::fmt::rfc2822::DateTimePrinter::new();
                 buf.clear();
-                PRINTER.print_zoned(bb(&zdt), &mut buf).unwrap();
+                PRINTER.print_zoned_datetime(bb(&zdt), &mut buf).unwrap();
                 assert_eq!(buf, EXPECTED);
             })
         });
@@ -578,7 +579,7 @@ fn print_rfc2822(c: &mut Criterion) {
             b.iter(|| {
                 static PRINTER: jiff::fmt::rfc2822::DateTimePrinter =
                     jiff::fmt::rfc2822::DateTimePrinter::new();
-                let got = PRINTER.zoned_to_string(bb(&zdt)).unwrap();
+                let got = PRINTER.zoned_datetime_to_string(bb(&zdt)).unwrap();
                 assert_eq!(got, EXPECTED);
             })
         });
@@ -639,7 +640,8 @@ fn print_rfc2822(c: &mut Criterion) {
     }
 }
 
-/// Measures the time it takes to print a `Zoned` in the RFC 3339 format.
+/// Measures the time it takes to print a `ZonedDateTime` in the RFC 3339
+/// format.
 fn print_rfc3339(c: &mut Criterion) {
     const NAME: &str = "print/rfc3339";
     const TZ: TimeZone = TimeZone::fixed(Offset::constant(-5));
@@ -647,7 +649,7 @@ fn print_rfc3339(c: &mut Criterion) {
     const EXPECTED_HUMANTIME: &str = "2025-12-28T00:46:02Z";
     const START: Timestamp = Timestamp::constant(1766882762, 0);
 
-    let start = START.to_zoned(TZ.clone());
+    let start = START.to_zoned_datetime(TZ.clone());
     let mut buf = String::with_capacity(1024);
 
     {
@@ -763,7 +765,8 @@ fn print_rfc3339(c: &mut Criterion) {
     }
 }
 
-/// Measures the time it takes to print a `Zoned` in the RFC 3339 format.
+/// Measures the time it takes to print a `ZonedDateTime` in the RFC 3339
+/// format.
 fn print_rfc9557(c: &mut Criterion) {
     const NAME: &str = "print/rfc9557";
     const TZ: &str = "America/New_York";
@@ -771,7 +774,7 @@ fn print_rfc9557(c: &mut Criterion) {
     const START: Timestamp = Timestamp::constant(1766882762, 0);
 
     let tz = TimeZone::get(TZ).unwrap();
-    let start = START.to_zoned(tz.clone());
+    let start = START.to_zoned_datetime(tz.clone());
     let mut buf = String::with_capacity(1024);
 
     {
@@ -781,7 +784,7 @@ fn print_rfc9557(c: &mut Criterion) {
                 static PRINTER: jiff::fmt::temporal::DateTimePrinter =
                     jiff::fmt::temporal::DateTimePrinter::new();
                 buf.clear();
-                PRINTER.print_zoned(bb(zdt), &mut buf).unwrap();
+                PRINTER.print_zoned_datetime(bb(zdt), &mut buf).unwrap();
                 assert_eq!(buf, EXPECTED);
             })
         });
@@ -793,7 +796,7 @@ fn print_rfc9557(c: &mut Criterion) {
             b.iter(|| {
                 static PRINTER: jiff::fmt::temporal::DateTimePrinter =
                     jiff::fmt::temporal::DateTimePrinter::new();
-                let got = PRINTER.zoned_to_string(bb(&zdt));
+                let got = PRINTER.zoned_datetime_to_string(bb(&zdt));
                 assert_eq!(got, EXPECTED);
             })
         });
@@ -835,7 +838,7 @@ fn print_strftime(c: &mut Criterion) {
          [offset_hour sign:mandatory][offset_minute] \
          [year]"
     );
-    let zdt = DATETIME.to_zoned(TZ.clone()).unwrap();
+    let zdt = DATETIME.to_zoned_datetime(TZ.clone()).unwrap();
     let mut buf = String::with_capacity(1024);
 
     {

@@ -48,9 +48,9 @@ other programs do in practice (for example, GNU date).
 A big part of this module works fine in core-only environments. But because
 core-only environments provide means of indirection, and embedding a
 `PosixTimeZone` into a `TimeZone` without indirection would use up a lot of
-space (and thereby make `Zoned` quite chunky), we provide core-only support
-principally through a proc macro. Namely, a `PosixTimeZone` can be parsed by
-the proc macro and then turned into static data.
+space (and thereby make `ZonedDateTime` quite chunky), we provide core-only
+support principally through a proc macro. Namely, a `PosixTimeZone` can be
+parsed by the proc macro and then turned into static data.
 
 POSIX time zone support isn't explicitly provided directly as a public API
 for core-only environments, but is implicitly supported via TZif. (Since TZif

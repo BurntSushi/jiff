@@ -218,7 +218,7 @@ fn every_hour_in_week(c: &mut Criterion) {
     const NAME: &str = "timestamp/every_hour_in_week";
     const START: civil::DateTime = civil::date(2025, 2, 16).at(0, 0, 0, 0);
     const EXPECTED: Timestamp = Timestamp::constant(1740265200, 0);
-    let start = START.to_zoned(TimeZone::UTC).unwrap().timestamp();
+    let start = START.to_zoned_datetime(TimeZone::UTC).unwrap().timestamp();
 
     {
         benchmark(c, format!("{NAME}/series/jiff"), |b| {

@@ -220,7 +220,7 @@ fn time_zone_static_tzif_to_ambiguous_timestamp() {
         for &(datetime, ambiguous_kind) in datetimes_to_ambiguous {
             let (year, month, day, hour, min, sec, nano) = datetime;
             let dt = date(year, month, day).at(hour, min, sec, nano);
-            let got = tz.to_ambiguous_zoned(dt);
+            let got = tz.to_ambiguous_zoned_datetime(dt);
             assert_eq!(
                 got.offset(),
                 ambiguous_kind,

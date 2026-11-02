@@ -18,7 +18,7 @@ impl From<Error> for error::Error {
     #[cold]
     #[inline(never)]
     fn from(err: Error) -> error::Error {
-        error::ErrorKind::Zoned(err).into()
+        error::ErrorKind::ZonedDateTime(err).into()
     }
 }
 

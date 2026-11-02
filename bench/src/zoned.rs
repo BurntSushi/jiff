@@ -65,8 +65,8 @@ fn add_calendar(c: &mut Criterion) {
             civil::date(2024, 7, 1).at(10, 46, 0, 0),
         ),
     ] {
-        let start = start.to_zoned(tz.clone()).unwrap();
-        let expected = expected.to_zoned(tz.clone()).unwrap();
+        let start = start.to_zoned_datetime(tz.clone()).unwrap();
+        let expected = expected.to_zoned_datetime(tz.clone()).unwrap();
         benchmark(c, format!("{NAME}/{label}/jiff"), |b| {
             b.iter(|| {
                 let end = bb(&start).checked_add(bb(span)).unwrap();
@@ -76,15 +76,16 @@ fn add_calendar(c: &mut Criterion) {
     }
 }
 
-/// Measures the time that `Zoned::default()` takes.
+/// Measures the time that `ZonedDateTime::default()` takes.
 ///
 /// This is a little weird in that it usually doesn't matter how fast this
 /// runs. But default values are used often as throw-away values[1] and perf
 /// can matter.
 ///
-/// Previously, `Zoned::default()` went through `Zoned::new()`, which does
-/// offset lookup and a translation to a civil datetime. This benchmarks tests
-/// that we do something smarter: just fix everything to the expected values.
+/// Previously, `ZonedDateTime::default()` went through `ZonedDateTime::new()`,
+/// which does offset lookup and a translation to a civil datetime. This
+/// benchmarks tests that we do something smarter: just fix everything to the
+/// expected values.
 ///
 /// [1]: https://github.com/BurntSushi/jiff/pull/492#discussion_r2751601292
 fn default(c: &mut Criterion) {
@@ -98,7 +99,7 @@ fn default(c: &mut Criterion) {
             |b| {
                 b.iter(|| {
                     for _ in 0..50 {
-                        let got = bb(jiff::Zoned::default());
+                        let got = bb(jiff::ZonedDateTime::default());
                         assert_eq!(got.timestamp().as_second(), bb(0));
                     }
                 })
@@ -112,12 +113,12 @@ fn default(c: &mut Criterion) {
 /// Note that we used a fixed offset as our time zone in order to accommodate
 /// the lowest common denominator.
 ///
-/// Jiff doesn't do as well here compared to Chrono because a `Zoned` in Jiff
-/// is a much heavier weight type. e.g., It has more stuff in it (timestamp,
-/// offset, civil datetime and time zone) and creating a new `Zoned` means
-/// an `Arc::clone`. If one really just wants a fixed offset timestamp with
-/// the best possible perf, then probably a `TimestampWithOffset { timestamp,
-/// offset }` is the way to go.
+/// Jiff doesn't do as well here compared to Chrono because a `ZonedDateTime`
+/// in Jiff is a much heavier weight type. e.g., It has more stuff in it
+/// (timestamp, offset, civil datetime and time zone) and creating a new
+/// `ZonedDateTime` means an `Arc::clone`. If one really just wants a fixed
+/// offset timestamp with the best possible perf, then probably a
+/// `TimestampWithOffset { timestamp, offset }` is the way to go.
 fn fixed_offset_add_time(c: &mut Criterion) {
     const NAME: &str = "zoned/fixed_offset_add_time";
     const TZ: TimeZone = TimeZone::fixed(Offset::constant(-4));
@@ -125,8 +126,8 @@ fn fixed_offset_add_time(c: &mut Criterion) {
     const EXPECTED: Timestamp =
         Timestamp::constant(1719755160 + (24 * 60 * 60), 0);
 
-    let start = START.to_zoned(TZ.clone());
-    let expected = EXPECTED.to_zoned(TZ.clone());
+    let start = START.to_zoned_datetime(TZ.clone());
+    let expected = EXPECTED.to_zoned_datetime(TZ.clone());
 
     {
         let span = 24.hours();
@@ -193,7 +194,7 @@ fn fixed_offset_to_civil_datetime(c: &mut Criterion) {
     const STAMP: Timestamp = Timestamp::constant(1719755160, 0);
     const EXPECTED: civil::DateTime = civil::date(2024, 6, 30).at(9, 46, 0, 0);
 
-    let zdt = STAMP.to_zoned(TZ.clone());
+    let zdt = STAMP.to_zoned_datetime(TZ.clone());
 
     {
         benchmark(c, format!("{NAME}/jiff"), |b| {
@@ -240,7 +241,7 @@ fn fixed_offset_to_timestamp(c: &mut Criterion) {
     const TZ: TimeZone = TimeZone::fixed(Offset::constant(-4));
     const STAMP: Timestamp = Timestamp::constant(1719755160, 0);
 
-    let zdt = STAMP.to_zoned(TZ.clone());
+    let zdt = STAMP.to_zoned_datetime(TZ.clone());
 
     {
         benchmark(c, format!("{NAME}/jiff"), |b| {

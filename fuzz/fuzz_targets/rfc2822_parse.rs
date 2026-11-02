@@ -14,13 +14,13 @@ fn do_fuzz(data: &[u8]) {
     const RFC2822_PRINTER: rfc2822::DateTimePrinter =
         rfc2822::DateTimePrinter::new();
 
-    let Ok(first) = RFC2822_PARSER.parse_zoned(data) else { return };
+    let Ok(first) = RFC2822_PARSER.parse_zoned_datetime(data) else { return };
     let mut unparsed = Vec::with_capacity(data.len());
     RFC2822_PRINTER
-        .print_zoned(&first, &mut unparsed)
+        .print_zoned_datetime(&first, &mut unparsed)
         .expect("We parsed it, so we should be able to print it");
 
-    match RFC2822_PARSER.parse_zoned(&unparsed) {
+    match RFC2822_PARSER.parse_zoned_datetime(&unparsed) {
         Ok(second) => {
             assert_eq!(
                 first, second,

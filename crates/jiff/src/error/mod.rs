@@ -488,7 +488,7 @@ enum ErrorKind {
     #[allow(dead_code)]
     TzZic(self::tz::zic::Error),
     Unknown,
-    Zoned(self::zoned::Error),
+    ZonedDateTime(self::zoned::Error),
 }
 
 impl core::fmt::Display for ErrorKind {
@@ -534,7 +534,7 @@ impl core::fmt::Display for ErrorKind {
             TzTimeZone(ref err) => err.fmt(f),
             TzZic(ref err) => err.fmt(f),
             Unknown => f.write_str("unknown Jiff error"),
-            Zoned(ref err) => err.fmt(f),
+            ZonedDateTime(ref err) => err.fmt(f),
         }
     }
 }
