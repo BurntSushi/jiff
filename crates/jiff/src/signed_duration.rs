@@ -3,7 +3,7 @@ use core::time::Duration;
 use jcore::bounds::Sign;
 
 use crate::{
-    Error, RoundMode, Timestamp, Unit, Zoned,
+    Error, RoundMode, Timestamp, Unit, ZonedDateTime,
     civil::{Date, DateTime, Time},
     error::{ErrorContext, signed_duration::Error as E},
     fmt::{friendly, temporal},
@@ -188,8 +188,9 @@ const DAYS_PER_CIVIL_WEEK: i64 = 7;
 /// cannot be represented by a `SignedDuration`. In some cases, it may be
 /// appropriate, for example, to assume that all days are 24 hours long. But
 /// since Jiff sometimes assumes all days are 24 hours (for civil time) and
-/// sometimes doesn't (like for `Zoned` when respecting time zones), it would
-/// be inappropriate to bake one of those assumptions into a `SignedDuration`.
+/// sometimes doesn't (like for `ZonedDateTime` when respecting time zones), it
+/// would be inappropriate to bake one of those assumptions into a
+/// `SignedDuration`.
 /// * A `SignedDuration` is a much smaller type than a `Span`. Specifically,
 /// it's a 96-bit integer. In contrast, a `Span` is much larger since it needs
 /// to track each individual unit separately.
@@ -236,18 +237,18 @@ const DAYS_PER_CIVIL_WEEK: i64 = 7;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
-/// The same API pattern works with [`Zoned`], [`DateTime`], [`Date`] and
-/// [`Time`].
+/// The same API pattern works with [`ZonedDateTime`], [`DateTime`], [`Date`]
+/// and [`Time`].
 ///
 /// # Interaction with daylight saving time and time zone transitions
 ///
 /// A `SignedDuration` always corresponds to a specific number of nanoseconds.
-/// Since a [`Zoned`] is always a precise instant in time, adding a
-/// `SignedDuration` to a `Zoned` always behaves by adding the nanoseconds from
-/// the duration to the timestamp inside of `Zoned`. Consider `2024-03-10` in
-/// `America/New_York`. At `02:00:00`, daylight saving time came into effect,
-/// switching the UTC offset for the region from `-05` to `-04`. This has the
-/// effect of skipping an hour on the clocks:
+/// Since a [`ZonedDateTime`] is always a precise instant in time, adding a
+/// `SignedDuration` to a `ZonedDateTime` always behaves by adding the
+/// nanoseconds from the duration to the timestamp inside of `ZonedDateTime`.
+/// Consider `2024-03-10` in `America/New_York`. At `02:00:00`, daylight saving
+/// time came into effect, switching the UTC offset for the region from `-05`
+/// to `-04`. This has the effect of skipping an hour on the clocks:
 ///
 /// ```
 /// use jiff::{civil::date, SignedDuration};
@@ -313,8 +314,8 @@ const DAYS_PER_CIVIL_WEEK: i64 = 7;
 /// A `Span` achieves this by keeping track of individual units. Unlike a
 /// `SignedDuration`, it is not just a simple count of nanoseconds. It is a
 /// "bag" of individual units, and the arithmetic operations defined on a
-/// `Span` for `Zoned` know how to interpret "day" in a particular time zone
-/// at a particular instant in time.
+/// `Span` for `ZonedDateTime` know how to interpret "day" in a particular time
+/// zone at a particular instant in time.
 ///
 /// With that said, the above does not mean that using a `SignedDuration` is
 /// always wrong. For example, if you're dealing with units of hours or lower,
@@ -2064,9 +2065,9 @@ impl SignedDuration {
 
 /// Additional APIs for computing the duration between date and time values.
 impl SignedDuration {
-    pub(crate) fn zoned_until(
-        zoned1: &Zoned,
-        zoned2: &Zoned,
+    pub(crate) fn zoned_datetime_until(
+        zoned1: &ZonedDateTime,
+        zoned2: &ZonedDateTime,
     ) -> SignedDuration {
         SignedDuration::timestamp_until(zoned1.timestamp(), zoned2.timestamp())
     }

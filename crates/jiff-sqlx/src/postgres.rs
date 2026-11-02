@@ -27,26 +27,26 @@ static POSTGRES_EPOCH_TIMESTAMP: jiff::Timestamp =
 static MIDNIGHT: civil::Time = civil::Time::midnight();
 static UTC: tz::TimeZone = tz::TimeZone::UTC;
 
-// We currently don't support `Zoned` integration in this wrapper crate.
-// See comments in `src/wrappers.rs`.
+// We currently don't support `ZonedDateTime` integration in this wrapper
+// crate. See comments in `src/wrappers.rs`.
 //
 // Ref: https://github.com/launchbadge/sqlx/issues/3487#issuecomment-2636542379
 /*
-impl Type<Postgres> for Zoned {
+impl Type<Postgres> for ZonedDateTime {
     fn type_info() -> PgTypeInfo {
         // https://github.com/launchbadge/sqlx/blob/65229f7ff91ecd38be7c10fb61ff3e05bedabe87/sqlx-postgres/src/type_info.rs#L473
         PgTypeInfo::with_oid(Oid(25))
     }
 }
 
-impl PgHasArrayType for Zoned {
+impl PgHasArrayType for ZonedDateTime {
     fn array_type_info() -> PgTypeInfo {
         // https://github.com/launchbadge/sqlx/blob/65229f7ff91ecd38be7c10fb61ff3e05bedabe87/sqlx-postgres/src/type_info.rs#L503
         PgTypeInfo::with_oid(Oid(1009))
     }
 }
 
-impl Encode<'_, Postgres> for Zoned {
+impl Encode<'_, Postgres> for ZonedDateTime {
     fn encode_by_ref(
         &self,
         buf: &mut PgArgumentBuffer,
@@ -59,9 +59,9 @@ impl Encode<'_, Postgres> for Zoned {
     }
 }
 
-impl<'r> Decode<'r, Postgres> for Zoned {
-    fn decode(value: PgValueRef<'r>) -> Result<Zoned, BoxDynError> {
-        Ok(value.as_str()?.parse::<jiff::Zoned>()?.to_sqlx())
+impl<'r> Decode<'r, Postgres> for ZonedDateTime {
+    fn decode(value: PgValueRef<'r>) -> Result<ZonedDateTime, BoxDynError> {
+        Ok(value.as_str()?.parse::<jiff::ZonedDateTime>()?.to_sqlx())
     }
 }
 */

@@ -17,9 +17,9 @@ assert_eq!(zdt.to_string(), "2024-07-10T20:48:00-04:00[America/New_York]");
 And this example parses a zone aware datetime from a string:
 
 ```
-use jiff::Zoned;
+use jiff::ZonedDateTime;
 
-let zdt: Zoned = "2024-07-10 20:48[america/new_york]".parse()?;
+let zdt: ZonedDateTime = "2024-07-10 20:48[america/new_york]".parse()?;
 assert_eq!(zdt.year(), 2024);
 assert_eq!(zdt.month(), 7);
 assert_eq!(zdt.day(), 10);
@@ -35,15 +35,15 @@ Yet, neither of the above examples require uttering [`TimeZone`]. This is
 because the datetime types in this crate provide higher level abstractions for
 working with time zone identifiers. Nevertheless, sometimes it is useful to
 work with a `TimeZone` directly. For example, if one has a `TimeZone`, then
-conversion from a [`Timestamp`](crate::Timestamp) to a [`Zoned`](crate::Zoned)
-is infallible:
+conversion from a [`Timestamp`](crate::Timestamp) to a
+[`ZonedDateTime`](crate::ZonedDateTime) is infallible:
 
 ```
 use jiff::{tz::TimeZone, Timestamp};
 
 let tz = TimeZone::get("America/New_York")?;
 let ts = Timestamp::UNIX_EPOCH;
-let zdt = ts.to_zoned(tz);
+let zdt = ts.to_zoned_datetime(tz);
 assert_eq!(zdt.to_string(), "1969-12-31T19:00:00-05:00[America/New_York]");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -109,7 +109,7 @@ let ts: Timestamp = "2025-02-25T00:00Z".parse()?;
 let Some(next_transition) = TZ.following(ts).next() else {
     return Err("no time zone transitions".into());
 };
-let zdt = next_transition.timestamp().to_zoned(TZ.clone());
+let zdt = next_transition.timestamp().to_zoned_datetime(TZ.clone());
 assert_eq!(zdt.to_string(), "2025-03-30T03:00:00+02:00[Europe/Zurich]");
 
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -125,7 +125,8 @@ compiled binary.
 
 pub use self::{
     ambiguous::{
-        AmbiguousOffset, AmbiguousTimestamp, AmbiguousZoned, Disambiguation,
+        AmbiguousOffset, AmbiguousTimestamp, AmbiguousZonedDateTime,
+        Disambiguation,
     },
     db::{TimeZoneDatabase, TimeZoneName, TimeZoneNameIter, db},
     offset::{Dst, Offset, OffsetArithmetic, OffsetConflict, OffsetRound},
@@ -207,7 +208,7 @@ mod zic;
 /// let Some(next_transition) = TZ.following(ts).next() else {
 ///     return Err("no time zone transitions".into());
 /// };
-/// let zdt = next_transition.timestamp().to_zoned(TZ.clone());
+/// let zdt = next_transition.timestamp().to_zoned_datetime(TZ.clone());
 /// assert_eq!(zdt.to_string(), "2025-03-30T03:00:00+02:00[Europe/Zurich]");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -286,7 +287,7 @@ pub use jiff_static::get;
 /// let Some(next_transition) = TZ.following(ts).next() else {
 ///     return Err("no time zone transitions".into());
 /// };
-/// let zdt = next_transition.timestamp().to_zoned(TZ.clone());
+/// let zdt = next_transition.timestamp().to_zoned_datetime(TZ.clone());
 /// assert_eq!(zdt.to_string(), "2025-03-30T03:00:00+02:00[Europe/Zurich]");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -305,7 +306,7 @@ pub use jiff_static::get;
 /// static TZ: TimeZone = tz::include!("/etc/localtime", "America/New_York");
 ///
 /// let ts: Timestamp = "2025-02-25T00:00Z".parse()?;
-/// let zdt = ts.to_zoned(TZ.clone());
+/// let zdt = ts.to_zoned_datetime(TZ.clone());
 /// assert_eq!(zdt.to_string(), "2025-02-24T19:00:00-05:00[America/New_York]");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())

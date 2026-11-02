@@ -452,8 +452,9 @@ pub mod span {
 /// whatever). If you're designing a new API and need to transmit instants in
 /// time that don't care about time zones, then you should use `Timestamp`
 /// directly. It will automatically use RFC 3339. (And if you do want to
-/// include the time zone, then using [`Zoned`](crate::Zoned) directly will
-/// work as well by utilizing the RFC 9557 extension to RFC 3339.)
+/// include the time zone, then using [`ZonedDateTime`](crate::ZonedDateTime)
+/// directly will work as well by utilizing the RFC 9557 extension to RFC
+/// 3339.)
 pub mod timestamp {
     use serde_core::de;
 

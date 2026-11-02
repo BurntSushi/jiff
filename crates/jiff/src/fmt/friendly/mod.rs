@@ -177,7 +177,7 @@ much detail." You can remove this by rounding the `Span` to the nearest half
 hour before printing:
 
 ```
-use jiff::{civil, RoundMode, Unit, ZonedDifference};
+use jiff::{civil, RoundMode, Unit, ZonedDateTimeDifference};
 
 let commented_at = civil::date(2024, 8, 1)
     .at(19, 29, 13, 123_456_789)
@@ -194,7 +194,7 @@ assert_eq!(format!("{span:#}"), "4mo 24d 17h 19m 46s 876ms 543µs 211ns");
 // rounding the result. We could also do this with `Span::round`
 // directly by providing `now` as our relative zoned datetime.
 let rounded = now.since(
-    ZonedDifference::new(&commented_at)
+    ZonedDateTimeDifference::new(&commented_at)
         .smallest(Unit::Minute)
         .largest(Unit::Year)
         .mode(RoundMode::HalfExpand)

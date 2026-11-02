@@ -9,7 +9,7 @@ use jcore::{
 };
 
 use crate::{
-    RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
+    RoundMode, SignedDuration, Span, SpanRound, Unit, ZonedDateTime,
     civil::{Date, DateTime},
     duration::{Duration, SDuration},
     error::{Error, civil::Error as E, unit::UnitConfigError},
@@ -2025,16 +2025,16 @@ impl From<DateTime> for Time {
     }
 }
 
-impl From<Zoned> for Time {
+impl From<ZonedDateTime> for Time {
     #[inline]
-    fn from(zdt: Zoned) -> Time {
+    fn from(zdt: ZonedDateTime) -> Time {
         zdt.datetime().time()
     }
 }
 
-impl<'a> From<&'a Zoned> for Time {
+impl<'a> From<&'a ZonedDateTime> for Time {
     #[inline]
-    fn from(zdt: &'a Zoned) -> Time {
+    fn from(zdt: &'a ZonedDateTime) -> Time {
         zdt.datetime().time()
     }
 }
@@ -2572,16 +2572,16 @@ impl From<DateTime> for TimeDifference {
     }
 }
 
-impl From<Zoned> for TimeDifference {
+impl From<ZonedDateTime> for TimeDifference {
     #[inline]
-    fn from(zdt: Zoned) -> TimeDifference {
+    fn from(zdt: ZonedDateTime) -> TimeDifference {
         TimeDifference::from(Time::from(zdt))
     }
 }
 
-impl<'a> From<&'a Zoned> for TimeDifference {
+impl<'a> From<&'a ZonedDateTime> for TimeDifference {
     #[inline]
-    fn from(zdt: &'a Zoned) -> TimeDifference {
+    fn from(zdt: &'a ZonedDateTime) -> TimeDifference {
         TimeDifference::from(zdt.datetime())
     }
 }
@@ -2600,16 +2600,16 @@ impl From<(Unit, DateTime)> for TimeDifference {
     }
 }
 
-impl From<(Unit, Zoned)> for TimeDifference {
+impl From<(Unit, ZonedDateTime)> for TimeDifference {
     #[inline]
-    fn from((largest, zdt): (Unit, Zoned)) -> TimeDifference {
+    fn from((largest, zdt): (Unit, ZonedDateTime)) -> TimeDifference {
         TimeDifference::from((largest, Time::from(zdt)))
     }
 }
 
-impl<'a> From<(Unit, &'a Zoned)> for TimeDifference {
+impl<'a> From<(Unit, &'a ZonedDateTime)> for TimeDifference {
     #[inline]
-    fn from((largest, zdt): (Unit, &'a Zoned)) -> TimeDifference {
+    fn from((largest, zdt): (Unit, &'a ZonedDateTime)) -> TimeDifference {
         TimeDifference::from((largest, zdt.datetime()))
     }
 }

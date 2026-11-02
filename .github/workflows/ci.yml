@@ -355,7 +355,7 @@ jobs:
         toolchain: stable
     - run: cargo package --workspace
 
-  # A test to ensure that `Zoned::now()` doesn't take "too long" on its
+  # A test to ensure that `ZonedDateTime::now()` doesn't take "too long" on its
   # first run.
   time-zone-init:
     runs-on: ${{ matrix.os }}
