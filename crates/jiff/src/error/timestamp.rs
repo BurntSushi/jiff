@@ -3,6 +3,10 @@ use crate::error;
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub(crate) enum Error {
+    #[cfg(feature = "std")]
+    ConvertToSystemTime {
+        timestamp: crate::Timestamp,
+    },
     OverflowAddDuration,
     OverflowAddSpan,
 }
@@ -26,6 +30,12 @@ impl core::fmt::Display for Error {
         use self::Error::*;
 
         match *self {
+            #[cfg(feature = "std")]
+            ConvertToSystemTime { timestamp } => write!(
+                f,
+                "timestamp {timestamp} is out of range for \
+                 `std::time::SystemTime`",
+            ),
             OverflowAddDuration => {
                 f.write_str("adding duration overflowed timestamp")
             }

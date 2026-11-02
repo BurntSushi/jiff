@@ -2579,21 +2579,44 @@ impl<'a> From<&'a Zoned> for Timestamp {
     }
 }
 
+/// Converts a timestamp to a system time.
+///
+/// The precision of a system time depends on the platform. This conversion
+/// may truncate the subsecond precision of the timestamp.
+///
+/// # Errors
+///
+/// This returns an error when the timestamp is outside the range supported
+/// by `SystemTime` on the current platform.
+///
+/// # Example
+///
+/// ```
+/// use std::time::SystemTime;
+/// use jiff::Timestamp;
+///
+/// let timestamp: Timestamp = "2025-12-30T15:29:46Z".parse()?;
+/// let system_time = SystemTime::try_from(timestamp)?;
+/// assert_eq!(Timestamp::try_from(system_time)?, timestamp);
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[cfg(feature = "std")]
-impl From<Timestamp> for std::time::SystemTime {
+impl TryFrom<Timestamp> for std::time::SystemTime {
+    type Error = Error;
+
     #[inline]
-    fn from(time: Timestamp) -> std::time::SystemTime {
+    fn try_from(time: Timestamp) -> Result<std::time::SystemTime, Error> {
         let unix_epoch = std::time::SystemTime::UNIX_EPOCH;
         let sdur = time.as_duration();
         let dur = sdur.unsigned_abs();
-        // These are guaranteed to succeed because we assume that SystemTime
-        // uses at least 64 bits for the time, and our durations are capped via
-        // the range on UnixSeconds.
-        if sdur.is_negative() {
-            unix_epoch.checked_sub(dur).expect("duration too big (negative)")
+        let system_time = if sdur.is_negative() {
+            unix_epoch.checked_sub(dur)
         } else {
-            unix_epoch.checked_add(dur).expect("duration too big (positive)")
-        }
+            unix_epoch.checked_add(dur)
+        };
+        system_time
+            .ok_or_else(|| E::ConvertToSystemTime { timestamp: time }.into())
     }
 }
 
@@ -3507,6 +3530,64 @@ mod tests {
         let date = civil::Date::new(year, month, day).unwrap();
         let time = civil::Time::new(hour, minute, second, nano).unwrap();
         civil::DateTime::from_parts(date, time)
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn system_time_roundtrip() {
+        use std::time::{Duration, SystemTime};
+
+        let epoch = SystemTime::UNIX_EPOCH;
+        let duration = Duration::new(1_234_567_890, 123_456_789);
+        let times = [
+            Some(epoch),
+            epoch.checked_add(Duration::from_nanos(1)),
+            epoch.checked_sub(Duration::from_nanos(1)),
+            epoch.checked_add(duration),
+            epoch.checked_sub(duration),
+        ];
+        for system_time in times.into_iter().flatten() {
+            let timestamp = Timestamp::try_from(system_time).unwrap();
+            let zoned = timestamp.to_zoned(TimeZone::UTC);
+            let results: [Result<SystemTime, Error>; 3] =
+                [timestamp.try_into(), (&zoned).try_into(), zoned.try_into()];
+            for result in results {
+                assert_eq!(result.unwrap(), system_time);
+            }
+        }
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn system_time_limits() {
+        use std::time::{Duration, SystemTime};
+
+        let epoch = SystemTime::UNIX_EPOCH;
+        let times = [
+            (
+                Timestamp::MIN,
+                epoch.checked_sub(Duration::from_secs(
+                    Timestamp::MIN.as_second().unsigned_abs(),
+                )),
+            ),
+            (
+                Timestamp::MAX,
+                epoch.checked_add(Duration::new(
+                    Timestamp::MAX.as_second().unsigned_abs(),
+                    Timestamp::MAX.subsec_nanosecond().unsigned_abs(),
+                )),
+            ),
+        ];
+        // SystemTime's range varies by platform. In particular, some
+        // platforms cannot represent Timestamp::MIN (see issue #467).
+        for (timestamp, expected) in times {
+            let zoned = timestamp.to_zoned(TimeZone::UTC);
+            let results: [Result<SystemTime, Error>; 3] =
+                [timestamp.try_into(), (&zoned).try_into(), zoned.try_into()];
+            for result in results {
+                assert_eq!(result.ok(), expected, "{timestamp}");
+            }
+        }
     }
 
     #[test]

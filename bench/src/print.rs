@@ -739,7 +739,7 @@ fn print_rfc3339(c: &mut Criterion) {
     }
 
     {
-        let ts = SystemTime::from(start.timestamp());
+        let ts = SystemTime::try_from(start.timestamp()).unwrap();
         benchmark(c, format!("{NAME}/buffer/humantime"), |b| {
             b.iter(|| {
                 use std::fmt::Write;
@@ -753,7 +753,7 @@ fn print_rfc3339(c: &mut Criterion) {
     }
 
     {
-        let ts = SystemTime::from(start.timestamp());
+        let ts = SystemTime::try_from(start.timestamp()).unwrap();
         benchmark(c, format!("{NAME}/to_string/humantime"), |b| {
             b.iter(|| {
                 let got = humantime::format_rfc3339(ts).to_string();
