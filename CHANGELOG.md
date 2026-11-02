@@ -1,22 +1,34 @@
 # CHANGELOG
 
-0.2.39 (TBD)
-============
-TODO
+0.2.39 (2026-11-02)
+===================
+This release gathers a smattering of performance improvements and bug fixes.
 
 Enhancements:
 
+* [#646](https://github.com/BurntSushi/jiff/pull/646):
+Added optional `serde` support to `jiff-sqlx`.
 * [#659](https://github.com/BurntSushi/jiff/pull/659):
 Update the Windows time zone names.
+* [#665](https://github.com/BurntSushi/jiff/pull/665):
+Avoid allocating IANA name during a `Zoned::strftime` call.
+* [#666](https://github.com/BurntSushi/jiff/pull/666):
+Avoid a second offset lookup when adding calendar units.
 
 Bug fixes:
 
+* [#645](https://github.com/BurntSushi/jiff/issues/645):
+Fix `Timestamp::from_nanosecond` panic on out-of-range input.
+* [#649](https://github.com/BurntSushi/jiff/issues/649):
+Fix optional deserializers dropping null under `#[serde(flatten)]`.
 * [#652](https://github.com/BurntSushi/jiff/issues/652):
 Tweak "lossless" wording for round-tripping `Zoned` values.
 * [#654](https://github.com/BurntSushi/jiff/issues/654):
 Fixes a panic when printing some very large durations.
 * [#660](https://github.com/BurntSushi/jiff/issues/660):
 Fixes a bug where parsing some very large spans gave an incorrect result.
+* [#668](https://github.com/BurntSushi/jiff/issues/668):
+Fixes a panic in `Span::total` for a zero span with a calendar unit.
 
 
 0.2.38 (2026-10-06)

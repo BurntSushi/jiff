@@ -1,6 +1,6 @@
 [package]
 name = "jiff-static"
-version = "0.2.38"  #:version
+version = "0.2.39"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 license = "Unlicense OR MIT"
 homepage = "https://github.com/BurntSushi/jiff/tree/master/crates/jiff-static"
@@ -36,7 +36,7 @@ tz-fat = []
 perf-inline = []
 
 [dependencies]
-jcore = { package = "jiff-core", version = "0.1", path = "../jiff-core" }
+jcore = { package = "jiff-core", version = "0.1.2", path = "../jiff-core" }
 jiff-tzdb = { version = "0.1.6", path = "../jiff-tzdb", optional = true }
 proc-macro2 = "1.0.93"
 quote = "1.0.38"
