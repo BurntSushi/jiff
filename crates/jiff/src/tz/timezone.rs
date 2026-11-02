@@ -2112,12 +2112,8 @@ impl<'a> core::fmt::Display for DiagnosticName<'a> {
 ///
 /// This module exists to _encapsulate_ the representation rigorously and
 /// expose a safe and sound API.
-// To squash warnings on older versions of Rust. Our polyfill below should
-// match what std does on newer versions of Rust, so the confusability should
-// be fine. ---AG
-#[allow(unstable_name_collisions)]
 mod repr {
-    use core::mem::ManuallyDrop;
+    use core::{mem::ManuallyDrop, ptr::without_provenance};
 
     use jcore::tz::{posix, tzif};
 
@@ -2126,10 +2122,6 @@ mod repr {
     use crate::util::sync::Arc;
 
     use super::Offset;
-
-    // On Rust 1.84+, `StrictProvenancePolyfill` isn't actually used.
-    #[allow(unused_imports)]
-    use self::polyfill::{StrictProvenancePolyfill, without_provenance};
 
     /// A macro for "matching" over the time zone representation variants.
     ///
@@ -2634,57 +2626,6 @@ mod repr {
                         crate::tz::posix::TimeZoneFormatter(&posix),
                     )
                 },
-            }
-        }
-    }
-
-    /// This is a polyfill for a small subset of std's strict provenance APIs.
-    ///
-    /// The strict provenance APIs in `core` were stabilized in Rust 1.84,
-    /// but it will likely be a while before Jiff can use them. (At time of
-    /// writing, 2025-02-24, Jiff's MSRV is Rust 1.70.)
-    mod polyfill {
-        pub(super) const fn without_provenance(addr: usize) -> *const u8 {
-            // SAFETY: Every valid `usize` is also a valid pointer (but not
-            // necessarily legal to dereference).
-            //
-            // MSRV(1.84): We *really* ought to be using
-            // `core::ptr::without_provenance` here, but Jiff's MSRV prevents
-            // us.
-            #[allow(integer_to_ptr_transmutes)]
-            unsafe {
-                core::mem::transmute(addr)
-            }
-        }
-
-        // On Rust 1.84+, `StrictProvenancePolyfill` isn't actually used.
-        #[allow(dead_code)]
-        pub(super) trait StrictProvenancePolyfill:
-            Sized + Clone + Copy
-        {
-            fn addr(&self) -> usize;
-            fn with_addr(&self, addr: usize) -> Self;
-            fn map_addr(&self, map: impl FnOnce(usize) -> usize) -> Self {
-                self.with_addr(map(self.addr()))
-            }
-        }
-
-        impl StrictProvenancePolyfill for *const u8 {
-            fn addr(&self) -> usize {
-                // SAFETY: Pointer-to-integer transmutes are valid (if you are
-                // okay with losing the provenance).
-                //
-                // The implementation in std says that this isn't guaranteed to
-                // be sound outside of std, but I'm not sure how else to do it.
-                // In practice, this seems likely fine?
-                unsafe { core::mem::transmute(self.cast::<()>()) }
-            }
-
-            fn with_addr(&self, address: usize) -> Self {
-                let self_addr = self.addr() as isize;
-                let dest_addr = address as isize;
-                let offset = dest_addr.wrapping_sub(self_addr);
-                self.wrapping_offset(offset)
             }
         }
     }
