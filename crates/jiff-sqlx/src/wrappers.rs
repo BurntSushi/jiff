@@ -265,3 +265,45 @@ impl From<Span> for jiff::Span {
         x.0
     }
 }
+
+/// Give the wrapper types a Serialize and a Deserialize implementation to use with Serde.
+///
+/// Under the hood, we use the Serde implementation of the original types directly.
+#[cfg(feature = "serde")]
+mod serde_impl {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use super::{Date, DateTime, Span, Time, Timestamp};
+
+    macro_rules! impl_serde {
+        ($wrapper:ident, $jiff:ty) => {
+            impl Serialize for $wrapper {
+                fn serialize<S>(
+                    &self,
+                    serializer: S,
+                ) -> Result<S::Ok, S::Error>
+                where
+                    S: Serializer,
+                {
+                    Serialize::serialize(&self.0, serializer)
+                }
+            }
+
+            impl<'de> Deserialize<'de> for $wrapper {
+                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                where
+                    D: Deserializer<'de>,
+                {
+                    <$jiff as Deserialize<'de>>::deserialize(deserializer)
+                        .map($wrapper)
+                }
+            }
+        };
+    }
+
+    impl_serde!(Timestamp, jiff::Timestamp);
+    impl_serde!(DateTime, jiff::civil::DateTime);
+    impl_serde!(Date, jiff::civil::Date);
+    impl_serde!(Time, jiff::civil::Time);
+    impl_serde!(Span, jiff::Span);
+}
