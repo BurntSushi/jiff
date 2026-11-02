@@ -27,10 +27,10 @@ assert_eq!(zoned.timestamp().to_string(), "2024-08-11T03:14:00Z");
 
 # Overview
 
-The primary type in this crate is [`Zoned`]. A `Zoned` value is a datetime that
-corresponds to a precise instant in time in a particular geographic region.
-Users of this crate may find it helpful to think of a `Zoned` as a triple of
-the following components:
+The primary type in this crate is [`ZonedDateTime`]. A `ZonedDateTime` value is
+a datetime that corresponds to a precise instant in time in a particular
+geographic region. Users of this crate may find it helpful to think of a
+`ZonedDateTime` as a triple of the following components:
 
 * A [`Timestamp`] is a 96-bit integer of nanoseconds since the [Unix epoch].
 A timestamp is a precise instant in time.
@@ -41,7 +41,7 @@ describe this same concept.
 offset from [UTC], in a particular geographic region.
 
 All three of these components are used to provide convenient high level
-operations on `Zoned` such as computing durations, adding durations and
+operations on `ZonedDateTime` such as computing durations, adding durations and
 rounding.
 
 A [`Span`] is this crate's primary duration type. It mixes calendar and clock
@@ -77,7 +77,7 @@ Here is a non-exhaustive list of the things that Jiff supports:
 [IANA Time Zone Database]. When a platform doesn't have a time zone database,
 Jiff automatically embeds a copy of it.
 * A separation of datetime types between absolute times ([`Timestamp`] and
-[`Zoned`]) and civil times ([`civil::DateTime`]).
+[`ZonedDateTime`]) and civil times ([`civil::DateTime`]).
 * Nanosecond precision.
 * Time zone and daylight saving time aware arithmetic.
 * The primary duration type, [`Span`], mixes calendar and clock
@@ -164,10 +164,10 @@ $ cargo add jiff
 Third, edit `src/main.rs`. Delete what's there and replace it with this:
 
 ```
-use jiff::{Unit, Zoned};
+use jiff::{Unit, ZonedDateTime};
 
 fn main() -> Result<(), jiff::Error> {
-    let now = Zoned::now().round(Unit::Second)?;
+    let now = ZonedDateTime::now().round(Unit::Second)?;
     println!("{now}");
     Ok(())
 }
@@ -206,28 +206,28 @@ subsequent runs shouldn't have to re-compile the dependencies.
 
 ### Get the current time in your system's time zone
 
-The [`Zoned::now`] returns your system's time and also attempts
+The [`ZonedDateTime::now`] returns your system's time and also attempts
 to automatically find your system's default time zone via
 [`tz::TimeZone::system`]:
 
 ```
-use jiff::Zoned;
+use jiff::ZonedDateTime;
 
-let now = Zoned::now();
+let now = ZonedDateTime::now();
 println!("{now}");
 // Output: 2024-07-10T17:09:28.168146054-04:00[America/New_York]
 ```
 
 ### Print the current time rounded to the nearest second
 
-This uses the [`Zoned::round`] API to round a zoned datetime to the nearest
-second. This is useful, for example, if you don't care about fractional
+This uses the [`ZonedDateTime::round`] API to round a zoned datetime to the
+nearest second. This is useful, for example, if you don't care about fractional
 seconds:
 
 ```
-use jiff::{Unit, Zoned};
+use jiff::{Unit, ZonedDateTime};
 
-let now = Zoned::now().round(Unit::Second)?;
+let now = ZonedDateTime::now().round(Unit::Second)?;
 println!("{now}");
 // Output: 2024-07-10T17:09:28-04:00[America/New_York]
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -236,12 +236,12 @@ println!("{now}");
 ### Print today's date at a specific time
 
 Let's say you want to get the current date at 2pm. Here's one way of doing it
-that makes use of [`Zoned::with`]:
+that makes use of [`ZonedDateTime::with`]:
 
 ```
-use jiff::Zoned;
+use jiff::ZonedDateTime;
 
-let zdt = Zoned::now().with()
+let zdt = ZonedDateTime::now().with()
     .hour(14)
     .minute(0)
     .second(0)
@@ -256,9 +256,9 @@ Or, if the time is known to be valid, you can use the infallible
 [`civil::time`](civil::time()) convenience constructor:
 
 ```
-use jiff::{civil::time, Zoned};
+use jiff::{civil::time, ZonedDateTime};
 
-let zdt = Zoned::now().with().time(time(14, 0, 0, 0)).build()?;
+let zdt = ZonedDateTime::now().with().time(time(14, 0, 0, 0)).build()?;
 println!("{zdt}");
 // Output: 2024-07-12T14:00:00-04:00[America/New_York]
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -268,9 +268,10 @@ You can eliminate the possibility of a panic at runtime by using `time` in
 a `const` block:
 
 ```
-use jiff::{civil::time, Zoned};
+use jiff::{ZonedDateTime, civil::time};
 
-let zdt = Zoned::now().with().time(const { time(14, 0, 0, 0) }).build()?;
+let zdt =
+    ZonedDateTime::now().with().time(const { time(14, 0, 0, 0) }).build()?;
 println!("{zdt}");
 // Output: 2024-07-12T14:00:00-04:00[America/New_York]
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -302,17 +303,17 @@ println!("{}", now.as_nanosecond());
 
 ### Print the datetime for a timestamp
 
-This example shows how to convert a Unix timestamp, in milliseconds, to
-a zoned datetime in the system's current time zone. This utilizes the
+This example shows how to convert a Unix timestamp, in milliseconds, to a zoned
+datetime in the system's current time zone. This utilizes the
 [`Timestamp::from_millisecond`] constructor, [`tz::TimeZone::system`] to get
-the default time zone and the [`Timestamp::to_zoned`] routine to convert a
-timestamp to a zoned datetime.
+the default time zone and the [`Timestamp::to_zoned_datetime`] routine to
+convert a timestamp to a zoned datetime.
 
 ```
 use jiff::{tz::TimeZone, Timestamp};
 
 let ts = Timestamp::from_millisecond(1_720_646_365_567)?;
-let zdt = ts.to_zoned(TimeZone::system());
+let zdt = ts.to_zoned_datetime(TimeZone::system());
 println!("{zdt}");
 // Output: 2024-07-10T17:19:25.567-04:00[America/New_York]
 // Or if you just want the RFC 3339 time without bothering with time zones:
@@ -361,9 +362,9 @@ assert_eq!(
 
 ### Find the duration between two zoned datetimes
 
-This shows how to compute a span between two zoned datetimes. This utilizes
-a [`Zoned`]'s implementation for `Sub`, permitting one to subtract two zoned
-datetimes via the `-` operator:
+This shows how to compute a span between two zoned datetimes. This utilizes a
+[`ZonedDateTime`]'s implementation for `Sub`, permitting one to subtract two
+zoned datetimes via the `-` operator:
 
 ```
 use jiff::civil::date;
@@ -379,7 +380,7 @@ assert_eq!(format!("{span:#}"), "29341h 3m");
 The above returns no units bigger than hours because it makes the operation
 reversible in all cases. But if you don't need reversibility (i.e., adding the
 span returned to `zdt1` gives you `zdt2`), then you can ask for bigger units
-via [`Zoned::until`] to make the span more comprehensible:
+via [`ZonedDateTime::until`] to make the span more comprehensible:
 
 ```
 use jiff::{civil::date, Unit};
@@ -394,9 +395,9 @@ assert_eq!(format!("{span:#}"), "3y 4mo 5d 12h 3m");
 
 ### Add a duration to a zoned datetime
 
-This example shows how one can add a [`Span`] to a [`Zoned`] via
-[`Zoned::checked_add`] to get a new `Zoned` value. We utilize the [`ToSpan`]
-trait for convenience construction of `Span` values.
+This example shows how one can add a [`Span`] to a [`ZonedDateTime`] via
+[`ZonedDateTime::checked_add`] to get a new `ZonedDateTime` value. We utilize
+the [`ToSpan`] trait for convenience construction of `Span` values.
 
 ```
 use jiff::{civil::date, ToSpan};
@@ -437,7 +438,7 @@ assert_eq!(zdt.to_string(), "2024-11-03T01:30:00-04:00[America/New_York]");
 ```
 
 For more control over disambiguation, see
-[`tz::TimeZone::to_ambiguous_zoned`]. Or
+[`tz::TimeZone::to_ambiguous_zoned_datetime`]. Or
 [`fmt::temporal::DateTimeParser::disambiguation`]
 if you're parsing zoned datetimes.
 
@@ -500,14 +501,14 @@ assert_eq!(rfc2822::to_string(&zdt3)?, "Thu, 29 Feb 2024 16:04:00 +0530");
 
 Jiff has support for the C style [`strftime`] and [`strptime`] functions for
 formatting and parsing datetime types. All of Jiff's datetime types having a
-`strptime` constructor for parsing, and a `strftime` method for formatting.
-For example, this shows how to use [`Zoned::strptime`] to parsed a string in
-a "odd" custom format into a zoned datetime:
+`strptime` constructor for parsing, and a `strftime` method for formatting. For
+example, this shows how to use [`ZonedDateTime::strptime`] to parsed a string
+in a "odd" custom format into a zoned datetime:
 
 ```
-use jiff::Zoned;
+use jiff::ZonedDateTime;
 
-let zdt = Zoned::strptime(
+let zdt = ZonedDateTime::strptime(
     "%A, %B %d, %Y at %I:%M%p %Q",
     "Monday, July 15, 2024 at 5:30pm America/New_York",
 )?;
@@ -516,9 +517,9 @@ assert_eq!(zdt.to_string(), "2024-07-15T17:30:00-04:00[America/New_York]");
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-And this shows how to use [`Zoned::strftime`] to format a zoned datetime.
-Note the use of `%Z`, which will print a time zone abbreviation (when one is
-available) instead of an offset (`%Z` can't be used for parsing):
+And this shows how to use [`ZonedDateTime::strftime`] to format a zoned
+datetime. Note the use of `%Z`, which will print a time zone abbreviation (when
+one is available) instead of an offset (`%Z` can't be used for parsing):
 
 ```
 use jiff::civil::date;
@@ -776,8 +777,8 @@ pub use crate::{
     },
     util::round::RoundMode,
     zoned::{
-        Zoned, ZonedArithmetic, ZonedDifference, ZonedRound, ZonedSeries,
-        ZonedWith,
+        ZonedDateTime, ZonedDateTimeArithmetic, ZonedDateTimeDifference,
+        ZonedDateTimeRound, ZonedDateTimeSeries, ZonedDateTimeWith,
     },
 };
 
@@ -818,7 +819,7 @@ mod tests {
     fn now_works() {
         let _ = crate::logging::Logger::init();
 
-        let zdt = Zoned::now();
+        let zdt = ZonedDateTime::now();
         std::println!("{zdt}");
     }
 

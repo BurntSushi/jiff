@@ -21,10 +21,11 @@ pub trait ToSqlx {
     fn to_sqlx(self) -> Self::Target;
 }
 
-// We currently don't support `Zoned` integration in this wrapper crate. To
-// briefly explain why, a `Zoned` is _both_ a timestamp and a time zone. And
-// it isn't necessarily a dumb time zone like `-05:00`. It is intended to be a
-// real time zone like `America/New_York` or `Australia/Hobart`.
+// We currently don't support `ZonedDateTime` integration in this wrapper
+// crate. To briefly explain why, a `ZonedDateTime` is _both_ a timestamp and a
+// time zone. And it isn't necessarily a dumb time zone like `-05:00`. It is
+// intended to be a real time zone like `America/New_York` or
+// `Australia/Hobart`.
 //
 // However, PostgreSQL doesn't really have a primitive type that specifically
 // supports "timestamp with time zone." Comically, it does have a `TIMESTAMP
@@ -36,29 +37,30 @@ pub trait ToSqlx {
 // to fixed offsets as "time zones," which is rather antiquated IMO.) And,
 // conventionally, `TIMESTAMP WITHOUT TIME ZONE` is civil (local) time.
 //
-// So what's the problem? Well, if we try to stuff a `Zoned` into a
-// `TIMESTAMP WITH TIME ZONE`, then the *only* thing that actually
-// gets stored is a timestamp. No time zone. No offset. Nothing. That
-// means the time zone attached to `Zoned` gets dropped. So if you put
+// So what's the problem? Well, if we try to stuff a `ZonedDateTime` into a
+// `TIMESTAMP WITH TIME ZONE`, then the *only* thing that actually gets stored
+// is a timestamp. No time zone. No offset. Nothing. That means the time zone
+// attached to `ZonedDateTime` gets dropped. So if you put
 // `2025-02-15T17:00-05[America/New_york]` into the database, then you'll
 // always get `2025-02-15T22:00+00[UTC]` out. That's a silent dropping of the
-// time zone data. I personally think this would be extremely surprising,
-// and it could lead to bugs if you assume the time zone is correctly
-// round-tripped. (For example, DST safe arithmetic would no longer apply.)
-// And indeed, this is a principle design goal of Jiff: `Zoned` values can be
-// losslessly transmitted.
+// time zone data. I personally think this would be extremely surprising, and
+// it could lead to bugs if you assume the time zone is correctly
+// round-tripped. (For example, DST safe arithmetic would no longer apply.) And
+// indeed, this is a principle design goal of Jiff: `ZonedDateTime` values can
+// be losslessly transmitted.
 //
-// An alternative here is to provide a `Zoned` wrapper, but store it in
+// An alternative here is to provide a `ZonedDateTime` wrapper, but store it in
 // a `TEXT` field as an RFC 9557 timestamp. This would permit lossless
 // round-tripping. The problem is that this may also violate user expectations
 // because a datetime is not stored in a datetime field. Thus, you won't be
 // able to use PostgreSQL native functionality to handle it as a date.
 //
 // So for now, I opted to take the conservative choice and just not provide a
-// `Zoned` impl. This way, we can gather use cases and make a better informed
-// decision of what to do. Plus, the maintainer of `sqlx` seemed unconvinced
-// that a `Zoned` impl that drops time zone data was a problem, so out of
-// deference there, I started with this more conservative strategy.
+// `ZonedDateTime` impl. This way, we can gather use cases and make a better
+// informed decision of what to do. Plus, the maintainer of `sqlx` seemed
+// unconvinced that a `ZonedDateTime` impl that drops time zone data was a
+// problem, so out of deference there, I started with this more conservative
+// strategy.
 //
 // Of course, if you want to store something in `TIMESTAMP WITHOUT TIME ZONE`,
 // then you can just use `Timestamp`.
@@ -66,38 +68,38 @@ pub trait ToSqlx {
 // Ref: https://github.com/launchbadge/sqlx/issues/3487#issuecomment-2636542379
 /*
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub struct Zoned(jiff::Zoned);
+pub struct ZonedDateTime(jiff::ZonedDateTime);
 
-impl Zoned {
-    pub fn to_jiff(&self) -> jiff::Zoned {
+impl ZonedDateTime {
+    pub fn to_jiff(&self) -> jiff::ZonedDateTime {
         self.0.clone()
     }
 }
 
-impl<'a> ToSqlx for &'a jiff::Zoned {
-    type Target = Zoned;
+impl<'a> ToSqlx for &'a jiff::ZonedDateTime {
+    type Target = ZonedDateTime;
 
-    fn to_sqlx(self) -> Zoned {
-        Zoned(self.clone())
+    fn to_sqlx(self) -> ZonedDateTime {
+        ZonedDateTime(self.clone())
     }
 }
 
-impl From<jiff::Zoned> for Zoned {
-    fn from(x: jiff::Zoned) -> Zoned {
-        Zoned(x)
+impl From<jiff::ZonedDateTime> for ZonedDateTime {
+    fn from(x: jiff::ZonedDateTime) -> ZonedDateTime {
+        ZonedDateTime(x)
     }
 }
 
-impl From<Zoned> for jiff::Zoned {
-    fn from(x: Zoned) -> jiff::Zoned {
+impl From<ZonedDateTime> for jiff::ZonedDateTime {
+    fn from(x: ZonedDateTime) -> jiff::ZonedDateTime {
         x.0
     }
 }
 
-impl core::ops::Deref for Zoned {
-    type Target = jiff::Zoned;
+impl core::ops::Deref for ZonedDateTime {
+    type Target = jiff::ZonedDateTime;
 
-    fn deref(&self) -> &jiff::Zoned {
+    fn deref(&self) -> &jiff::ZonedDateTime {
         &self.0
     }
 }

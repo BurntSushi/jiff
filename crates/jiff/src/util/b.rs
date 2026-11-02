@@ -265,11 +265,11 @@ define_bounds! {
     (YearBCE, i16),
     (YearTwoDigit, i16, "year (2 digits)", 0, 99),
     (
-        ZonedDayNanoseconds,
+        ZonedDateTimeDayNanoseconds,
         i64,
         "nanoseconds (in one zoned datetime day)",
-        ZonedDaySeconds::MIN as i64 * c::NANOS_PER_SEC,
-        ZonedDaySeconds::MAX as i64 * c::NANOS_PER_SEC,
+        ZonedDateTimeDaySeconds::MIN as i64 * c::NANOS_PER_SEC,
+        ZonedDateTimeDaySeconds::MAX as i64 * c::NANOS_PER_SEC,
     ),
     // The number of seconds permitted in a single day.
     //
@@ -278,7 +278,7 @@ define_bounds! {
     //
     // It must also be at least 1 second long.
     (
-        ZonedDaySeconds,
+        ZonedDateTimeDaySeconds,
         i32,
         "seconds (in one zoned datetime day)",
         1,

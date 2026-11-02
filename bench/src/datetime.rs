@@ -119,9 +119,9 @@ fn to_timestamp_static(c: &mut Criterion) {
     if let Ok(tz) = jiff::tz::TimeZone::get(TZNAME) {
         benchmark(c, format!("{NAME}/zoneinfo/jiff"), |b| {
             b.iter(|| {
-                // The natural way to do this is `dt.to_zoned(..)`, but
-                // Jiff doesn't actually require one to materialize a `Zoned`
-                // to disambiguate a civil datetime.
+                // The natural way to do this is `dt.to_zoned_datetime(..)`,
+                // but Jiff doesn't actually require one to materialize a
+                // `ZonedDateTime` to disambiguate a civil datetime.
                 let ts = bb(&tz).to_timestamp(bb(DATETIME)).unwrap();
                 assert_eq!(ts.as_second(), STAMP);
             })
@@ -132,9 +132,9 @@ fn to_timestamp_static(c: &mut Criterion) {
         static TZ: jiff::tz::TimeZone = jiff::tz::get!("America/New_York");
         benchmark(c, format!("{NAME}/bundled/jiff"), |b| {
             b.iter(|| {
-                // The natural way to do this is `dt.to_zoned(..)`, but
-                // Jiff doesn't actually require one to materialize a `Zoned`
-                // to disambiguate a civil datetime.
+                // The natural way to do this is `dt.to_zoned_datetime(..)`,
+                // but Jiff doesn't actually require one to materialize a
+                // `ZonedDateTime` to disambiguate a civil datetime.
                 let ts = bb(&TZ).to_timestamp(bb(DATETIME)).unwrap();
                 assert_eq!(ts.as_second(), STAMP);
             })

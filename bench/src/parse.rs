@@ -284,7 +284,8 @@ fn parse_rfc2822(c: &mut Criterion) {
     const STRING: &str = "Sat, 13 Jul 2024 17:24:59 -0400";
     const EXPECTED: civil::DateTime =
         civil::date(2024, 7, 13).at(21, 24, 59, 0);
-    let expected = EXPECTED.to_zoned(TimeZone::UTC).unwrap().timestamp();
+    let expected =
+        EXPECTED.to_zoned_datetime(TimeZone::UTC).unwrap().timestamp();
 
     {
         benchmark(c, format!("{NAME}/jiff"), |b| {
@@ -343,7 +344,8 @@ fn parse_strptime(c: &mut Criterion) {
          [offset_hour sign:mandatory][offset_minute] \
          [year]"
     );
-    let expected = EXPECTED.to_zoned(TimeZone::UTC).unwrap().timestamp();
+    let expected =
+        EXPECTED.to_zoned_datetime(TimeZone::UTC).unwrap().timestamp();
 
     {
         benchmark(c, format!("{NAME}/oneshot/jiff"), |b| {
