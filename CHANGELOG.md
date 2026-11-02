@@ -11,6 +11,8 @@ Update the Windows time zone names.
 
 Bug fixes:
 
+* [#652](https://github.com/BurntSushi/jiff/issues/652):
+Tweak "lossless" wording for round-tripping `Zoned` values.
 * [#654](https://github.com/BurntSushi/jiff/issues/654):
 Fixes a panic when printing some very large durations.
 * [#660](https://github.com/BurntSushi/jiff/issues/660):

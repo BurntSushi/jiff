@@ -90,7 +90,8 @@ aware.
 account.
 * Formatting and parsing datetimes via a Temporal-specified hybrid format
 that takes the best parts of [RFC 3339], [RFC 9557] and [ISO 8601]. This
-includes lossless round tripping of zone aware datetimes and durations.
+includes lossless round tripping of IANA time zone aware datetimes and
+durations.
 * Formatting and parsing according to [RFC 2822].
 * Formatting and parsing via routines similar to [`strftime`] and [`strptime`].
 * Formatting and parsing durations via a bespoke

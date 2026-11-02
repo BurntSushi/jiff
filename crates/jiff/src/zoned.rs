@@ -47,9 +47,9 @@ use crate::{
 /// time (a precise instant in time). Indeed, a `Zoned` can be losslessy
 /// converted to any other datetime type in this crate: [`Timestamp`],
 /// [`DateTime`], [`Date`] and [`Time`].
-/// * A `Zoned` value can be losslessly serialized and deserialized, via
-/// [serde], by adhering to [RFC 8536]. An example of a serialized zoned
-/// datetime is `2024-07-04T08:39:00-04:00[America/New_York]`.
+/// * A `Zoned` value with an IANA time zone can be losslessly serialized and
+/// deserialized, via [serde], by adhering to [RFC 8536]. An example of a
+/// serialized zoned datetime is `2024-07-04T08:39:00-04:00[America/New_York]`.
 /// * Since a `Zoned` stores a [`TimeZone`] itself, multiple time zone aware
 /// operations can be chained together without repeatedly specifying the time
 /// zone.
