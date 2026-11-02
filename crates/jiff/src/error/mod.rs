@@ -194,6 +194,21 @@ impl Error {
     pub fn is_crate_feature(&self) -> bool {
         matches!(*self.root().kind(), ErrorKind::CrateFeature(_))
     }
+
+    /// Returns a reference to this error's corresponding I/O error, if it
+    /// exists.
+    ///
+    /// An I/O error can occur, for example, when opening a time zone database
+    /// via
+    /// [`TimeZoneDatabase::from_dir`](crate::tz::TimeZoneDatabase::from_dir).
+    #[cfg(feature = "std")]
+    pub fn io_error(&self) -> Option<&std::io::Error> {
+        if let ErrorKind::IO(IOError { ref err }) = *self.root().kind() {
+            Some(err)
+        } else {
+            None
+        }
+    }
 }
 
 impl Error {
@@ -355,7 +370,7 @@ impl Error {
         }
     }
 
-    /// Returns the kind of this error.
+    /// Returns a reference to the kind of this error.
     fn kind(&self) -> &ErrorKind {
         self.inner
             .as_ref()
