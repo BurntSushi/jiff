@@ -3605,6 +3605,10 @@ impl From<SpanFieldwise> for Span {
 /// This trait is implemented for the following integer types: `i8`, `i16`,
 /// `i32` and `i64`.
 ///
+/// This trait is sealed and cannot be implemented for types outside of Jiff.
+/// (If you have a use case for implementing this trait, please
+/// [participate on the issue tracker](https://github.com/BurntSushi/jiff/issues).)
+///
 /// Note that this trait is provided as a convenience and should generally
 /// only be used for literals in your source code. You should not use this
 /// trait on numbers provided by end users. Namely, if the number provided
@@ -3642,7 +3646,7 @@ impl From<SpanFieldwise> for Span {
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-pub trait ToSpan: Sized {
+pub trait ToSpan: Sized + sealed::Sealed {
     /// Create a new span from this integer in units of years.
     ///
     /// # Panics
@@ -3774,8 +3778,14 @@ pub trait ToSpan: Sized {
     }
 }
 
+mod sealed {
+    pub trait Sealed {}
+}
+
 macro_rules! impl_to_span {
     ($ty:ty) => {
+        impl sealed::Sealed for $ty {}
+
         impl ToSpan for $ty {
             #[inline]
             fn years(self) -> Span {
