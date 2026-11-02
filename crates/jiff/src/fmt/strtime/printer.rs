@@ -1096,7 +1096,7 @@ impl Case {
 #[cfg(test)]
 mod tests {
     use crate::{
-        Timestamp, Zoned,
+        Timestamp, ZonedDateTime,
         civil::{Date, DateTime, Time, date, time},
         fmt::strtime::{BrokenDownTime, Config, PosixCustom, format},
         tz::Offset,
@@ -1229,7 +1229,7 @@ mod tests {
             return;
         }
 
-        let f = |fmt: &str, zdt: &Zoned| format(fmt, zdt).unwrap();
+        let f = |fmt: &str, zdt: &ZonedDateTime| format(fmt, zdt).unwrap();
 
         let zdt = date(2024, 7, 14)
             .at(22, 24, 0, 0)
@@ -1335,7 +1335,7 @@ mod tests {
             return;
         }
 
-        let f = |fmt: &str, zdt: &Zoned| format(fmt, zdt).unwrap();
+        let f = |fmt: &str, zdt: &ZonedDateTime| format(fmt, zdt).unwrap();
 
         let zdt = date(2024, 7, 14)
             .at(22, 24, 0, 0)
@@ -1355,7 +1355,7 @@ mod tests {
             return;
         }
 
-        let f = |fmt: &str, zdt: &Zoned| format(fmt, zdt).unwrap();
+        let f = |fmt: &str, zdt: &ZonedDateTime| format(fmt, zdt).unwrap();
 
         let zdt = date(2024, 7, 14)
             .at(22, 24, 0, 0)
@@ -1366,14 +1366,14 @@ mod tests {
 
         let zdt = date(2024, 7, 14)
             .at(22, 24, 0, 0)
-            .to_zoned(crate::tz::offset(-4).to_time_zone())
+            .to_zoned_datetime(crate::tz::offset(-4).to_time_zone())
             .unwrap();
         insta::assert_snapshot!(f("%Q", &zdt), @"-0400");
         insta::assert_snapshot!(f("%:Q", &zdt), @"-04:00");
 
         let zdt = date(2024, 7, 14)
             .at(22, 24, 0, 0)
-            .to_zoned(crate::tz::TimeZone::UTC)
+            .to_zoned_datetime(crate::tz::TimeZone::UTC)
             .unwrap();
         insta::assert_snapshot!(f("%Q", &zdt), @"UTC");
         insta::assert_snapshot!(f("%:Q", &zdt), @"UTC");

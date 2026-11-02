@@ -10,7 +10,7 @@ losslessly, opt-in Serde support and a whole lot more.
 Jiff takes enormous inspiration from [Temporal], which is a [TC39] proposal to
 improve datetime handling in JavaScript.
 
-[![Build status](https://github.com/BurntSushi/jiff/workflows/ci/badge.svg)](https://github.com/BurntSushi/jiff/actions)
+[![Build status][build-status]][build]
 [![Crates.io](https://img.shields.io/crates/v/jiff.svg)](https://crates.io/crates/jiff)
 [![Docs.rs](https://img.shields.io/docsrs/jiff)](https://docs.rs/jiff)
 
@@ -18,6 +18,8 @@ Dual-licensed under MIT or the [UNLICENSE](https://unlicense.org/).
 
 [TC39]: https://tc39.es/
 [Temporal]: https://tc39.es/proposal-temporal/docs/index.html
+[build-status]: https://github.com/BurntSushi/jiff/workflows/ci/badge.svg
+[build]: https://github.com/BurntSushi/jiff/actions
 
 ### Documentation
 
@@ -38,8 +40,12 @@ use jiff::{Timestamp, ToSpan};
 
 fn main() -> Result<(), jiff::Error> {
     let time: Timestamp = "2024-07-11T01:14:00Z".parse()?;
-    let zoned = time.in_tz("America/New_York")?.checked_add(1.month().hours(2))?;
-    assert_eq!(zoned.to_string(), "2024-08-10T23:14:00-04:00[America/New_York]");
+    let zoned =
+        time.in_tz("America/New_York")?.checked_add(1.month().hours(2))?;
+    assert_eq!(
+        zoned.to_string(),
+        "2024-08-10T23:14:00-04:00[America/New_York]"
+    );
     // Or, if you want an RFC3339 formatted string:
     assert_eq!(zoned.timestamp().to_string(), "2024-08-11T03:14:00Z");
     Ok(())
@@ -74,10 +80,10 @@ $ cargo add jiff
 Third, edit `src/main.rs`. Delete what's there and replace it with this:
 
 ```rust
-use jiff::{Unit, Zoned};
+use jiff::{Unit, ZonedDateTime};
 
 fn main() -> Result<(), jiff::Error> {
-    let now = Zoned::now().round(Unit::Second)?;
+    let now = ZonedDateTime::now().round(Unit::Second)?;
     println!("{now}");
     Ok(())
 }
@@ -134,14 +140,15 @@ had optimization attention paid to them, but many still have not. It is a goal
 to improve where we can, but performance will generally come second to API
 comprehension and correctness.
 
-The submodules in Jiff, especially `jiff::fmt`, often work as an
-escape hatch for more complicated APIs that provide more control. For
-example, using the `std::fmt::Display` implementation of `Zoned` makes
-it difficult to write the data into a reusable buffer. Conversely,
-[`jiff::fmt::temporal::DateTimePrinter::print_zoned`] provides a way to write a
-`Zoned` into an existing `String` or even a `Vec<u8>`.
+The submodules in Jiff, especially `jiff::fmt`, often work as an escape hatch
+for more complicated APIs that provide more control. For example, using the
+`std::fmt::Display` implementation of `ZonedDateTime` makes it difficult to
+write the data into a reusable buffer. Conversely, the `print_zoned_datetime`
+method on [`jiff::fmt::temporal::DateTimePrinter`] provides a way to write a
+`ZonedDateTime` into an existing `String` or even a `Vec<u8>`.
 
-[`jiff::fmt::temporal::DateTimePrinter::print_zoned`]: https://docs.rs/jiff/latest/jiff/fmt/temporal/struct.DateTimePrinter.html#method.print_zoned
+[`jiff::fmt::temporal::DateTimePrinter`]:
+  https://docs.rs/jiff/latest/jiff/fmt/temporal/struct.DateTimePrinter.html
 
 ### Platform support
 

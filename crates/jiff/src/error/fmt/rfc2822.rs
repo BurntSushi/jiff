@@ -17,7 +17,7 @@ pub(crate) enum Error {
     EndOfInputSecond,
     EndOfInputTimeSeparator,
     FailedTimestamp,
-    FailedZoned,
+    FailedZonedDateTime,
     InconsistentWeekday { parsed: Weekday, from_date: Weekday },
     InvalidDate,
     InvalidMonth,
@@ -111,7 +111,7 @@ impl core::fmt::Display for Error {
             FailedTimestamp => f.write_str(
                 "failed to parse RFC 2822 datetime into Jiff timestamp",
             ),
-            FailedZoned => f.write_str(
+            FailedZonedDateTime => f.write_str(
                 "failed to parse RFC 2822 datetime into Jiff zoned datetime",
             ),
             InconsistentWeekday { parsed, from_date } => write!(

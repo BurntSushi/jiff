@@ -47,7 +47,7 @@ pub(crate) enum Error {
     RangeWidth,
     RequiredDateForDateTime,
     RequiredDateTimeForTimestamp,
-    RequiredDateTimeForZoned,
+    RequiredDateTimeForZonedDateTime,
     RequiredOffsetForTimestamp,
     RequiredSomeDayForDate,
     RequiredTimeForDateTime,
@@ -64,7 +64,7 @@ pub(crate) enum Error {
     UnknownDirective {
         directive: u8,
     },
-    ZonedOffsetOrTz,
+    ZonedDateTimeOffsetOrTz,
 }
 
 impl Error {
@@ -198,7 +198,7 @@ impl core::fmt::Display for Error {
             RequiredDateTimeForTimestamp => {
                 f.write_str("datetime required to parse timestamp")
             }
-            RequiredDateTimeForZoned => {
+            RequiredDateTimeForZonedDateTime => {
                 f.write_str("datetime required to parse zoned datetime")
             }
             RequiredOffsetForTimestamp => {
@@ -242,7 +242,7 @@ impl core::fmt::Display for Error {
                  following `%.`",
                 directive = escape::Byte(directive),
             ),
-            ZonedOffsetOrTz => f.write_str(
+            ZonedDateTimeOffsetOrTz => f.write_str(
                 "either offset (from `%z`) or IANA time zone identifier \
                  (from `%Q`) is required for parsing zoned datetime",
             ),

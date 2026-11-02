@@ -190,7 +190,10 @@ assert_eq!(serde_json::to_string(&got).unwrap(), expected);
 ///
 /// let json = r#"{"duration": "36 hours 1100ms"}"#;
 /// let got: Data = serde_json::from_str(&json).unwrap();
-/// assert_eq!(got.duration, SignedDuration::new(36 * 60 * 60 + 1, 100_000_000));
+/// assert_eq!(
+///     got.duration,
+///     SignedDuration::new(36 * 60 * 60 + 1, 100_000_000)
+/// );
 ///
 /// let expected = r#"{"duration":"36:00:01.100"}"#;
 /// assert_eq!(serde_json::to_string(&got).unwrap(), expected);
@@ -203,7 +206,7 @@ assert_eq!(serde_json::to_string(&got).unwrap(), expected);
 ///
 ///     impl<'a> std::fmt::Display for Custom<'a> {
 ///         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-///             use jiff::fmt::{friendly::SpanPrinter, StdFmtWrite};
+///             use jiff::fmt::{StdFmtWrite, friendly::SpanPrinter};
 ///
 ///             static PRINTER: SpanPrinter = SpanPrinter::new()
 ///                 .hours_minutes_seconds(true)
@@ -223,8 +226,8 @@ assert_eq!(serde_json::to_string(&got).unwrap(), expected);
 /// for this. Namely, deserialization automatically supports parsing all
 /// configuration options for serialization unconditionally.
 pub mod duration {
-    /// Serialize a `SignedDuration` in the [`friendly`](crate::fmt::friendly) duration
-    /// format.
+    /// Serialize a `SignedDuration` in the [`friendly`](crate::fmt::friendly)
+    /// duration format.
     pub mod friendly {
         /// Serialize a `SignedDuration` in the
         /// [`friendly`](crate::fmt::friendly) duration format using compact
@@ -299,7 +302,8 @@ pub mod duration {
 ///
 /// The `Serialize` implementation uses ISO 8601 because it is a widely
 /// accepted interchange format for communicating durations. If you need to
-/// inter-operate with other systems, it is almost certainly the correct choice.
+/// inter-operate with other systems, it is almost certainly the correct
+/// choice.
 ///
 /// The "friendly" format does not adhere to any universal specified format.
 /// However, it is perhaps easier to read, and crucially, unambiguously
@@ -452,8 +456,9 @@ pub mod span {
 /// whatever). If you're designing a new API and need to transmit instants in
 /// time that don't care about time zones, then you should use `Timestamp`
 /// directly. It will automatically use RFC 3339. (And if you do want to
-/// include the time zone, then using [`Zoned`](crate::Zoned) directly will
-/// work as well by utilizing the RFC 9557 extension to RFC 3339.)
+/// include the time zone, then using [`ZonedDateTime`](crate::ZonedDateTime)
+/// directly will work as well by utilizing the RFC 9557 extension to RFC
+/// 3339.)
 pub mod timestamp {
     use serde_core::de;
 
@@ -1414,13 +1419,14 @@ pub mod tz {
 /// Jiff's own [`SignedDuration`](crate::SignedDuration).
 ///
 /// If you want to serialize a `std::time::Duration` using the
-/// [friendly](crate::fmt::friendly), then you can make use of the
-/// helpers in
-/// [`friendly::compact`](crate::fmt::serde::unsigned_duration::friendly::compact),
+/// [friendly](crate::fmt::friendly), then you can make use of the helpers in
+/// [`friendly::compact`](
+///     crate::fmt::serde::unsigned_duration::friendly::compact
+/// ),
 /// also via Serde's `with` attribute. These helpers change their serialization
-/// to the "friendly" format using compact unit designators. Their deserialization
-/// remains the same as the top-level helpers (that is, both ISO 8601 and
-/// friendly formatted duration strings are parsed).
+/// to the "friendly" format using compact unit designators. Their
+/// deserialization remains the same as the top-level helpers (that is, both
+/// ISO 8601 and friendly formatted duration strings are parsed).
 ///
 /// Unlike Jiff's own [`SignedDuration`](crate::SignedDuration), deserializing
 /// a `std::time::Duration` does not support negative durations. If a negative
@@ -1432,11 +1438,11 @@ pub mod tz {
 ///
 /// # Example: maximally interoperable serialization
 ///
-/// This example shows how to achieve Serde integration for `std::time::Duration`
-/// in a way that mirrors [`SignedDuration`](crate::SignedDuration). In
-/// particular, this supports deserializing ISO 8601 or "friendly" format
-/// duration strings. In order to be maximally interoperable, this serializes
-/// only in the ISO 8601 format.
+/// This example shows how to achieve Serde integration for
+/// `std::time::Duration` in a way that mirrors
+/// [`SignedDuration`](crate::SignedDuration). In particular, this supports
+/// deserializing ISO 8601 or "friendly" format duration strings. In order to
+/// be maximally interoperable, this serializes only in the ISO 8601 format.
 ///
 /// ```
 /// use std::time::Duration;
@@ -1460,7 +1466,8 @@ pub mod tz {
 ///     retry_delay: Some(Duration::from_millis(2500)),
 /// };
 ///
-/// let expected_json = r#"{"name":"Task 1","timeout":"PT1H30M","retry_delay":"PT2.5S"}"#;
+/// let expected_json =
+///     r#"{"name":"Task 1","timeout":"PT1H30M","retry_delay":"PT2.5S"}"#;
 /// let actual_json = serde_json::to_string(&task)?;
 /// assert_eq!(actual_json, expected_json);
 ///
@@ -1473,11 +1480,13 @@ pub mod tz {
 ///     timeout: Duration::from_secs(5),
 ///     retry_delay: None,
 /// };
-/// let expected_json_no_retry = r#"{"name":"Task 2","timeout":"PT5S","retry_delay":null}"#;
+/// let expected_json_no_retry =
+///     r#"{"name":"Task 2","timeout":"PT5S","retry_delay":null}"#;
 /// let actual_json_no_retry = serde_json::to_string(&task_no_retry)?;
 /// assert_eq!(actual_json_no_retry, expected_json_no_retry);
 ///
-/// let deserialized_task_no_retry: Task = serde_json::from_str(&actual_json_no_retry)?;
+/// let deserialized_task_no_retry: Task =
+///     serde_json::from_str(&actual_json_no_retry)?;
 /// assert_eq!(deserialized_task_no_retry, task_no_retry);
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1495,12 +1504,14 @@ pub mod tz {
 ///
 /// use serde::{Deserialize, Serialize};
 ///
+/// use jiff::fmt::serde::unsigned_duration::friendly::compact;
+///
 /// #[derive(Debug, PartialEq, Serialize, Deserialize)]
 /// struct Task {
 ///     name: String,
-///     #[serde(with = "jiff::fmt::serde::unsigned_duration::friendly::compact::required")]
+///     #[serde(with = "compact::required")]
 ///     timeout: Duration,
-///     #[serde(with = "jiff::fmt::serde::unsigned_duration::friendly::compact::optional")]
+///     #[serde(with = "compact::optional")]
 ///     retry_delay: Option<Duration>,
 /// }
 ///
@@ -1512,7 +1523,8 @@ pub mod tz {
 ///     retry_delay: Some(Duration::from_millis(2500)),
 /// };
 ///
-/// let expected_json = r#"{"name":"Task 1","timeout":"1h 30m","retry_delay":"2s 500ms"}"#;
+/// let expected_json =
+///     r#"{"name":"Task 1","timeout":"1h 30m","retry_delay":"2s 500ms"}"#;
 /// let actual_json = serde_json::to_string(&task)?;
 /// assert_eq!(actual_json, expected_json);
 ///
@@ -1525,11 +1537,13 @@ pub mod tz {
 ///     timeout: Duration::from_secs(5),
 ///     retry_delay: None,
 /// };
-/// let expected_json_no_retry = r#"{"name":"Task 2","timeout":"5s","retry_delay":null}"#;
+/// let expected_json_no_retry =
+///     r#"{"name":"Task 2","timeout":"5s","retry_delay":null}"#;
 /// let actual_json_no_retry = serde_json::to_string(&task_no_retry)?;
 /// assert_eq!(actual_json_no_retry, expected_json_no_retry);
 ///
-/// let deserialized_task_no_retry: Task = serde_json::from_str(&actual_json_no_retry)?;
+/// let deserialized_task_no_retry: Task =
+///     serde_json::from_str(&actual_json_no_retry)?;
 /// assert_eq!(deserialized_task_no_retry, task_no_retry);
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1538,7 +1552,9 @@ pub mod tz {
 /// # Example: custom "friendly" format options
 ///
 /// When using
-/// [`friendly::compact`](crate::fmt::serde::unsigned_duration::friendly::compact),
+/// [`friendly::compact`](
+///     crate::fmt::serde::unsigned_duration::friendly::compact
+/// ),
 /// the serialization implementation uses a fixed friendly format
 /// configuration. To use your own configuration, you'll need to write your own
 /// serialization function:
@@ -1546,12 +1562,16 @@ pub mod tz {
 /// ```
 /// use std::time::Duration;
 ///
+/// use jiff::fmt::serde::unsigned_duration;
+///
 /// #[derive(Debug, serde::Deserialize, serde::Serialize)]
 /// struct Data {
 ///     #[serde(serialize_with = "custom_friendly")]
 ///     // We can reuse an existing deserialization helper so that you
 ///     // don't have to write your own.
-///     #[serde(deserialize_with = "jiff::fmt::serde::unsigned_duration::required::deserialize")]
+///     #[serde(
+///         deserialize_with = "unsigned_duration::required::deserialize"
+///     )]
 ///     duration: Duration,
 /// }
 ///
@@ -1570,7 +1590,7 @@ pub mod tz {
 ///
 ///     impl<'a> std::fmt::Display for Custom<'a> {
 ///         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-///             use jiff::fmt::{friendly::SpanPrinter, StdFmtWrite};
+///             use jiff::fmt::{StdFmtWrite, friendly::SpanPrinter};
 ///
 ///             static PRINTER: SpanPrinter = SpanPrinter::new()
 ///                 .hours_minutes_seconds(true)

@@ -14,7 +14,7 @@ use crate::{
     },
     tz::{Offset, TimeZone},
     util::{constant, round::Increment},
-    zoned::Zoned,
+    zoned::ZonedDateTime,
 };
 
 /// An instant in time represented as the number of nanoseconds since the Unix
@@ -23,8 +23,9 @@ use crate::{
 /// A timestamp is always in the Unix timescale with a UTC offset of zero.
 ///
 /// To obtain civil or "local" datetime units like year, month, day or hour, a
-/// timestamp needs to be combined with a [`TimeZone`] to create a [`Zoned`].
-/// That can be done with [`Timestamp::in_tz`] or [`Timestamp::to_zoned`].
+/// timestamp needs to be combined with a [`TimeZone`] to create a
+/// [`ZonedDateTime`]. That can be done with [`Timestamp::in_tz`] or
+/// [`Timestamp::to_zoned_datetime`].
 ///
 /// The integer count of nanoseconds since the Unix epoch is signed, where
 /// the Unix epoch is `1970-01-01 00:00:00Z`. A positive timestamp indicates
@@ -151,7 +152,7 @@ use crate::{
 /// let ts2: Timestamp = "2024-02-25 07Z".parse()?;
 /// assert_eq!(
 ///     // If you want to deal in units bigger than hours, then you'll have to
-///     // convert your timestamp to a [`Zoned`] first.
+///     // convert your timestamp to a [`ZonedDateTime`] first.
 ///     ts1.since((Unit::Hour, ts2))?,
 ///     1648.hours().minutes(30).milliseconds(123).fieldwise(),
 /// );
@@ -298,8 +299,8 @@ use crate::{
 /// The above happened to be the precise instant in time I wrote the example.
 /// Since I happened to know the offset, this worked okay. But what if I
 /// didn't? We could instead construct a civil datetime and attach a time zone
-/// to it. This will create a [`Zoned`] value, from which we can access the
-/// timestamp:
+/// to it. This will create a [`ZonedDateTime`] value, from which we can access
+/// the timestamp:
 ///
 /// ```
 /// use jiff::civil::date;
@@ -1136,8 +1137,8 @@ impl Timestamp {
     /// ```
     #[inline]
     pub fn as_duration(self) -> SignedDuration {
-        // OK because a `Timestamp` has a strictly smaller range than a duration,
-        // _and_ because we know `|nanos| < 1` as well.
+        // OK because a `Timestamp` has a strictly smaller range than a
+        // duration, _and_ because we know `|nanos| < 1` as well.
         SignedDuration::new_unchecked(
             self.dur.as_second(),
             self.dur.subsec_nanosecond(),
@@ -1198,20 +1199,22 @@ impl Timestamp {
         self.dur.is_zero()
     }
 
-    /// Creates a [`Zoned`] value by attaching a time zone for the given name
-    /// to this instant in time.
+    /// Creates a [`ZonedDateTime`] value by attaching a time zone for the
+    /// given name to this instant in time.
     ///
     /// The name given is resolved to a [`TimeZone`] by using the default
     /// [`TimeZoneDatabase`](crate::tz::TimeZoneDatabase) created by
-    /// [`tz::db`](crate::tz::db). Indeed, this is a convenience function
-    /// for [`Timestamp::to_zoned`] where the time zone database lookup
+    /// [`tz::db`](crate::tz::db). Indeed, this is a convenience function for
+    /// [`Timestamp::to_zoned_datetime`] where the time zone database lookup
     /// is done automatically.
     ///
     /// Assuming the time zone name could be resolved to a [`TimeZone`], this
     /// routine is otherwise infallible and never results in any ambiguity
-    /// since both a [`Timestamp`] and a [`Zoned`] correspond to precise
-    /// instant in time. This is unlike
-    /// [`civil::DateTime::to_zoned`](crate::civil::DateTime::to_zoned),
+    /// since both a [`Timestamp`] and a [`ZonedDateTime`] correspond to
+    /// precise instant in time. This is unlike
+    /// [`civil::DateTime::to_zoned_datetime`](
+    ///     crate::civil::DateTime::to_zoned_datetime
+    /// ),
     /// where a civil datetime might correspond to more than one instant in
     /// time (i.e., a fold, typically DST ending) or no instants in time (i.e.,
     /// a gap, typically DST starting).
@@ -1223,16 +1226,19 @@ impl Timestamp {
     ///
     /// # Example
     ///
-    /// This is a simple example of converting the instant that is `123,456,789`
-    /// seconds after the Unix epoch to an instant that is aware of its time
-    /// zone:
+    /// This is a simple example of converting the instant that is
+    /// `123,456,789` seconds after the Unix epoch to an instant that is aware
+    /// of its time zone:
     ///
     /// ```
     /// use jiff::Timestamp;
     ///
     /// let ts = Timestamp::new(123_456_789, 0).unwrap();
     /// let zdt = ts.in_tz("America/New_York")?;
-    /// assert_eq!(zdt.to_string(), "1973-11-29T16:33:09-05:00[America/New_York]");
+    /// assert_eq!(
+    ///     zdt.to_string(),
+    ///     "1973-11-29T16:33:09-05:00[America/New_York]"
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1245,7 +1251,10 @@ impl Timestamp {
     ///
     /// // Time zone database lookups are case insensitive!
     /// let zdt = Timestamp::UNIX_EPOCH.in_tz("australia/hobart")?;
-    /// assert_eq!(zdt.to_string(), "1970-01-01T11:00:00+11:00[Australia/Hobart]");
+    /// assert_eq!(
+    ///     zdt.to_string(),
+    ///     "1970-01-01T11:00:00+11:00[Australia/Hobart]"
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1260,18 +1269,20 @@ impl Timestamp {
     /// assert!(Timestamp::UNIX_EPOCH.in_tz("does not exist").is_err());
     /// ```
     #[inline]
-    pub fn in_tz(self, time_zone_name: &str) -> Result<Zoned, Error> {
+    pub fn in_tz(self, time_zone_name: &str) -> Result<ZonedDateTime, Error> {
         let tz = crate::tz::db().get(time_zone_name)?;
-        Ok(self.to_zoned(tz))
+        Ok(self.to_zoned_datetime(tz))
     }
 
-    /// Creates a [`Zoned`] value by attaching the given time zone to this
-    /// instant in time.
+    /// Creates a [`ZonedDateTime`] value by attaching the given time zone to
+    /// this instant in time.
     ///
     /// This is infallible and never results in any ambiguity since both a
-    /// [`Timestamp`] and a [`Zoned`] correspond to precise instant in time.
-    /// This is unlike
-    /// [`civil::DateTime::to_zoned`](crate::civil::DateTime::to_zoned),
+    /// [`Timestamp`] and a [`ZonedDateTime`] correspond to precise instant in
+    /// time. This is unlike
+    /// [`civil::DateTime::to_zoned_datetime`](
+    ///     crate::civil::DateTime::to_zoned_datetime
+    /// ),
     /// where a civil datetime might correspond to more than one instant in
     /// time (i.e., a fold, typically DST ending) or no instants in time (i.e.,
     /// a gap, typically DST starting).
@@ -1290,9 +1301,9 @@ impl Timestamp {
     ///
     /// let ts = Timestamp::new(123_456_789, 0).unwrap();
     /// let tz = TimeZone::fixed(tz::offset(-4));
-    /// let zdt = ts.to_zoned(tz);
+    /// let zdt = ts.to_zoned_datetime(tz);
     /// // A time zone annotation is still included in the printable version
-    /// // of the Zoned value, but it is fixed to a particular offset.
+    /// // of the ZonedDateTime value, but it is fixed to a particular offset.
     /// assert_eq!(zdt.to_string(), "1973-11-29T17:33:09-04:00[-04:00]");
     /// ```
     ///
@@ -1308,7 +1319,7 @@ impl Timestamp {
     ///
     /// let ts = Timestamp::new(123_456_789, 0)?;
     /// let tz = TimeZone::posix("NST3:30NDT,M3.2.0,M11.1.0")?;
-    /// let zdt = ts.to_zoned(tz);
+    /// let zdt = ts.to_zoned_datetime(tz);
     /// // There isn't any agreed upon mechanism for transmitting a POSIX time
     /// // zone string within an RFC 9557 TZ annotation, so Jiff just emits the
     /// // offset. In practice, POSIX TZ strings are rarely user facing anyway.
@@ -1319,8 +1330,8 @@ impl Timestamp {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_zoned(self, tz: TimeZone) -> Zoned {
-        Zoned::new(self, tz)
+    pub fn to_zoned_datetime(self, tz: TimeZone) -> ZonedDateTime {
+        ZonedDateTime::new(self, tz)
     }
 
     /// Add the given span of time to this timestamp.
@@ -1345,9 +1356,10 @@ impl Timestamp {
     ///
     /// This also returns an error if the given duration is a `Span` with any
     /// non-zero units greater than hours. If you want to use bigger units,
-    /// convert this timestamp to a `Zoned` and use [`Zoned::checked_add`].
-    /// This error occurs because a `Timestamp` has no time zone attached to
-    /// it, and thus cannot unambiguously resolve the length of a single day.
+    /// convert this timestamp to a `ZonedDateTime` and use
+    /// [`ZonedDateTime::checked_add`]. This error occurs because a `Timestamp`
+    /// has no time zone attached to it, and thus cannot unambiguously resolve
+    /// the length of a single day.
     ///
     /// # Example
     ///
@@ -1402,9 +1414,15 @@ impl Timestamp {
     /// assert_eq!(ts.to_string(), "9999-12-30T22:00:00.999999999Z");
     /// assert!(ts.checked_add(1.second()).is_err());
     /// assert!(ts.checked_add(1.nanosecond()).is_err());
-    /// assert!(ts.checked_add(
-    ///     175_307_616.hours().minutes(10_518_456_960i64).seconds(631_107_417_600i64),
-    /// ).is_err());
+    /// assert!(
+    ///     ts.checked_add(
+    ///         175_307_616
+    ///             .hours()
+    ///             .minutes(10_518_456_960i64)
+    ///             .seconds(631_107_417_600i64),
+    ///     )
+    ///     .is_err()
+    /// );
     ///
     /// let ts = Timestamp::MIN;
     /// assert_eq!(ts.to_string(), "-009999-01-02T01:59:59Z");
@@ -1684,7 +1702,7 @@ impl Timestamp {
     /// An error can also occur if `TimestampDifference` is misconfigured. For
     /// example, if the smallest unit provided is bigger than the largest unit,
     /// or if the largest unit provided is bigger than hours. (To use bigger
-    /// units with an instant in time, use [`Zoned::until`] instead.)
+    /// units with an instant in time, use [`ZonedDateTime::until`] instead.)
     ///
     /// It is guaranteed that if one provides a timestamp with the default
     /// [`TimestampDifference`] configuration, then this routine will never
@@ -2102,7 +2120,8 @@ impl Timestamp {
     /// ```
     /// use jiff::Timestamp;
     ///
-    /// let ts = Timestamp::strptime("%F %H:%M %:z", "2024-07-14 21:14 -04:00")?;
+    /// let ts =
+    ///     Timestamp::strptime("%F %H:%M %:z", "2024-07-14 21:14 -04:00")?;
     /// assert_eq!(ts.to_string(), "2024-07-15T01:14:00Z");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -2565,16 +2584,16 @@ impl core::ops::SubAssign<UnsignedDuration> for Timestamp {
     }
 }
 
-impl From<Zoned> for Timestamp {
+impl From<ZonedDateTime> for Timestamp {
     #[inline]
-    fn from(zdt: Zoned) -> Timestamp {
+    fn from(zdt: ZonedDateTime) -> Timestamp {
         zdt.timestamp()
     }
 }
 
-impl<'a> From<&'a Zoned> for Timestamp {
+impl<'a> From<&'a ZonedDateTime> for Timestamp {
     #[inline]
-    fn from(zdt: &'a Zoned) -> Timestamp {
+    fn from(zdt: &'a ZonedDateTime) -> Timestamp {
         zdt.timestamp()
     }
 }
@@ -2965,16 +2984,16 @@ impl<'a> From<&'a UnsignedDuration> for TimestampArithmetic {
 /// configuration consisting of just the timestamp. So for example,
 /// `timestamp1.until(timestamp2)` will return the span from `timestamp1` to
 /// `timestamp2`.
-/// * `From<Zoned> for TimestampDifference` will construct a configuration
-/// consisting of the timestamp from the given zoned datetime. So for example,
-/// `timestamp.since(zoned)` returns the span from `zoned.to_timestamp()` to
-/// `timestamp`.
+/// * `From<ZonedDateTime> for TimestampDifference` will construct a
+/// configuration consisting of the timestamp from the given zoned datetime. So
+/// for example, `timestamp.since(zoned)` returns the span from
+/// `zoned.to_timestamp()` to `timestamp`.
 /// * `From<(Unit, Timestamp)>` is a convenient way to specify the largest
 /// units that should be present on the span returned. By default, the largest
 /// units are seconds. Using this trait implementation is equivalent to
 /// `TimestampDifference::new(timestamp).largest(unit)`.
-/// * `From<(Unit, Zoned)>` is like the one above, but with the time from
-/// the given zoned datetime.
+/// * `From<(Unit, ZonedDateTime)>` is like the one above, but with the time
+/// from the given zoned datetime.
 ///
 /// One can also provide a `TimestampDifference` value directly. Doing so
 /// is necessary to use the rounding features of calculating a span. For
@@ -3249,16 +3268,16 @@ impl From<Timestamp> for TimestampDifference {
     }
 }
 
-impl From<Zoned> for TimestampDifference {
+impl From<ZonedDateTime> for TimestampDifference {
     #[inline]
-    fn from(zdt: Zoned) -> TimestampDifference {
+    fn from(zdt: ZonedDateTime) -> TimestampDifference {
         TimestampDifference::new(Timestamp::from(zdt))
     }
 }
 
-impl<'a> From<&'a Zoned> for TimestampDifference {
+impl<'a> From<&'a ZonedDateTime> for TimestampDifference {
     #[inline]
-    fn from(zdt: &'a Zoned) -> TimestampDifference {
+    fn from(zdt: &'a ZonedDateTime) -> TimestampDifference {
         TimestampDifference::from(Timestamp::from(zdt))
     }
 }
@@ -3270,16 +3289,16 @@ impl From<(Unit, Timestamp)> for TimestampDifference {
     }
 }
 
-impl From<(Unit, Zoned)> for TimestampDifference {
+impl From<(Unit, ZonedDateTime)> for TimestampDifference {
     #[inline]
-    fn from((largest, zdt): (Unit, Zoned)) -> TimestampDifference {
+    fn from((largest, zdt): (Unit, ZonedDateTime)) -> TimestampDifference {
         TimestampDifference::from((largest, Timestamp::from(zdt)))
     }
 }
 
-impl<'a> From<(Unit, &'a Zoned)> for TimestampDifference {
+impl<'a> From<(Unit, &'a ZonedDateTime)> for TimestampDifference {
     #[inline]
-    fn from((largest, zdt): (Unit, &'a Zoned)) -> TimestampDifference {
+    fn from((largest, zdt): (Unit, &'a ZonedDateTime)) -> TimestampDifference {
         TimestampDifference::from((largest, Timestamp::from(zdt)))
     }
 }
@@ -3329,8 +3348,11 @@ impl<'a> From<(Unit, &'a Zoned)> for TimestampDifference {
 /// let ts: Timestamp = "2024-06-20 16:24:59.5Z".parse()?;
 /// assert_eq!(
 ///     ts.round(
-///         TimestampRound::new().smallest(Unit::Second).mode(RoundMode::Trunc),
-///     )?.to_string(),
+///         TimestampRound::new()
+///             .smallest(Unit::Second)
+///             .mode(RoundMode::Trunc),
+///     )?
+///     .to_string(),
 ///     // The second just gets truncated as if it wasn't there.
 ///     "2024-06-20T16:24:59Z",
 /// );
@@ -3377,7 +3399,8 @@ impl TimestampRound {
     ///
     /// let ts: Timestamp = "2024-06-20T03:25:30Z".parse()?;
     /// assert_eq!(
-    ///     ts.round(TimestampRound::new().smallest(Unit::Minute))?.to_string(),
+    ///     ts.round(TimestampRound::new().smallest(Unit::Minute))?
+    ///         .to_string(),
     ///     "2024-06-20T03:26:00Z",
     /// );
     /// // Or, utilize the `From<Unit> for TimestampRound` impl:
@@ -3548,7 +3571,7 @@ mod tests {
         ];
         for system_time in times.into_iter().flatten() {
             let timestamp = Timestamp::try_from(system_time).unwrap();
-            let zoned = timestamp.to_zoned(TimeZone::UTC);
+            let zoned = timestamp.to_zoned_datetime(TimeZone::UTC);
             let results: [Result<SystemTime, Error>; 3] =
                 [timestamp.try_into(), (&zoned).try_into(), zoned.try_into()];
             for result in results {
@@ -3581,7 +3604,7 @@ mod tests {
         // SystemTime's range varies by platform. In particular, some
         // platforms cannot represent Timestamp::MIN (see issue #467).
         for (timestamp, expected) in times {
-            let zoned = timestamp.to_zoned(TimeZone::UTC);
+            let zoned = timestamp.to_zoned_datetime(TimeZone::UTC);
             let results: [Result<SystemTime, Error>; 3] =
                 [timestamp.try_into(), (&zoned).try_into(), zoned.try_into()];
             for result in results {
@@ -3624,7 +3647,7 @@ mod tests {
             );
             assert_eq!(
                 timestamp,
-                datetime.to_zoned(TimeZone::UTC).unwrap().timestamp(),
+                datetime.to_zoned_datetime(TimeZone::UTC).unwrap().timestamp(),
                 "datetime: {datetime:?}"
             );
         }
@@ -3657,8 +3680,9 @@ mod tests {
                         continue;
                     }
                     let t = Timestamp::new(second, nano).unwrap();
-                    let Ok(got) =
-                        Offset::UTC.to_datetime(t).to_zoned(TimeZone::UTC)
+                    let Ok(got) = Offset::UTC
+                        .to_datetime(t)
+                        .to_zoned_datetime(TimeZone::UTC)
                     else {
                         continue;
                     };
@@ -3728,8 +3752,8 @@ mod tests {
 
     quickcheck::quickcheck! {
         fn prop_unix_seconds_roundtrip(t: Timestamp) -> quickcheck::TestResult {
-            let dt = t.to_zoned(TimeZone::UTC).datetime();
-            let Ok(got) = dt.to_zoned(TimeZone::UTC) else {
+            let dt = t.to_zoned_datetime(TimeZone::UTC).datetime();
+            let Ok(got) = dt.to_zoned_datetime(TimeZone::UTC) else {
                 return quickcheck::TestResult::discard();
             };
             quickcheck::TestResult::from_bool(t == got.timestamp())
@@ -3768,7 +3792,7 @@ mod tests {
     #[test]
     fn timestamp_deserialize_yaml() {
         let expected = datetime(2024, 10, 31, 16, 33, 53, 123456789)
-            .to_zoned(TimeZone::UTC)
+            .to_zoned_datetime(TimeZone::UTC)
             .unwrap()
             .timestamp();
 

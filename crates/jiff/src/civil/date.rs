@@ -3,7 +3,7 @@ use core::time::Duration as UnsignedDuration;
 use jcore::{bounds::Sign, civil::Date as JDate};
 
 use crate::{
-    RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
+    RoundMode, SignedDuration, Span, SpanRound, Unit, ZonedDateTime,
     civil::{DateTime, Era, ISOWeekDate, Time, Weekday},
     duration::{Duration, SDuration},
     error::{Error, ErrorContext, civil::Error as E, unit::UnitConfigError},
@@ -1036,13 +1036,14 @@ impl Date {
         ISOWeekDate::from_jcore(self.inner.to_iso_week_date())
     }
 
-    /// Converts a civil date to a [`Zoned`] datetime by adding the given
-    /// time zone and setting the clock time to midnight.
+    /// Converts a civil date to a [`ZonedDateTime`] datetime by adding the
+    /// given time zone and setting the clock time to midnight.
     ///
     /// This is a convenience function for
-    /// `date.to_datetime(midnight).in_tz(name)`. See [`DateTime::to_zoned`]
-    /// for more details. Note that ambiguous datetimes are handled in the
-    /// same way as `DateTime::to_zoned`.
+    /// `date.to_datetime(midnight).in_tz(name)`. See
+    /// [`DateTime::to_zoned_datetime`] for more details. Note that ambiguous
+    /// datetimes are handled in the same way as
+    /// `DateTime::to_zoned_datetime`.
     ///
     /// # Errors
     ///
@@ -1063,22 +1064,25 @@ impl Date {
     /// use jiff::civil::date;
     ///
     /// let zdt = date(2024, 6, 20).in_tz("America/New_York")?;
-    /// assert_eq!(zdt.to_string(), "2024-06-20T00:00:00-04:00[America/New_York]");
+    /// assert_eq!(
+    ///     zdt.to_string(),
+    ///     "2024-06-20T00:00:00-04:00[America/New_York]"
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
     /// # Example: dealing with ambiguity
     ///
-    /// Since a [`Zoned`] corresponds to a precise instant in time (to
+    /// Since a [`ZonedDateTime`] corresponds to a precise instant in time (to
     /// nanosecond precision) and a `Date` can be many possible such instants,
     /// this routine chooses one for this date: the first one, or midnight.
     ///
     /// Interestingly, some regions implement their daylight saving time
     /// transitions at midnight. This means there are some places in the world
     /// where, once a year, midnight does not exist on their clocks. As a
-    /// result, it's possible for the datetime string representing a [`Zoned`]
-    /// to be something other than midnight. For example:
+    /// result, it's possible for the datetime string representing a
+    /// [`ZonedDateTime`] to be something other than midnight. For example:
     ///
     /// ```
     /// use jiff::civil::date;
@@ -1095,9 +1099,9 @@ impl Date {
     /// Since this uses
     /// [`Disambiguation::Compatible`](crate::tz::Disambiguation::Compatible),
     /// and since that also chooses the "later" time in a forward transition,
-    /// it follows that the date of the returned `Zoned` will always match
-    /// this civil date. (Unless there is a pathological time zone with a 24+
-    /// hour transition forward.)
+    /// it follows that the date of the returned `ZonedDateTime` will always
+    /// match this civil date. (Unless there is a pathological time zone with a
+    /// 24+ hour transition forward.)
     ///
     /// But if a different disambiguation strategy is used, even when only
     /// dealing with standard one hour transitions, the date returned can be
@@ -1108,7 +1112,7 @@ impl Date {
     ///
     /// let tz = TimeZone::get("America/Havana")?;
     /// let dt = date(2024, 3, 10).at(0, 0, 0, 0);
-    /// let zdt = tz.to_ambiguous_zoned(dt).earlier()?;
+    /// let zdt = tz.to_ambiguous_zoned_datetime(dt).earlier()?;
     /// assert_eq!(
     ///     zdt.to_string(),
     ///     "2024-03-09T23:00:00-05:00[America/Havana]",
@@ -1117,18 +1121,19 @@ impl Date {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn in_tz(self, time_zone_name: &str) -> Result<Zoned, Error> {
+    pub fn in_tz(self, time_zone_name: &str) -> Result<ZonedDateTime, Error> {
         let tz = crate::tz::db().get(time_zone_name)?;
-        self.to_zoned(tz)
+        self.to_zoned_datetime(tz)
     }
 
-    /// Converts a civil datetime to a [`Zoned`] datetime by adding the given
-    /// [`TimeZone`] and setting the clock time to midnight.
+    /// Converts a civil datetime to a [`ZonedDateTime`] datetime by adding the
+    /// given [`TimeZone`] and setting the clock time to midnight.
     ///
     /// This is a convenience function for
-    /// `date.to_datetime(midnight).to_zoned(tz)`. See [`DateTime::to_zoned`]
-    /// for more details. Note that ambiguous datetimes are handled in the same
-    /// way as `DateTime::to_zoned`.
+    /// `date.to_datetime(midnight).to_zoned_datetime(tz)`. See
+    /// [`DateTime::to_zoned_datetime`] for more details. Note that ambiguous
+    /// datetimes are handled in the same way as
+    /// `DateTime::to_zoned_datetime`.
     ///
     /// In the common case of a time zone being represented as a name string,
     /// like `Australia/Tasmania`, consider using [`Date::in_tz`]
@@ -1149,16 +1154,19 @@ impl Date {
     /// use jiff::{civil::date, tz};
     ///
     /// let tz = tz::offset(-4).to_time_zone();
-    /// let zdt = date(2024, 6, 20).to_zoned(tz)?;
+    /// let zdt = date(2024, 6, 20).to_zoned_datetime(tz)?;
     /// // A time zone annotation is still included in the printable version
-    /// // of the Zoned value, but it is fixed to a particular offset.
+    /// // of the ZonedDateTime value, but it is fixed to a particular offset.
     /// assert_eq!(zdt.to_string(), "2024-06-20T00:00:00-04:00[-04:00]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_zoned(self, tz: TimeZone) -> Result<Zoned, Error> {
-        DateTime::from(self).to_zoned(tz)
+    pub fn to_zoned_datetime(
+        self,
+        tz: TimeZone,
+    ) -> Result<ZonedDateTime, Error> {
+        DateTime::from(self).to_zoned_datetime(tz)
     }
 
     /// Given a [`Time`], this constructs a [`DateTime`] value with its time
@@ -2066,16 +2074,16 @@ impl From<DateTime> for Date {
     }
 }
 
-impl From<Zoned> for Date {
+impl From<ZonedDateTime> for Date {
     #[inline]
-    fn from(zdt: Zoned) -> Date {
+    fn from(zdt: ZonedDateTime) -> Date {
         zdt.datetime().date()
     }
 }
 
-impl<'a> From<&'a Zoned> for Date {
+impl<'a> From<&'a ZonedDateTime> for Date {
     #[inline]
-    fn from(zdt: &'a Zoned) -> Date {
+    fn from(zdt: &'a ZonedDateTime) -> Date {
         zdt.datetime().date()
     }
 }
@@ -2375,12 +2383,18 @@ impl core::iter::FusedIterator for DateSeries {}
 /// ```
 /// use std::time::Duration;
 ///
-/// use jiff::{civil::date, SignedDuration, ToSpan};
+/// use jiff::{SignedDuration, ToSpan, civil::date};
 ///
 /// let d = date(2024, 2, 29);
 /// assert_eq!(d.checked_add(1.year())?, date(2025, 2, 28));
-/// assert_eq!(d.checked_add(SignedDuration::from_hours(24))?, date(2024, 3, 1));
-/// assert_eq!(d.checked_add(Duration::from_secs(24 * 60 * 60))?, date(2024, 3, 1));
+/// assert_eq!(
+///     d.checked_add(SignedDuration::from_hours(24))?,
+///     date(2024, 3, 1)
+/// );
+/// assert_eq!(
+///     d.checked_add(Duration::from_secs(24 * 60 * 60))?,
+///     date(2024, 3, 1)
+/// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -2839,16 +2853,16 @@ impl From<DateTime> for DateDifference {
     }
 }
 
-impl From<Zoned> for DateDifference {
+impl From<ZonedDateTime> for DateDifference {
     #[inline]
-    fn from(zdt: Zoned) -> DateDifference {
+    fn from(zdt: ZonedDateTime) -> DateDifference {
         DateDifference::from(Date::from(zdt))
     }
 }
 
-impl<'a> From<&'a Zoned> for DateDifference {
+impl<'a> From<&'a ZonedDateTime> for DateDifference {
     #[inline]
-    fn from(zdt: &'a Zoned) -> DateDifference {
+    fn from(zdt: &'a ZonedDateTime) -> DateDifference {
         DateDifference::from(zdt.datetime())
     }
 }
@@ -2867,16 +2881,16 @@ impl From<(Unit, DateTime)> for DateDifference {
     }
 }
 
-impl From<(Unit, Zoned)> for DateDifference {
+impl From<(Unit, ZonedDateTime)> for DateDifference {
     #[inline]
-    fn from((largest, zdt): (Unit, Zoned)) -> DateDifference {
+    fn from((largest, zdt): (Unit, ZonedDateTime)) -> DateDifference {
         DateDifference::from((largest, Date::from(zdt)))
     }
 }
 
-impl<'a> From<(Unit, &'a Zoned)> for DateDifference {
+impl<'a> From<(Unit, &'a ZonedDateTime)> for DateDifference {
     #[inline]
-    fn from((largest, zdt): (Unit, &'a Zoned)) -> DateDifference {
+    fn from((largest, zdt): (Unit, &'a ZonedDateTime)) -> DateDifference {
         DateDifference::from((largest, zdt.datetime()))
     }
 }
@@ -3439,7 +3453,7 @@ mod tests {
     #[test]
     fn t_from_unix() {
         fn date_from_timestamp(timestamp: Timestamp) -> Date {
-            timestamp.to_zoned(TimeZone::UTC).datetime().date()
+            timestamp.to_zoned_datetime(TimeZone::UTC).datetime().date()
         }
 
         assert_eq!(
@@ -3641,9 +3655,11 @@ mod tests {
     // Ref: https://github.com/tc39/proposal-temporal/issues/2845#issuecomment-2121057896
     #[test]
     fn since_until_not_commutative() {
-        // Temporal.PlainDate.from("2020-04-30").since("2020-02-29", {largestUnit: "months"})
+        // Temporal.PlainDate.from("2020-04-30").since("2020-02-29",
+        // {largestUnit: "months"})
         // // => P2M
-        // Temporal.PlainDate.from("2020-02-29").until("2020-04-30", {largestUnit: "months"})
+        // Temporal.PlainDate.from("2020-02-29").until("2020-04-30",
+        // {largestUnit: "months"})
         // // => P2M1D
         let d1 = date(2020, 4, 30);
         let d2 = date(2020, 2, 29);

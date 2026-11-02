@@ -1086,7 +1086,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ok_parse_zoned() {
+    fn ok_parse_zoned_datetime() {
         if crate::tz::db().is_definitively_empty() {
             return;
         }
@@ -1094,7 +1094,7 @@ mod tests {
         let p = |fmt: &str, input: &str| {
             BrokenDownTime::parse_mono(fmt.as_bytes(), input.as_bytes())
                 .unwrap()
-                .to_zoned()
+                .to_zoned_datetime()
                 .unwrap()
         };
 

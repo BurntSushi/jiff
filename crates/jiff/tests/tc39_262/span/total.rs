@@ -81,8 +81,8 @@ fn dst_balancing_result() -> Result {
     }
 
     let sp = 1.year().hours(24);
-    let zdt =
-        "1999-10-29T01-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
+    let zdt = "1999-10-29T01-07[America/Los_Angeles]"
+        .parse::<jiff::ZonedDateTime>()?;
     let result = sp.total((Unit::Day, &zdt))?;
     assert_eq!(result, 366.96);
 
@@ -92,15 +92,15 @@ fn dst_balancing_result() -> Result {
     // But with real TZ data, a span of 1 year will pretty much always cover
     // a DST backward transition.
     let sp = 1.month().hours(24);
-    let zdt =
-        "2000-09-29T01-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
+    let zdt = "2000-09-29T01-07[America/Los_Angeles]"
+        .parse::<jiff::ZonedDateTime>()?;
     let result = sp.total((Unit::Day, &zdt))?;
     assert_eq!(result, 30.96);
 
     // Try one month earlier, and we balance up to 1 day.
     let sp = 1.month().hours(24);
-    let zdt =
-        "2000-08-29T01-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
+    let zdt = "2000-08-29T01-07[America/Los_Angeles]"
+        .parse::<jiff::ZonedDateTime>()?;
     let result = sp.total((Unit::Day, &zdt))?;
     assert_eq!(result, 32.0);
 
@@ -214,7 +214,7 @@ fn no_dst_day_length() -> Result {
     assert_eq!(48.hours().total((Unit::Day, d))?, 2.0);
 
     let zdt = Timestamp::from_second(1_000_000_000)?
-        .to_zoned(tz::offset(4).to_time_zone());
+        .to_zoned_datetime(tz::offset(4).to_time_zone());
     assert_eq!(1.day().total((Unit::Hour, &zdt))?, 24.0);
     assert_eq!(48.hours().total((Unit::Day, &zdt))?, 2.0);
 

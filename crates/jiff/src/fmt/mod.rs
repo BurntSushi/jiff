@@ -28,8 +28,8 @@ disambiguation strategy used when parsing zoned datetime [RFC-9557] strings).
 | ------- | ------ | ----- |
 | `2025-08-20T17:35:00Z` | [RFC-3339] | [`Timestamp`] |
 | `2025-08-20T17:35:00-05` | [RFC-3339] | [`FromStr`] impl and<br>[`Timestamp::display_with_offset`] |
-| `2025-08-20T17:35:00+02[Poland]` | [RFC-9557] | [`Zoned`] |
-| `2025-08-20T17:35:00+02:00[+02:00]` | [RFC-9557] | [`Zoned`] |
+| `2025-08-20T17:35:00+02[Poland]` | [RFC-9557] | [`ZonedDateTime`] |
+| `2025-08-20T17:35:00+02:00[+02:00]` | [RFC-9557] | [`ZonedDateTime`] |
 | `2025-08-20T17:35:00` | [ISO-8601] | [`civil::DateTime`] |
 | `2025-08-20` | [ISO-8601] | [`civil::Date`] |
 | `17:35:00` | [ISO-8601] | [`civil::Time`] |
@@ -83,8 +83,8 @@ shows the options for printing durations in the format shown.
 
 ## Bespoke datetime formats via `strptime` and `strftime`
 
-Every datetime type has bespoke formatting routines defined on it. For
-example, [`Zoned::strptime`] and [`civil::Date::strftime`]. Additionally, the
+Every datetime type has bespoke formatting routines defined on it. For example,
+[`ZonedDateTime::strptime`] and [`civil::Date::strftime`]. Additionally, the
 [`strtime`] sub-module also provides convenience routines, [`strtime::format`]
 and [`strtime::parse`], where the former is generic over any datetime type in
 Jiff and the latter provides a [`BrokenDownTime`] for granular parsing.
@@ -135,15 +135,16 @@ and features.)
 [`Span`]: crate::Span
 [`Timestamp`]: crate::Timestamp
 [`Timestamp::display_with_offset`]: crate::Timestamp::display_with_offset
-[`Zoned`]: crate::Zoned
-[`Zoned::strptime`]: crate::Zoned::strptime
+[`ZonedDateTime`]: crate::ZonedDateTime
+[`ZonedDateTime::strptime`]: crate::ZonedDateTime::strptime
 
 [`Designator::Verbose`]: crate::fmt::friendly::Designator::Verbose
 [`Designator::Short`]: crate::fmt::friendly::Designator::Short
 [`Designator::Compact`]: crate::fmt::friendly::Designator::Compact
 [`Spacing::None`]: crate::fmt::friendly::Spacing::None
 [`Spacing::BetweenUnits`]: crate::fmt::friendly::Spacing::BetweenUnits
-[`Spacing::BetweenUnitsAndDesignators`]: crate::fmt::friendly::Spacing::BetweenUnitsAndDesignators
+[`Spacing::BetweenUnitsAndDesignators`]:
+  crate::fmt::friendly::Spacing::BetweenUnitsAndDesignators
 [`Direction::Auto`]: crate::fmt::friendly::Direction::Auto
 [`Direction::Sign`]: crate::fmt::friendly::Direction::Sign
 [`Direction::ForceSign`]: crate::fmt::friendly::Direction::ForceSign
@@ -153,8 +154,10 @@ and features.)
 [`SpanPrinter::spacing`]: crate::fmt::friendly::SpanPrinter::spacing
 [`SpanPrinter::direction`]: crate::fmt::friendly::SpanPrinter::direction
 [`SpanPrinter::fractional`]: crate::fmt::friendly::SpanPrinter::fractional
-[`SpanPrinter::comma_after_designator`]: crate::fmt::friendly::SpanPrinter::comma_after_designator
-[`SpanPrinter::hours_minutes_seconds`]: crate::fmt::friendly::SpanPrinter::hours_minutes_seconds
+[`SpanPrinter::comma_after_designator`]:
+  crate::fmt::friendly::SpanPrinter::comma_after_designator
+[`SpanPrinter::hours_minutes_seconds`]:
+  crate::fmt::friendly::SpanPrinter::hours_minutes_seconds
 
 [`BrokenDownTime`]: crate::fmt::strtime::BrokenDownTime
 [`strtime::parse`]: crate::fmt::strtime::parse
@@ -162,7 +165,8 @@ and features.)
 
 [`rfc2822::parse`]: crate::fmt::rfc2822::parse
 [`rfc2822::to_string`]: crate::fmt::rfc2822::to_string
-[`DateTimePrinter::timestamp_to_rfc9110_string`]: crate::fmt::rfc2822::DateTimePrinter::timestamp_to_rfc9110_string
+[`DateTimePrinter::timestamp_to_rfc9110_string`]:
+  crate::fmt::rfc2822::DateTimePrinter::timestamp_to_rfc9110_string
 */
 
 use crate::{
@@ -390,15 +394,24 @@ impl Write for &mut dyn Write {
 /// # Example
 ///
 /// ```no_run
-/// use std::{fs::File, io::{BufWriter, Write}, path::Path};
+/// use std::{
+///     fs::File,
+///     io::{BufWriter, Write},
+///     path::Path,
+/// };
 ///
-/// use jiff::{civil::date, fmt::{StdIoWrite, temporal::DateTimePrinter}};
+/// use jiff::{
+///     civil::date,
+///     fmt::{StdIoWrite, temporal::DateTimePrinter},
+/// };
 ///
 /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("America/New_York")?;
 ///
 /// let path = Path::new("/tmp/output");
 /// let mut file = BufWriter::new(File::create(path)?);
-/// DateTimePrinter::new().print_zoned(&zdt, StdIoWrite(&mut file)).unwrap();
+/// DateTimePrinter::new()
+///     .print_zoned_datetime(&zdt, StdIoWrite(&mut file))
+///     .unwrap();
 /// file.flush()?;
 /// assert_eq!(
 ///     std::fs::read_to_string(path)?,

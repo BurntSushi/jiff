@@ -15,7 +15,7 @@ use crate::{
     },
     tz::TimeZone,
     util::round::Increment,
-    zoned::Zoned,
+    zoned::ZonedDateTime,
 };
 
 /// A representation of a civil datetime in the Gregorian calendar.
@@ -1316,14 +1316,14 @@ impl DateTime {
         self.date().iso_week_date()
     }
 
-    /// Converts a civil datetime to a [`Zoned`] datetime by adding the given
-    /// time zone.
+    /// Converts a civil datetime to a [`ZonedDateTime`] datetime by adding the
+    /// given time zone.
     ///
     /// The name given is resolved to a [`TimeZone`] by using the default
     /// [`TimeZoneDatabase`](crate::tz::TimeZoneDatabase) created by
     /// [`tz::db`](crate::tz::db). Indeed, this is a convenience function for
-    /// [`DateTime::to_zoned`] where the time zone database lookup is done
-    /// automatically.
+    /// [`DateTime::to_zoned_datetime`] where the time zone database lookup is
+    /// done automatically.
     ///
     /// In some cases, a civil datetime may be ambiguous in a
     /// particular time zone. This routine automatically utilizes the
@@ -1333,8 +1333,9 @@ impl DateTime {
     /// Or if a civil datetime occurs in a forward transition (called a gap),
     /// then the later time is selected.
     ///
-    /// To convert a datetime to a `Zoned` using a different disambiguation
-    /// strategy, use [`TimeZone::to_ambiguous_zoned`].
+    /// To convert a datetime to a `ZonedDateTime` using a different
+    /// disambiguation strategy, use
+    /// [`TimeZone::to_ambiguous_zoned_datetime`].
     ///
     /// # Errors
     ///
@@ -1356,7 +1357,10 @@ impl DateTime {
     ///
     /// let dt: DateTime = "2024-06-20 15:06".parse()?;
     /// let zdt = dt.in_tz("America/New_York")?;
-    /// assert_eq!(zdt.to_string(), "2024-06-20T15:06:00-04:00[America/New_York]");
+    /// assert_eq!(
+    ///     zdt.to_string(),
+    ///     "2024-06-20T15:06:00-04:00[America/New_York]"
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1381,7 +1385,10 @@ impl DateTime {
     /// // This is the gap, where by default we select the later time.
     /// let dt: DateTime = "2024-03-10 02:30".parse()?;
     /// let zdt = dt.in_tz("America/New_York")?;
-    /// assert_eq!(zdt.to_string(), "2024-03-10T03:30:00-04:00[America/New_York]");
+    /// assert_eq!(
+    ///     zdt.to_string(),
+    ///     "2024-03-10T03:30:00-04:00[America/New_York]"
+    /// );
     ///
     /// // This is the fold, where by default we select the earlier time.
     /// let dt: DateTime = "2024-11-03 01:30".parse()?;
@@ -1391,7 +1398,10 @@ impl DateTime {
     /// // it is the offset for DST time in New York. The later time, or the
     /// // repetition of the 1 o'clock hour, would occur in standard time,
     /// // which is an offset of -05 for New York.
-    /// assert_eq!(zdt.to_string(), "2024-11-03T01:30:00-04:00[America/New_York]");
+    /// assert_eq!(
+    ///     zdt.to_string(),
+    ///     "2024-11-03T01:30:00-04:00[America/New_York]"
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1426,30 +1436,30 @@ impl DateTime {
     /// assert!(dt.in_tz("America/New_York").is_err());
     /// assert!(dt.in_tz("Australia/Hobart").is_err());
     /// // In fact, the only valid offset one can use to turn the maximum civil
-    /// // datetime into a Zoned value is the maximum offset:
+    /// // datetime into a ZonedDateTime value is the maximum offset:
     /// let tz = Offset::from_seconds(93_599).unwrap().to_time_zone();
-    /// assert!(dt.to_zoned(tz).is_ok());
+    /// assert!(dt.to_zoned_datetime(tz).is_ok());
     /// // One second less than the maximum offset results in a failure at the
     /// // maximum datetime boundary.
     /// let tz = Offset::from_seconds(93_598).unwrap().to_time_zone();
-    /// assert!(dt.to_zoned(tz).is_err());
+    /// assert!(dt.to_zoned_datetime(tz).is_err());
     /// ```
     ///
-    /// This behavior exists because it guarantees that every possible `Zoned`
-    /// value can be converted into a civil datetime, but not every possible
-    /// combination of civil datetime and offset can be converted into a
-    /// `Zoned` value. There isn't a way to make every possible roundtrip
-    /// lossless in both directions, so Jiff chooses to ensure that there is
-    /// always a way to convert a `Zoned` instant to a human readable wall
-    /// clock time.
+    /// This behavior exists because it guarantees that every possible
+    /// `ZonedDateTime` value can be converted into a civil datetime, but not
+    /// every possible combination of civil datetime and offset can be
+    /// converted into a `ZonedDateTime` value. There isn't a way to make every
+    /// possible roundtrip lossless in both directions, so Jiff chooses to
+    /// ensure that there is always a way to convert a `ZonedDateTime` instant
+    /// to a human readable wall clock time.
     #[inline]
-    pub fn in_tz(self, time_zone_name: &str) -> Result<Zoned, Error> {
+    pub fn in_tz(self, time_zone_name: &str) -> Result<ZonedDateTime, Error> {
         let tz = crate::tz::db().get(time_zone_name)?;
-        self.to_zoned(tz)
+        self.to_zoned_datetime(tz)
     }
 
-    /// Converts a civil datetime to a [`Zoned`] datetime by adding the given
-    /// [`TimeZone`].
+    /// Converts a civil datetime to a [`ZonedDateTime`] datetime by adding the
+    /// given [`TimeZone`].
     ///
     /// In some cases, a civil datetime may be ambiguous in a
     /// particular time zone. This routine automatically utilizes the
@@ -1459,8 +1469,9 @@ impl DateTime {
     /// Or if a civil datetime occurs in a forward transition (called a gap),
     /// then the later time is selected.
     ///
-    /// To convert a datetime to a `Zoned` using a different disambiguation
-    /// strategy, use [`TimeZone::to_ambiguous_zoned`].
+    /// To convert a datetime to a `ZonedDateTime` using a different
+    /// disambiguation strategy, use
+    /// [`TimeZone::to_ambiguous_zoned_datetime`].
     ///
     /// In the common case of a time zone being represented as a name string,
     /// like `Australia/Hobart`, consider using [`DateTime::in_tz`]
@@ -1481,9 +1492,9 @@ impl DateTime {
     /// use jiff::{civil::date, tz::{self, TimeZone}};
     ///
     /// let tz = TimeZone::fixed(tz::offset(-4));
-    /// let zdt = date(2024, 6, 20).at(17, 3, 0, 0).to_zoned(tz)?;
+    /// let zdt = date(2024, 6, 20).at(17, 3, 0, 0).to_zoned_datetime(tz)?;
     /// // A time zone annotation is still included in the printable version
-    /// // of the Zoned value, but it is fixed to a particular offset.
+    /// // of the ZonedDateTime value, but it is fixed to a particular offset.
     /// assert_eq!(zdt.to_string(), "2024-06-20T17:03:00-04:00[-04:00]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1500,7 +1511,7 @@ impl DateTime {
     /// use jiff::{civil::date, tz::TimeZone};
     ///
     /// let tz = TimeZone::posix("NST3:30NDT,M3.2.0,M11.1.0")?;
-    /// let zdt = date(2024, 6, 20).at(17, 3, 0, 0).to_zoned(tz)?;
+    /// let zdt = date(2024, 6, 20).at(17, 3, 0, 0).to_zoned_datetime(tz)?;
     /// // There isn't any agreed upon mechanism for transmitting a POSIX time
     /// // zone string within an RFC 9557 TZ annotation, so Jiff just emits the
     /// // offset. In practice, POSIX TZ strings are rarely user facing anyway.
@@ -1511,23 +1522,26 @@ impl DateTime {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_zoned(self, tz: TimeZone) -> Result<Zoned, Error> {
+    pub fn to_zoned_datetime(
+        self,
+        tz: TimeZone,
+    ) -> Result<ZonedDateTime, Error> {
         use crate::tz::AmbiguousOffset;
 
         // It's pretty disappointing that we do this instead of the
         // simpler:
         //
-        //     tz.into_ambiguous_zoned(self).compatible()
+        //     tz.into_ambiguous_zoned_datetime(self).compatible()
         //
         // Below, in the common case of an unambiguous datetime,
         // we avoid doing the work to re-derive the datetime *and*
         // offset from the timestamp we find from tzdb. In particular,
-        // `Zoned::new` does this work given a timestamp and a time
-        // zone. But we circumvent `Zoned::new` and use a special
-        // `Zoned::from_parts` crate-internal constructor to handle
+        // `ZonedDateTime::new` does this work given a timestamp and a time
+        // zone. But we circumvent `ZonedDateTime::new` and use a special
+        // `ZonedDateTime::from_parts` crate-internal constructor to handle
         // this case.
         //
-        // Ideally we could do this in `AmbiguousZoned::compatible`
+        // Ideally we could do this in `AmbiguousZonedDateTime::compatible`
         // itself, but it turns out that it doesn't always work.
         // Namely, that API supports providing an unambiguous
         // offset even when the civil datetime is within a
@@ -1535,7 +1549,7 @@ impl DateTime {
         // is resolved, the offset given might actually
         // change. See `2024-03-11T02:02[America/New_York]`
         // example for `AlwaysOffset` conflict resolution on
-        // `ZonedWith::disambiguation`.
+        // `ZonedDateTimeWith::disambiguation`.
         //
         // But the optimization works here because if we get an
         // unambiguous offset from tzdb, then we know it isn't in a DST
@@ -1567,7 +1581,7 @@ impl DateTime {
                 (offset, ts, dt)
             }
         };
-        Ok(Zoned::from_parts(ts, dt, offset, tz))
+        Ok(ZonedDateTime::from_parts(ts, dt, offset, tz))
     }
 
     /// Add the given span of time to this datetime. If the sum would overflow
@@ -2231,7 +2245,10 @@ impl DateTime {
     /// [`RoundMode::Trunc`] can be used too:
     ///
     /// ```
-    /// use jiff::{civil::{DateTimeRound, date}, RoundMode, Unit};
+    /// use jiff::{
+    ///     RoundMode, Unit,
+    ///     civil::{DateTimeRound, date},
+    /// };
     ///
     /// let dt = date(2024, 6, 19).at(15, 0, 0, 0);
     /// assert_eq!(dt.round(Unit::Day)?, date(2024, 6, 20).at(0, 0, 0, 0));
@@ -2239,7 +2256,9 @@ impl DateTime {
     /// // but using truncation rounding will always round down.
     /// assert_eq!(
     ///     dt.round(
-    ///         DateTimeRound::new().smallest(Unit::Day).mode(RoundMode::Trunc),
+    ///         DateTimeRound::new()
+    ///             .smallest(Unit::Day)
+    ///             .mode(RoundMode::Trunc),
     ///     )?,
     ///     date(2024, 6, 19).at(0, 0, 0, 0),
     /// );
@@ -2598,18 +2617,18 @@ impl From<Date> for DateTime {
     }
 }
 
-/// Converts a [`Zoned`] to a [`DateTime`].
-impl From<Zoned> for DateTime {
+/// Converts a [`ZonedDateTime`] to a [`DateTime`].
+impl From<ZonedDateTime> for DateTime {
     #[inline]
-    fn from(zdt: Zoned) -> DateTime {
+    fn from(zdt: ZonedDateTime) -> DateTime {
         zdt.datetime()
     }
 }
 
-/// Converts a [`&Zoned`](Zoned) to a [`DateTime`].
-impl<'a> From<&'a Zoned> for DateTime {
+/// Converts a [`&ZonedDateTime`](ZonedDateTime) to a [`DateTime`].
+impl<'a> From<&'a ZonedDateTime> for DateTime {
     #[inline]
-    fn from(zdt: &'a Zoned) -> DateTime {
+    fn from(zdt: &'a ZonedDateTime) -> DateTime {
         zdt.datetime()
     }
 }
@@ -3329,16 +3348,16 @@ impl From<Date> for DateTimeDifference {
     }
 }
 
-impl From<Zoned> for DateTimeDifference {
+impl From<ZonedDateTime> for DateTimeDifference {
     #[inline]
-    fn from(zdt: Zoned) -> DateTimeDifference {
+    fn from(zdt: ZonedDateTime) -> DateTimeDifference {
         DateTimeDifference::from(DateTime::from(zdt))
     }
 }
 
-impl<'a> From<&'a Zoned> for DateTimeDifference {
+impl<'a> From<&'a ZonedDateTime> for DateTimeDifference {
     #[inline]
-    fn from(zdt: &'a Zoned) -> DateTimeDifference {
+    fn from(zdt: &'a ZonedDateTime) -> DateTimeDifference {
         DateTimeDifference::from(zdt.datetime())
     }
 }
@@ -3357,16 +3376,16 @@ impl From<(Unit, Date)> for DateTimeDifference {
     }
 }
 
-impl From<(Unit, Zoned)> for DateTimeDifference {
+impl From<(Unit, ZonedDateTime)> for DateTimeDifference {
     #[inline]
-    fn from((largest, zdt): (Unit, Zoned)) -> DateTimeDifference {
+    fn from((largest, zdt): (Unit, ZonedDateTime)) -> DateTimeDifference {
         DateTimeDifference::from((largest, DateTime::from(zdt)))
     }
 }
 
-impl<'a> From<(Unit, &'a Zoned)> for DateTimeDifference {
+impl<'a> From<(Unit, &'a ZonedDateTime)> for DateTimeDifference {
     #[inline]
-    fn from((largest, zdt): (Unit, &'a Zoned)) -> DateTimeDifference {
+    fn from((largest, zdt): (Unit, &'a ZonedDateTime)) -> DateTimeDifference {
         DateTimeDifference::from((largest, zdt.datetime()))
     }
 }
@@ -3560,10 +3579,11 @@ impl DateTimeRound {
     ///
     /// A non-public configuration here is the length of a day. For civil
     /// datetimes, this should always be `NANOS_PER_CIVIL_DAY`. But this
-    /// rounding routine is also used for `Zoned` rounding, and in that
+    /// rounding routine is also used for `ZonedDateTime` rounding, and in that
     /// context, the length of a day can vary based on the time zone.
     pub(crate) fn round(&self, dt: DateTime) -> Result<DateTime, Error> {
-        // ref: https://tc39.es/proposal-temporal/#sec-temporal.plaindatetime.prototype.round
+        // ref:
+        // https://tc39.es/proposal-temporal/#sec-temporal.plaindatetime.prototype.round
 
         // We don't do any rounding in this case and there are no possible
         // error conditions under this configuration. So just bail.

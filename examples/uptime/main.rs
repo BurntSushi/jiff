@@ -22,12 +22,13 @@ second (or less) precision.
 use std::io::Write;
 
 use anyhow::Context;
-use jiff::{Span, Unit, Zoned};
+use jiff::{Span, Unit, ZonedDateTime};
 use regex_lite::Regex;
 
 fn main() -> anyhow::Result<()> {
     let up = UptimeDuration::find()?;
-    let now = Zoned::now().with().hour(up.hour).minute(up.minute).build()?;
+    let now =
+        ZonedDateTime::now().with().hour(up.hour).minute(up.minute).build()?;
     let span = Span::new()
         .try_days(up.days)?
         .try_hours(up.hours)?
