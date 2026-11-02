@@ -17,3 +17,12 @@ jobs:
     - run: cargo publish --workspace
       env:
         CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+    - run: cargo publish --manifest-path ./crates/jiff-diesel/Cargo.toml || true
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+    - run: cargo publish --manifest-path ./crates/jiff-icu/Cargo.toml || true
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+    - run: cargo publish --manifest-path ./crates/jiff-sqlx/Cargo.toml || true
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
