@@ -30,7 +30,7 @@ features=(
 )
 for f in "${features[@]}"; do
     echo "===== COREONLY PLUS '$f' ====="
-    cargo build --no-default-features --features "$f"
+    cargo build -p jiff --no-default-features --features "$f"
     INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test -p jiff --lib --no-default-features --features "$f"
     INSTA_FORCE_PASS=1 INSTA_UPDATE=no cargo test -p jiff --test integration --no-default-features --features "$f"
 done

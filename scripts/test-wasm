@@ -11,7 +11,7 @@ if [ $# = 0 ]; then
   echo "Example: ./test-wasm cargo test --lib -- --nocapture" >&2
   exit 1
 fi
-if ! command -V rustup &> /dev/null; then
+if ! command -V rustup > /dev/null 2>&1; then
   echo 'please install rustup' >&2
   exit 1
 fi
