@@ -1,0 +1,8 @@
+# Cargo drops path dependencies and manifest patches during package
+# verification. Keep verification on this checkout's internal dependencies.
+[patch.crates-io]
+jiff = { path = "crates/jiff" }
+jiff-core = { path = "crates/jiff-core" }
+jiff-static = { path = "crates/jiff-static" }
+jiff-tzdb = { path = "crates/jiff-tzdb" }
+jiff-tzdb-platform = { path = "crates/jiff-tzdb-platform" }
