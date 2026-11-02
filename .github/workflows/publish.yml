@@ -15,15 +15,14 @@ jobs:
         persist-credentials: false
     - uses: rust-lang/crates-io-auth-action@v1
       id: auth
-    - run: cargo publish --workspace
-      env:
-        CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-    - run: cargo publish --manifest-path ./crates/jiff-diesel/Cargo.toml || true
-      env:
-        CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-    - run: cargo publish --manifest-path ./crates/jiff-icu/Cargo.toml || true
-      env:
-        CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-    - run: cargo publish --manifest-path ./crates/jiff-sqlx/Cargo.toml || true
+    - run: |
+        cargo publish -p jiff-core || true
+        cargo publish -p jiff-static || true
+        cargo publish -p jiff-tzdb || true
+        cargo publish -p jiff-tzdb-platform || true
+        cargo publish -p jiff || true
+        cargo publish -p jiff-icu || true
+        cargo publish -p jiff-diesel || true
+        cargo publish -p jiff-sqlx || true
       env:
         CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
