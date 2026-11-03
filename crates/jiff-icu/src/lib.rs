@@ -166,31 +166,31 @@ extern crate std;
 extern crate alloc;
 
 use icu_calendar::{
-    types::Weekday as IcuWeekday, AsCalendar as IcuAsCalendar,
-    Date as IcuDate, Iso,
+    AsCalendar as IcuAsCalendar, Date as IcuDate, Iso,
+    types::Weekday as IcuWeekday,
 };
 #[cfg(feature = "zoned")]
 #[allow(deprecated)]
 use icu_time::zone::models::Full;
 #[cfg(feature = "time")]
 use icu_time::{
-    zone::UtcOffset as IcuUtcOffset, DateTime as IcuDateTime, Time as IcuTime,
+    DateTime as IcuDateTime, Time as IcuTime, zone::UtcOffset as IcuUtcOffset,
 };
 #[cfg(feature = "zoned")]
 use icu_time::{
-    zone::{models::AtTime, TimeZoneVariant},
     TimeZone as IcuTimeZone, TimeZoneInfo as IcuTimeZoneInfo,
     ZonedDateTime as IcuZonedDateTime,
+    zone::{TimeZoneVariant, models::AtTime},
 };
 
 use jiff::civil::{Date as JiffDate, Weekday as JiffWeekday};
+#[cfg(feature = "zoned")]
+use jiff::{ZonedDateTime as JiffZonedDateTime, tz::TimeZone as JiffTimeZone};
 #[cfg(feature = "time")]
 use jiff::{
     civil::{DateTime as JiffDateTime, Time as JiffTime},
     tz::Offset as JiffOffset,
 };
-#[cfg(feature = "zoned")]
-use jiff::{tz::TimeZone as JiffTimeZone, ZonedDateTime as JiffZonedDateTime};
 
 use self::error::err;
 pub use self::{

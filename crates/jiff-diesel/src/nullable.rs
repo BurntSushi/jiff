@@ -96,9 +96,9 @@ impl<DB: Backend>
     > for NullableTimestamp
 where
     Option<crate::Timestamp>: ToSql<
-        diesel::sql_types::Nullable<diesel::sql_types::TimestamptzSqlite>,
-        DB,
-    >,
+            diesel::sql_types::Nullable<diesel::sql_types::TimestamptzSqlite>,
+            DB,
+        >,
 {
     fn to_sql<'b>(
         &'b self,
