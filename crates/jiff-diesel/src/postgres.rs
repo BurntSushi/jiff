@@ -1,8 +1,8 @@
 use diesel::{
     deserialize::{self, FromSql},
     pg::{
-        data_types::{PgDate, PgInterval, PgTime, PgTimestamp},
         Pg, PgValue,
+        data_types::{PgDate, PgInterval, PgTime, PgTimestamp},
     },
     serialize::{self, Output, ToSql},
     sql_types,
