@@ -1,8 +1,8 @@
 use jcore::bounds::Bounds;
 
 use crate::{
-    error::util::{ParseFractionError, ParseIntError},
     Error,
+    error::util::{ParseFractionError, ParseIntError},
 };
 
 /// Parses an `i64` number from the beginning to the end of the given slice of
@@ -159,11 +159,7 @@ where
 /// returns `None`.
 #[cfg_attr(feature = "perf-inline", inline(always))]
 pub(crate) fn split(input: &[u8], at: usize) -> Option<(&[u8], &[u8])> {
-    if at > input.len() {
-        None
-    } else {
-        Some(input.split_at(at))
-    }
+    if at > input.len() { None } else { Some(input.split_at(at)) }
 }
 
 /// Returns a function that converts two slices to an offset.

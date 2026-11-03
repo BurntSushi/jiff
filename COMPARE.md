@@ -91,8 +91,8 @@ imported via `use`. A disadvantage of this approach is that you're reliant on
 of this approach is that you never need to worry about an end user's system
 state. Another advantage is that this allows a `TimeZone` trait implementation
 to be `Copy` via a `&Tz`, and that in turn allows a `chrono::DateTime` to be
-`Copy`. In contrast, in Jiff, a `TimeZone` is never `Copy`. Since a `Zoned`
-embeds a `TimeZone`, a `Zoned` is never `Copy` either.
+`Copy`. In contrast, in Jiff, a `TimeZone` is never `Copy`. Since a
+`ZonedDateTime` embeds a `TimeZone`, a `ZonedDateTime` is never `Copy` either.
 
 Another recommended option is the [`tzfile`](https://docs.rs/tzfile) crate.
 Unlike `chrono-tz`, the `tzfile` crate will try to read time zone data from
@@ -130,11 +130,11 @@ not matter for your use case.
 ### Jiff losslessly roundtrips time zone aware datetimes
 
 In Jiff, with `serde` support enabled, one can serialize and deserialize a
-`Zoned` value losslessly. This means that, after deserialization, you can
-expect it to still perform DST arithmetic:
+`ZonedDateTime` value losslessly. This means that, after deserialization, you
+can expect it to still perform DST arithmetic:
 
 ```rust
-use jiff::{civil::date, ToSpan, Zoned};
+use jiff::{ToSpan, ZonedDateTime, civil::date};
 
 fn main() -> anyhow::Result<()> {
     let zdt = date(2024, 3, 10).at(1, 59, 59, 0).in_tz("America/New_York")?;
@@ -142,10 +142,13 @@ fn main() -> anyhow::Result<()> {
     let json = serde_json::to_string_pretty(&zdt)?;
     assert_eq!(json, "\"2024-03-10T01:59:59-05:00[America/New_York]\"");
 
-    let got: Zoned = serde_json::from_str(&json)?;
+    let got: ZonedDateTime = serde_json::from_str(&json)?;
     assert_eq!(got.to_string(), "2024-03-10T01:59:59-05:00[America/New_York]");
     let next = got.checked_add(1.minute())?;
-    assert_eq!(next.to_string(), "2024-03-10T03:00:59-04:00[America/New_York]");
+    assert_eq!(
+        next.to_string(),
+        "2024-03-10T03:00:59-04:00[America/New_York]"
+    );
 
     Ok(())
 }
@@ -245,12 +248,12 @@ zone database.)
 
 ### Jiff provides support for zone aware calendar arithmetic
 
-With Jiff, you can add non-uniform units like days to time zone aware datetimes,
-and get non-uniform units like days as a representation of a span between
-datetimes. And they agree on the results.
+With Jiff, you can add non-uniform units like days to time zone aware
+datetimes, and get non-uniform units like days as a representation of a span
+between datetimes. And they agree on the results.
 
 ```rust
-use jiff::{civil::date, ToSpan, Unit};
+use jiff::{ToSpan, Unit, civil::date};
 
 fn main() -> anyhow::Result<()> {
     let zdt1 = date(2024, 3, 9).at(21, 0, 0, 0).in_tz("America/New_York")?;
@@ -258,7 +261,10 @@ fn main() -> anyhow::Result<()> {
 
     // Even though 2 o'clock didn't occur on 2024-03-10, adding 1 day
     // returns the same civil time the next day.
-    assert_eq!(zdt2.to_string(), "2024-03-10T21:00:00-04:00[America/New_York]");
+    assert_eq!(
+        zdt2.to_string(),
+        "2024-03-10T21:00:00-04:00[America/New_York]"
+    );
     // The span of time is 23 hours:
     assert_eq!(&zdt2 - &zdt1, 23.hours().fieldwise());
     // But if you ask for the span in units of days, you get exactly 1:
@@ -337,7 +343,8 @@ fn main() -> anyhow::Result<()> {
 }
 ```
 
-Chrono [does not currently have Serde support for its duration type][serde-duration].
+Chrono [does not currently have Serde support for its duration
+type][serde-duration].
 
 [serde-duration]: https://github.com/chronotope/chrono/issues/117
 
@@ -353,15 +360,15 @@ Jiff supports automatically selecting a "reasonable" choice in either case
 via its "compatible" strategy (as specified by [RFC 5545]).
 
 ```rust
-use jiff::Zoned;
+use jiff::ZonedDateTime;
 
 fn main() -> anyhow::Result<()> {
     // This is a gap. The default strategy takes the time after the gap.
-    let zdt: Zoned = "2024-03-10 02:30[America/New_York]".parse()?;
+    let zdt: ZonedDateTime = "2024-03-10 02:30[America/New_York]".parse()?;
     assert_eq!(zdt.to_string(), "2024-03-10T03:30:00-04:00[America/New_York]");
 
     // This is a fold. The default strategy takes the time before the fold.
-    let zdt: Zoned = "2024-11-03 01:30[America/New_York]".parse()?;
+    let zdt: ZonedDateTime = "2024-11-03 01:30[America/New_York]".parse()?;
     // The time after the fold would be identical,
     // except the offset would be -05.
     assert_eq!(zdt.to_string(), "2024-11-03T01:30:00-04:00[America/New_York]");
@@ -371,7 +378,7 @@ fn main() -> anyhow::Result<()> {
 ```
 
 Jiff also exposes all information available with respect to ambiguous civil
-datetimes via `tz::AmbiguousZoned`, `tz::AmbiguousTimestamp` and
+datetimes via `tz::AmbiguousZonedDateTime`, `tz::AmbiguousTimestamp` and
 `tz::AmbiguousOffset`. This enables callers to implement whatever strategy
 they want.
 
@@ -408,13 +415,13 @@ fn main() -> anyhow::Result<()> {
 In Jiff, one can round the duration computed between two datetimes:
 
 ```rust
-use jiff::{civil::date, RoundMode, ToSpan, Unit, ZonedDifference};
+use jiff::{civil::date, RoundMode, ToSpan, Unit, ZonedDateTimeDifference};
 
 fn main() -> anyhow::Result<()> {
     let zdt1 = date(2001, 11, 18).at(8, 30, 0, 0).in_tz("America/New_York")?;
     let zdt2 = date(2024, 7, 11).at(22, 38, 0, 0).in_tz("America/New_York")?;
 
-    let round_options = ZonedDifference::new(&zdt2)
+    let round_options = ZonedDateTimeDifference::new(&zdt2)
         .largest(Unit::Year)
         .smallest(Unit::Day)
         .mode(RoundMode::HalfExpand);
@@ -473,13 +480,13 @@ rounding units like `Days` with respect to a reference datetime.
 This example is like the one above, except we choose a smaller "largest" unit:
 
 ```rust
-use jiff::{civil::date, RoundMode, ToSpan, Unit, ZonedDifference};
+use jiff::{civil::date, RoundMode, ToSpan, Unit, ZonedDateTimeDifference};
 
 fn main() -> anyhow::Result<()> {
     let zdt1 = date(2001, 11, 18).at(8, 30, 0, 0).in_tz("America/New_York")?;
     let zdt2 = date(2024, 7, 11).at(22, 38, 0, 0).in_tz("America/New_York")?;
 
-    let round_options = ZonedDifference::new(&zdt2)
+    let round_options = ZonedDateTimeDifference::new(&zdt2)
         .largest(Unit::Month)
         .smallest(Unit::Day)
         .mode(RoundMode::HalfExpand);
@@ -532,7 +539,10 @@ But the main point here is to simulate the process of "serialize datetime,
 time zone rules change, deserialize datetime.")
 
 ```rust,no_run
-use jiff::{fmt::temporal::DateTimeParser, tz::{self, TimeZoneDatabase}};
+use jiff::{
+    fmt::temporal::DateTimeParser,
+    tz::{self, TimeZoneDatabase},
+};
 
 // We use a custom parser with a default configuration because we need
 // to ask the parser to use a different time zone database than the
@@ -550,8 +560,8 @@ fn main() -> anyhow::Result<()> {
     // Parse the same datetime string with the same parser, but using two
     // different versions of tzdb.
     let dt = "2020-01-15T12:00[America/Sao_Paulo]";
-    let zdt2018 = PARSER.parse_zoned_with(&tzdb2018, dt)?;
-    let zdt = PARSER.parse_zoned_with(tzdb, dt)?;
+    let zdt2018 = PARSER.parse_zoned_datetime_with(&tzdb2018, dt)?;
+    let zdt = PARSER.parse_zoned_datetime_with(tzdb, dt)?;
 
     // Before DST was abolished, 2020-01-15 was in DST, which corresponded
     // to UTC offset -02. Since DST rules applied to datetimes in the
@@ -567,7 +577,9 @@ fn main() -> anyhow::Result<()> {
     // tzdb with a new copy of tzdb, you'll get an error under the default
     // configuration because of `OffsetConflict::Reject`. This would succeed if
     // you parsed it using tzdb2018!
-    assert!(PARSER.parse_zoned_with(tzdb, zdt2018.to_string()).is_err());
+    assert!(
+        PARSER.parse_zoned_datetime_with(tzdb, zdt2018.to_string()).is_err()
+    );
 
     Ok(())
 }
@@ -755,9 +767,9 @@ that provides some time zone support in a fashion similar to `chrono-tz`. That
 is, it requires bundling the time zone data into your binary and does not
 support reading the system copy of the Time Zone Database when available.
 
-Note also that `time` does not provide the extension points necessary in its API
-to make handling time zone aware datetimes ergonomic. Indeed, many operations
-are not expressible at all.
+Note also that `time` does not provide the extension points necessary in its
+API to make handling time zone aware datetimes ergonomic. Indeed, many
+operations are not expressible at all.
 
 The main thing `time` supports is a concept of "local" time. In particular, it
 is limited to determining your system's default time zone offset, but nothing
@@ -788,12 +800,15 @@ anything about the time zone rules. Compare this with Jiff, which lets you not
 only create a datetime with an offset, but with a _time zone_:
 
 ```rust
-use jiff::{civil::date, ToSpan};
+use jiff::{ToSpan, civil::date};
 
 fn main() -> anyhow::Result<()> {
     let zdt1 = date(2024, 3, 10).at(1, 30, 0, 0).in_tz("America/New_York")?;
     let zdt2 = zdt1.checked_add(1.hour())?;
-    assert_eq!(zdt2.to_string(), "2024-03-10T03:30:00-04:00[America/New_York]");
+    assert_eq!(
+        zdt2.to_string(),
+        "2024-03-10T03:30:00-04:00[America/New_York]"
+    );
 
     Ok(())
 }
@@ -855,10 +870,10 @@ Jiff does support a `strptime`/`strftime` style API via the
 `jiff::fmt::strtime` module:
 
 ```rust
-use jiff::Zoned;
+use jiff::ZonedDateTime;
 
 fn main() -> anyhow::Result<()> {
-    let zdt = Zoned::strptime(
+    let zdt = ZonedDateTime::strptime(
       "%Y-%m-%d %H:%M:%S %:z",
       "2024-07-11 22:49:00 -04:00:00",
     )?;
@@ -887,15 +902,15 @@ fn main() -> anyhow::Result<()> {
 
 ### Jiff supports rounding datetimes
 
-We use a `Zoned` with a `TimeZone` that has a fixed offset. This is same as
-`time`'s `OffsetDateTime` type:
+We use a `ZonedDateTime` with a `TimeZone` that has a fixed offset. This is
+same as `time`'s `OffsetDateTime` type:
 
 ```rust
-use jiff::{civil::date, tz::{self, TimeZone}, Unit, Zoned};
+use jiff::{civil::date, tz::{self, TimeZone}, Unit, ZonedDateTime};
 
 fn main() -> anyhow::Result<()> {
     let tz = TimeZone::fixed(tz::offset(-4));
-    let zdt1 = date(2024, 7, 11).at(16, 46, 0, 0).to_zoned(tz)?;
+    let zdt1 = date(2024, 7, 11).at(16, 46, 0, 0).to_zoned_datetime(tz)?;
     let zdt2 = zdt1.round(Unit::Hour)?;
     assert_eq!(zdt2.to_string(), "2024-07-11T17:00:00-04:00[-04:00]");
 
@@ -910,14 +925,17 @@ DST safe arithmetic. Instead, the code above should be written like this
 (unless you have a very specific reason to do otherwise):
 
 ```rust
-use jiff::{civil::date, Unit};
+use jiff::{Unit, civil::date};
 
 fn main() -> anyhow::Result<()> {
-    // Can also use `.to_zoned(TimeZone::system())` to use your system's
-    // default time zone.
+    // Can also use `.to_zoned_datetime(TimeZone::system())` to use your
+    // system's default time zone.
     let zdt1 = date(2024, 7, 11).at(16, 46, 0, 0).in_tz("America/New_York")?;
     let zdt2 = zdt1.round(Unit::Hour)?;
-    assert_eq!(zdt2.to_string(), "2024-07-11T17:00:00-04:00[America/New_York]");
+    assert_eq!(
+        zdt2.to_string(),
+        "2024-07-11T17:00:00-04:00[America/New_York]"
+    );
 
     Ok(())
 }
@@ -933,13 +951,13 @@ The `time` crate has no rounding APIs.
 In Jiff, one can round the duration computed between two datetimes
 
 ```rust
-use jiff::{civil::date, RoundMode, ToSpan, Unit, ZonedDifference};
+use jiff::{civil::date, RoundMode, ToSpan, Unit, ZonedDateTimeDifference};
 
 fn main() -> anyhow::Result<()> {
     let zdt1 = date(2001, 11, 18).at(8, 30, 0, 0).in_tz("America/New_York")?;
     let zdt2 = date(2024, 7, 11).at(22, 38, 0, 0).in_tz("America/New_York")?;
 
-    let round_options = ZonedDifference::new(&zdt2)
+    let round_options = ZonedDateTimeDifference::new(&zdt2)
         .largest(Unit::Year)
         .smallest(Unit::Day)
         .mode(RoundMode::HalfExpand);
@@ -957,12 +975,15 @@ The `time` crate has no rounding APIs.
 With Jiff, you can add durations with calendar units:
 
 ```rust
-use jiff::{civil::date, ToSpan};
+use jiff::{ToSpan, civil::date};
 
 fn main() -> anyhow::Result<()> {
     let zdt1 = date(2024, 7, 11).at(21, 0, 0, 0).in_tz("America/New_York")?;
     let zdt2 = zdt1.checked_add(2.years().months(6).days(1))?;
-    assert_eq!(zdt2.to_string(), "2027-01-12T21:00:00-05:00[America/New_York]");
+    assert_eq!(
+        zdt2.to_string(),
+        "2027-01-12T21:00:00-05:00[America/New_York]"
+    );
 
     Ok(())
 }
@@ -1166,13 +1187,13 @@ fn main() -> anyhow::Result<()> {
 Jiff, however, [does not support leap seconds][jiff-leap-seconds]:
 
 ```rust
-use jiff::{Timestamp, ToSpan};
+use jiff::{SignedDuration, Timestamp};
 
 fn main() -> anyhow::Result<()> {
     let ts1: Timestamp = "2015-06-30T23:00:00Z".parse()?;
     let ts2: Timestamp = "2015-07-01T00:00:00Z".parse()?;
     let span = ts2 - ts1;
-    assert_eq!(span, 3_600.seconds().fieldwise());
+    assert_eq!(span, SignedDuration::from_secs(3_600));
 
     Ok(())
 }

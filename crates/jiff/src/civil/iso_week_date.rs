@@ -1,10 +1,10 @@
 use jcore::civil::ISOWeekDate as JISOWeekDate;
 
 use crate::{
+    ZonedDateTime,
     civil::{Date, DateTime, Weekday},
     error::Error,
     fmt::temporal::{DEFAULT_DATETIME_PARSER, DEFAULT_DATETIME_PRINTER},
-    Zoned,
 };
 
 /// A type representing an [ISO 8601 week date].
@@ -721,16 +721,16 @@ impl From<DateTime> for ISOWeekDate {
     }
 }
 
-impl From<Zoned> for ISOWeekDate {
+impl From<ZonedDateTime> for ISOWeekDate {
     #[inline]
-    fn from(zdt: Zoned) -> ISOWeekDate {
+    fn from(zdt: ZonedDateTime) -> ISOWeekDate {
         ISOWeekDate::from(zdt.date())
     }
 }
 
-impl<'a> From<&'a Zoned> for ISOWeekDate {
+impl<'a> From<&'a ZonedDateTime> for ISOWeekDate {
     #[inline]
-    fn from(zdt: &'a Zoned) -> ISOWeekDate {
+    fn from(zdt: &'a ZonedDateTime) -> ISOWeekDate {
         ISOWeekDate::from(zdt.date())
     }
 }

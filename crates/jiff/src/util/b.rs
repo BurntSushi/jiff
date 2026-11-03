@@ -6,7 +6,7 @@ ranged integers. I'm not quite sure where this will go.
 */
 
 use jcore::{
-    bounds::{self, const_check, Bounds, RawBoundsError},
+    bounds::{self, Bounds, RawBoundsError, const_check},
     constants as c,
 };
 
@@ -172,8 +172,8 @@ define_bounds! {
     (Hour12, i8, "hour (12 hour clock)", 1, 12),
     (ISOWeek, i8),
     (ISOYear, i16),
-    // This matches Temporal's range.
-    // See: https://github.com/tc39/proposal-temporal/issues/2458#issuecomment-1380742911
+    // This matches Temporal's range. See:
+    // https://github.com/tc39/proposal-temporal/issues/2458#issuecomment-1380742911
     (Increment, i64, "rounding increment", 1, 1_000_000_000),
     (Increment32, i32, "rounding increment", 1, 1_000_000_000),
     // This is only used in parsing. A value of `60` gets clamped to `59`.
@@ -265,11 +265,11 @@ define_bounds! {
     (YearBCE, i16),
     (YearTwoDigit, i16, "year (2 digits)", 0, 99),
     (
-        ZonedDayNanoseconds,
+        ZonedDateTimeDayNanoseconds,
         i64,
         "nanoseconds (in one zoned datetime day)",
-        ZonedDaySeconds::MIN as i64 * c::NANOS_PER_SEC,
-        ZonedDaySeconds::MAX as i64 * c::NANOS_PER_SEC,
+        ZonedDateTimeDaySeconds::MIN as i64 * c::NANOS_PER_SEC,
+        ZonedDateTimeDaySeconds::MAX as i64 * c::NANOS_PER_SEC,
     ),
     // The number of seconds permitted in a single day.
     //
@@ -278,7 +278,7 @@ define_bounds! {
     //
     // It must also be at least 1 second long.
     (
-        ZonedDaySeconds,
+        ZonedDateTimeDaySeconds,
         i32,
         "seconds (in one zoned datetime day)",
         1,

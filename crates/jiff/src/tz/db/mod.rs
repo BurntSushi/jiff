@@ -1,5 +1,5 @@
 use crate::{
-    error::{tz::db::Error as E, Error},
+    error::{Error, tz::db::Error as E},
     tz::TimeZone,
     util::{sync::Arc, utf8},
 };
@@ -11,10 +11,10 @@ mod zoneinfo;
 /// Returns a copy of the global [`TimeZoneDatabase`].
 ///
 /// This is the same database used for convenience routines like
-/// [`Timestamp::in_tz`](crate::Timestamp::in_tz) and parsing routines
-/// for [`Zoned`](crate::Zoned) that need to do IANA time zone identifier
-/// lookups. Basically, whenever an implicit time zone database is needed,
-/// it is *this* copy of the time zone database that is used.
+/// [`Timestamp::in_tz`](crate::Timestamp::in_tz) and parsing routines for
+/// [`ZonedDateTime`](crate::ZonedDateTime) that need to do IANA time zone
+/// identifier lookups. Basically, whenever an implicit time zone database is
+/// needed, it is *this* copy of the time zone database that is used.
 ///
 /// In feature configurations where a time zone database cannot interact with
 /// the file system (like when `std` is not enabled), this returns a database
@@ -80,16 +80,19 @@ pub fn db() -> &'static TimeZoneDatabase {
 /// human readable identifiers, such as `America/Los_Angeles` and
 /// `Europe/Warsaw`.
 ///
-/// It is rare to need to create or use this type directly. Routines
-/// like zoned datetime parsing and time zone conversion provide
-/// convenience routines for using an implicit global time zone database
-/// by default. This global time zone database is available via
-/// [`jiff::tz::db`](crate::tz::db()`). But lower level parsing routines
-/// such as
-/// [`fmt::temporal::DateTimeParser::parse_zoned_with`](crate::fmt::temporal::DateTimeParser::parse_zoned_with)
+/// It is rare to need to create or use this type directly. Routines like zoned
+/// datetime parsing and time zone conversion provide convenience routines for
+/// using an implicit global time zone database by default. This global time
+/// zone database is available via [`jiff::tz::db`](crate::tz::db()`). But
+/// lower level parsing routines such as
+/// [`fmt::temporal::DateTimeParser::parse_zoned_datetime_with`](
+///     crate::fmt::temporal::DateTimeParser::parse_zoned_datetime_with
+/// )
 /// and
-/// [`civil::DateTime::to_zoned`](crate::civil::DateTime::to_zoned) provide a
-/// means to use a custom copy of a `TimeZoneDatabase`.
+/// [`civil::DateTime::to_zoned_datetime`](
+///     crate::civil::DateTime::to_zoned_datetime
+/// )
+/// provide a means to use a custom copy of a `TimeZoneDatabase`.
 ///
 /// # Platform behavior
 ///
@@ -177,7 +180,10 @@ pub fn db() -> &'static TimeZoneDatabase {
 /// timestamp.
 ///
 /// ```no_run
-/// use jiff::{fmt::temporal::DateTimeParser, tz::{self, TimeZoneDatabase}};
+/// use jiff::{
+///     fmt::temporal::DateTimeParser,
+///     tz::{self, TimeZoneDatabase},
+/// };
 ///
 /// static PARSER: DateTimeParser = DateTimeParser::new();
 ///
@@ -190,8 +196,8 @@ pub fn db() -> &'static TimeZoneDatabase {
 /// // Parse the same datetime string with the same parser, but using two
 /// // different versions of tzdb.
 /// let dt = "2020-01-15T12:00[America/Sao_Paulo]";
-/// let zdt2018 = PARSER.parse_zoned_with(&tzdb2018, dt)?;
-/// let zdt = PARSER.parse_zoned_with(tzdb, dt)?;
+/// let zdt2018 = PARSER.parse_zoned_datetime_with(&tzdb2018, dt)?;
+/// let zdt = PARSER.parse_zoned_datetime_with(tzdb, dt)?;
 ///
 /// // Before DST was abolished, 2020-01-15 was in DST, which corresponded
 /// // to UTC offset -02. Since DST rules applied to datetimes in the
@@ -207,7 +213,9 @@ pub fn db() -> &'static TimeZoneDatabase {
 /// // tzdb, you'll get an error under the default configuration because
 /// // of `OffsetConflict::Reject`. This would succeed if you parsed it
 /// // using tzdb2018!
-/// assert!(PARSER.parse_zoned_with(tzdb, zdt2018.to_string()).is_err());
+/// assert!(
+///     PARSER.parse_zoned_datetime_with(tzdb, zdt2018.to_string()).is_err()
+/// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -467,8 +475,10 @@ impl TimeZoneDatabase {
     /// [localization of time zone names] to be done correctly.
     ///
     /// [IANA Time Zone Database]: https://en.wikipedia.org/wiki/Tz_database
-    /// [`jiff-cli`]: https://github.com/BurntSushi/jiff/tree/master/crates/jiff-cli
-    /// [localization of time zone names]: https://github.com/BurntSushi/jiff/issues/258
+    /// [`jiff-cli`]:
+    ///   https://github.com/BurntSushi/jiff/tree/master/crates/jiff-cli
+    /// [localization of time zone names]:
+    ///   https://github.com/BurntSushi/jiff/issues/258
     pub fn bundled() -> TimeZoneDatabase {
         let db = bundled::Database::new();
         if db.is_definitively_empty() {
@@ -773,10 +783,12 @@ mod tests {
         assert!(db.get("America/New_York").is_ok());
         // The convenience APIs route through the global `db()`, so this is
         // the symptom originally reported in #533.
-        assert!(crate::civil::date(2024, 7, 4)
-            .at(12, 0, 0, 0)
-            .in_tz("America/New_York")
-            .is_ok());
+        assert!(
+            crate::civil::date(2024, 7, 4)
+                .at(12, 0, 0, 0)
+                .in_tz("America/New_York")
+                .is_ok()
+        );
     }
 
     /// This tests that the size of a time zone database is kept small.

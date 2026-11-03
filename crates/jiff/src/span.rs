@@ -3,13 +3,13 @@ use core::{cmp::Ordering, time::Duration as UnsignedDuration};
 use jcore::{bounds::Sign, constants as c};
 
 use crate::{
+    RoundMode, SignedDuration, Timestamp, ZonedDateTime,
     civil::{Date, DateTime, Time},
     duration::{Duration, SDuration},
-    error::{span::Error as E, unit::UnitConfigError, Error, ErrorContext},
+    error::{Error, ErrorContext, span::Error as E, unit::UnitConfigError},
     fmt::{friendly, temporal},
     tz::TimeZone,
     util::{b, borrow::DumbCow, round::Increment},
-    RoundMode, SignedDuration, Timestamp, Zoned,
 };
 
 /// A macro helper, only used in tests, for comparing spans for equality.
@@ -31,7 +31,7 @@ pub(crate) use span_eq;
 /// A span represents a duration of time in units of years, months, weeks,
 /// days, hours, minutes, seconds, milliseconds, microseconds and nanoseconds.
 /// Spans are used to as inputs to routines like
-/// [`Zoned::checked_add`] and [`Date::saturating_sub`],
+/// [`ZonedDateTime::checked_add`] and [`Date::saturating_sub`],
 /// and are also outputs from routines like
 /// [`Timestamp::since`] and [`DateTime::until`].
 ///
@@ -227,7 +227,13 @@ pub(crate) use span_eq;
 ///     ("P0d", 0.seconds()),
 ///     (
 ///         "P1y1m1dT1h1m1.1s",
-///         1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
+///         1.year()
+///             .months(1)
+///             .days(1)
+///             .hours(1)
+///             .minutes(1)
+///             .seconds(1)
+///             .milliseconds(100),
 ///     ),
 ///     // Jiff's "friendly" format
 ///     ("40d", 40.days()),
@@ -251,19 +257,43 @@ pub(crate) use span_eq;
 ///     ("0 days", 0.seconds()),
 ///     (
 ///         "1y1mo1d1h1m1.1s",
-///         1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
+///         1.year()
+///             .months(1)
+///             .days(1)
+///             .hours(1)
+///             .minutes(1)
+///             .seconds(1)
+///             .milliseconds(100),
 ///     ),
 ///     (
 ///         "1yr 1mo 1day 1hr 1min 1.1sec",
-///         1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
+///         1.year()
+///             .months(1)
+///             .days(1)
+///             .hours(1)
+///             .minutes(1)
+///             .seconds(1)
+///             .milliseconds(100),
 ///     ),
 ///     (
 ///         "1 year, 1 month, 1 day, 1 hour, 1 minute 1.1 seconds",
-///         1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
+///         1.year()
+///             .months(1)
+///             .days(1)
+///             .hours(1)
+///             .minutes(1)
+///             .seconds(1)
+///             .milliseconds(100),
 ///     ),
 ///     (
 ///         "1 year, 1 month, 1 day, 01:01:01.1",
-///         1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
+///         1.year()
+///             .months(1)
+///             .days(1)
+///             .hours(1)
+///             .minutes(1)
+///             .seconds(1)
+///             .milliseconds(100),
 ///     ),
 /// ];
 /// for (string, span) in spans {
@@ -674,10 +704,11 @@ pub(crate) use span_eq;
 /// If you need to convert such spans, then as the error suggests, you'll need
 /// to use [`Span::to_duration`] with a relative date.
 ///
-/// And note that since a `Span` is signed and a `std::time::Duration` is unsigned,
-/// converting a negative `Span` to `std::time::Duration` will always fail. One can use
-/// [`Span::signum`] to get the sign of the span and [`Span::abs`] to make the
-/// span positive before converting it to a `Duration`:
+/// And note that since a `Span` is signed and a `std::time::Duration` is
+/// unsigned, converting a negative `Span` to `std::time::Duration` will always
+/// fail. One can use [`Span::signum`] to get the sign of the span and
+/// [`Span::abs`] to make the span positive before converting it to a
+/// `Duration`:
 ///
 /// ```
 /// use std::time::Duration;
@@ -911,9 +942,8 @@ impl Span {
     ///
     /// # Errors
     ///
-    /// This returns an error when the number of months is too small or too big.
-    /// The minimum value is `-239,976`.
-    /// The maximum value is `239,976`.
+    /// This returns an error when the number of months is too small or too
+    /// big. The minimum value is `-239,976`. The maximum value is `239,976`.
     #[inline]
     pub fn try_months<I: Into<i64>>(self, months: I) -> Result<Span, Error> {
         let months = b::SpanMonths::check(months.into())?;
@@ -979,9 +1009,9 @@ impl Span {
     ///
     /// # Errors
     ///
-    /// This returns an error when the number of minutes is too small or too big.
-    /// The minimum value is `-10,518,456,960`.
-    /// The maximum value is `10,518,456,960`.
+    /// This returns an error when the number of minutes is too small or too
+    /// big. The minimum value is `-10,518,456,960`. The maximum value is
+    /// `10,518,456,960`.
     #[inline]
     pub fn try_minutes<I: Into<i64>>(self, minutes: I) -> Result<Span, Error> {
         let minutes = b::SpanMinutes::check(minutes.into())?;
@@ -996,9 +1026,9 @@ impl Span {
     ///
     /// # Errors
     ///
-    /// This returns an error when the number of seconds is too small or too big.
-    /// The minimum value is `-631,107,417,600`.
-    /// The maximum value is `631,107,417,600`.
+    /// This returns an error when the number of seconds is too small or too
+    /// big. The minimum value is `-631,107,417,600`. The maximum value is
+    /// `631,107,417,600`.
     #[inline]
     pub fn try_seconds<I: Into<i64>>(self, seconds: I) -> Result<Span, Error> {
         let seconds = b::SpanSeconds::check(seconds.into())?;
@@ -1155,12 +1185,12 @@ impl Span {
     /// # Example
     ///
     /// ```
-    /// use jiff::{ToSpan, Unit, Zoned};
+    /// use jiff::{ToSpan, Unit, ZonedDateTime};
     ///
     /// let span = 3.days().hours(47);
     /// assert_eq!(3, span.get_days());
     ///
-    /// let zdt: Zoned = "2024-03-07[America/New_York]".parse()?;
+    /// let zdt: ZonedDateTime = "2024-03-07[America/New_York]".parse()?;
     /// assert_eq!(5.0, span.total((Unit::Day, &zdt))?);
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -1367,7 +1397,7 @@ impl Span {
     /// The number returned is `-1` when this span is negative,
     /// `0` when this span is zero and `1` when this span is positive.
     #[inline]
-    pub fn signum(self) -> i8 {
+    pub fn signum(&self) -> i8 {
         self.sign.signum()
     }
 
@@ -1384,7 +1414,7 @@ impl Span {
     /// assert!((-2.months()).is_negative());
     /// ```
     #[inline]
-    pub fn is_positive(self) -> bool {
+    pub fn is_positive(&self) -> bool {
         self.get_sign().is_positive()
     }
 
@@ -1401,7 +1431,7 @@ impl Span {
     /// assert!((-2.months()).is_negative());
     /// ```
     #[inline]
-    pub fn is_negative(self) -> bool {
+    pub fn is_negative(&self) -> bool {
         self.get_sign().is_negative()
     }
 
@@ -1419,7 +1449,7 @@ impl Span {
     /// assert!(0.seconds().seconds(1).seconds(0).is_zero());
     /// ```
     #[inline]
-    pub fn is_zero(self) -> bool {
+    pub fn is_zero(&self) -> bool {
         self.sign.is_zero()
     }
 
@@ -1496,13 +1526,14 @@ impl Span {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn checked_mul(mut self, rhs: i64) -> Result<Span, Error> {
+    pub fn checked_mul(&self, rhs: i64) -> Result<Span, Error> {
+        let mut this = *self;
         if rhs == 0 {
             return Ok(Span::default());
         } else if rhs == 1 {
-            return Ok(self);
+            return Ok(this);
         }
-        self.sign = self.sign * Sign::from(rhs);
+        this.sign = this.sign * Sign::from(rhs);
         // This can only fail when `rhs == i64::MIN`, which is out of bounds
         // for all possible span units (including nanoseconds).
         let rhs = rhs.checked_abs().ok_or_else(b::SpanMultiple::error)?;
@@ -1515,52 +1546,52 @@ impl Span {
         // actually going to multiply with it. If our span has non-zero years,
         // then our multiple can't exceed the bounds of `SpanYears`, otherwise
         // it is guaranteed to overflow.
-        if self.years != 0 {
+        if this.years != 0 {
             let rhs = b::SpanYears::check(rhs)?;
-            self.years = b::SpanYears::checked_mul(self.years, rhs)?;
+            this.years = b::SpanYears::checked_mul(this.years, rhs)?;
         }
-        if self.months != 0 {
+        if this.months != 0 {
             let rhs = b::SpanMonths::check(rhs)?;
-            self.months = b::SpanMonths::checked_mul(self.months, rhs)?;
+            this.months = b::SpanMonths::checked_mul(this.months, rhs)?;
         }
-        if self.weeks != 0 {
+        if this.weeks != 0 {
             let rhs = b::SpanWeeks::check(rhs)?;
-            self.weeks = b::SpanWeeks::checked_mul(self.weeks, rhs)?;
+            this.weeks = b::SpanWeeks::checked_mul(this.weeks, rhs)?;
         }
-        if self.days != 0 {
+        if this.days != 0 {
             let rhs = b::SpanDays::check(rhs)?;
-            self.days = b::SpanDays::checked_mul(self.days, rhs)?;
+            this.days = b::SpanDays::checked_mul(this.days, rhs)?;
         }
-        if self.hours != 0 {
+        if this.hours != 0 {
             let rhs = b::SpanHours::check(rhs)?;
-            self.hours = b::SpanHours::checked_mul(self.hours, rhs)?;
+            this.hours = b::SpanHours::checked_mul(this.hours, rhs)?;
         }
-        if self.minutes != 0 {
-            self.minutes = b::SpanMinutes::checked_mul(self.minutes, rhs)?;
+        if this.minutes != 0 {
+            this.minutes = b::SpanMinutes::checked_mul(this.minutes, rhs)?;
         }
-        if self.seconds != 0 {
-            self.seconds = b::SpanSeconds::checked_mul(self.seconds, rhs)?;
+        if this.seconds != 0 {
+            this.seconds = b::SpanSeconds::checked_mul(this.seconds, rhs)?;
         }
-        if self.milliseconds != 0 {
-            self.milliseconds =
-                b::SpanMilliseconds::checked_mul(self.milliseconds, rhs)?;
+        if this.milliseconds != 0 {
+            this.milliseconds =
+                b::SpanMilliseconds::checked_mul(this.milliseconds, rhs)?;
         }
-        if self.microseconds != 0 {
-            self.microseconds =
-                b::SpanMicroseconds::checked_mul(self.microseconds, rhs)?;
+        if this.microseconds != 0 {
+            this.microseconds =
+                b::SpanMicroseconds::checked_mul(this.microseconds, rhs)?;
         }
-        if self.nanoseconds != 0 {
-            self.nanoseconds =
-                b::SpanNanoseconds::checked_mul(self.nanoseconds, rhs)?;
+        if this.nanoseconds != 0 {
+            this.nanoseconds =
+                b::SpanNanoseconds::checked_mul(this.nanoseconds, rhs)?;
         }
-        // N.B. We don't need to update `self.units` here since it shouldn't
+        // N.B. We don't need to update `this.units` here since it shouldn't
         // change. The only way it could is if a unit goes from zero to
         // non-zero (which can't happen, because multiplication by zero is
         // always zero), or if a unit goes from non-zero to zero. That also
         // can't happen because we handle the case of the factor being zero
         // specially above, and it returns a `Span` will all units zero
         // correctly.
-        Ok(self)
+        Ok(this)
     }
 
     /// Adds a span to this one and returns the sum as a new span.
@@ -1578,7 +1609,7 @@ impl Span {
     /// * `From<Span> for SpanArithmetic` adds the given span to this one.
     /// * `From<(Span, civil::Date)> for SpanArithmetic` adds the given
     /// span to this one relative to the given date. There are also `From`
-    /// implementations for `civil::DateTime` and `Zoned`.
+    /// implementations for `civil::DateTime` and `ZonedDateTime`.
     ///
     /// This also works with different duration types, such as
     /// [`SignedDuration`] and [`std::time::Duration`], via additional trait
@@ -1588,7 +1619,7 @@ impl Span {
     /// this one.
     /// * `From<(SignedDuration, civil::Date)> for SpanArithmetic` adds the
     /// given duration to this one relative to the given date. There are also
-    /// `From` implementations for `civil::DateTime` and `Zoned`.
+    /// `From` implementations for `civil::DateTime` and `ZonedDateTime`.
     ///
     /// And similarly for `std::time::Duration`.
     ///
@@ -1638,7 +1669,10 @@ impl Span {
     ///
     /// let span1 = 2.hours().minutes(59);
     /// let span2 = 2.minutes();
-    /// assert_eq!(span1.checked_add(span2)?, 3.hours().minutes(1).fieldwise());
+    /// assert_eq!(
+    ///     span1.checked_add(span2)?,
+    ///     3.hours().minutes(1).fieldwise()
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -1797,7 +1831,7 @@ impl Span {
         let start = match relative {
             Some(r) => match r.to_relative(unit)? {
                 None => {
-                    return span1.checked_add_invariant_duration(unit, dur2)
+                    return span1.checked_add_invariant_duration(unit, dur2);
                 }
                 Some(r) => r,
             },
@@ -1896,7 +1930,7 @@ impl Span {
     /// * `From<Span> for SpanCompare` compares the given span to this one.
     /// * `From<(Span, civil::Date)> for SpanArithmetic` compares the given
     /// span to this one relative to the given date. There are also `From`
-    /// implementations for `civil::DateTime` and `Zoned`.
+    /// implementations for `civil::DateTime` and `ZonedDateTime`.
     ///
     /// # Errors
     ///
@@ -1944,13 +1978,14 @@ impl Span {
     /// account when comparing spans:
     ///
     /// ```
-    /// use jiff::{civil, ToSpan, Zoned};
+    /// use jiff::{ToSpan, ZonedDateTime, civil};
     ///
     /// let span1 = 79.hours().minutes(10);
     /// let span2 = 3.days().hours(7).seconds(630);
     /// let span3 = 3.days().hours(6).minutes(50);
     ///
-    /// let relative: Zoned = "2020-11-01T00-07[America/Los_Angeles]".parse()?;
+    /// let relative: ZonedDateTime =
+    ///     "2020-11-01T00-07[America/Los_Angeles]".parse()?;
     /// let mut spans = [span1, span2, span3];
     /// spans.sort_by(|s1, s2| s1.compare((s2, &relative)).unwrap());
     /// assert_eq!(
@@ -1993,7 +2028,7 @@ impl Span {
     /// this span.
     /// * `From<(Unit, civil::Date)> for SpanTotal` computes a total for the
     /// given unit in this span, relative to the given date. There are also
-    /// `From` implementations for `civil::DateTime` and `Zoned`.
+    /// `From` implementations for `civil::DateTime` and `ZonedDateTime`.
     ///
     /// # Errors
     ///
@@ -2082,13 +2117,14 @@ impl Span {
     /// representations for each span up-front:
     ///
     /// ```
-    /// use jiff::{civil::Date, ToSpan, Unit, Zoned};
+    /// use jiff::{ToSpan, Unit, ZonedDateTime, civil::Date};
     ///
     /// let span1 = 79.hours().minutes(10);
     /// let span2 = 3.days().hours(7).seconds(630);
     /// let span3 = 3.days().hours(6).minutes(50);
     ///
-    /// let relative: Zoned = "2020-11-01T00-07[America/Los_Angeles]".parse()?;
+    /// let relative: ZonedDateTime =
+    ///     "2020-11-01T00-07[America/Los_Angeles]".parse()?;
     /// let mut spans = [
     ///     (span1, span1.total((Unit::Day, &relative))?),
     ///     (span2, span2.total((Unit::Day, &relative))?),
@@ -2240,7 +2276,9 @@ impl Span {
     ///
     /// let span = 123_456_789_123_456_789i64.nanoseconds();
     /// assert_eq!(
-    ///     span.round(SpanRound::new().largest(Unit::Hour).smallest(Unit::Second))?,
+    ///     span.round(
+    ///         SpanRound::new().largest(Unit::Hour).smallest(Unit::Second)
+    ///     )?,
     ///     34_293.hours().minutes(33).seconds(9).fieldwise(),
     /// );
     ///
@@ -2265,12 +2303,15 @@ impl Span {
     /// it's easy to turn days into bigger units:
     ///
     /// ```
-    /// use jiff::{civil::date, SpanRound, ToSpan, Unit};
+    /// use jiff::{SpanRound, ToSpan, Unit, civil::date};
     ///
     /// let span = 1_000.days();
     /// let relative = date(2000, 1, 1);
     /// let options = SpanRound::new().largest(Unit::Year).relative(relative);
-    /// assert_eq!(span.round(options)?, 2.years().months(8).days(26).fieldwise());
+    /// assert_eq!(
+    ///     span.round(options)?,
+    ///     2.years().months(8).days(26).fieldwise()
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2322,7 +2363,8 @@ impl Span {
     /// convert a `Span` to a `SignedDuration` and instead will be ably to
     /// use `SignedDuration::try_from(span)`. Namely, by default:
     ///
-    /// * [`Zoned::until`] guarantees that the biggest non-zero unit is hours.
+    /// * [`ZonedDateTime::until`] guarantees that the biggest non-zero unit is
+    ///   hours.
     /// * [`Timestamp::until`] guarantees that the biggest non-zero unit is
     /// seconds.
     /// * [`DateTime::until`] guarantees that the biggest non-zero unit is
@@ -2336,7 +2378,7 @@ impl Span {
     /// actual relative date to resolve the length of a day.)
     ///
     /// Of course, one may change the defaults. For example, if one
-    /// uses `Zoned::until` with the largest unit set to `Unit::Year`
+    /// uses `ZonedDateTime::until` with the largest unit set to `Unit::Year`
     /// and the resulting `Span` includes non-zero calendar units, then
     /// `SignedDuration::try_from` will fail because there is no relative date.
     ///
@@ -2396,7 +2438,9 @@ impl Span {
             .and_then(|r| r.into_relative_span(Unit::Second, *self))
             .with_context(|| match relative.kind {
                 SpanRelativeToKind::Civil(_) => E::ToDurationCivil,
-                SpanRelativeToKind::Zoned(_) => E::ToDurationZoned,
+                SpanRelativeToKind::ZonedDateTime(_) => {
+                    E::ToDurationZonedDateTime
+                }
                 SpanRelativeToKind::DaysAre24Hours => {
                     E::ToDurationDaysAre24Hours
                 }
@@ -3474,10 +3518,10 @@ impl quickcheck::Arbitrary for Span {
 ///
 /// # Construction
 ///
-/// While callers may use `SpanFieldwise(span)` (where `span` has type [`Span`])
-/// to construct a value of this type, callers may find [`Span::fieldwise`]
-/// more convenient. Namely, `Span::fieldwise` may avoid the need to explicitly
-/// import `SpanFieldwise`.
+/// While callers may use `SpanFieldwise(span)` (where `span` has type
+/// [`Span`]) to construct a value of this type, callers may find
+/// [`Span::fieldwise`] more convenient. Namely, `Span::fieldwise` may avoid
+/// the need to explicitly import `SpanFieldwise`.
 ///
 /// # Trait implementations
 ///
@@ -3604,6 +3648,10 @@ impl From<SpanFieldwise> for Span {
 /// This trait is implemented for the following integer types: `i8`, `i16`,
 /// `i32` and `i64`.
 ///
+/// This trait is sealed and cannot be implemented for types outside of Jiff.
+/// (If you have a use case for implementing this trait, please [participate on
+/// the issue tracker](https://github.com/BurntSushi/jiff/issues).)
+///
 /// Note that this trait is provided as a convenience and should generally
 /// only be used for literals in your source code. You should not use this
 /// trait on numbers provided by end users. Namely, if the number provided
@@ -3636,12 +3684,18 @@ impl From<SpanFieldwise> for Span {
 /// let span = "P5y2m15dT23h30m10s".parse::<Span>()?;
 /// assert_eq!(
 ///     span.fieldwise(),
-///     Span::new().years(5).months(2).days(15).hours(23).minutes(30).seconds(10),
+///     Span::new()
+///         .years(5)
+///         .months(2)
+///         .days(15)
+///         .hours(23)
+///         .minutes(30)
+///         .seconds(10),
 /// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-pub trait ToSpan: Sized {
+pub trait ToSpan: Sized + sealed::Sealed {
     /// Create a new span from this integer in units of years.
     ///
     /// # Panics
@@ -3773,8 +3827,14 @@ pub trait ToSpan: Sized {
     }
 }
 
+mod sealed {
+    pub trait Sealed {}
+}
+
 macro_rules! impl_to_span {
     ($ty:ty) => {
+        impl sealed::Sealed for $ty {}
+
         impl ToSpan for $ty {
             #[inline]
             fn years(self) -> Span {
@@ -3828,14 +3888,14 @@ impl_to_span!(i64);
 /// A way to refer to a single calendar or clock unit.
 ///
 /// This type is principally used in APIs involving a [`Span`], which is a
-/// duration of time. For example, routines like [`Zoned::until`] permit
-/// specifying the largest unit of the span returned:
+/// duration of time. For example, routines like [`ZonedDateTime::until`]
+/// permit specifying the largest unit of the span returned:
 ///
 /// ```
-/// use jiff::{Unit, Zoned};
+/// use jiff::{Unit, ZonedDateTime};
 ///
-/// let zdt1: Zoned = "2024-07-06 17:40-04[America/New_York]".parse()?;
-/// let zdt2: Zoned = "2024-11-05 08:00-05[America/New_York]".parse()?;
+/// let zdt1: ZonedDateTime = "2024-07-06 17:40-04[America/New_York]".parse()?;
+/// let zdt2: ZonedDateTime = "2024-11-05 08:00-05[America/New_York]".parse()?;
 /// let span = zdt1.until((Unit::Year, &zdt2))?;
 /// assert_eq!(format!("{span:#}"), "3mo 29d 14h 20m");
 ///
@@ -3845,9 +3905,10 @@ impl_to_span!(i64);
 /// But a `Unit` is also used in APIs for rounding datetimes themselves:
 ///
 /// ```
-/// use jiff::{Unit, Zoned};
+/// use jiff::{Unit, ZonedDateTime};
 ///
-/// let zdt: Zoned = "2024-07-06 17:44:22.158-04[America/New_York]".parse()?;
+/// let zdt: ZonedDateTime =
+///     "2024-07-06 17:44:22.158-04[America/New_York]".parse()?;
 /// let nearest_minute = zdt.round(Unit::Minute)?;
 /// assert_eq!(
 ///     nearest_minute.to_string(),
@@ -4071,10 +4132,11 @@ impl quickcheck::Arbitrary for Unit {
 ///
 /// * `From<Span> for SpanArithmetic` adds (or subtracts) the given span to the
 /// receiver in [`Span::checked_add`] (or [`Span::checked_sub`]).
-/// * `From<(Span, civil::Date)> for SpanArithmetic` adds (or subtracts)
-/// the given span to the receiver in [`Span::checked_add`] (or
+/// * `From<(Span, civil::Date)> for SpanArithmetic` adds (or subtracts) the
+/// given span to the receiver in [`Span::checked_add`] (or
 /// [`Span::checked_sub`]), relative to the given date. There are also `From`
-/// implementations for `civil::DateTime`, `Zoned` and [`SpanRelativeTo`].
+/// implementations for `civil::DateTime`, `ZonedDateTime` and
+/// [`SpanRelativeTo`].
 ///
 /// # Example
 ///
@@ -4180,9 +4242,9 @@ impl From<(Span, DateTime)> for SpanArithmetic<'static> {
     }
 }
 
-impl<'a> From<(Span, &'a Zoned)> for SpanArithmetic<'a> {
+impl<'a> From<(Span, &'a ZonedDateTime)> for SpanArithmetic<'a> {
     #[inline]
-    fn from((span, zoned): (Span, &'a Zoned)) -> SpanArithmetic<'a> {
+    fn from((span, zoned): (Span, &'a ZonedDateTime)) -> SpanArithmetic<'a> {
         SpanArithmetic::from(span).relative(zoned)
     }
 }
@@ -4212,9 +4274,11 @@ impl<'a> From<(&'a Span, DateTime)> for SpanArithmetic<'static> {
     }
 }
 
-impl<'a, 'b> From<(&'a Span, &'b Zoned)> for SpanArithmetic<'b> {
+impl<'a, 'b> From<(&'a Span, &'b ZonedDateTime)> for SpanArithmetic<'b> {
     #[inline]
-    fn from((span, zoned): (&'a Span, &'b Zoned)) -> SpanArithmetic<'b> {
+    fn from(
+        (span, zoned): (&'a Span, &'b ZonedDateTime),
+    ) -> SpanArithmetic<'b> {
         SpanArithmetic::from(span).relative(zoned)
     }
 }
@@ -4253,10 +4317,10 @@ impl From<(SignedDuration, DateTime)> for SpanArithmetic<'static> {
     }
 }
 
-impl<'a> From<(SignedDuration, &'a Zoned)> for SpanArithmetic<'a> {
+impl<'a> From<(SignedDuration, &'a ZonedDateTime)> for SpanArithmetic<'a> {
     #[inline]
     fn from(
-        (duration, zoned): (SignedDuration, &'a Zoned),
+        (duration, zoned): (SignedDuration, &'a ZonedDateTime),
     ) -> SpanArithmetic<'a> {
         SpanArithmetic::from(duration).relative(zoned)
     }
@@ -4287,10 +4351,10 @@ impl From<(UnsignedDuration, DateTime)> for SpanArithmetic<'static> {
     }
 }
 
-impl<'a> From<(UnsignedDuration, &'a Zoned)> for SpanArithmetic<'a> {
+impl<'a> From<(UnsignedDuration, &'a ZonedDateTime)> for SpanArithmetic<'a> {
     #[inline]
     fn from(
-        (duration, zoned): (UnsignedDuration, &'a Zoned),
+        (duration, zoned): (UnsignedDuration, &'a ZonedDateTime),
     ) -> SpanArithmetic<'a> {
         SpanArithmetic::from(duration).relative(zoned)
     }
@@ -4313,7 +4377,7 @@ impl<'a> From<(UnsignedDuration, &'a Zoned)> for SpanArithmetic<'a> {
 /// in [`Span::compare`].
 /// * `From<(Span, civil::Date)> for SpanCompare` compares the given span
 /// to the receiver in [`Span::compare`], relative to the given date. There
-/// are also `From` implementations for `civil::DateTime`, `Zoned` and
+/// are also `From` implementations for `civil::DateTime`, `ZonedDateTime` and
 /// [`SpanRelativeTo`].
 ///
 /// # Example
@@ -4434,9 +4498,9 @@ impl From<(Span, DateTime)> for SpanCompare<'static> {
     }
 }
 
-impl<'a> From<(Span, &'a Zoned)> for SpanCompare<'a> {
+impl<'a> From<(Span, &'a ZonedDateTime)> for SpanCompare<'a> {
     #[inline]
-    fn from((span, zoned): (Span, &'a Zoned)) -> SpanCompare<'a> {
+    fn from((span, zoned): (Span, &'a ZonedDateTime)) -> SpanCompare<'a> {
         SpanCompare::from(span).relative(zoned)
     }
 }
@@ -4462,9 +4526,9 @@ impl<'a> From<(&'a Span, DateTime)> for SpanCompare<'static> {
     }
 }
 
-impl<'a, 'b> From<(&'a Span, &'b Zoned)> for SpanCompare<'b> {
+impl<'a, 'b> From<(&'a Span, &'b ZonedDateTime)> for SpanCompare<'b> {
     #[inline]
-    fn from((span, zoned): (&'a Span, &'b Zoned)) -> SpanCompare<'b> {
+    fn from((span, zoned): (&'a Span, &'b ZonedDateTime)) -> SpanCompare<'b> {
         SpanCompare::from(span).relative(zoned)
     }
 }
@@ -4496,8 +4560,8 @@ impl<'a, 'b> From<(&'a Span, SpanRelativeTo<'b>)> for SpanCompare<'b> {
 /// receiver span for [`Span::total`].
 /// * `From<(Unit, civil::Date)> for SpanTotal` computes a total for the given
 /// unit in the receiver span for [`Span::total`], relative to the given date.
-/// There are also `From` implementations for `civil::DateTime`, `Zoned` and
-/// [`SpanRelativeTo`].
+/// There are also `From` implementations for `civil::DateTime`,
+/// `ZonedDateTime` and [`SpanRelativeTo`].
 ///
 /// # Example
 ///
@@ -4653,9 +4717,9 @@ impl<'a> SpanTotal<'a> {
                 let end = Relative::Civil(end);
                 (start, end)
             }
-            RelativeSpanKind::Zoned { start, end } => {
-                let start = Relative::Zoned(start);
-                let end = Relative::Zoned(end);
+            RelativeSpanKind::ZonedDateTime { start, end } => {
+                let start = Relative::ZonedDateTime(start);
+                let end = Relative::ZonedDateTime(end);
                 (start, end)
             }
         };
@@ -4705,9 +4769,9 @@ impl From<(Unit, DateTime)> for SpanTotal<'static> {
     }
 }
 
-impl<'a> From<(Unit, &'a Zoned)> for SpanTotal<'a> {
+impl<'a> From<(Unit, &'a ZonedDateTime)> for SpanTotal<'a> {
     #[inline]
-    fn from((unit, zoned): (Unit, &'a Zoned)) -> SpanTotal<'a> {
+    fn from((unit, zoned): (Unit, &'a ZonedDateTime)) -> SpanTotal<'a> {
         SpanTotal::from(unit).relative(zoned)
     }
 }
@@ -4852,7 +4916,11 @@ impl<'a> SpanRound<'a> {
     /// let span = 86_401_123_456_789i64.nanoseconds();
     /// assert_eq!(
     ///     span.round(SpanRound::new().largest(Unit::Hour))?.fieldwise(),
-    ///     24.hours().seconds(1).milliseconds(123).microseconds(456).nanoseconds(789),
+    ///     24.hours()
+    ///         .seconds(1)
+    ///         .milliseconds(123)
+    ///         .microseconds(456)
+    ///         .nanoseconds(789),
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -4887,8 +4955,13 @@ impl<'a> SpanRound<'a> {
     /// assert_eq!(
     ///     span.round(
     ///         SpanRound::new().largest(Unit::Day).days_are_24_hours(),
-    ///     )?.fieldwise(),
-    ///     1.day().seconds(1).milliseconds(123).microseconds(456).nanoseconds(789),
+    ///     )?
+    ///     .fieldwise(),
+    ///     1.day()
+    ///         .seconds(1)
+    ///         .milliseconds(123)
+    ///         .microseconds(456)
+    ///         .nanoseconds(789),
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -4900,10 +4973,11 @@ impl<'a> SpanRound<'a> {
     /// DST into account:
     ///
     /// ```
-    /// use jiff::{SpanRound, ToSpan, Unit, Zoned};
+    /// use jiff::{SpanRound, ToSpan, Unit, ZonedDateTime};
     ///
     /// let span = 2756.hours();
-    /// let zdt = "2020-01-01T00:00+01:00[Europe/Rome]".parse::<Zoned>()?;
+    /// let zdt =
+    ///     "2020-01-01T00:00+01:00[Europe/Rome]".parse::<ZonedDateTime>()?;
     /// let round = SpanRound::new().largest(Unit::Year).relative(&zdt);
     /// assert_eq!(
     ///     span.round(round)?,
@@ -5032,10 +5106,10 @@ impl<'a> SpanRound<'a> {
     /// `Into<SpanRelativeTo>`. There are a few convenience trait
     /// implementations provided:
     ///
-    /// * `From<&Zoned> for SpanRelativeTo` uses a zone aware datetime to do
-    /// rounding. In this case, rounding will take time zone transitions into
-    /// account. In particular, when using a zoned relative datetime, not all
-    /// days are necessarily 24 hours.
+    /// * `From<&ZonedDateTime> for SpanRelativeTo` uses a zone aware datetime
+    /// to do rounding. In this case, rounding will take time zone transitions
+    /// into account. In particular, when using a zoned relative datetime, not
+    /// all days are necessarily 24 hours.
     /// * `From<civil::DateTime> for SpanRelativeTo` uses a civil datetime. In
     /// this case, all days will be considered 24 hours long.
     /// * `From<civil::Date> for SpanRelativeTo` uses a civil date. In this
@@ -5059,9 +5133,10 @@ impl<'a> SpanRound<'a> {
     /// rounding if a zoned datetime is provided as a reference point:
     ///
     /// ```
-    /// use jiff::{SpanRound, ToSpan, Unit, Zoned};
+    /// use jiff::{SpanRound, ToSpan, Unit, ZonedDateTime};
     ///
-    /// let zdt = "2024-11-03T00-04[America/New_York]".parse::<Zoned>()?;
+    /// let zdt =
+    ///     "2024-11-03T00-04[America/New_York]".parse::<ZonedDateTime>()?;
     /// let round = SpanRound::new().largest(Unit::Hour).relative(&zdt);
     /// assert_eq!(1.day().round(round)?, 25.hours().fieldwise());
     ///
@@ -5072,9 +5147,10 @@ impl<'a> SpanRound<'a> {
     /// entirely:
     ///
     /// ```
-    /// use jiff::{SpanRound, ToSpan, Unit, Zoned};
+    /// use jiff::{SpanRound, ToSpan, Unit, ZonedDateTime};
     ///
-    /// let zdt = "2024-03-10T00-05[America/New_York]".parse::<Zoned>()?;
+    /// let zdt =
+    ///     "2024-03-10T00-05[America/New_York]".parse::<ZonedDateTime>()?;
     /// let round = SpanRound::new().largest(Unit::Hour).relative(&zdt);
     /// assert_eq!(1.day().round(round)?, 23.hours().fieldwise());
     ///
@@ -5239,20 +5315,20 @@ impl From<(Unit, i64)> for SpanRound<'static> {
 /// A relative datetime for use with [`Span`] APIs.
 ///
 /// A relative datetime can be one of the following: [`civil::Date`](Date),
-/// [`civil::DateTime`](DateTime) or [`Zoned`]. It can be constructed from any
-/// of the preceding types via `From` trait implementations.
+/// [`civil::DateTime`](DateTime) or [`ZonedDateTime`]. It can be constructed
+/// from any of the preceding types via `From` trait implementations.
 ///
 /// A relative datetime is used to indicate how the calendar units of a `Span`
 /// should be interpreted. For example, the span "1 month" does not have a
 /// fixed meaning. One month from `2024-03-01` is 31 days, but one month from
 /// `2024-04-01` is 30 days. Similar for years.
 ///
-/// When a relative datetime in time zone aware (i.e., it is a `Zoned`), then
-/// operations on a `Span` will also consider its day units to be variable in
-/// length. For example, `2024-03-10` in `America/New_York` was only 23 hours
-/// long, where as `2024-11-03` in `America/New_York` was 25 hours long. When
-/// a relative datetime is civil, then days are considered to always be of a
-/// fixed 24 hour length.
+/// When a relative datetime in time zone aware (i.e., it is a
+/// `ZonedDateTime`), then operations on a `Span` will also consider its day
+/// units to be variable in length. For example, `2024-03-10` in
+/// `America/New_York` was only 23 hours long, where as `2024-11-03` in
+/// `America/New_York` was 25 hours long. When a relative datetime is civil,
+/// then days are considered to always be of a fixed 24 hour length.
 ///
 /// This type is principally used as an input to one of several different
 /// [`Span`] APIs:
@@ -5275,9 +5351,9 @@ impl From<(Unit, i64)> for SpanRound<'static> {
 /// smaller units:
 ///
 /// ```
-/// use jiff::{SpanRound, ToSpan, Unit, Zoned};
+/// use jiff::{SpanRound, ToSpan, Unit, ZonedDateTime};
 ///
-/// let zdt: Zoned = "2012-01-01[Antarctica/Troll]".parse()?;
+/// let zdt: ZonedDateTime = "2012-01-01[Antarctica/Troll]".parse()?;
 /// let round = SpanRound::new().largest(Unit::Day).relative(&zdt);
 /// assert_eq!(1.year().round(round)?, 366.days().fieldwise());
 ///
@@ -5348,7 +5424,7 @@ impl<'a> SpanRelativeTo<'a> {
     /// [`Span::total`] API:
     ///
     /// ```
-    /// use jiff::{SpanRelativeTo, ToSpan, Unit, Zoned};
+    /// use jiff::{SpanRelativeTo, ToSpan, Unit, ZonedDateTime};
     ///
     /// let span = 1.day();
     ///
@@ -5365,11 +5441,11 @@ impl<'a> SpanRelativeTo<'a> {
     /// let hours = span.total((Unit::Hour, marker))?;
     /// assert_eq!(hours, 24.0);
     /// // Days can be shorter than 24 hours:
-    /// let zdt: Zoned = "2024-03-10[America/New_York]".parse()?;
+    /// let zdt: ZonedDateTime = "2024-03-10[America/New_York]".parse()?;
     /// let hours = span.total((Unit::Hour, &zdt))?;
     /// assert_eq!(hours, 23.0);
     /// // Days can be longer than 24 hours:
-    /// let zdt: Zoned = "2024-11-03[America/New_York]".parse()?;
+    /// let zdt: ZonedDateTime = "2024-11-03[America/New_York]".parse()?;
     /// let hours = span.total((Unit::Hour, &zdt))?;
     /// assert_eq!(hours, 25.0);
     ///
@@ -5384,15 +5460,15 @@ impl<'a> SpanRelativeTo<'a> {
     /// [`Span::total`] API:
     ///
     /// ```
-    /// use jiff::{SpanRelativeTo, ToSpan, Unit, Zoned};
+    /// use jiff::{SpanRelativeTo, ToSpan, Unit, ZonedDateTime};
     ///
     /// let span = 1.week();
     ///
     /// // An error because days aren't always 24 hours:
     /// assert_eq!(
     ///     span.total(Unit::Hour).unwrap_err().to_string(),
-    ///     "using unit 'week' in a span or configuration requires that either \
-    ///      a relative reference time be given or \
+    ///     "using unit 'week' in a span or configuration requires that \
+    ///      either a relative reference time be given or \
     ///      `jiff::SpanRelativeTo::days_are_24_hours()` is used to indicate \
     ///      invariant 24-hour days, but neither were provided",
     /// );
@@ -5401,11 +5477,11 @@ impl<'a> SpanRelativeTo<'a> {
     /// let hours = span.total((Unit::Hour, marker))?;
     /// assert_eq!(hours, 168.0);
     /// // Weeks can be shorter than 24*7 hours:
-    /// let zdt: Zoned = "2024-03-10[America/New_York]".parse()?;
+    /// let zdt: ZonedDateTime = "2024-03-10[America/New_York]".parse()?;
     /// let hours = span.total((Unit::Hour, &zdt))?;
     /// assert_eq!(hours, 167.0);
     /// // Weeks can be longer than 24*7 hours:
-    /// let zdt: Zoned = "2024-11-03[America/New_York]".parse()?;
+    /// let zdt: ZonedDateTime = "2024-11-03[America/New_York]".parse()?;
     /// let hours = span.total((Unit::Hour, &zdt))?;
     /// assert_eq!(hours, 169.0);
     ///
@@ -5499,8 +5575,8 @@ impl<'a> SpanRelativeTo<'a> {
             SpanRelativeToKind::Civil(dt) => {
                 Ok(Some(Relative::Civil(RelativeCivil::new(dt)?)))
             }
-            SpanRelativeToKind::Zoned(zdt) => {
-                Ok(Some(Relative::Zoned(RelativeZoned {
+            SpanRelativeToKind::ZonedDateTime(zdt) => {
+                Ok(Some(Relative::ZonedDateTime(RelativeZonedDateTime {
                     zoned: DumbCow::Borrowed(zdt),
                 })))
             }
@@ -5521,13 +5597,13 @@ impl<'a> SpanRelativeTo<'a> {
 #[derive(Clone, Copy, Debug)]
 enum SpanRelativeToKind<'a> {
     Civil(DateTime),
-    Zoned(&'a Zoned),
+    ZonedDateTime(&'a ZonedDateTime),
     DaysAre24Hours,
 }
 
-impl<'a> From<&'a Zoned> for SpanRelativeTo<'a> {
-    fn from(zdt: &'a Zoned) -> SpanRelativeTo<'a> {
-        SpanRelativeTo { kind: SpanRelativeToKind::Zoned(zdt) }
+impl<'a> From<&'a ZonedDateTime> for SpanRelativeTo<'a> {
+    fn from(zdt: &'a ZonedDateTime) -> SpanRelativeTo<'a> {
+        SpanRelativeTo { kind: SpanRelativeToKind::ZonedDateTime(zdt) }
     }
 }
 
@@ -5570,11 +5646,7 @@ impl UnitSet {
     #[inline]
     const fn set(self, unit: Unit, is_zero: bool) -> UnitSet {
         let bit = 1 << unit as usize;
-        if is_zero {
-            UnitSet(self.0 & !bit)
-        } else {
-            UnitSet(self.0 | bit)
-        }
+        if is_zero { UnitSet(self.0 & !bit) } else { UnitSet(self.0 | bit) }
     }
 
     /// Returns the set constructed from the given slice of units.
@@ -5664,12 +5736,13 @@ impl core::fmt::Debug for UnitSet {
 /// An internal abstraction for managing a relative datetime for use in some
 /// `Span` APIs.
 ///
-/// This is effectively the same as a `SpanRelativeTo`, but uses a `Cow<Zoned>`
-/// instead of a `&Zoned`. This makes it non-`Copy`, but allows us to craft a
-/// more uniform API. (i.e., `relative + span = relative` instead of `relative
+/// This is effectively the same as a `SpanRelativeTo`, but uses a
+/// `Cow<ZonedDateTime>` instead of a `&ZonedDateTime`. This makes it
+/// non-`Copy`, but allows us to craft a more uniform API. (i.e., `relative +
+/// span = relative` instead of `relative
 /// + span = owned_relative` or whatever.) Note that the `Copy` impl on
-/// `SpanRelativeTo` means it has to accept a `&Zoned`. It can't ever take a
-/// `Zoned` since it is non-Copy.
+/// `SpanRelativeTo` means it has to accept a `&ZonedDateTime`. It can't ever
+/// take a `ZonedDateTime` since it is non-Copy.
 ///
 /// NOTE: Separately from above, I think it's plausible that this type could be
 /// designed a bit differently. Namely, something like this:
@@ -5682,14 +5755,14 @@ impl core::fmt::Debug for UnitSet {
 /// }
 /// ```
 ///
-/// That is, we do zone aware stuff but without an actual `Zoned` type. But I
-/// think in order to make that work, we would need to expose most of the
-/// `Zoned` API as functions on its component types (DateTime, Timestamp and
-/// TimeZone). I think we are likely to want to do that for public API reasons,
-/// but I'd like to resist it since I think it will add a lot of complexity.
-/// Or maybe we need a `Unzoned` type that is `DateTime` and `Timestamp`, but
-/// requires passing the time zone in to each of its methods. That might work
-/// quite well, even if it was just an internal type.
+/// That is, we do zone aware stuff but without an actual `ZonedDateTime` type.
+/// But I think in order to make that work, we would need to expose most of the
+/// `ZonedDateTime` API as functions on its component types (DateTime,
+/// Timestamp and TimeZone). I think we are likely to want to do that for
+/// public API reasons, but I'd like to resist it since I think it will add a
+/// lot of complexity. Or maybe we need a `Unzoned` type that is `DateTime` and
+/// `Timestamp`, but requires passing the time zone in to each of its methods.
+/// That might work quite well, even if it was just an internal type.
 ///
 /// Anyway, I'm not 100% sure the above would work, but I think it would. It
 /// would be nicer because everything would be `Copy` all the time. We'd never
@@ -5698,14 +5771,15 @@ impl core::fmt::Debug for UnitSet {
 #[derive(Clone, Debug)]
 enum Relative<'a> {
     Civil(RelativeCivil),
-    Zoned(RelativeZoned<'a>),
+    ZonedDateTime(RelativeZonedDateTime<'a>),
 }
 
 impl<'a> Relative<'a> {
     /// Adds the given span to this relative datetime.
     ///
     /// This defers to either [`DateTime::checked_add`] or
-    /// [`Zoned::checked_add`], depending on the type of relative datetime.
+    /// [`ZonedDateTime::checked_add`], depending on the type of relative
+    /// datetime.
     ///
     /// The `Relative` datetime returned is guaranteed to have the same
     /// internal datetie type as `self`.
@@ -5718,8 +5792,8 @@ impl<'a> Relative<'a> {
     fn checked_add(&'a self, span: Span) -> Result<Relative<'a>, Error> {
         match *self {
             Relative::Civil(dt) => Ok(Relative::Civil(dt.checked_add(span)?)),
-            Relative::Zoned(ref zdt) => {
-                Ok(Relative::Zoned(zdt.checked_add(span)?))
+            Relative::ZonedDateTime(ref zdt) => {
+                Ok(Relative::ZonedDateTime(zdt.checked_add(span)?))
             }
         }
     }
@@ -5732,9 +5806,9 @@ impl<'a> Relative<'a> {
             Relative::Civil(dt) => {
                 Ok(Relative::Civil(dt.checked_add_duration(duration)?))
             }
-            Relative::Zoned(ref zdt) => {
-                Ok(Relative::Zoned(zdt.checked_add_duration(duration)?))
-            }
+            Relative::ZonedDateTime(ref zdt) => Ok(Relative::ZonedDateTime(
+                zdt.checked_add_duration(duration)?,
+            )),
         }
     }
 
@@ -5744,9 +5818,9 @@ impl<'a> Relative<'a> {
     /// # Errors
     ///
     /// This returns an error in the same cases as when the underlying
-    /// [`DateTime::until`] or [`Zoned::until`] fail. Because this doesn't
-    /// set or expose any rounding configuration, this can generally only
-    /// occur when `largest` is `Unit::Nanosecond` and the span of time
+    /// [`DateTime::until`] or [`ZonedDateTime::until`] fail. Because this
+    /// doesn't set or expose any rounding configuration, this can generally
+    /// only occur when `largest` is `Unit::Nanosecond` and the span of time
     /// between `self` and `other` is too big to represent as a 64-bit integer
     /// nanosecond count.
     ///
@@ -5760,9 +5834,10 @@ impl<'a> Relative<'a> {
             (&Relative::Civil(ref dt1), &Relative::Civil(ref dt2)) => {
                 dt1.until(largest, dt2)
             }
-            (&Relative::Zoned(ref zdt1), &Relative::Zoned(ref zdt2)) => {
-                zdt1.until(largest, zdt2)
-            }
+            (
+                &Relative::ZonedDateTime(ref zdt1),
+                &Relative::ZonedDateTime(ref zdt2),
+            ) => zdt1.until(largest, zdt2),
             // This would be bad if `Relative` were a public API, but in
             // practice, this case never occurs because we don't mixup our
             // `Relative` datetime types.
@@ -5780,7 +5855,9 @@ impl<'a> Relative<'a> {
     fn to_duration(&self) -> SignedDuration {
         match *self {
             Relative::Civil(dt) => dt.timestamp.as_duration(),
-            Relative::Zoned(ref zdt) => zdt.zoned.timestamp().as_duration(),
+            Relative::ZonedDateTime(ref zdt) => {
+                zdt.zoned.timestamp().as_duration()
+            }
         }
     }
 
@@ -5810,9 +5887,9 @@ impl<'a> Relative<'a> {
                 let end = start.checked_add(span)?;
                 RelativeSpanKind::Civil { start, end }
             }
-            Relative::Zoned(start) => {
+            Relative::ZonedDateTime(start) => {
                 let end = start.checked_add(span)?;
-                RelativeSpanKind::Zoned { start, end }
+                RelativeSpanKind::ZonedDateTime { start, end }
             }
         };
         let relspan = kind.into_relative_span(largest)?;
@@ -5824,7 +5901,8 @@ impl<'a> Relative<'a> {
             // actually impossible right? Balancing a duration should not flip
             // the sign.
             //
-            // ref: https://github.com/fullcalendar/temporal-polyfill/blob/9e001042864394247181d1a5d591c18057ce32d2/packages/temporal-polyfill/src/internal/durationMath.ts#L236-L238
+            // ref:
+            // https://github.com/fullcalendar/temporal-polyfill/blob/9e001042864394247181d1a5d591c18057ce32d2/packages/temporal-polyfill/src/internal/durationMath.ts#L236-L238
             unreachable!(
                 "balanced span should have same sign as original span"
             )
@@ -5864,12 +5942,12 @@ impl<'a> Relative<'a> {
                     )?
                 }
             }
-            RelativeSpanKind::Zoned { ref start, ref end } => {
+            RelativeSpanKind::ZonedDateTime { ref start, ref end } => {
                 if increment.unit() >= Unit::Day {
                     Nudge::relative_calendar(
                         relspan.span,
-                        &Relative::Zoned(start.borrowed()),
-                        &Relative::Zoned(end.borrowed()),
+                        &Relative::ZonedDateTime(start.borrowed()),
+                        &Relative::ZonedDateTime(end.borrowed()),
                         increment,
                         mode,
                     )?
@@ -5911,8 +5989,14 @@ struct RelativeSpan<'a> {
 /// A civil or zoned datetime range of time.
 #[derive(Clone, Debug)]
 enum RelativeSpanKind<'a> {
-    Civil { start: RelativeCivil, end: RelativeCivil },
-    Zoned { start: RelativeZoned<'a>, end: RelativeZoned<'a> },
+    Civil {
+        start: RelativeCivil,
+        end: RelativeCivil,
+    },
+    ZonedDateTime {
+        start: RelativeZonedDateTime<'a>,
+        end: RelativeZonedDateTime<'a>,
+    },
 }
 
 impl<'a> RelativeSpanKind<'a> {
@@ -5933,7 +6017,7 @@ impl<'a> RelativeSpanKind<'a> {
                 .datetime
                 .until((largest, end.datetime))
                 .context(E::FailedSpanBetweenDateTimes { unit: largest })?,
-            RelativeSpanKind::Zoned { ref start, ref end } => {
+            RelativeSpanKind::ZonedDateTime { ref start, ref end } => {
                 start.zoned.until((largest, &*end.zoned)).context(
                     E::FailedSpanBetweenZonedDateTimes { unit: largest },
                 )?
@@ -5977,7 +6061,7 @@ impl RelativeCivil {
     /// values.
     fn new(datetime: DateTime) -> Result<RelativeCivil, Error> {
         let timestamp = datetime
-            .to_zoned(TimeZone::UTC)
+            .to_zoned_datetime(TimeZone::UTC)
             .context(E::ConvertDateTimeToTimestamp)?
             .timestamp();
         Ok(RelativeCivil { datetime, timestamp })
@@ -5996,7 +6080,7 @@ impl RelativeCivil {
     fn checked_add(&self, span: Span) -> Result<RelativeCivil, Error> {
         let datetime = self.datetime.checked_add(span)?;
         let timestamp = datetime
-            .to_zoned(TimeZone::UTC)
+            .to_zoned_datetime(TimeZone::UTC)
             .context(E::ConvertDateTimeToTimestamp)?
             .timestamp();
         Ok(RelativeCivil { datetime, timestamp })
@@ -6019,7 +6103,7 @@ impl RelativeCivil {
     ) -> Result<RelativeCivil, Error> {
         let datetime = self.datetime.checked_add(duration)?;
         let timestamp = datetime
-            .to_zoned(TimeZone::UTC)
+            .to_zoned_datetime(TimeZone::UTC)
             .context(E::ConvertDateTimeToTimestamp)?
             .timestamp();
         Ok(RelativeCivil { datetime, timestamp })
@@ -6044,53 +6128,54 @@ impl RelativeCivil {
     }
 }
 
-/// A simple wrapper around a possibly borrowed `Zoned`.
+/// A simple wrapper around a possibly borrowed `ZonedDateTime`.
 #[derive(Clone, Debug)]
-struct RelativeZoned<'a> {
-    zoned: DumbCow<'a, Zoned>,
+struct RelativeZonedDateTime<'a> {
+    zoned: DumbCow<'a, ZonedDateTime>,
 }
 
-impl<'a> RelativeZoned<'a> {
-    /// Returns the result of [`Zoned::checked_add`].
+impl<'a> RelativeZonedDateTime<'a> {
+    /// Returns the result of [`ZonedDateTime::checked_add`].
     ///
     /// # Errors
     ///
-    /// Returns an error in the same cases as `Zoned::checked_add`. That is,
-    /// when adding the span to this zoned datetime would overflow.
+    /// Returns an error in the same cases as `ZonedDateTime::checked_add`.
+    /// That is, when adding the span to this zoned datetime would overflow.
     fn checked_add(
         &self,
         span: Span,
-    ) -> Result<RelativeZoned<'static>, Error> {
+    ) -> Result<RelativeZonedDateTime<'static>, Error> {
         let zoned = self.zoned.checked_add(span)?;
-        Ok(RelativeZoned { zoned: DumbCow::Owned(zoned) })
+        Ok(RelativeZonedDateTime { zoned: DumbCow::Owned(zoned) })
     }
 
-    /// Returns the result of [`Zoned::checked_add`] with an absolute duration.
+    /// Returns the result of [`ZonedDateTime::checked_add`] with an absolute
+    /// duration.
     ///
     /// # Errors
     ///
-    /// Returns an error in the same cases as `Zoned::checked_add`. That is,
-    /// when adding the span to this zoned datetime would overflow.
+    /// Returns an error in the same cases as `ZonedDateTime::checked_add`.
+    /// That is, when adding the span to this zoned datetime would overflow.
     fn checked_add_duration(
         &self,
         duration: SignedDuration,
-    ) -> Result<RelativeZoned<'static>, Error> {
+    ) -> Result<RelativeZonedDateTime<'static>, Error> {
         let zoned = self.zoned.checked_add(duration)?;
-        Ok(RelativeZoned { zoned: DumbCow::Owned(zoned) })
+        Ok(RelativeZonedDateTime { zoned: DumbCow::Owned(zoned) })
     }
 
-    /// Returns the result of [`Zoned::until`].
+    /// Returns the result of [`ZonedDateTime::until`].
     ///
     /// # Errors
     ///
-    /// Returns an error in the same cases as `Zoned::until`. That is, when
-    /// the span for the given largest unit cannot be represented. This can
-    /// generally only happen when `largest` is `Unit::Nanosecond` and the span
-    /// cannot be represented as a 64-bit integer of nanoseconds.
+    /// Returns an error in the same cases as `ZonedDateTime::until`. That is,
+    /// when the span for the given largest unit cannot be represented. This
+    /// can generally only happen when `largest` is `Unit::Nanosecond` and the
+    /// span cannot be represented as a 64-bit integer of nanoseconds.
     fn until(
         &self,
         largest: Unit,
-        other: &RelativeZoned<'a>,
+        other: &RelativeZonedDateTime<'a>,
     ) -> Result<Span, Error> {
         self.zoned
             .until((largest, &*other.zoned))
@@ -6098,9 +6183,10 @@ impl<'a> RelativeZoned<'a> {
     }
 
     /// Returns the borrowed version of self; useful when you need to convert
-    /// `&RelativeZoned` into `RelativeZoned` without cloning anything.
-    fn borrowed(&'a self) -> RelativeZoned<'a> {
-        RelativeZoned { zoned: self.zoned.borrowed() }
+    /// `&RelativeZonedDateTime` into `RelativeZonedDateTime` without cloning
+    /// anything.
+    fn borrowed(&'a self) -> RelativeZonedDateTime<'a> {
+        RelativeZonedDateTime { zoned: self.zoned.borrowed() }
     }
 }
 
@@ -6337,7 +6423,7 @@ impl Nudge {
     /// or less *and* the relative datetime is time zone aware.
     fn relative_zoned_time(
         balanced: Span,
-        relative_start: &RelativeZoned<'_>,
+        relative_start: &RelativeZonedDateTime<'_>,
         increment: &Increment,
         mode: RoundMode,
     ) -> Result<Nudge, Error> {
@@ -6345,7 +6431,7 @@ impl Nudge {
         let time_dur = balanced.only_lower(Unit::Day).to_invariant_duration();
         let mut rounded_time_nanos = increment.round(mode, time_dur)?;
         let (relative0, relative1) = unit_start_and_end(
-            &Relative::Zoned(relative_start.borrowed()),
+            &Relative::ZonedDateTime(relative_start.borrowed()),
             balanced.without_lower(Unit::Day),
             Unit::Day,
             sign.as_i64(),
@@ -6418,7 +6504,7 @@ impl Nudge {
                 RelativeSpanKind::Civil { ref start, .. } => {
                     start.checked_add(span_end)?.timestamp
                 }
-                RelativeSpanKind::Zoned { ref start, .. } => {
+                RelativeSpanKind::ZonedDateTime { ref start, .. } => {
                     start.checked_add(span_end)?.zoned.timestamp()
                 }
             };
@@ -6554,7 +6640,7 @@ mod tests {
 
     use alloc::string::ToString;
 
-    use crate::{civil::date, RoundMode};
+    use crate::{RoundMode, civil::date};
 
     use super::*;
 
@@ -6791,7 +6877,7 @@ mod tests {
 
         // Ref: https://github.com/tc39/proposal-temporal/issues/2816#issuecomment-2115608460
         let span = -1.month().hours(24);
-        let relative: crate::Zoned = date(2024, 4, 11)
+        let relative: crate::ZonedDateTime = date(2024, 4, 11)
             .at(2, 0, 0, 0)
             .in_tz("America/New_York")
             .unwrap();

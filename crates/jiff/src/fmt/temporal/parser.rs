@@ -1,22 +1,22 @@
 use jcore::{bounds::Sign, constants as c};
 
 use crate::{
+    SignedDuration, Timestamp, Unit, ZonedDateTime,
     civil::{Date, DateTime, ISOWeekDate, Time, Weekday},
-    error::{fmt::temporal::Error as E, Error, ErrorContext},
+    error::{Error, ErrorContext, fmt::temporal::Error as E},
     fmt::{
+        Parsed,
         offset::{self, ParsedOffset},
         rfc9557::{self, ParsedAnnotations},
         temporal::Pieces,
-        util::{parse_temporal_fraction, DurationUnits},
-        Parsed,
+        util::{DurationUnits, parse_temporal_fraction},
     },
     span::Span,
     tz::{
-        AmbiguousZoned, Disambiguation, Offset, OffsetConflict, TimeZone,
-        TimeZoneDatabase,
+        AmbiguousZonedDateTime, Disambiguation, Offset, OffsetConflict,
+        TimeZone, TimeZoneDatabase,
     },
     util::{b, escape, parse},
-    SignedDuration, Timestamp, Unit, Zoned,
 };
 
 /// The datetime components parsed from a string.
@@ -52,22 +52,22 @@ impl<'i> ParsedDateTime<'i> {
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    pub(super) fn to_zoned(
+    pub(super) fn to_zoned_datetime(
         &self,
         db: &TimeZoneDatabase,
         offset_conflict: OffsetConflict,
         disambiguation: Disambiguation,
-    ) -> Result<Zoned, Error> {
-        self.to_ambiguous_zoned(db, offset_conflict)?
+    ) -> Result<ZonedDateTime, Error> {
+        self.to_ambiguous_zoned_datetime(db, offset_conflict)?
             .disambiguate(disambiguation)
     }
 
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn to_ambiguous_zoned(
+    fn to_ambiguous_zoned_datetime(
         &self,
         db: &TimeZoneDatabase,
         offset_conflict: OffsetConflict,
-    ) -> Result<AmbiguousZoned, Error> {
+    ) -> Result<AmbiguousZonedDateTime, Error> {
         let time = self.time.as_ref().map_or(Time::midnight(), |p| p.time);
         let dt = DateTime::from_parts(self.date.date, time);
 
@@ -82,7 +82,7 @@ impl<'i> ParsedDateTime<'i> {
         // resolution preference, is to use the time zone. That is, there is no
         // possible conflict.
         let Some(ref parsed_offset) = self.offset else {
-            return Ok(tz.into_ambiguous_zoned(dt));
+            return Ok(tz.into_ambiguous_zoned_datetime(dt));
         };
         if parsed_offset.is_zulu() {
             // When `Z` is used, that means the offset to local time is not
@@ -272,12 +272,12 @@ impl DateTimeParser {
         DateTimeParser { _priv: () }
     }
 
-    // TemporalDateTimeString[Zoned] :::
-    //   AnnotatedDateTime[?Zoned]
+    // TemporalDateTimeString[ZonedDateTime] :::
+    //   AnnotatedDateTime[?ZonedDateTime]
     //
-    // AnnotatedDateTime[Zoned] :::
-    //   [~Zoned] DateTime TimeZoneAnnotation[opt] Annotations[opt]
-    //   [+Zoned] DateTime TimeZoneAnnotation Annotations[opt]
+    // AnnotatedDateTime[ZonedDateTime] :::
+    //   [~ZonedDateTime] DateTime TimeZoneAnnotation[opt] Annotations[opt]
+    //   [+ZonedDateTime] DateTime TimeZoneAnnotation Annotations[opt]
     //
     // DateTime :::
     //   Date
@@ -326,8 +326,8 @@ impl DateTimeParser {
     //   TimeSpecWithOptionalOffsetNotAmbiguous TimeZoneAnnotation[opt]
     //                                          Annotations[opt]
     //
-    // TimeSpecWithOptionalOffsetNotAmbiguous :::
-    //   TimeSpec DateTimeUTCOffsetopt (but not one of ValidMonthDay or DateSpecYearMonth)
+    // TimeSpecWithOptionalOffsetNotAmbiguous ::: TimeSpec DateTimeUTCOffsetopt
+    // (but not one of ValidMonthDay or DateSpecYearMonth)
     //
     // TimeDesignator ::: one of
     //   T t
@@ -679,9 +679,9 @@ impl DateTimeParser {
         Ok(Parsed { value: (), input })
     }
 
-    // DateYear :::
-    //   DecimalDigit DecimalDigit DecimalDigit DecimalDigit
-    //   TemporalSign DecimalDigit DecimalDigit DecimalDigit DecimalDigit DecimalDigit DecimalDigit
+    // DateYear ::: DecimalDigit DecimalDigit DecimalDigit DecimalDigit
+    // TemporalSign DecimalDigit DecimalDigit DecimalDigit DecimalDigit
+    // DecimalDigit DecimalDigit
     //
     // NOTE: I don't really like the fact that in order to write a negative
     // year, you need to use the six digit variant. Like, why not allow

@@ -1,9 +1,9 @@
 use crate::{
+    Timestamp,
     bounds::{self as b, RangeError},
     civil::{self, DateTime},
     constants as c,
     macros::{rtry, unwrapr},
-    Timestamp,
 };
 
 /// A fixed offset, in seconds, from UTC.
@@ -783,8 +783,7 @@ impl core::fmt::Display for AmbiguousError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for AmbiguousError {}
+impl core::error::Error for AmbiguousError {}
 
 #[cfg(test)]
 mod tests {

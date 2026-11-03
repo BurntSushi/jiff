@@ -1,11 +1,11 @@
 use crate::{
+    SignedDuration, Unit,
     error::{
+        Error, ErrorContext,
         unit::{MustDivide, UnitConfigError},
         util::RoundingIncrementError,
-        Error, ErrorContext,
     },
     util::b,
-    SignedDuration, Unit,
 };
 
 /// A representation of a rounding increment in a particular unit.
@@ -105,7 +105,7 @@ impl Increment {
     }
 
     /// Return a rounding increment suitable for use when rounding a
-    /// `civil::DateTime` or a `Zoned`.
+    /// `civil::DateTime` or a `ZonedDateTime`.
     pub(crate) fn for_datetime(
         unit: Unit,
         value: i64,
@@ -258,8 +258,8 @@ impl Increment {
 /// The mode for dealing with the remainder when rounding datetimes or spans.
 ///
 /// This is used in APIs like [`Span::round`](crate::Span::round) for rounding
-/// spans, and APIs like [`Zoned::round`](crate::Zoned::round) for rounding
-/// datetimes.
+/// spans, and APIs like [`ZonedDateTime::round`](crate::ZonedDateTime::round)
+/// for rounding datetimes.
 ///
 /// In the documentation for each variant, we refer to concepts like the
 /// "smallest" unit and the "rounding increment." These are best described
@@ -400,7 +400,8 @@ impl RoundMode {
     /// When `increment < 1`.
     fn round_by_i128(self, quantity: i128, increment: i128) -> i128 {
         assert!(increment >= 1);
-        // ref: https://tc39.es/proposal-temporal/#sec-temporal-roundnumbertoincrement
+        // ref:
+        // https://tc39.es/proposal-temporal/#sec-temporal-roundnumbertoincrement
         let mode = self;
         let mut quotient = quantity / increment;
         let remainder = quantity % increment;
@@ -411,7 +412,8 @@ impl RoundMode {
         let tiebreaker = (remainder * 2).abs();
         let tie = tiebreaker == increment;
         let expand_is_nearer = tiebreaker > increment;
-        // ref: https://tc39.es/proposal-temporal/#sec-temporal-roundnumbertoincrement
+        // ref:
+        // https://tc39.es/proposal-temporal/#sec-temporal-roundnumbertoincrement
         match mode {
             RoundMode::Ceil => {
                 if sign > 0 {

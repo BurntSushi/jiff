@@ -36,8 +36,12 @@ impl<F, T: ConvertFrom<F>> ConvertInto<T> for F {
     }
 }
 
-impl ConvertFrom<jiff::Zoned> for chrono::DateTime<chrono::FixedOffset> {
-    fn convert_from(x: jiff::Zoned) -> chrono::DateTime<chrono::FixedOffset> {
+impl ConvertFrom<jiff::ZonedDateTime>
+    for chrono::DateTime<chrono::FixedOffset>
+{
+    fn convert_from(
+        x: jiff::ZonedDateTime,
+    ) -> chrono::DateTime<chrono::FixedOffset> {
         // We specifically avoid `x.offset()` here, since we only want this
         // conversion to succeed when our time zone is itself a fixed offset.
         let offset = chrono::FixedOffset::convert_from(
@@ -102,8 +106,8 @@ impl ConvertFrom<jiff::SignedDuration> for chrono::TimeDelta {
     }
 }
 
-impl ConvertFrom<jiff::Zoned> for time::OffsetDateTime {
-    fn convert_from(x: jiff::Zoned) -> time::OffsetDateTime {
+impl ConvertFrom<jiff::ZonedDateTime> for time::OffsetDateTime {
+    fn convert_from(x: jiff::ZonedDateTime) -> time::OffsetDateTime {
         // We specifically avoid `x.offset()` here, since we only want this
         // conversion to succeed when our time zone is itself a fixed offset.
         let offset = x.time_zone().to_fixed_offset().unwrap();

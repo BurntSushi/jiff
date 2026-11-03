@@ -9,7 +9,7 @@ macro_rules! eprintln {
 
 #[wasm_bindgen_test]
 fn zoned_now_no_panic() {
-    let zdt = jiff::Zoned::now();
+    let zdt = jiff::ZonedDateTime::now();
     eprintln!("{zdt}");
 }
 

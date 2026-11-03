@@ -1,6 +1,7 @@
-// This module tries to test the API guarantees on errors in the various
-// APIs that can produce errors related to units. This includes through the
-// "convenience" APIs on the various datetime types, e.g., `Zoned::until`.
+// This module tries to test the API guarantees on errors in the various APIs
+// that can produce errors related to units. This includes through the
+// "convenience" APIs on the various datetime types, e.g.,
+// `ZonedDateTime::until`.
 //
 // Some of these tests may be duplicative of other tests. But this serves
 // as a central point on which to test various rounding configuration errors.
@@ -9,7 +10,7 @@
 // of my own devising. However, much of the behavior being tested comes from
 // Temporal.)
 
-use jiff::{civil, tz, SignedDuration, Timestamp, ToSpan, Unit};
+use jiff::{SignedDuration, Timestamp, ToSpan, Unit, civil, tz};
 
 use crate::tc39_262::Result;
 
@@ -22,11 +23,11 @@ const T2: civil::Time = civil::time(23, 30, 0, 0);
 
 #[test]
 fn zoned_datetime_smallest_bigger_than_largest() -> Result {
-    let zdt1 = DT1.to_zoned(jiff::tz::TimeZone::UTC)?;
-    let zdt2 = DT2.to_zoned(jiff::tz::TimeZone::UTC)?;
+    let zdt1 = DT1.to_zoned_datetime(jiff::tz::TimeZone::UTC)?;
+    let zdt2 = DT2.to_zoned_datetime(jiff::tz::TimeZone::UTC)?;
 
     let result = zdt1.until(
-        jiff::ZonedDifference::new(&zdt2)
+        jiff::ZonedDateTimeDifference::new(&zdt2)
             .smallest(Unit::Year)
             .largest(Unit::Day),
     );
@@ -37,7 +38,7 @@ fn zoned_datetime_smallest_bigger_than_largest() -> Result {
 
     // We get an error even in the trivial case.
     let result = zdt1.until(
-        jiff::ZonedDifference::new(&zdt2)
+        jiff::ZonedDateTimeDifference::new(&zdt2)
             .smallest(Unit::Year)
             .largest(Unit::Day),
     );
@@ -51,61 +52,73 @@ fn zoned_datetime_smallest_bigger_than_largest() -> Result {
 
 #[test]
 fn zoned_datetime_round_invalid_increment() -> Result {
-    let zdt1 = DT1.to_zoned(jiff::tz::TimeZone::UTC)?;
+    let zdt1 = DT1.to_zoned_datetime(jiff::tz::TimeZone::UTC)?;
 
-    let result =
-        zdt1.round(jiff::ZonedRound::new().smallest(Unit::Hour).increment(-1));
-    insta::assert_snapshot!(
-        result.unwrap_err(),
-        @"failed rounding datetime: parameter 'rounding increment' is not in the required range of 1..=1000000000",
+    let result = zdt1.round(
+        jiff::ZonedDateTimeRound::new().smallest(Unit::Hour).increment(-1),
     );
-
-    let result =
-        zdt1.round(jiff::ZonedRound::new().smallest(Unit::Hour).increment(0));
     insta::assert_snapshot!(
         result.unwrap_err(),
         @"failed rounding datetime: parameter 'rounding increment' is not in the required range of 1..=1000000000",
     );
 
     let result = zdt1.round(
-        jiff::ZonedRound::new().smallest(Unit::Hour).increment(1_000_000_001),
+        jiff::ZonedDateTimeRound::new().smallest(Unit::Hour).increment(0),
     );
     insta::assert_snapshot!(
         result.unwrap_err(),
         @"failed rounding datetime: parameter 'rounding increment' is not in the required range of 1..=1000000000",
     );
 
-    let result =
-        zdt1.round(jiff::ZonedRound::new().smallest(Unit::Hour).increment(11));
+    let result = zdt1.round(
+        jiff::ZonedDateTimeRound::new()
+            .smallest(Unit::Hour)
+            .increment(1_000_000_001),
+    );
+    insta::assert_snapshot!(
+        result.unwrap_err(),
+        @"failed rounding datetime: parameter 'rounding increment' is not in the required range of 1..=1000000000",
+    );
+
+    let result = zdt1.round(
+        jiff::ZonedDateTimeRound::new().smallest(Unit::Hour).increment(11),
+    );
     insta::assert_snapshot!(
         result.unwrap_err(),
         @"failed rounding datetime: increment for rounding to 'hours' must divide into `24` evenly",
     );
 
-    let result =
-        zdt1.round(jiff::ZonedRound::new().smallest(Unit::Hour).increment(13));
+    let result = zdt1.round(
+        jiff::ZonedDateTimeRound::new().smallest(Unit::Hour).increment(13),
+    );
     insta::assert_snapshot!(
         result.unwrap_err(),
         @"failed rounding datetime: increment for rounding to 'hours' must divide into `24` evenly",
     );
 
-    let got = zdt1
-        .round(jiff::ZonedRound::new().smallest(Unit::Hour).increment(12))?;
+    let got = zdt1.round(
+        jiff::ZonedDateTimeRound::new().smallest(Unit::Hour).increment(12),
+    )?;
     insta::assert_snapshot!(
         got,
         @"2000-01-02T00:00:00+00:00[UTC]",
     );
 
-    let got = zdt1
-        .round(jiff::ZonedRound::new().smallest(Unit::Minute).increment(12))?;
+    let got = zdt1.round(
+        jiff::ZonedDateTimeRound::new().smallest(Unit::Minute).increment(12),
+    )?;
     insta::assert_snapshot!(
         got,
         @"2000-01-01T21:12:00+00:00[UTC]",
     );
 
-    let got =
-        D1.at(21, 15, 45, 123_456_789).to_zoned(tz::TimeZone::UTC)?.round(
-            jiff::ZonedRound::new().smallest(Unit::Nanosecond).increment(500),
+    let got = D1
+        .at(21, 15, 45, 123_456_789)
+        .to_zoned_datetime(tz::TimeZone::UTC)?
+        .round(
+            jiff::ZonedDateTimeRound::new()
+                .smallest(Unit::Nanosecond)
+                .increment(500),
         )?;
     insta::assert_snapshot!(
         got,
@@ -113,7 +126,9 @@ fn zoned_datetime_round_invalid_increment() -> Result {
     );
 
     let result = zdt1.round(
-        jiff::ZonedRound::new().smallest(Unit::Nanosecond).increment(501),
+        jiff::ZonedDateTimeRound::new()
+            .smallest(Unit::Nanosecond)
+            .increment(501),
     );
     insta::assert_snapshot!(
         result.unwrap_err(),
@@ -121,21 +136,25 @@ fn zoned_datetime_round_invalid_increment() -> Result {
     );
 
     let result = zdt1.round(
-        jiff::ZonedRound::new().smallest(Unit::Nanosecond).increment(1_000),
+        jiff::ZonedDateTimeRound::new()
+            .smallest(Unit::Nanosecond)
+            .increment(1_000),
     );
     insta::assert_snapshot!(
         result.unwrap_err(),
         @"failed rounding datetime: increment for rounding to 'nanoseconds' must divide into `1000` evenly",
     );
 
-    let got = zdt1.round(jiff::ZonedRound::new().smallest(Unit::Day))?;
+    let got =
+        zdt1.round(jiff::ZonedDateTimeRound::new().smallest(Unit::Day))?;
     insta::assert_snapshot!(
         got,
         @"2000-01-02T00:00:00+00:00[UTC]",
     );
 
-    let result =
-        zdt1.round(jiff::ZonedRound::new().smallest(Unit::Day).increment(2));
+    let result = zdt1.round(
+        jiff::ZonedDateTimeRound::new().smallest(Unit::Day).increment(2),
+    );
     insta::assert_snapshot!(
         result.unwrap_err(),
         @"failed rounding datetime: increment for rounding to 'days' must be equal to `1`",
@@ -887,12 +906,13 @@ fn offset_checked_add_calendar() -> Result {
 
 #[test]
 fn offset_saturating_add_calendar() -> Result {
-    // TODO: This is weird and should change.
     // See: https://github.com/BurntSushi/jiff/issues/499
-    let offset = tz::Offset::MIN.saturating_add(1.day());
-    assert_eq!(offset, tz::Offset::MAX);
+    insta::assert_snapshot!(
+        tz::Offset::MIN.saturating_add(1.day()).unwrap_err(),
+        @"operation can only be performed with units of hours or smaller, but found non-zero 'day' units (operations on `jiff::Timestamp`, `jiff::tz::Offset` and `jiff::civil::Time` don't support calendar units in a `jiff::Span`)",
+    );
 
-    let offset = tz::Offset::MIN.saturating_add(24.hours());
+    let offset = tz::Offset::MIN.saturating_add(24.hours())?;
     assert_eq!(offset, tz::Offset::from_seconds(-(1 * 3600 + 59 * 60 + 59))?);
 
     Ok(())

@@ -1,7 +1,7 @@
 use jiff::{
-    civil::{time, Time},
+    Timestamp, ZonedDateTime,
+    civil::{Time, time},
     tz::TimeZone,
-    Timestamp, Zoned,
 };
 
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/PlainTime/prototype/equals/argument-string-calendar-annotation-invalid-key.js
@@ -162,7 +162,7 @@ fn argument_string_with_utc_designator() {
 #[test]
 fn argument_zoneddatetime_balance_negative_time_units() {
     let timestamp = Timestamp::new(3661, 001_001_001).unwrap();
-    let zdt = Zoned::new(timestamp, TimeZone::UTC);
+    let zdt = ZonedDateTime::new(timestamp, TimeZone::UTC);
     // DIFFERENCE: Temporal has a different result here? Not sure why.
     assert_eq!(zdt.datetime().time(), time(1, 1, 1, 001_001_001));
 }
@@ -171,6 +171,6 @@ fn argument_zoneddatetime_balance_negative_time_units() {
 #[test]
 fn argument_zoneddatetime_negative_epochnanoseconds() {
     let timestamp = Timestamp::new(-13_849_764, -999_999_999).unwrap();
-    let zdt = Zoned::new(timestamp, TimeZone::UTC);
+    let zdt = ZonedDateTime::new(timestamp, TimeZone::UTC);
     assert_eq!(zdt.datetime().time(), time(16, 50, 35, 000_000_001));
 }

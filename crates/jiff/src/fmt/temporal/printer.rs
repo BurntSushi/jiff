@@ -3,16 +3,16 @@ use core::time::Duration;
 use jcore::tz::posix;
 
 use crate::{
+    SignedDuration, Timestamp, Unit, ZonedDateTime,
     civil::{Date, DateTime, ISOWeekDate, Time},
-    error::{fmt::temporal::Error as E, Error},
+    error::{Error, fmt::temporal::Error as E},
     fmt::{
+        Write,
         buffer::{ArrayBuffer, BorrowedBuffer, BorrowedWriter},
         temporal::{Pieces, PiecesOffset, TimeZoneAnnotationKind},
-        Write,
     },
     span::{Span, UnitSet},
     tz::{Offset, TimeZone},
-    SignedDuration, Timestamp, Unit, Zoned,
 };
 
 /// Defines the "maximum" possible length (in bytes) of an RFC 9557 zoned
@@ -168,9 +168,9 @@ impl DateTimePrinter {
         DateTimePrinter { precision, ..self }
     }
 
-    pub(super) fn print_zoned(
+    pub(super) fn print_zoned_datetime(
         &self,
-        zdt: &Zoned,
+        zdt: &ZonedDateTime,
         wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         /// The base size of an RFC 9557 zoned datetime string.
@@ -221,7 +221,7 @@ impl DateTimePrinter {
             return BorrowedBuffer::with_writer::<REASONABLE_ZONED_LEN>(
                 wtr,
                 runtime_allocation,
-                |bbuf| Ok(self.print_zoned_buf(zdt, bbuf)),
+                |bbuf| Ok(self.print_zoned_datetime_buf(zdt, bbuf)),
             );
         }
 
@@ -230,11 +230,15 @@ impl DateTimePrinter {
         let mut buf = ArrayBuffer::<REASONABLE_ZONED_LEN>::default();
         let mut bbuf = buf.as_borrowed();
         let mut wtr = BorrowedWriter::new(&mut bbuf, wtr);
-        self.print_zoned_wtr(zdt, &mut wtr)?;
+        self.print_zoned_datetime_wtr(zdt, &mut wtr)?;
         wtr.finish()
     }
 
-    fn print_zoned_buf(&self, zdt: &Zoned, bbuf: &mut BorrowedBuffer<'_>) {
+    fn print_zoned_datetime_buf(
+        &self,
+        zdt: &ZonedDateTime,
+        bbuf: &mut BorrowedBuffer<'_>,
+    ) {
         self.print_datetime_buf(&zdt.datetime(), bbuf);
         let tz = zdt.time_zone();
         if tz.is_unknown() {
@@ -245,9 +249,9 @@ impl DateTimePrinter {
         }
     }
 
-    fn print_zoned_wtr(
+    fn print_zoned_datetime_wtr(
         &self,
-        zdt: &Zoned,
+        zdt: &ZonedDateTime,
         wtr: &mut BorrowedWriter<'_, '_, '_>,
     ) -> Result<(), Error> {
         self.print_datetime_wtr(&zdt.datetime(), wtr)?;
@@ -702,7 +706,7 @@ impl DateTimePrinter {
             self.print_date_wtr(&pieces.date(), wtr)?;
         }
         // For the time zone annotation, a `Pieces` gives us the annotation
-        // name or offset directly, where as with `Zoned`, we have a
+        // name or offset directly, where as with `ZonedDateTime`, we have a
         // `TimeZone`. So we hand-roll our own formatter directly from the
         // annotation.
         if let Some(ann) = pieces.time_zone_annotation() {
@@ -1129,7 +1133,7 @@ mod tests {
     use alloc::string::{String, ToString};
 
     use crate::{
-        civil::{date, time, Weekday},
+        civil::{Weekday, date, time},
         fmt::StdFmtWrite,
         span::ToSpan,
         util::b,
@@ -1138,7 +1142,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn print_zoned() {
+    fn print_zoned_datetime() {
         if crate::tz::db().is_definitively_empty() {
             return;
         }
@@ -1146,12 +1150,13 @@ mod tests {
         let p = || DateTimePrinter::new();
         let via_io = |dtp: DateTimePrinter, zdt| {
             let mut buf = String::new();
-            dtp.print_zoned(&zdt, &mut StdFmtWrite(&mut buf)).unwrap();
+            dtp.print_zoned_datetime(&zdt, &mut StdFmtWrite(&mut buf))
+                .unwrap();
             buf
         };
         let to_string = |dtp: DateTimePrinter, zdt| {
             let mut buf = String::new();
-            dtp.print_zoned(&zdt, &mut buf).unwrap();
+            dtp.print_zoned_datetime(&zdt, &mut buf).unwrap();
             let got_via_io = via_io(dtp, zdt);
             assert_eq!(
                 buf, got_via_io,
@@ -1172,12 +1177,12 @@ mod tests {
         assert_eq!(got, "2024-03-10T09:34:45+00:00[UTC]");
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 0);
-        let zdt = dt.to_zoned(TimeZone::fixed(Offset::MIN)).unwrap();
+        let zdt = dt.to_zoned_datetime(TimeZone::fixed(Offset::MIN)).unwrap();
         let got = to_string(p(), zdt);
         assert_eq!(got, "2024-03-10T05:34:45-25:59[-25:59]");
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 0);
-        let zdt = dt.to_zoned(TimeZone::fixed(Offset::MAX)).unwrap();
+        let zdt = dt.to_zoned_datetime(TimeZone::fixed(Offset::MAX)).unwrap();
         let got = to_string(p(), zdt);
         assert_eq!(got, "2024-03-10T05:34:45+25:59[+25:59]");
 
@@ -1212,7 +1217,7 @@ mod tests {
             crate::tz::testdata::TzifTestFile::get("America/New_York").data,
         ).unwrap();
         let dt = date(-9999, 3, 1).at(23, 59, 59, 999_999_999);
-        let zdt = dt.to_zoned(tz).unwrap();
+        let zdt = dt.to_zoned_datetime(tz).unwrap();
         let got = to_string(p().precision(Some(9)), zdt);
         assert_eq!(
             got,
@@ -1242,22 +1247,22 @@ mod tests {
         let tz = TimeZone::fixed(-Offset::constant(4));
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let zoned: ZonedDateTime = dt.to_zoned_datetime(tz.clone()).unwrap();
         let got = to_string(p(), zoned.timestamp());
         assert_eq!(got, "2024-03-10T09:34:45Z");
 
         let dt = date(-2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let zoned: ZonedDateTime = dt.to_zoned_datetime(tz.clone()).unwrap();
         let got = to_string(p(), zoned.timestamp());
         assert_eq!(got, "-002024-03-10T09:34:45Z");
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 123_456_789);
-        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let zoned: ZonedDateTime = dt.to_zoned_datetime(tz.clone()).unwrap();
         let got = to_string(p(), zoned.timestamp());
         assert_eq!(got, "2024-03-10T09:34:45.123456789Z");
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let zoned: ZonedDateTime = dt.to_zoned_datetime(tz.clone()).unwrap();
         let got = to_string(p().precision(Some(9)), zoned.timestamp());
         assert_eq!(got, "2024-03-10T09:34:45.000000000Z");
     }
@@ -1289,22 +1294,22 @@ mod tests {
         let tz = TimeZone::fixed(-Offset::constant(4));
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let zoned: ZonedDateTime = dt.to_zoned_datetime(tz.clone()).unwrap();
         let got = to_string(p(), zoned.timestamp(), zoned.offset());
         assert_eq!(got, "2024-03-10T05:34:45-04:00");
 
         let dt = date(-2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let zoned: ZonedDateTime = dt.to_zoned_datetime(tz.clone()).unwrap();
         let got = to_string(p(), zoned.timestamp(), zoned.offset());
         assert_eq!(got, "-002024-03-10T05:34:45-04:00");
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 123_456_789);
-        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let zoned: ZonedDateTime = dt.to_zoned_datetime(tz.clone()).unwrap();
         let got = to_string(p(), zoned.timestamp(), zoned.offset());
         assert_eq!(got, "2024-03-10T05:34:45.123456789-04:00");
 
         let dt = date(2024, 3, 10).at(5, 34, 45, 0);
-        let zoned: Zoned = dt.to_zoned(tz.clone()).unwrap();
+        let zoned: ZonedDateTime = dt.to_zoned_datetime(tz.clone()).unwrap();
         let got = to_string(
             p().precision(Some(9)),
             zoned.timestamp(),
@@ -1313,7 +1318,8 @@ mod tests {
         assert_eq!(got, "2024-03-10T05:34:45.000000000-04:00");
 
         let dt = DateTime::MIN;
-        let zoned: Zoned = dt.to_zoned(TimeZone::fixed(Offset::MIN)).unwrap();
+        let zoned: ZonedDateTime =
+            dt.to_zoned_datetime(TimeZone::fixed(Offset::MIN)).unwrap();
         let got = to_string(
             p().precision(Some(9)),
             zoned.timestamp(),

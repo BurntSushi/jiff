@@ -1,4 +1,4 @@
-use crate::{error, Unit};
+use crate::{Unit, error};
 
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -14,7 +14,7 @@ pub(crate) enum Error {
     OptionSmallest,
     ToDurationCivil,
     ToDurationDaysAre24Hours,
-    ToDurationZoned,
+    ToDurationZonedDateTime,
 }
 
 impl From<Error> for error::Error {
@@ -83,7 +83,7 @@ impl core::fmt::Display for Error {
                 "could not compute normalized relative span \
                  when all days are assumed to be 24 hours",
             ),
-            ToDurationZoned => f.write_str(
+            ToDurationZonedDateTime => f.write_str(
                 "could not compute normalized relative span \
                  from zoned datetime",
             ),

@@ -9,15 +9,15 @@ use jcore::{
 };
 
 use crate::{
+    RoundMode, SignedDuration, Span, SpanRound, Unit, ZonedDateTime,
     civil::{Date, DateTime},
     duration::{Duration, SDuration},
-    error::{civil::Error as E, unit::UnitConfigError, Error},
+    error::{Error, civil::Error as E, unit::UnitConfigError},
     fmt::{
         self,
         temporal::{self, DEFAULT_DATETIME_PARSER},
     },
     util::{b, constant, round::Increment},
-    RoundMode, SignedDuration, Span, SpanRound, Unit, Zoned,
 };
 
 /// A representation of civil "wall clock" time.
@@ -1029,11 +1029,7 @@ impl Time {
     pub fn saturating_add<A: Into<TimeArithmetic>>(self, duration: A) -> Time {
         let duration: TimeArithmetic = duration.into();
         self.checked_add(duration).unwrap_or_else(|_| {
-            if duration.is_negative() {
-                Time::MIN
-            } else {
-                Time::MAX
-            }
+            if duration.is_negative() { Time::MIN } else { Time::MAX }
         })
     }
 
@@ -1298,13 +1294,16 @@ impl Time {
     /// # Example
     ///
     /// ```
-    /// use jiff::{civil::time, SignedDuration};
+    /// use jiff::{SignedDuration, civil::time};
     ///
     /// let t1 = time(22, 35, 1, 0);
     /// let t2 = time(22, 35, 3, 500_000_000);
     /// assert_eq!(t1.duration_until(t2), SignedDuration::new(2, 500_000_000));
     /// // Flipping the time is fine, but you'll get a negative duration.
-    /// assert_eq!(t2.duration_until(t1), -SignedDuration::new(2, 500_000_000));
+    /// assert_eq!(
+    ///     t2.duration_until(t1),
+    ///     -SignedDuration::new(2, 500_000_000)
+    /// );
     /// ```
     ///
     /// # Example: difference with [`Time::until`]
@@ -1967,7 +1966,8 @@ impl core::ops::Sub<SignedDuration> for Time {
     }
 }
 
-/// Subtracts a signed duration of time in place. This uses wrapping arithmetic.
+/// Subtracts a signed duration of time in place. This uses wrapping
+/// arithmetic.
 ///
 /// For checked arithmetic, see [`Time::checked_sub`].
 impl core::ops::SubAssign<SignedDuration> for Time {
@@ -2029,16 +2029,16 @@ impl From<DateTime> for Time {
     }
 }
 
-impl From<Zoned> for Time {
+impl From<ZonedDateTime> for Time {
     #[inline]
-    fn from(zdt: Zoned) -> Time {
+    fn from(zdt: ZonedDateTime) -> Time {
         zdt.datetime().time()
     }
 }
 
-impl<'a> From<&'a Zoned> for Time {
+impl<'a> From<&'a ZonedDateTime> for Time {
     #[inline]
-    fn from(zdt: &'a Zoned) -> Time {
+    fn from(zdt: &'a ZonedDateTime) -> Time {
         zdt.datetime().time()
     }
 }
@@ -2046,7 +2046,7 @@ impl<'a> From<&'a Zoned> for Time {
 #[cfg(feature = "defmt")]
 impl defmt::Format for Time {
     fn format(&self, f: defmt::Formatter) {
-        use crate::fmt::{temporal::DEFAULT_DATETIME_PRINTER, DefmtWrite};
+        use crate::fmt::{DefmtWrite, temporal::DEFAULT_DATETIME_PRINTER};
 
         defmt::unwrap!(
             DEFAULT_DATETIME_PRINTER.print_time(self, DefmtWrite(f))
@@ -2180,12 +2180,18 @@ impl core::iter::FusedIterator for TimeSeries {}
 /// ```
 /// use std::time::Duration;
 ///
-/// use jiff::{civil::time, SignedDuration, ToSpan};
+/// use jiff::{SignedDuration, ToSpan, civil::time};
 ///
 /// let t = time(0, 0, 0, 0);
 /// assert_eq!(t.checked_add(2.hours())?, time(2, 0, 0, 0));
-/// assert_eq!(t.checked_add(SignedDuration::from_hours(2))?, time(2, 0, 0, 0));
-/// assert_eq!(t.checked_add(Duration::from_secs(2 * 60 * 60))?, time(2, 0, 0, 0));
+/// assert_eq!(
+///     t.checked_add(SignedDuration::from_hours(2))?,
+///     time(2, 0, 0, 0)
+/// );
+/// assert_eq!(
+///     t.checked_add(Duration::from_secs(2 * 60 * 60))?,
+///     time(2, 0, 0, 0)
+/// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -2576,16 +2582,16 @@ impl From<DateTime> for TimeDifference {
     }
 }
 
-impl From<Zoned> for TimeDifference {
+impl From<ZonedDateTime> for TimeDifference {
     #[inline]
-    fn from(zdt: Zoned) -> TimeDifference {
+    fn from(zdt: ZonedDateTime) -> TimeDifference {
         TimeDifference::from(Time::from(zdt))
     }
 }
 
-impl<'a> From<&'a Zoned> for TimeDifference {
+impl<'a> From<&'a ZonedDateTime> for TimeDifference {
     #[inline]
-    fn from(zdt: &'a Zoned) -> TimeDifference {
+    fn from(zdt: &'a ZonedDateTime) -> TimeDifference {
         TimeDifference::from(zdt.datetime())
     }
 }
@@ -2604,16 +2610,16 @@ impl From<(Unit, DateTime)> for TimeDifference {
     }
 }
 
-impl From<(Unit, Zoned)> for TimeDifference {
+impl From<(Unit, ZonedDateTime)> for TimeDifference {
     #[inline]
-    fn from((largest, zdt): (Unit, Zoned)) -> TimeDifference {
+    fn from((largest, zdt): (Unit, ZonedDateTime)) -> TimeDifference {
         TimeDifference::from((largest, Time::from(zdt)))
     }
 }
 
-impl<'a> From<(Unit, &'a Zoned)> for TimeDifference {
+impl<'a> From<(Unit, &'a ZonedDateTime)> for TimeDifference {
     #[inline]
-    fn from((largest, zdt): (Unit, &'a Zoned)) -> TimeDifference {
+    fn from((largest, zdt): (Unit, &'a ZonedDateTime)) -> TimeDifference {
         TimeDifference::from((largest, zdt.datetime()))
     }
 }
@@ -2901,7 +2907,10 @@ impl TimeWith {
     /// use jiff::civil::time;
     ///
     /// let t = time(14, 27, 30, 123_456_789);
-    /// assert_eq!(t.with().subsec_nanosecond(0).build()?, time(14, 27, 30, 0));
+    /// assert_eq!(
+    ///     t.with().subsec_nanosecond(0).build()?,
+    ///     time(14, 27, 30, 0)
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -3198,7 +3207,7 @@ impl TimeWith {
 mod tests {
     use std::io::Cursor;
 
-    use crate::{civil::time, span::span_eq, ToSpan};
+    use crate::{ToSpan, civil::time, span::span_eq};
 
     use super::*;
 

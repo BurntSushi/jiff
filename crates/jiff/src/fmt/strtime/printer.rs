@@ -1,19 +1,19 @@
 use crate::{
+    Error,
     error::{
-        fmt::strtime::{Error as E, FormatError as FE},
         ErrorContext,
+        fmt::strtime::{Error as E, FormatError as FE},
     },
     fmt::{
         buffer::BorrowedWriter,
         strtime::{
+            BrokenDownTime, Config, Custom, Extension, Flag, Meridiem,
             month_name_abbrev, month_name_full, weekday_name_abbrev,
-            weekday_name_full, BrokenDownTime, Config, Custom, Extension,
-            Flag, Meridiem,
+            weekday_name_full,
         },
     },
     tz::Offset,
     util::utf8,
-    Error,
 };
 
 enum Item {
@@ -79,16 +79,15 @@ pub(super) struct Formatter<
     'buffer,
     'data,
     'write,
-    L,
 > {
-    pub(super) config: &'config Config<L>,
+    pub(super) config: &'config Config<dyn Custom + 'config>,
     pub(super) fmt: &'fmt [u8],
     pub(super) tm: &'tm BrokenDownTime,
     pub(super) wtr: &'writer mut BorrowedWriter<'buffer, 'data, 'write>,
 }
 
-impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
-    Formatter<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L>
+impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write>
+    Formatter<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write>
 {
     #[inline(never)]
     pub(super) fn format(&mut self) -> Result<(), Error> {
@@ -369,11 +368,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
             Some(meridiem) => meridiem,
             None => {
                 let hour = self.tm.hour().ok_or(FE::RequiresTime)?;
-                if hour < 12 {
-                    Meridiem::AM
-                } else {
-                    Meridiem::PM
-                }
+                if hour < 12 { Meridiem::AM } else { Meridiem::PM }
             }
         };
         let s = match meridiem {
@@ -389,11 +384,7 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write, L: Custom>
             Some(meridiem) => meridiem,
             None => {
                 let hour = self.tm.hour().ok_or(FE::RequiresTime)?;
-                if hour < 12 {
-                    Meridiem::AM
-                } else {
-                    Meridiem::PM
-                }
+                if hour < 12 { Meridiem::AM } else { Meridiem::PM }
             }
         };
         // Manually specialize this case to avoid hitting `write_str_cold`.
@@ -1105,10 +1096,10 @@ impl Case {
 #[cfg(test)]
 mod tests {
     use crate::{
-        civil::{date, time, Date, DateTime, Time},
-        fmt::strtime::{format, BrokenDownTime, Config, PosixCustom},
+        Timestamp, ZonedDateTime,
+        civil::{Date, DateTime, Time, date, time},
+        fmt::strtime::{BrokenDownTime, Config, PosixCustom, format},
         tz::Offset,
-        Timestamp, Zoned,
     };
 
     #[test]
@@ -1238,7 +1229,7 @@ mod tests {
             return;
         }
 
-        let f = |fmt: &str, zdt: &Zoned| format(fmt, zdt).unwrap();
+        let f = |fmt: &str, zdt: &ZonedDateTime| format(fmt, zdt).unwrap();
 
         let zdt = date(2024, 7, 14)
             .at(22, 24, 0, 0)
@@ -1344,7 +1335,7 @@ mod tests {
             return;
         }
 
-        let f = |fmt: &str, zdt: &Zoned| format(fmt, zdt).unwrap();
+        let f = |fmt: &str, zdt: &ZonedDateTime| format(fmt, zdt).unwrap();
 
         let zdt = date(2024, 7, 14)
             .at(22, 24, 0, 0)
@@ -1364,7 +1355,7 @@ mod tests {
             return;
         }
 
-        let f = |fmt: &str, zdt: &Zoned| format(fmt, zdt).unwrap();
+        let f = |fmt: &str, zdt: &ZonedDateTime| format(fmt, zdt).unwrap();
 
         let zdt = date(2024, 7, 14)
             .at(22, 24, 0, 0)
@@ -1375,14 +1366,14 @@ mod tests {
 
         let zdt = date(2024, 7, 14)
             .at(22, 24, 0, 0)
-            .to_zoned(crate::tz::offset(-4).to_time_zone())
+            .to_zoned_datetime(crate::tz::offset(-4).to_time_zone())
             .unwrap();
         insta::assert_snapshot!(f("%Q", &zdt), @"-0400");
         insta::assert_snapshot!(f("%:Q", &zdt), @"-04:00");
 
         let zdt = date(2024, 7, 14)
             .at(22, 24, 0, 0)
-            .to_zoned(crate::tz::TimeZone::UTC)
+            .to_zoned_datetime(crate::tz::TimeZone::UTC)
             .unwrap();
         insta::assert_snapshot!(f("%Q", &zdt), @"UTC");
         insta::assert_snapshot!(f("%:Q", &zdt), @"UTC");

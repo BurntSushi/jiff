@@ -36,19 +36,43 @@ let spans = [
     ("3 mins 34,123s", 3.minutes().seconds(34).milliseconds(123)),
     (
         "1y1mo1d1h1m1.1s",
-        1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
+        1.year()
+            .months(1)
+            .days(1)
+            .hours(1)
+            .minutes(1)
+            .seconds(1)
+            .milliseconds(100),
     ),
     (
         "1yr 1mo 1day 1hr 1min 1.1sec",
-        1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
+        1.year()
+            .months(1)
+            .days(1)
+            .hours(1)
+            .minutes(1)
+            .seconds(1)
+            .milliseconds(100),
     ),
     (
         "1 year, 1 month, 1 day, 1 hour, 1 minute 1.1 seconds",
-        1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
+        1.year()
+            .months(1)
+            .days(1)
+            .hours(1)
+            .minutes(1)
+            .seconds(1)
+            .milliseconds(100),
     ),
     (
         "1 year, 1 month, 1 day, 01:01:01.1",
-        1.year().months(1).days(1).hours(1).minutes(1).seconds(1).milliseconds(100),
+        1.year()
+            .months(1)
+            .days(1)
+            .hours(1)
+            .minutes(1)
+            .seconds(1)
+            .milliseconds(100),
     ),
 ];
 for (string, span) in spans {
@@ -177,7 +201,7 @@ much detail." You can remove this by rounding the `Span` to the nearest half
 hour before printing:
 
 ```
-use jiff::{civil, RoundMode, Unit, ZonedDifference};
+use jiff::{civil, RoundMode, Unit, ZonedDateTimeDifference};
 
 let commented_at = civil::date(2024, 8, 1)
     .at(19, 29, 13, 123_456_789)
@@ -194,7 +218,7 @@ assert_eq!(format!("{span:#}"), "4mo 24d 17h 19m 46s 876ms 543µs 211ns");
 // rounding the result. We could also do this with `Span::round`
 // directly by providing `now` as our relative zoned datetime.
 let rounded = now.since(
-    ZonedDifference::new(&commented_at)
+    ZonedDateTimeDifference::new(&commented_at)
         .smallest(Unit::Minute)
         .largest(Unit::Year)
         .mode(RoundMode::HalfExpand)
@@ -479,9 +503,9 @@ PT1.100S
 This is problematic in some cases because it doesn't permit distinguishing
 between some spans. For example, `1.second().milliseconds(100)` and
 `1100.milliseconds()` both serialize to the same ISO 8601 duration as shown
-above. At deserialization time, it's impossible to know what the span originally
-looked like. Thus, using the ISO 8601 format means the serialization and
-deserialization of [`Span`](crate::Span) values is lossy.
+above. At deserialization time, it's impossible to know what the span
+originally looked like. Thus, using the ISO 8601 format means the serialization
+and deserialization of [`Span`](crate::Span) values is lossy.
 
 In the second case, ISO 8601 durations appear somewhat difficult to quickly
 read. For example:
