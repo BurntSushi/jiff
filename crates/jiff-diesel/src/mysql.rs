@@ -1,8 +1,8 @@
 use diesel::{
     deserialize::{self, FromSql},
     mysql::{
-        data_types::{MysqlTime, MysqlTimestampType},
         Mysql, MysqlValue,
+        data_types::{MysqlTime, MysqlTimestampType},
     },
     serialize::{self, Output, ToSql},
     sql_types,

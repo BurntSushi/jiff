@@ -1,8 +1,8 @@
 use jiff::{civil, tz};
 use sqlx::postgres::{
-    types::{Oid, PgInterval},
     PgArgumentBuffer, PgHasArrayType, PgTypeInfo, PgValueFormat, PgValueRef,
     Postgres,
+    types::{Oid, PgInterval},
 };
 use sqlx::{
     decode::Decode,
