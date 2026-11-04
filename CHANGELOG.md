@@ -1,5 +1,16 @@
 # CHANGELOG
 
+0.2.40 (TBD)
+============
+TODO
+
+Enhancements:
+
+* [#643](https://github.com/BurntSushi/jiff/issues/643):
+Don't add `defmt` and its dependencies to `Cargo.lock` when the `defmt`
+feature isn't enabled.
+
+
 0.2.39 (2026-11-02)
 ===================
 This release gathers a smattering of performance improvements and bug fixes.

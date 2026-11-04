@@ -549,6 +549,7 @@ impl From<ErrorKind> for Error {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 struct AdhocError {
     #[cfg(feature = "alloc")]
+    #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
     message: alloc::boxed::Box<str>,
     #[cfg(not(feature = "alloc"))]
     message: &'static str,
