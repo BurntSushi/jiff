@@ -54,6 +54,7 @@ pub(crate) enum Error {
     RequiredYearForDate,
     UnconsumedStrptime {
         #[cfg(feature = "alloc")]
+        #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
         remaining: alloc::boxed::Box<[u8]>,
     },
     UnexpectedEndAfterDot,

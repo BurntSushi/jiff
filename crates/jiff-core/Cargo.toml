@@ -20,7 +20,7 @@ bench = false
 
 [features]
 default = ["std", "tz-fat"]
-alloc = ["defmt?/alloc"]
+alloc = []
 std = ["alloc", "log?/std"]
 arbitrary = ["dep:arbitrary", "std"]
 defmt = ["dep:defmt"]

@@ -30,7 +30,6 @@ mod enabled {
     pub(crate) const MAX_LINE_LEN: usize = 2047;
 
     #[derive(Clone, Debug)]
-    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub(crate) enum Error {
         DuplicateLink { name: Box<str> },
         DuplicateLinkZone { name: Box<str> },
@@ -100,6 +99,15 @@ mod enabled {
         UnrecognizedSaveTimeSuffix,
         UnrecognizedTrailingTimeDuration,
         UnrecognizedZicLine,
+    }
+
+    // Deriving `defmt::Format` would require `defmt/alloc` (for `Box<str>`),
+    // and this is only used in tests, so just defer to `Debug`.
+    #[cfg(feature = "defmt")]
+    impl defmt::Format for Error {
+        fn format(&self, f: defmt::Formatter) {
+            defmt::write!(f, "{}", defmt::Debug2Format(self))
+        }
     }
 
     impl From<Error> for error::Error {

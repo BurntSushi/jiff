@@ -45,7 +45,6 @@ alloc = [
   "jcore/alloc",
   "serde_core?/alloc",
   "portable-atomic-util/alloc",
-  "defmt?/alloc",
 ]
 
 # Enables integration with the `arbitray` crate. This provides implemetations

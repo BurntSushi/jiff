@@ -921,6 +921,7 @@ pub struct BrokenDownTime {
     // The IANA time zone identifier. Used only when
     // formatting a `Zoned`.
     #[cfg(feature = "alloc")]
+    #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
     iana: Option<alloc::string::String>,
 }
 
