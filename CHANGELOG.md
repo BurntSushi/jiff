@@ -65,6 +65,9 @@ Bug fixes:
 Fixes a bug in `jiff_core::tz::Offset` checked subtraction routine.
 * [#627](https://github.com/BurntSushi/jiff/issues/627):
 Use `serialize_some` for optional Serde helpers in `jiff::fmt::serde`.
+* [#643](https://github.com/BurntSushi/jiff/issues/643):
+Don't add `defmt` and its dependencies to `Cargo.lock` when the `defmt`
+feature isn't enabled.
 
 
 0.2.35 (2026-07-25)

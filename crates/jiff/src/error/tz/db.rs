@@ -11,10 +11,12 @@ pub(crate) enum Error {
     DisabledZoneInfo,
     FailedTimeZone {
         #[cfg(feature = "alloc")]
+        #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
         name: alloc::boxed::Box<str>,
     },
     FailedTimeZoneNoDatabaseConfigured {
         #[cfg(feature = "alloc")]
+        #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
         name: alloc::boxed::Box<str>,
     },
     #[cfg(feature = "tzdb-zoneinfo")]
