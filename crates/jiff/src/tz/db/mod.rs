@@ -695,6 +695,7 @@ pub struct TimeZoneName<'d> {
     /// time" TZif or some such.
     lifetime: core::marker::PhantomData<&'d str>,
     #[cfg(feature = "alloc")]
+    #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
     name: alloc::string::String,
     #[cfg(not(feature = "alloc"))]
     name: core::convert::Infallible,

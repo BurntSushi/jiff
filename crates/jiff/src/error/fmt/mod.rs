@@ -17,8 +17,10 @@ pub(crate) enum Error {
     },
     IntoFull {
         #[cfg(feature = "alloc")]
+        #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
         value: alloc::boxed::Box<str>,
         #[cfg(feature = "alloc")]
+        #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
         unparsed: alloc::boxed::Box<[u8]>,
     },
     StdFmtWriteAdapter,
