@@ -12,13 +12,13 @@ shift
 for crate; do
   if [ $crate = jiff ]; then
     cargo release tag \
-      --sign-tag --tag-name '{{version}}' -p jiff"$execute"
+      --sign-tag --tag-name '{{version}}' -p jiff${execute}
     # If we tag jiff, then we must have also released jiff-static, so tag that
     # too.
     cargo release tag \
-      --sign-tag --tag-name '{{prefix}}{{version}}' -p jiff-static"$execute"
+      --sign-tag --tag-name '{{prefix}}{{version}}' -p jiff-static${execute}
   else
     cargo release tag \
-      --sign-tag --tag-name '{{prefix}}{{version}}' -p $crate"$execute"
+      --sign-tag --tag-name '{{prefix}}{{version}}' -p ${crate}${execute}
   fi
 done
