@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+execute=
+if [ $1 = execute ]; then
+  execute=" --execute"
+elif [ $1 != dry-run ]; then
+  echo "Usage: $(basename "$0") <execute | dry-run> crate ..." >&2
+  exit 1
+fi
+shift
+
+level_or_version="$1"
+shift
+
+packages=""
+for crate; do
+  packages+=" -p $crate"
+  # If we release jiff, then we always release jiff-static.
+  if [ $crate = jiff ]; then
+    packages+=" -p jiff-static"
+  fi
+done
+
+cargo release version "$level_or_version" $packages$execute

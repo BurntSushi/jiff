@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+execute=
+if [ $1 = execute ]; then
+  execute=" --execute"
+elif [ $1 != dry-run ]; then
+  echo "Usage: $(basename "$0") <execute | dry-run> crate ..." >&2
+  exit 1
+fi
+shift
+
+for crate; do
+  if [ $crate = jiff ]; then
+    cargo release tag \
+      --sign-tag --tag-name '{{version}}' -p jiff"$execute"
+    # If we tag jiff, then we must have also released jiff-static, so tag that
+    # too.
+    cargo release tag \
+      --sign-tag --tag-name '{{prefix}}{{version}}' -p jiff-static"$execute"
+  else
+    cargo release tag \
+      --sign-tag --tag-name '{{prefix}}{{version}}' -p $crate"$execute"
+  fi
+done
