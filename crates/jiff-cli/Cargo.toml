@@ -27,7 +27,7 @@ default = []
 [dependencies]
 anyhow = "1.0.28"
 bstr = "1.9.1"
-jiff = { version = "0.2.38", path = "../jiff", features = ["logging"] }
+jiff = { version = "0.2.40", path = "../jiff", features = ["logging"] }
 lexopt = "0.3.0"
 log = { version = "0.4.17", features = ["std"] }
 regex-lite = "0.1.6"

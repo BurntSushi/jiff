@@ -1,14 +1,21 @@
 # CHANGELOG
 
-0.2.40 (TBD)
-============
-TODO
+0.2.40 (2026-11-07)
+===================
+This release should help reduce the number of entries Jiff adds to `Cargo.lock`
+by default. This also improves performance for datetime<->timestamp
+conversions.
 
 Enhancements:
 
 * [#643](https://github.com/BurntSushi/jiff/issues/643):
 Don't add `defmt` and its dependencies to `Cargo.lock` when the `defmt`
 feature isn't enabled.
+
+Performance:
+
+* [#640](https://github.com/BurntSushi/jiff/pull/640):
+Add branch-free implementation for part of datetime <-> timestamp conversions.
 
 
 0.2.39 (2026-11-02)
