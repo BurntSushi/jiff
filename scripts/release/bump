@@ -21,4 +21,4 @@ for crate; do
   fi
 done
 
-cargo release version "$level_or_version" $packages$execute
+cargo release version "$level_or_version" ${packages}${execute}
