@@ -10,7 +10,7 @@ description = "Conversion routines between Jiff and ICU4X."
 categories = ["date-and-time"]
 keywords = ["date", "time", "temporal", "zone", "icu"]
 include = ["/src/*.rs", "/*.dat", "COPYING", "LICENSE-MIT", "UNLICENSE"]
-edition = "2021"
+edition.workspace = true
 rust-version = "1.82"
 
 [lib]
