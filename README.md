@@ -108,10 +108,10 @@ documentation lists the full set of supported features.
 
 ### Future plans
 
-My original plan was to release Jiff 1.0 in Summer 2025. It is now April 2026,
-so that deadline has clearly slipped. I've continued to make progress toward
-Jiff 1.0, but it has been more work than anticipated. I don't currently have a
-timeline for a Jiff 1.0 release.
+My original plan was to release Jiff 1.0 in Summer 2025. It is now November
+2026, so that deadline has clearly slipped. I've continued to make progress
+toward Jiff 1.0, but it has been more work than anticipated. I don't currently
+have a timeline for a Jiff 1.0 release.
 
 It's important to get Jiff 1.0 as "right" as possible. Namely, once it's
 released, I plan to commit to its API indefinitely. At which point, users of
@@ -177,10 +177,10 @@ For more on platform support, see [`PLATFORM.md`](PLATFORM.md).
 
 ### Dependencies
 
-At time of writing, it is no accident that Jiff has zero dependencies on Unix.
-In general, my philosophy on adding new dependencies in an ecosystem crate like
-Jiff is very conservative. I consider there to be two primary use cases for
-adding new dependencies:
+At time of writing, it is no accident that Jiff has one required dependency
+on Unix. In general, my philosophy on adding new dependencies in an ecosystem
+crate like Jiff is very conservative. I consider there to be two primary use
+cases for adding new dependencies:
 
 1. When a dependency is _practically_ required in order to interact with a
 platform.
@@ -189,11 +189,10 @@ But even here, I expect to be conservative, where I'm generally only willing
 to depend on things that have fewer breaking change releases than Jiff.
 
 A secondary use case for new dependencies is if Jiff gets split into multiple
-crates. I did a similar thing for the `regex` crate for very compelling
-reasons. It is possible that will happen with Jiff as well, although there are
-no plans for that. And in general, I expect the number of crates to stay small,
-if only to make keep maintenance lightweight. (Managing lots of semver API
-boundaries has a lot of overhead in my experience.)
+crates. This is exactly what happened with the introduction of `jiff-core`.
+This helps reuse code between `jiff` and `jiff-static`, and also provides some
+fundamental datetime conversions to consumers who don't need the full footprint
+of `jiff`.
 
 ### Minimum Rust version policy
 
