@@ -1,8 +1,9 @@
 # CHANGELOG
 
-0.2.41 (TBD)
-============
-TODO
+0.2.41 (2026-11-08)
+===================
+This release includes a bug fix for time zone transition lookups for timestamps
+before the Unix epoch with a non-zero nanosecond component.
 
 Bug fixes:
 

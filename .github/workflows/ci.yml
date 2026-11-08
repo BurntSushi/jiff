@@ -412,9 +412,6 @@ jobs:
       with:
         toolchain: stable
     - run: cargo package --workspace
-    - run: cargo package --manifest-path ./crates/jiff-diesel/Cargo.toml
-    - run: cargo package --manifest-path ./crates/jiff-icu/Cargo.toml
-    - run: cargo package --manifest-path ./crates/jiff-sqlx/Cargo.toml
 
   # A test to ensure that `Zoned::now()` doesn't take "too long" on its
   # first run.

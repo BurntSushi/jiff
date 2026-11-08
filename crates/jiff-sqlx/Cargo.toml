@@ -1,6 +1,6 @@
 [package]
 name = "jiff-sqlx"
-version = "0.2.1"  #:version
+version = "0.2.2"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 license = "Unlicense OR MIT"
 homepage = "https://github.com/BurntSushi/jiff/tree/master/crates/jiff-sqlx"
@@ -26,12 +26,12 @@ serde = ["dep:serde", "jiff/serde"]
 
 [dependencies]
 # The `std` feature is necessary for the `std::error::Error` impl.
-jiff = { version = "0.2.0", path = "../jiff", default-features = false, features = ["std"] }
+jiff = { version = "0.2.41", path = "../jiff", default-features = false, features = ["std"] }
 sqlx = { version = "0.9.0", default-features = false }
 serde = { version = "1.0", optional = true, default-features = false }
 
 [dev-dependencies]
-jiff = { version = "0.2.0", path = "../jiff", default-features = true }
+jiff = { version = "0.2.41", path = "../jiff", default-features = true }
 
 [lints.cargo]
 # We squash this warning because Cargo falsely reports that the `sqlx`
