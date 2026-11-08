@@ -24,6 +24,11 @@ the [`friendly`] sub-module). The sub-modules provide lower level control
 (such as parsing from `&[u8]`) and more configuration (such as controlling the
 disambiguation strategy used when parsing zoned datetime [RFC-9557] strings).
 
+There is substantial overlap between [RFC-3339], [RFC-9557] and [ISO-8601].
+The table below lists the most precise specification. For example,
+`2025-08-20T17:35:00-05` is valid in all three specifications, but is most
+precisely described by RFC 3339.
+
 | Example | Format | Links |
 | ------- | ------ | ----- |
 | `2025-08-20T17:35:00Z` | [RFC-3339] | [`Timestamp`] |
