@@ -13,14 +13,6 @@ include = ["/src/*.rs", "COPYING", "LICENSE-MIT", "UNLICENSE"]
 edition = "2021"
 rust-version = "1.70"
 
-# Integration crates in Jiff are explicitly isolated from the workspace to
-# avoid dependencies accumulating. I was originally motivated to do this
-# because rustc kept getting stun-locked compiling diesel. And this was somehow
-# happening every time I saved a file inside of Jiff proper. So I just ragequit
-# including everything in the same workspace and put integration crates (and
-# examples) into their own little bloated fiefdoms.
-[workspace]
-
 [lib]
 name = "jiff_diesel"
 bench = false

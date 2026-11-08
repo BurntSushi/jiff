@@ -13,14 +13,6 @@ include = ["/src/*.rs", "/*.dat", "COPYING", "LICENSE-MIT", "UNLICENSE"]
 edition = "2021"
 rust-version = "1.94"
 
-# Integration crates in Jiff are explicitly isolated from the workspace to
-# avoid dependencies accumulating. I was originally motivated to do this
-# because rustc kept getting stun-locked compiling diesel. And this was somehow
-# happening every time I saved a file inside of Jiff proper. So I just ragequit
-# including everything in the same workspace and put integration crates (and
-# examples) into their own little bloated fiefdoms.
-[workspace]
-
 [lib]
 name = "jiff_sqlx"
 bench = false
@@ -40,3 +32,10 @@ serde = { version = "1.0", optional = true, default-features = false }
 
 [dev-dependencies]
 jiff = { version = "0.2.0", path = "../jiff", default-features = true }
+
+[lints.cargo]
+# We squash this warning because Cargo falsely reports that the `sqlx`
+# dependency is unused. While this is true in the default feature
+# configuration, it is still used when one of `postgres` or `sqlite` are
+# enabled.
+unused_dependencies = "allow"

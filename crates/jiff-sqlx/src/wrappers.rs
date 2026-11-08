@@ -231,11 +231,11 @@ impl From<Time> for jiff::civil::Time {
 ///
 /// # PostgreSQL: Limited support
 ///
-/// This type _only_ has a [`sqlx_core::decode::Decode`] trait implementation
+/// This type _only_ has a [`sqlx::decode::Decode`] trait implementation
 /// for PostgreSQL. The reason for this is that encoding an arbitrary
 /// `Span` into a PostgreSQL interval requires a relative datetime.
 /// Therefore, users wanting to store a `Span` will need to explicitly use a
-/// [`sqlx_postgres::types::PgInterval`] at least at encoding time.
+/// `sqlx::postgres::types::PgInterval` at least at encoding time.
 #[derive(Clone, Copy, Debug)]
 pub struct Span(jiff::Span);
 
@@ -266,9 +266,11 @@ impl From<Span> for jiff::Span {
     }
 }
 
-/// Give the wrapper types a Serialize and a Deserialize implementation to use with Serde.
+/// Give the wrapper types a Serialize and a Deserialize implementation to use
+/// with Serde.
 ///
-/// Under the hood, we use the Serde implementation of the original types directly.
+/// Under the hood, we use the Serde implementation of the original types
+/// directly.
 #[cfg(feature = "serde")]
 mod serde_impl {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};

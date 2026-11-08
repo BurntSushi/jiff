@@ -1,13 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-  "crates/jiff",
-  "crates/jiff-cli",
-  "crates/jiff-core",
-  "crates/jiff-static",
-  "crates/jiff-tzdb",
-  "crates/jiff-tzdb-platform",
-]
+members = ["crates/*"]
 
 [workspace.package]
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
