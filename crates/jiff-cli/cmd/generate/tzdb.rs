@@ -39,9 +39,8 @@ recommended to generate your own zoneinfo directory via
 make the binary size of `jiff-tzdb` bigger than it needs to be. Jiff works just
 fine with the "slim" TZif files.
 2. Your system zoneinfo directory may not have the version of the tzdata files
-anywhere. While the version isn't strictly required, we put it into the crate
-for diagnostic purposes. The `jiff-cli generate zoneinfo` command will do this
-for you.
+anywhere. The version is required and stored in the crate for diagnostic
+purposes. The `jiff-cli generate zoneinfo` command will include it for you.
 "#;
 
 pub fn run(p: &mut Parser) -> anyhow::Result<()> {
@@ -50,6 +49,21 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
 
     let zoneinfo = config.zoneinfo()?;
     let jiff_tzdb = config.jiff_tzdb();
+
+    let version_path = zoneinfo.join("version");
+    let version =
+        std::fs::read_to_string(&version_path).with_context(|| {
+            format!(
+                "failed to read IANA Time Zone Database version from {}",
+                version_path.display()
+            )
+        })?;
+    let version = version.trim();
+    anyhow::ensure!(
+        !version.is_empty(),
+        "IANA Time Zone Database version in {} is empty",
+        version_path.display()
+    );
 
     let mut buf = vec![];
     let mut tzif_to_names: BTreeMap<Vec<u8>, BTreeSet<String>> =
@@ -170,20 +184,6 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
         .flush()
         .with_context(|| format!("failed to flush {}", dat_path.display()))?;
 
-    let version_path = zoneinfo.join("version");
-    let version = match std::fs::read_to_string(&version_path) {
-        Ok(version) => Some(version.trim().to_string()),
-        Err(err) => {
-            if config.verbose {
-                eprintln!(
-                    "failed to read version from {}: {err}",
-                    version_path.display()
-                )
-            }
-            None
-        }
-    };
-
     let tzname_path = jiff_tzdb.join("tzname.rs");
     write_tzname_offsets(&tzname_path, version, &tzname_to_range)
         .with_context(|| {
@@ -263,15 +263,11 @@ output is added depends on the command.
 
 fn write_tzname_offsets(
     path: &Path,
-    version: Option<String>,
+    version: &str,
     tzname_to_range: &BTreeMap<String, (String, Range<u32>)>,
 ) -> anyhow::Result<()> {
     let mut out = BufWriter::new(File::create(path)?);
-    writeln!(
-        out,
-        "pub(super) static VERSION: Option<&str> = {};",
-        version.map(|v| format!(r#"Some(r"{v}")"#)).unwrap_or("None".into())
-    )?;
+    writeln!(out, "pub(super) static VERSION: &str = {version:?};")?;
     writeln!(out, "")?;
     writeln!(
         out,
