@@ -89,11 +89,7 @@ mod tzname;
 static TZIF_DATA: &[u8] = include_bytes!("concatenated-zoneinfo.dat");
 
 /// The version of the IANA Time Zone Database that was bundled.
-///
-/// If this bundled database was generated from a pre-existing system copy
-/// of the Time Zone Database, then it's possible no version information was
-/// available.
-pub static VERSION: Option<&str> = tzname::VERSION;
+pub static VERSION: &str = tzname::VERSION;
 
 /// Returns the binary TZif data for the time zone name given.
 ///

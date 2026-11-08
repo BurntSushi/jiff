@@ -110,9 +110,8 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
     })?;
 
     // Write the version to our output directory. Unfortunately, this isn't
-    // standard for zoneinfo directories, which means `jiff-cli generate
-    // jiff-tzdb` can't rely on this being here. But it will notice it when it
-    // exists and add it to the crate data.
+    // standard for zoneinfo directories, but `jiff-cli generate jiff-tzdb`
+    // requires it and adds it to the crate data.
     //
     // We also write backzone and zone.tab, which `jiff-cli generate jiff-tzdb`
     // then uses to determine which IANA time zone identifiers are primary.
