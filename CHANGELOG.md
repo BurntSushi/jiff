@@ -1,5 +1,16 @@
 # CHANGELOG
 
+0.2.41 (TBD)
+============
+TODO
+
+Bug fixes:
+
+* [#678](https://github.com/BurntSushi/jiff/issues/678):
+Fix timezone transition lookup in TZif data for negative timestamps with a
+non-zero nanosecond component.
+
+
 0.2.40 (2026-11-07)
 ===================
 This release should help reduce the number of entries Jiff adds to `Cargo.lock`

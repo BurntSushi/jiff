@@ -398,10 +398,17 @@ impl Timestamp {
 
     /// Creates a new TZif timestamp from jiff-core's standard timestamp type.
     ///
-    /// Note that this completely ignores any subsecond component of the
-    /// provided timestamp.
+    /// Any fractional second is rounded down to the preceding whole second.
+    /// This ensures that a timestamp just before a transition stays before
+    /// it, even when the timestamp is negative.
     pub const fn new(ts: crate::Timestamp) -> Timestamp {
-        Timestamp { second: ts.as_second() }
+        let mut second = ts.as_second();
+        if ts.subsec_nanosecond() < 0 {
+            // This cannot underflow: the minimum timestamp has no negative
+            // fractional component.
+            second -= 1;
+        }
+        Timestamp { second }
     }
 
     /// Creates a new `Timestamp` from a Unix timestamp integer value.
