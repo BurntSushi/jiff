@@ -11,8 +11,8 @@ Note that to use this crate, you'll likely need to enable one of its
 
 This crates defines several types that wrap corresponding types in Jiff. Each
 wrapper type provides implementations of traits found in SQLx. For most types,
-these are the [`sqlx_core::types::Type`], [`sqlx_core::decode::Decode`] and
-[`sqlx_core::encode::Encode`] traits.
+these are the [`sqlx::types::Type`], [`sqlx::decode::Decode`] and
+[`sqlx::encode::Encode`] traits.
 
 The intended workflow is to use these wrapper types within your wire types for
 encoding and decoding data from databases such as PostgreSQL. The wrapper types

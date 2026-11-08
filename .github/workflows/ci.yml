@@ -334,36 +334,11 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: 1.70.0
-    # quickcheck 1.1.0 requires Rust 1.85+. But we still work with older
-    # versions of quickcheck, so downgrade it.
-    - name: Downgrade quickcheck
-      run: cargo update -p quickcheck --precise 1.0.3
-    - name: Downgrade log
-      run: cargo update -p log --precise 0.4.33
-    # We would use `cargo build --all` here, but `jiff-cli` doesn't really
-    # track an MSRV and I don't want it to.
-    - name: Build jiff
-      run: cargo build -p jiff --verbose
-    - name: Build jiff-tzdb
-      run: cargo build -p jiff-tzdb --verbose
-    - name: Build jiff-tzdb-platform
-      run: cargo build -p jiff-tzdb-platform --verbose
-    - name: Build docs
-      run: cargo doc -p jiff --verbose
-    # NOTE: We currently don't track some ecosystem integration crates
-    # like `jiff-icu`. They don't support Jiff's MSRV at time of writing
-    # (2025-02-02), and I think these sorts of integration crates are at very
-    # low risk of being more aggressive with respect to MSRV than the crates
-    # they depend on. So for now, we just don't test them here.
-    #
-    # NOTE: We don't really care much about adding dev dependencies, and they
-    # can move quite a bit faster. So unfortunately don't run tests on MSRV. We
-    # could fix this by adding a `Carg.msrv.lock` or some such, but it doesn't
-    # seem worth it.
-    # - name: Run library tests
-      # run: cargo test --lib
-    # - name: Run integration tests
-      # run: cargo test --test integration
+    # Just do a simple check here to ensure we continue to build on MSRV.
+    # We don't use `-p jiff` here so that we can avoid having Cargo try to
+    # build a dev-dependency graph that works on older versions of Rust.
+    # Instead, this strictly limits it to the uptime example.
+    - run: cargo build --manifest-path ./examples/uptime/Cargo.toml --verbose
 
   # Same as above, but for Windows. The MSRV is technically higher because Jiff
   # inherits the MSRV of system-level dependencies (like `windows-link`).
@@ -376,7 +351,7 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: 1.71.1
-    - run: cargo build -p jiff --verbose
+    - run: cargo build --manifest-path ./examples/uptime/Cargo.toml --verbose
 
   # This job tests that examples outside the workspace build.
   #
@@ -613,7 +588,7 @@ jobs:
         run: cargo test --test integration -- --nocapture
 
   # Tests wasm32-unknown-unknown integration via wasm-pack.
-  wasm32-unknown-uknown:
+  wasm32-unknown-unknown:
     runs-on: ubuntu-latest
     env:
       # Set the time zone to something so that there's some kind of interesting
@@ -622,14 +597,14 @@ jobs:
       # logs.
       TZ: America/New_York
     steps:
-    - uses: dtolnay/rust-toolchain@1.81.0
+    - uses: dtolnay/rust-toolchain@stable
     - uses: actions/checkout@v7
     - name: Install wasm-pack
       run: |
         curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
     - name: Test wasm-pack project
       run: |
-        cd crates/jiff-wasm
+        cd examples/wasm
         wasm-pack test --node
 
   # This job checks the docsrs configuration.

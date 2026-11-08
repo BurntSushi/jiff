@@ -16,13 +16,13 @@ jobs:
     - uses: rust-lang/crates-io-auth-action@v1
       id: auth
     - run: |
-        cargo publish -p jiff-core || true
-        cargo publish -p jiff-static || true
-        cargo publish -p jiff-tzdb || true
-        cargo publish -p jiff-tzdb-platform || true
-        cargo publish -p jiff || true
-        cargo publish --manifest-path ./crates/jiff-icu/Cargo.toml || true
-        cargo publish --manifest-path ./crates/jiff-diesel/Cargo.toml || true
-        cargo publish --manifest-path ./crates/jiff-sqlx/Cargo.toml || true
+        echo "Publishing jiff-core..." && cargo publish -p jiff-core || true
+        echo "Publishing jiff-static..." && cargo publish -p jiff-static || true
+        echo "Publishing jiff-tzdb..." && cargo publish -p jiff-tzdb || true
+        echo "Publishing jiff-tzdb-platform..." && cargo publish -p jiff-tzdb-platform || true
+        echo "Publishing jiff..." && cargo publish -p jiff || true
+        echo "Publishing jiff-icu..." && cargo publish -p jiff-icu || true
+        echo "Publishing jiff-diesel..." && cargo publish -p jiff-diesel || true
+        echo "Publishing jiff-sqlx..." && cargo publish -p jiff-sqlx || true
       env:
         CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
