@@ -6491,4 +6491,31 @@ mod tests {
             "2024-11-03T01:30:00-05:00[America/New_York]"
         );
     }
+
+    // See: https://github.com/BurntSushi/jiff/issues/678
+    #[test]
+    fn zoned_pre_epoch_fractional_transition() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let zone = crate::tz::db().get("Europe/Istanbul").unwrap();
+        for (input, expected) in [
+            (
+                "1910-09-30T22:03:03Z",
+                "1910-09-30T23:59:59+01:57[Europe/Istanbul]",
+            ),
+            (
+                "1910-09-30T22:03:03.999999999Z",
+                "1910-09-30T23:59:59.999999999+01:57[Europe/Istanbul]",
+            ),
+            (
+                "1910-09-30T22:03:04Z",
+                "1910-10-01T00:03:04+02:00[Europe/Istanbul]",
+            ),
+        ] {
+            let instant: Timestamp = input.parse().unwrap();
+            assert_eq!(instant.to_zoned(zone.clone()).to_string(), expected);
+        }
+    }
 }
