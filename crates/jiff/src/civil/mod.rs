@@ -5,7 +5,7 @@ Facilities for dealing with inexact dates and times.
 
 The essential types in this module are:
 
-* [`Date`] is a specific day in the Gregorian calendar.
+* [`Date`] is a specific day in the proleptic Gregorian calendar.
 * [`Time`] is a specific wall clock time.
 * [`DateTime`] is a combination of a day and a time.
 
@@ -95,6 +95,23 @@ you're in.
 saving time.
 * When interacting with legacy systems or systems that specifically do not
 support time zones.
+
+# What about dates preceding the introduction of the Gregorian calendar?
+
+Jiff uses what is called the _proleptic_ Gregorian calendar. This means that
+Jiff behaves _as if_ the Gregorian calendar has been used for all of time.
+
+In reality, the Gregorian calendar wasn't introduced until October 1582.
+However, not all places in the world adopted the Gregorian calendar at that
+time. For example, Russia didn't convert from the Julian calendar to the
+Gregorian calendar until 1917.
+
+By using the proleptic calendar---where by we pretend the Gregorian calendar
+has always been in use---we are sacrificing contextually and historically
+accurate dates in favor of a massive simplification in datetime handling. In
+general, the process of determining the correct calendar used by a given locale
+and at a given time is a research task that is outside the scope of what Jiff
+offers.
 */
 
 pub use self::{

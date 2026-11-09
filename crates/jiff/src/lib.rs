@@ -34,9 +34,9 @@ geographic region. Users of this crate may find it helpful to think of a
 
 * A [`Timestamp`] is a 96-bit integer of nanoseconds since the [Unix epoch].
 A timestamp is a precise instant in time.
-* A [`civil::DateTime`] is an inexact calendar date and clock time. The terms
-"civil", "local", "plain" and "naive" are all used in various places to
-describe this same concept.
+* A [`civil::DateTime`] is an inexact calendar date and clock time in the
+proleptic Gregorian calendar. The terms "civil", "local", "plain" and "naive"
+are all used in various places to describe this same concept.
 * A [`tz::TimeZone`] is a set of rules for determining the civil time, via an
 offset from [UTC], in a particular geographic region.
 
@@ -112,7 +112,7 @@ a link to a relevant issue (if one exists).
 * [Leap seconds]. (Jiff will automatically constrain times like `23:59:60` to
 `23:59:59`.)
 * Time scales other than Unix.
-* [Calendars other than Gregorian].
+* [Calendars other than the proleptic Gregorian calendar].
 * [Localization].
 * [Changing the representation size, precision or limits on the minimum and
 maximum datetime values.][cppchrono]
@@ -123,7 +123,7 @@ At present, it is recommended to use the [`icu`] crate via [`jiff-icu`] for
 localization and non-Gregorian use cases.
 
 [Leap seconds]: https://github.com/BurntSushi/jiff/issues/7
-[Calendars other than Gregorian]: https://github.com/BurntSushi/jiff/issues/6
+[Calendars other than the proleptic Gregorian calendar]: https://github.com/BurntSushi/jiff/issues/6
 [Localization]: https://github.com/BurntSushi/jiff/issues/4
 [cppchrono]: https://github.com/BurntSushi/jiff/issues/3
 [perf]: https://github.com/BurntSushi/jiff/issues/17
