@@ -4553,45 +4553,46 @@ impl<'a> ZonedDifference<'a> {
         }
         let tz = zdt1.time_zone();
 
-        let (dt1, mut dt2) = (zdt1.datetime(), zdt2.datetime());
-
-        let mut day_correct: i32 = 0;
-        if Sign::from_ordinals(dt1.time(), dt2.time()) == sign {
-            day_correct += 1;
+        let dt1 = zdt1.datetime();
+        let mut end_date = zdt2.date();
+        if Sign::from_ordinals(end_date, dt1.date()) != sign {
+            return zdt1.timestamp().until((Unit::Hour, zdt2.timestamp()));
         }
-
-        let mut mid = dt2
-            .date()
-            .checked_add(Span::new().days(day_correct * -sign))
-            .context(E::AddDays)?
-            .to_datetime(dt1.time());
-        let mut zmid: Zoned = mid
-            .to_zoned(tz.clone())
-            .context(E::ConvertIntermediateDatetime)?;
-        if Sign::from_ordinals(zdt2, &zmid) == -sign {
-            if sign.is_negative() {
-                // FIXME
-                panic!("this should be an error");
+        let to_intermediate = |date: Date| {
+            if date == dt1.date() {
+                // Preserve the start's offset when it is in a fold.
+                return Ok(zdt1.clone());
             }
-            day_correct += 1;
-            mid = dt2
-                .date()
-                .checked_add(Span::new().days(day_correct * -sign))
-                .context(E::AddDays)?
-                .to_datetime(dt1.time());
-            zmid = mid
+            date.to_datetime(dt1.time())
                 .to_zoned(tz.clone())
-                .context(E::ConvertIntermediateDatetime)?;
+                .context(E::ConvertIntermediateDatetime)
+        };
+        // Only borrow a day when the intermediate timestamp passes the end.
+        // Clock times alone can have the opposite order during a fold.
+        let mut zmid = to_intermediate(end_date)?;
+        if Sign::from_ordinals(zdt2, &zmid) == -sign {
+            end_date = end_date
+                .checked_add(Span::new().days(-sign.as_i64()))
+                .context(E::AddDays)?;
+            zmid = to_intermediate(end_date)?;
+            // A skipped date can require a second correction.
             if Sign::from_ordinals(zdt2, &zmid) == -sign {
-                // FIXME
-                panic!("this should be an error too");
+                end_date = end_date
+                    .checked_add(Span::new().days(-sign.as_i64()))
+                    .context(E::AddDays)?;
+                zmid = to_intermediate(end_date)?;
+                assert_ne!(
+                    Sign::from_ordinals(zdt2, &zmid),
+                    -sign,
+                    "intermediate datetime should not pass the end \
+                     after two day corrections",
+                );
             }
         }
         let remainder =
             zdt2.timestamp().as_duration() - zmid.timestamp().as_duration();
-        dt2 = mid;
 
-        let date_span = dt1.date().until((largest, dt2.date()))?;
+        let date_span = dt1.date().until((largest, end_date))?;
         Ok(Span::from_invariant_duration(Unit::Hour, remainder)
             .expect("difference between time always fits in span")
             .years(date_span.get_years())
@@ -6093,6 +6094,96 @@ mod tests {
             .unwrap();
         let span = zdt1.until((Unit::Day, &zdt2)).unwrap();
         span_eq!(span, 24.hours().nanoseconds(5));
+    }
+
+    /// Ref: https://github.com/BurntSushi/jiff/issues/685
+    #[test]
+    fn until_crosses_dst_day() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let start = date(2024, 11, 3)
+            .at(1, 50, 0, 0)
+            .in_tz("America/New_York")
+            .unwrap();
+        let end: Zoned =
+            "2024-11-03T01:00:00-05:00[America/New_York]".parse().unwrap();
+        for largest in [Unit::Day, Unit::Week, Unit::Month, Unit::Year] {
+            span_eq!(start.until((largest, &end)).unwrap(), 10.minutes());
+            span_eq!(end.until((largest, &start)).unwrap(), -10.minutes());
+        }
+    }
+
+    /// Ref: https://github.com/BurntSushi/jiff/issues/685
+    #[test]
+    fn until_crosses_dst_day_different_date() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let start: Zoned =
+            "2009-11-01T00:00:00-02:30[America/St_Johns]".parse().unwrap();
+        let end: Zoned =
+            "2009-10-31T23:01:00-03:30[America/St_Johns]".parse().unwrap();
+        for largest in [Unit::Day, Unit::Week, Unit::Month, Unit::Year] {
+            span_eq!(start.until((largest, &end)).unwrap(), 1.minutes());
+            span_eq!(end.until((largest, &start)).unwrap(), -1.minutes());
+        }
+    }
+
+    #[test]
+    fn until_crosses_dst_multiple_days() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let cases = [
+            (
+                "2024-11-01T01:50:00-04:00[America/New_York]",
+                "2024-11-03T01:00:00-05:00[America/New_York]",
+                2.days().minutes(10),
+                -1.day().hours(23).minutes(10),
+            ),
+            (
+                "2024-11-03T01:50:00-04:00[America/New_York]",
+                "2024-11-04T01:00:00-05:00[America/New_York]",
+                24.hours().minutes(10),
+                -24.hours().minutes(10),
+            ),
+            (
+                "2024-11-03T01:50:00-05:00[America/New_York]",
+                "2024-11-04T01:00:00-05:00[America/New_York]",
+                23.hours().minutes(10),
+                -23.hours().minutes(10),
+            ),
+            (
+                "2024-03-09T02:30:00-05:00[America/New_York]",
+                "2024-03-10T03:00:00-04:00[America/New_York]",
+                23.hours().minutes(30),
+                -1.day().minutes(30),
+            ),
+            // The first day correction lands on a skipped date.
+            (
+                "2011-12-28T12:00:00-10:00[Pacific/Apia]",
+                "2011-12-31T11:00:00+14:00[Pacific/Apia]",
+                1.day().hours(23),
+                -2.days().hours(23),
+            ),
+        ];
+        for (start, end, forward, backward) in cases {
+            let start: Zoned = start.parse().unwrap();
+            let end: Zoned = end.parse().unwrap();
+            for largest in [Unit::Day, Unit::Week, Unit::Month, Unit::Year] {
+                let span = start.until((largest, &end)).unwrap();
+                span_eq!(span, forward, "{start} until {end}, {largest:?}");
+                assert_eq!(start.checked_add(span).unwrap(), end);
+
+                let span = end.until((largest, &start)).unwrap();
+                span_eq!(span, backward, "{end} until {start}, {largest:?}");
+                assert_eq!(end.checked_add(span).unwrap(), start);
+            }
+        }
     }
 
     #[cfg(target_pointer_width = "64")]

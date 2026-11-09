@@ -7373,6 +7373,22 @@ mod tests {
             .is_err());
     }
 
+    /// Ref: https://github.com/BurntSushi/jiff/issues/685
+    #[test]
+    fn span_total_minutes_to_days_dst() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let zdt = date(2024, 11, 3)
+            .at(1, 50, 0, 0)
+            .in_tz("America/New_York")
+            .unwrap();
+        let float = 10.minutes().total((Unit::Day, &zdt)).unwrap();
+        // The next calendar day is 25 elapsed hours after zdt.
+        assert_eq!(float, 10.0 / (25.0 * 60.0));
+    }
+
     #[test]
     fn unit_set_debug() {
         let set = UnitSet::from_slice(&[Unit::Second]);
