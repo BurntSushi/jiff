@@ -1,5 +1,17 @@
 # CHANGELOG
 
+0.2.42 (2026-11-09)
+===================
+This release includes a couple of bug fixes where panics could occur when they
+should not have been. Specifically in `Span::total` and `Span::checked_add`.
+
+* [#683](https://github.com/BurntSushi/jiff/issues/683):
+Fix a panic in `Span::checked_add` when an internal addition would overflow
+a `SignedDuration`'s minimum/maximum values.
+* [#685](https://github.com/BurntSushi/jiff/issues/685):
+Fix a panic in `Span::total` when a time zone transition boundary was crossed.
+
+
 0.2.41 (2026-11-08)
 ===================
 This release includes a bug fix for time zone transition lookups for timestamps
