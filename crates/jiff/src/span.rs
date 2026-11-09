@@ -1833,9 +1833,9 @@ impl Span {
     ) -> Result<Span, Error> {
         assert!(unit <= Unit::Week);
         let self_duration = self.to_invariant_duration();
-        // OK because maximal invariant `Span` is way below maximal
-        // `SignedDuration`. Doubling it can never overflow.
-        let sum = self_duration + rhs_duration;
+        let sum = self_duration
+            .checked_add(rhs_duration)
+            .ok_or_else(|| b::SignedDurationSeconds::error())?;
         Span::from_invariant_duration(unit, sum)
     }
 
@@ -7248,6 +7248,129 @@ mod tests {
                 709_551_614,
             ),
         );
+    }
+
+    /// This is a regression test for a case where adding a duration to a
+    /// `Span` could panic if there was an `i64` overflow.
+    ///
+    /// Ref: https://github.com/BurntSushi/jiff/issues/683
+    #[test]
+    fn overflow_i64_signed_duration() {
+        const MIN: SignedDuration = SignedDuration::MIN;
+        const MAX: SignedDuration = SignedDuration::MAX;
+
+        let span = 1.nanosecond();
+        assert!(span.checked_add(MAX).is_err());
+        assert!(span.checked_add(MIN).is_err());
+        assert!(span.checked_sub(MAX).is_err());
+        assert!(span.checked_sub(MIN).is_err());
+
+        let span = 1.microsecond();
+        assert!(span.checked_add(MAX).is_err());
+        assert!(span.checked_add(MIN).is_err());
+        assert!(span.checked_sub(MAX).is_err());
+        assert!(span.checked_sub(MIN).is_err());
+
+        let span = 1.millisecond();
+        assert!(span.checked_add(MAX).is_err());
+        assert!(span.checked_add(MIN).is_err());
+        assert!(span.checked_sub(MAX).is_err());
+        assert!(span.checked_sub(MIN).is_err());
+
+        let span = 1.second();
+        assert!(span.checked_add(MAX).is_err());
+        assert!(span.checked_add(MIN).is_err());
+        assert!(span.checked_sub(MAX).is_err());
+        assert!(span.checked_sub(MIN).is_err());
+
+        let span = 1.minute();
+        assert!(span.checked_add(MAX).is_err());
+        assert!(span.checked_add(MIN).is_err());
+        assert!(span.checked_sub(MAX).is_err());
+        assert!(span.checked_sub(MIN).is_err());
+
+        let span = 1.hour();
+        assert!(span.checked_add(MAX).is_err());
+        assert!(span.checked_add(MIN).is_err());
+        assert!(span.checked_sub(MAX).is_err());
+        assert!(span.checked_sub(MIN).is_err());
+
+        let span = 1.day();
+        assert!(span
+            .checked_add(SpanArithmetic::from(MAX).days_are_24_hours())
+            .is_err());
+        assert!(span
+            .checked_add(SpanArithmetic::from(MIN).days_are_24_hours())
+            .is_err());
+        assert!(span
+            .checked_sub(SpanArithmetic::from(MAX).days_are_24_hours())
+            .is_err());
+        assert!(span
+            .checked_sub(SpanArithmetic::from(MIN).days_are_24_hours())
+            .is_err());
+
+        let span = 1.week();
+        assert!(span
+            .checked_add(SpanArithmetic::from(MAX).days_are_24_hours())
+            .is_err());
+        assert!(span
+            .checked_add(SpanArithmetic::from(MIN).days_are_24_hours())
+            .is_err());
+        assert!(span
+            .checked_sub(SpanArithmetic::from(MAX).days_are_24_hours())
+            .is_err());
+        assert!(span
+            .checked_sub(SpanArithmetic::from(MIN).days_are_24_hours())
+            .is_err());
+    }
+
+    /// This is a regression test for a case where adding a duration to a
+    /// `Span` could panic if there was an `i64` overflow.
+    ///
+    /// Ref: https://github.com/BurntSushi/jiff/issues/683
+    #[test]
+    fn overflow_i64_unsigned_duration() {
+        const MAX: UnsignedDuration = UnsignedDuration::MAX;
+
+        let span = 1.nanosecond();
+        assert!(span.checked_add(MAX).is_err());
+        assert!(span.checked_sub(MAX).is_err());
+
+        let span = 1.microsecond();
+        assert!(span.checked_add(MAX).is_err());
+        assert!(span.checked_sub(MAX).is_err());
+
+        let span = 1.millisecond();
+        assert!(span.checked_add(MAX).is_err());
+        assert!(span.checked_sub(MAX).is_err());
+
+        let span = 1.second();
+        assert!(span.checked_add(MAX).is_err());
+        assert!(span.checked_sub(MAX).is_err());
+
+        let span = 1.minute();
+        assert!(span.checked_add(MAX).is_err());
+        assert!(span.checked_sub(MAX).is_err());
+
+        let span = 1.hour();
+        assert!(span.checked_add(MAX).is_err());
+        assert!(span.checked_sub(MAX).is_err());
+
+        let span = 1.day();
+        assert!(span
+            .checked_add(SpanArithmetic::from(MAX).days_are_24_hours())
+            .is_err());
+        assert!(span
+            .checked_sub(SpanArithmetic::from(MAX).days_are_24_hours())
+            .is_err());
+
+        let span = 1.week();
+        assert!(span
+            .checked_add(SpanArithmetic::from(MAX).days_are_24_hours())
+            .is_err());
+        assert!(span
+            .checked_sub(SpanArithmetic::from(MAX).days_are_24_hours())
+            .is_err());
     }
 
     #[test]
