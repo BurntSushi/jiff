@@ -25,8 +25,8 @@ postgres = ["diesel/postgres_backend"]
 sqlite = ["diesel/sqlite"]
 
 [dependencies]
-jiff = { version = "0.2.41", path = "../jiff", default-features = false, features = ["std"] }
+jiff = { version = "0.2.42", path = "../jiff", default-features = false, features = ["std"] }
 diesel = { version = "2.0.0", default-features = false }
 
 [dev-dependencies]
-jiff = { version = "0.2.41", path = "../jiff", default-features = true }
+jiff = { version = "0.2.42", path = "../jiff", default-features = true }
