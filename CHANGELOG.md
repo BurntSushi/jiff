@@ -5,6 +5,8 @@
 This release includes a couple of bug fixes where panics could occur when they
 should not have been. Specifically in `Span::total` and `Span::checked_add`.
 
+Bug fixes:
+
 * [#683](https://github.com/BurntSushi/jiff/issues/683):
 Fix a panic in `Span::checked_add` when an internal addition would overflow
 a `SignedDuration`'s minimum/maximum values.
