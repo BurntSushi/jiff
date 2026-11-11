@@ -356,3 +356,20 @@ pub use jiff_static::include;
 pub const fn offset(hours: i8) -> Offset {
     Offset::constant(hours)
 }
+
+/// Resets Jiff's internal and global cache for this system's configured time
+/// zone.
+///
+/// The next request for the system time zone will be forced to re-fetch it.
+///
+/// It might be useful to call this if you believe the system time zone has
+/// changed and you don't want to wait for the cache to clear after Jiff's
+/// internal expiration has elapsed.
+///
+/// This has no effect when the `tz-system` crate feature is not enabled.
+pub fn reset_system_time_zone_cache() {
+    #[cfg(feature = "tz-system")]
+    {
+        crate::tz::system::reset();
+    }
+}
