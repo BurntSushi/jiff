@@ -1548,6 +1548,28 @@ pub struct ParseError {
     kind: ParseErrorKind,
 }
 
+impl ParseError {
+    /// Returns true if parsing a POSIX time zone failed because a DST
+    /// transition rule was missing.
+    ///
+    /// As of POSIX 2024, behavior is unspecified when a DST abbreviation is
+    /// provided but a transition rule is omitted. In this case, Jiff chooses
+    /// to return an error. Some POSIX implementations default to the US
+    /// daylight saving time rules or even behave as if `TZ=posixrules` was
+    /// set.
+    ///
+    /// Callers therefore might want to inspect when Jiff rejects a POSIX
+    /// time zone because of a missing transition rule and do something
+    /// different.
+    pub fn is_missing_dst_transition_rule(&self) -> bool {
+        matches!(
+            self.kind,
+            ParseErrorKind::FoundDstNoRule
+                | ParseErrorKind::FoundDstNoRuleWithOffset
+        )
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum ParseErrorKind {
@@ -3743,7 +3765,15 @@ mod tests {
         // transition rule. We never actually used unreasonable POSIX
         // time zones and it was complicating the type definitions, so
         // now we just reject it outright.
-        assert!(TzEnv::parse("EST5EDT").is_err());
+        //
+        // UPDATE: We now provide a way to inspect whether this happens
+        // or not via a predicate on the error returned.
+        assert!(TzEnv::parse("EST5EDT")
+            .unwrap_err()
+            .is_missing_dst_transition_rule());
+        assert!(TzEnv::parse("EST5EDT4")
+            .unwrap_err()
+            .is_missing_dst_transition_rule());
 
         let tz = TzEnv::parse(":EST5EDT").unwrap();
         assert_eq!(
