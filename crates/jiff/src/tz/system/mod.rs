@@ -105,6 +105,22 @@ impl Cache {
     const fn empty() -> Cache {
         Cache { tz: None, expiration: Expiration::expired() }
     }
+
+    /// Retrieve the cached system time zone if it exists and isn't expired.
+    fn get(&self) -> Option<TimeZone> {
+        if let Some(ref tz) = self.tz {
+            if !self.expiration.is_expired() {
+                return Some(tz.clone());
+            }
+        }
+        None
+    }
+
+    /// Set the given time zone in the cache.
+    fn set(&mut self, tz: TimeZone) {
+        self.tz = Some(tz);
+        self.expiration = Expiration::after(TTL);
+    }
 }
 
 /// Retrieve the "system" time zone.
@@ -123,22 +139,20 @@ impl Cache {
 pub(crate) fn get(db: &TimeZoneDatabase) -> Result<TimeZone, Error> {
     {
         let cache = CACHE.read().unwrap();
-        if let Some(ref tz) = cache.tz {
-            if !cache.expiration.is_expired() {
-                return Ok(tz.clone());
-            }
+        if let Some(tz) = cache.get() {
+            return Ok(tz);
         }
     }
     let tz = get_force(db)?;
     {
+        let tz = tz.clone();
         // It's okay that we race here. We basically assume that any
         // sufficiently close but approximately simultaneous detection of
         // "system" time will lead to the same result. Of course, this is not
         // strictly true, but since we invalidate the cache after a TTL, it
         // will eventually be true in any sane environment.
         let mut cache = CACHE.write().unwrap();
-        cache.tz = Some(tz.clone());
-        cache.expiration = Expiration::after(TTL);
+        cache.set(tz);
     }
     Ok(tz)
 }
