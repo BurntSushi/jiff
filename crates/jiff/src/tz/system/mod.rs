@@ -121,6 +121,19 @@ impl Cache {
         self.tz = Some(tz);
         self.expiration = Expiration::after(TTL);
     }
+
+    /// Resets the cache back to its initial state.
+    fn reset(&mut self) {
+        *self = Cache::empty();
+    }
+}
+
+/// Clears the system time zone cache.
+///
+/// The next request for the system time zone will be forced to re-fetch it.
+pub(crate) fn reset() {
+    let mut cache = CACHE.write().unwrap();
+    cache.reset();
 }
 
 /// Retrieve the "system" time zone.
@@ -158,7 +171,7 @@ pub(crate) fn get(db: &TimeZoneDatabase) -> Result<TimeZone, Error> {
 }
 
 /// Always attempt retrieve the system time zone. This never uses a cache.
-pub(crate) fn get_force(db: &TimeZoneDatabase) -> Result<TimeZone, Error> {
+fn get_force(db: &TimeZoneDatabase) -> Result<TimeZone, Error> {
     match get_env_tz(db) {
         Ok(Some(tz)) => {
             debug!("checked `TZ` environment variable and found {tz:?}");
