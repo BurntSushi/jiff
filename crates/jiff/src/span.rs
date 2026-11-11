@@ -4095,6 +4095,75 @@ pub struct SpanArithmetic<'a> {
 }
 
 impl<'a> SpanArithmetic<'a> {
+    /// Set the relative datetime to use when adding or subtracting a span.
+    ///
+    /// A relative datetime is only required when calendar units (units greater
+    /// than hours) are involved. A relative datetime is required when calendar
+    /// units are used because the duration of a particular calendar unit (like
+    /// 1 month or 1 year) is variable and depends on the date. For example,
+    /// 1 month from 2024-01-01 is 31 days, but 1 month from 2024-02-01 is 29
+    /// days.
+    ///
+    /// A relative datetime is provided by anything that implements
+    /// `Into<SpanRelativeTo>`. There are a few convenience trait
+    /// implementations provided:
+    ///
+    /// * `From<&Zoned> for SpanRelativeTo` uses a zone aware datetime to do
+    /// rounding. In this case, rounding will take time zone transitions into
+    /// account. In particular, when using a zoned relative datetime, not all
+    /// days are necessarily 24 hours.
+    /// * `From<civil::DateTime> for SpanRelativeTo` uses a civil datetime. In
+    /// this case, all days will be considered 24 hours long.
+    /// * `From<civil::Date> for SpanRelativeTo` uses a civil date. In this
+    /// case, all days will be considered 24 hours long.
+    ///
+    /// Note that one can impose 24-hour days without providing a reference
+    /// date via [`SpanRelativeTo::days_are_24_hours`].
+    ///
+    /// # Errors
+    ///
+    /// If the span involves a calendar unit (units bigger than hours) and no
+    /// relative datetime is provided, then this configuration will lead to
+    /// an error when used with [`Span::checked_add`] or [`Span::checked_sub`].
+    ///
+    /// # Example
+    ///
+    /// This example shows very precisely how a DST transition can impact the
+    /// length of a single day. For example, consider the day `2024-11-03`
+    /// in `America/New_York`. On this day, the 1 o'clock hour was repeated,
+    /// making the day 25 hours long. This will be taken into account when
+    /// performing arithmetic if a zoned datetime is provided:
+    ///
+    /// ```
+    /// use jiff::{SpanArithmetic, ToSpan, Zoned};
+    ///
+    /// let zdt = "2024-11-02T00-04[America/New_York]".parse::<Zoned>()?;
+    /// let add = SpanArithmetic::from(25.hours()).relative(&zdt);
+    /// assert_eq!(1.day().checked_add(add)?, 2.days().fieldwise());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// The same concept applies to civil dates as well, since both years and
+    /// months can be of varying lengths:
+    ///
+    /// ```
+    /// use jiff::{civil, SpanArithmetic, ToSpan};
+    ///
+    /// let date = civil::date(2024, 1, 1);
+    /// let add = SpanArithmetic::from(29.days()).relative(date);
+    /// assert_eq!(1.month().checked_add(add)?, 2.months().fieldwise());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn relative<R: Into<SpanRelativeTo<'a>>>(
+        self,
+        relative: R,
+    ) -> SpanArithmetic<'a> {
+        SpanArithmetic { relative: Some(relative.into()), ..self }
+    }
+
     /// This is a convenience function for setting the relative option on
     /// this configuration to [`SpanRelativeTo::days_are_24_hours`].
     ///
@@ -4131,14 +4200,6 @@ impl<'a> SpanArithmetic<'a> {
 }
 
 impl<'a> SpanArithmetic<'a> {
-    #[inline]
-    fn relative<R: Into<SpanRelativeTo<'a>>>(
-        self,
-        relative: R,
-    ) -> SpanArithmetic<'a> {
-        SpanArithmetic { relative: Some(relative.into()), ..self }
-    }
-
     #[inline]
     fn checked_add(self, span1: Span) -> Result<Span, Error> {
         match self.duration.to_signed()? {
@@ -4334,6 +4395,79 @@ pub struct SpanCompare<'a> {
 }
 
 impl<'a> SpanCompare<'a> {
+    /// Set the relative datetime to use when comparing spans.
+    ///
+    /// A relative datetime is only required when calendar units (units greater
+    /// than hours) are involved. A relative datetime is required when calendar
+    /// units are used because the duration of a particular calendar unit (like
+    /// 1 month or 1 year) is variable and depends on the date. For example,
+    /// 1 month from 2024-01-01 is 31 days, but 1 month from 2024-02-01 is 29
+    /// days.
+    ///
+    /// A relative datetime is provided by anything that implements
+    /// `Into<SpanRelativeTo>`. There are a few convenience trait
+    /// implementations provided:
+    ///
+    /// * `From<&Zoned> for SpanRelativeTo` uses a zone aware datetime to do
+    /// rounding. In this case, rounding will take time zone transitions into
+    /// account. In particular, when using a zoned relative datetime, not all
+    /// days are necessarily 24 hours.
+    /// * `From<civil::DateTime> for SpanRelativeTo` uses a civil datetime. In
+    /// this case, all days will be considered 24 hours long.
+    /// * `From<civil::Date> for SpanRelativeTo` uses a civil date. In this
+    /// case, all days will be considered 24 hours long.
+    ///
+    /// Note that one can impose 24-hour days without providing a reference
+    /// date via [`SpanRelativeTo::days_are_24_hours`].
+    ///
+    /// # Errors
+    ///
+    /// If the span involves a calendar unit (units bigger than hours) and no
+    /// relative datetime is provided, then this configuration will lead to
+    /// an error when used with [`Span::compare`].
+    ///
+    /// # Example
+    ///
+    /// This example shows very precisely how a DST transition can impact the
+    /// length of a single day. For example, consider the day `2024-11-03`
+    /// in `America/New_York`. On this day, the 1 o'clock hour was repeated,
+    /// making the day 25 hours long. This will be taken into account when
+    /// comparing two spans if a zoned datetime is provided:
+    ///
+    /// ```
+    /// use jiff::{SpanCompare, ToSpan, Zoned};
+    ///
+    /// let zdt = "2024-11-03T00-04[America/New_York]".parse::<Zoned>()?;
+    /// let cmp = SpanCompare::from(25.hours()).relative(&zdt);
+    /// assert_eq!(1.day().compare(cmp)?, core::cmp::Ordering::Equal);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// The same concept applies to civil dates as well, since both years and
+    /// months can be of varying lengths:
+    ///
+    /// ```
+    /// use std::cmp::Ordering::Equal;
+    ///
+    /// use jiff::{civil::date, SpanCompare, ToSpan};
+    ///
+    /// let cmp = SpanCompare::from(29.days()).relative(date(2024, 2, 1));
+    /// assert_eq!(1.month().compare(cmp)?, Equal);
+    /// // One can use `From` impls to make this more convenient:
+    /// assert_eq!(1.month().compare((31.days(), date(2024, 1, 1)))?, Equal);
+    /// assert_eq!(1.month().compare((30.days(), date(2024, 11, 1)))?, Equal);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn relative<R: Into<SpanRelativeTo<'a>>>(
+        self,
+        relative: R,
+    ) -> SpanCompare<'a> {
+        SpanCompare { relative: Some(relative.into()), ..self }
+    }
+
     /// This is a convenience function for setting the relative option on
     /// this configuration to [`SpanRelativeTo::days_are_24_hours`].
     ///
@@ -4373,14 +4507,6 @@ impl<'a> SpanCompare<'a> {
     #[inline]
     fn new(span: Span) -> SpanCompare<'static> {
         SpanCompare { span, relative: None }
-    }
-
-    #[inline]
-    fn relative<R: Into<SpanRelativeTo<'a>>>(
-        self,
-        relative: R,
-    ) -> SpanCompare<'a> {
-        SpanCompare { relative: Some(relative.into()), ..self }
     }
 
     fn compare(self, span: Span) -> Result<Ordering, Error> {
@@ -4565,6 +4691,78 @@ pub struct SpanTotal<'a> {
 }
 
 impl<'a> SpanTotal<'a> {
+    /// Set the relative datetime to use when converting a span to a float
+    /// in terms of a specific unit.
+    ///
+    /// A relative datetime is only required when calendar units (units greater
+    /// than hours) are involved. A relative datetime is required when calendar
+    /// units are used because the duration of a particular calendar unit (like
+    /// 1 month or 1 year) is variable and depends on the date. For example,
+    /// 1 month from 2024-01-01 is 31 days, but 1 month from 2024-02-01 is 29
+    /// days.
+    ///
+    /// A relative datetime is provided by anything that implements
+    /// `Into<SpanRelativeTo>`. There are a few convenience trait
+    /// implementations provided:
+    ///
+    /// * `From<&Zoned> for SpanRelativeTo` uses a zone aware datetime to do
+    /// rounding. In this case, rounding will take time zone transitions into
+    /// account. In particular, when using a zoned relative datetime, not all
+    /// days are necessarily 24 hours.
+    /// * `From<civil::DateTime> for SpanRelativeTo` uses a civil datetime. In
+    /// this case, all days will be considered 24 hours long.
+    /// * `From<civil::Date> for SpanRelativeTo` uses a civil date. In this
+    /// case, all days will be considered 24 hours long.
+    ///
+    /// Note that one can impose 24-hour days without providing a reference
+    /// date via [`SpanRelativeTo::days_are_24_hours`].
+    ///
+    /// # Errors
+    ///
+    /// If the span involves a calendar unit (units bigger than hours) and no
+    /// relative datetime is provided, then this configuration will lead to
+    /// an error when used with [`Span::total`].
+    ///
+    /// # Example
+    ///
+    /// This example shows very precisely how a DST transition can impact the
+    /// length of a single day. For example, consider the day `2024-11-03`
+    /// in `America/New_York`. On this day, the 1 o'clock hour was repeated,
+    /// making the day 25 hours long. This will be taken into account when
+    /// computing the total span as a float when a zoned datetime is provided:
+    ///
+    /// ```
+    /// use jiff::{SpanTotal, ToSpan, Unit, Zoned};
+    ///
+    /// let zdt = "2024-11-03T00-04[America/New_York]".parse::<Zoned>()?;
+    /// let total = SpanTotal::from(Unit::Hour).relative(&zdt);
+    /// assert_eq!(1.day().total(total)?, 25.0);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// The same concept applies to civil dates as well, since both years and
+    /// months can be of varying lengths:
+    ///
+    /// ```
+    /// use jiff::{civil::date, SpanTotal, ToSpan, Unit};
+    ///
+    /// let total = SpanTotal::from(Unit::Day).relative(date(2024, 2, 1));
+    /// assert_eq!(1.month().total(total)?, 29.0);
+    /// // One can use `From` impls to make this more convenient:
+    /// assert_eq!(1.month().total((Unit::Day, date(2024, 1, 1)))?, 31.0);
+    /// assert_eq!(1.month().total((Unit::Day, date(2024, 11, 1)))?, 30.0);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn relative<R: Into<SpanRelativeTo<'a>>>(
+        self,
+        relative: R,
+    ) -> SpanTotal<'a> {
+        SpanTotal { relative: Some(relative.into()), ..self }
+    }
+
     /// This is a convenience function for setting the relative option on
     /// this configuration to [`SpanRelativeTo::days_are_24_hours`].
     ///
@@ -4610,14 +4808,6 @@ impl<'a> SpanTotal<'a> {
     #[inline]
     fn new(unit: Unit) -> SpanTotal<'static> {
         SpanTotal { unit, relative: None }
-    }
-
-    #[inline]
-    fn relative<R: Into<SpanRelativeTo<'a>>>(
-        self,
-        relative: R,
-    ) -> SpanTotal<'a> {
-        SpanTotal { relative: Some(relative.into()), ..self }
     }
 
     fn total(self, span: Span) -> Result<f64, Error> {
@@ -5021,7 +5211,7 @@ impl<'a> SpanRound<'a> {
     /// Set the relative datetime to use when rounding a span.
     ///
     /// A relative datetime is only required when calendar units (units greater
-    /// than days) are involved. This includes having calendar units in the
+    /// than hours) are involved. This includes having calendar units in the
     /// original span, or calendar units in the configured smallest or largest
     /// unit. A relative datetime is required when calendar units are used
     /// because the duration of a particular calendar unit (like 1 month or 1
@@ -5055,7 +5245,7 @@ impl<'a> SpanRound<'a> {
     /// This example shows very precisely how a DST transition can impact
     /// rounding and re-balancing. For example, consider the day `2024-11-03`
     /// in `America/New_York`. On this day, the 1 o'clock hour was repeated,
-    /// making the day 24 hours long. This will be taken into account when
+    /// making the day 25 hours long. This will be taken into account when
     /// rounding if a zoned datetime is provided as a reference point:
     ///
     /// ```
