@@ -304,6 +304,36 @@ impl TimeZone {
         parser.parse()
     }
 
+    /// Parse a POSIX `TZ` environment variable with default DST transition
+    /// rules.
+    ///
+    /// The `default_rules` input must contain a complete pair of comma
+    /// separated POSIX transition rules, such as `M3.2.0,M11.1.0`. The rules
+    /// are used only when `bytes` contains a DST abbreviation without an
+    /// explicit transition rule. If `bytes` contains transition rules, those
+    /// rules are used instead.
+    ///
+    /// Unlike [`TimeZone::parse`], this routine accepts POSIX time zones whose
+    /// DST abbreviation is not followed by a transition rule. This behavior is
+    /// opt-in because POSIX leaves the behavior of such time zones unspecified.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if either input is not a valid POSIX time zone
+    /// transition rule.
+    pub fn parse_with_default_rules<B: AsRef<[u8]>, R: AsRef<[u8]>>(
+        bytes: B,
+        default_rules: R,
+    ) -> Result<TimeZone, ParseError> {
+        let default_rule = Parser::parse_default_rule(default_rules.as_ref())?;
+        let parser = Parser {
+            ianav3plus: true,
+            default_rule: Some(default_rule),
+            ..Parser::new(bytes.as_ref())
+        };
+        parser.parse()
+    }
+
     /// Like `TimeZone::parse`, but parses a prefix of the input given. In
     /// addition to returning a `TimeZone`, this also returns the offset into
     /// `bytes` pointing at the beginning of any remaining unparsed input.
@@ -816,6 +846,9 @@ struct Parser<'s> {
     /// explicit clarification of something that POSIX itself implies.) But the
     /// first part is clear: it permits the hours to be a bigger range.
     ianav3plus: bool,
+    /// An optional default DST transition rule to use when the POSIX time zone
+    /// does not provide one.
+    default_rule: Option<Rule>,
 }
 
 impl<'s> Parser<'s> {
@@ -826,7 +859,21 @@ impl<'s> Parser<'s> {
             tz: tz.as_ref(),
             pos: core::cell::Cell::new(0),
             ianav3plus: false,
+            default_rule: None,
         }
+    }
+
+    /// Parse and validate a complete pair of POSIX DST transition rules.
+    fn parse_default_rule(bytes: &[u8]) -> Result<Rule, ParseError> {
+        let parser = Parser { ianav3plus: true, ..Parser::new(bytes) };
+        if parser.is_done() {
+            return Err(ParseErrorKind::EmptyDefaultRule.into());
+        }
+        let rule = parser.parse_rule().map_err(ParseErrorKind::DefaultRule)?;
+        if !parser.is_done() {
+            return Err(ParseErrorKind::FoundRemainingInDefaultRule.into());
+        }
+        Ok(rule)
     }
 
     /// Parses a POSIX time zone from the current position of the parser and
@@ -882,9 +929,6 @@ impl<'s> Parser<'s> {
         let abbrev = self
             .parse_abbreviation()
             .map_err(ParseErrorKind::AbbreviationDst)?;
-        if self.is_done() {
-            return Err(ParseErrorKind::FoundDstNoRule.into());
-        }
         // This is the default: one hour ahead of standard time. We may
         // override this if the DST portion specifies an offset. (But it
         // usually doesn't.)
@@ -893,12 +937,20 @@ impl<'s> Parser<'s> {
         // offsets are 24:59:59 or less. But the maximum offset is 25:59:59.
         // It was specifically setup that way so as to make this addition work.
         let mut offset = std_offset.checked_add(3600).unwrap();
+        if self.is_done() {
+            let rule =
+                self.default_rule.ok_or(ParseErrorKind::FoundDstNoRule)?;
+            return Ok(Dst { abbrev, offset, rule });
+        }
         if self.byte() != b',' {
             offset = self
                 .parse_posix_offset()
                 .map_err(ParseErrorKind::OffsetDst)?;
             if self.is_done() {
-                return Err(ParseErrorKind::FoundDstNoRuleWithOffset.into());
+                let rule = self
+                    .default_rule
+                    .ok_or(ParseErrorKind::FoundDstNoRuleWithOffset)?;
+                return Ok(Dst { abbrev, offset, rule });
             }
         }
         if self.byte() != b',' {
@@ -1553,12 +1605,15 @@ pub struct ParseError {
 enum ParseErrorKind {
     AbbreviationDst(AbbreviationError),
     AbbreviationStd(AbbreviationError),
+    DefaultRule(RuleError),
     Empty,
+    EmptyDefaultRule,
     ExpectedCommaAfterDst,
     FoundDstNoRule,
     FoundDstNoRuleWithOffset,
     FoundEndAfterComma,
     FoundRemaining,
+    FoundRemainingInDefaultRule,
     OffsetDst(OffsetError),
     OffsetStd(OffsetError),
     Rule(RuleError),
@@ -1582,8 +1637,16 @@ impl core::fmt::Display for ParseError {
                 )?;
                 core::fmt::Display::fmt(err, f)
             }
+            DefaultRule(ref err) => {
+                f.write_str("failed to parse default DST transition rule: ")?;
+                core::fmt::Display::fmt(err, f)
+            }
             Empty => f.write_str(
                 "an empty string is not a valid POSIX time zone \
+                 transition rule",
+            ),
+            EmptyDefaultRule => f.write_str(
+                "an empty string is not a valid default POSIX DST \
                  transition rule",
             ),
             ExpectedCommaAfterDst => f.write_str(
@@ -1610,6 +1673,11 @@ impl core::fmt::Display for ParseError {
                 "expected entire POSIX TZ string to be a valid \
                  time zone transition rule, but found data after \
                  parsing a valid time zone transition rule",
+            ),
+            FoundRemainingInDefaultRule => f.write_str(
+                "expected entire default POSIX DST transition rule to be \
+                 valid, but found data after parsing a valid transition \
+                 rule",
             ),
             OffsetDst(ref err) => {
                 f.write_str("failed to parse DST offset: ")?;
@@ -2344,6 +2412,61 @@ mod tests {
 
         let p = Parser::new("NZST-12NZDT,J60,J300WAT");
         assert!(p.parse().is_err());
+    }
+
+    #[test]
+    fn parse_with_default_rules() {
+        let default_rules = "M3.2.0,M11.1.0";
+        let expected = TimeZone::parse("EST5EDT,M3.2.0,M11.1.0").unwrap();
+        assert_eq!(
+            TimeZone::parse_with_default_rules("EST5EDT", default_rules)
+                .unwrap(),
+            expected,
+        );
+        assert_eq!(
+            TimeZone::parse_with_default_rules("EST5EDT-4", default_rules)
+                .unwrap(),
+            TimeZone::parse("EST5EDT-4,M3.2.0,M11.1.0").unwrap(),
+        );
+
+        // An explicit rule in the primary TZ string takes precedence over
+        // the default, while the default is still validated.
+        assert_eq!(
+            TimeZone::parse_with_default_rules(
+                "EST5EDT,M10.1.0,M4.1.0",
+                default_rules,
+            )
+            .unwrap(),
+            TimeZone::parse("EST5EDT,M10.1.0,M4.1.0").unwrap(),
+        );
+        assert!(TimeZone::parse_with_default_rules(
+            "EST5EDT,M10.1.0,M4.1.0",
+            "M3.2.0",
+        )
+        .is_err());
+
+        // Strict parsing remains strict.
+        assert!(TimeZone::parse("EST5EDT").is_err());
+        assert!(TimeZone::parse("EST5EDT-4").is_err());
+    }
+
+    #[test]
+    fn parse_with_default_rules_rejects_invalid_rules() {
+        let valid_default = "M3.2.0,M11.1.0";
+        for posix in ["EST5EDT,M3.2.0", "EST5EDT,"] {
+            assert!(
+                TimeZone::parse_with_default_rules(posix, valid_default)
+                    .is_err(),
+                "{posix}"
+            );
+        }
+        for default_rules in ["", "M3.2.0", "M3.2.0,M11.1.0,extra"] {
+            assert!(
+                TimeZone::parse_with_default_rules("EST5EDT", default_rules)
+                    .is_err(),
+                "{default_rules}"
+            );
+        }
     }
 
     #[test]

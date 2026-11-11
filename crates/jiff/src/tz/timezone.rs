@@ -509,6 +509,51 @@ impl TimeZone {
         Ok(TimeZone::from_posix_tz(posix_tz))
     }
 
+    /// Creates a time zone from a POSIX TZ rule string with default DST
+    /// transition rules.
+    ///
+    /// The `default_rules` string must contain a complete pair of comma
+    /// separated POSIX transition rules, such as `M3.2.0,M11.1.0`. The rules
+    /// are used only when `posix_tz_string` contains a DST abbreviation without
+    /// an explicit transition rule. If `posix_tz_string` contains transition
+    /// rules, those rules are used instead.
+    ///
+    /// This is an opt-in extension for POSIX TZ strings accepted by some
+    /// systems. [`TimeZone::posix`] remains strict and rejects a DST
+    /// abbreviation without transition rules.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if either the POSIX TZ string or the default
+    /// transition rules are invalid.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::tz::TimeZone;
+    ///
+    /// let posix = TimeZone::posix_with_default_rules(
+    ///     "EST5EDT",
+    ///     "M3.2.0,M11.1.0",
+    /// )?;
+    /// let explicit = TimeZone::posix("EST5EDT,M3.2.0,M11.1.0")?;
+    /// assert_eq!(posix, explicit);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[cfg(feature = "alloc")]
+    pub fn posix_with_default_rules(
+        posix_tz_string: &str,
+        default_rules: &str,
+    ) -> Result<TimeZone, Error> {
+        let posix_tz = posix::TimeZone::parse_with_default_rules(
+            posix_tz_string,
+            default_rules,
+        )
+        .map_err(Error::jcore_posix_parse)?;
+        Ok(TimeZone::from_posix_tz(posix_tz))
+    }
+
     /// Creates a time zone from a POSIX tz. Expose so that other parts of Jiff
     /// can create a `TimeZone` from a POSIX tz. (Kinda sloppy to be honest.)
     #[cfg(feature = "alloc")]
@@ -3597,6 +3642,43 @@ mod tests {
                     "\ntimestamp({unix_sec}, {unix_nano})",
                 );
             }
+        }
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn time_zone_posix_with_default_rules() {
+        let default_rules = "M3.2.0,M11.1.0";
+        assert!(TimeZone::posix("EST5EDT").is_err());
+        assert_eq!(
+            TimeZone::posix_with_default_rules("EST5EDT", default_rules)
+                .unwrap(),
+            TimeZone::posix("EST5EDT,M3.2.0,M11.1.0").unwrap(),
+        );
+        assert_eq!(
+            TimeZone::posix_with_default_rules("<EST>5<EDT>", default_rules)
+                .unwrap(),
+            TimeZone::posix("<EST>5<EDT>,M3.2.0,M11.1.0").unwrap(),
+        );
+        assert_eq!(
+            TimeZone::posix_with_default_rules(
+                "EST5EDT,M10.1.0,M4.1.0",
+                default_rules,
+            )
+            .unwrap(),
+            TimeZone::posix("EST5EDT,M10.1.0,M4.1.0").unwrap(),
+        );
+        assert!(TimeZone::posix_with_default_rules(
+            "EST5EDT,M3.2.0",
+            default_rules
+        )
+        .is_err());
+        for default_rules in ["", "M3.2.0", "M3.2.0,M11.1.0,extra"] {
+            assert!(
+                TimeZone::posix_with_default_rules("EST5EDT", default_rules)
+                    .is_err(),
+                "{default_rules}"
+            );
         }
     }
 
