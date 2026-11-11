@@ -1,5 +1,20 @@
 # CHANGELOG
 
+0.2.43 (2026-11-11)
+===================
+This release includes a few new minor API additions.
+
+Enhancements:
+
+* [#651](https://github.com/BurntSushi/jiff/issues/651):
+Add `jiff::tz::reset_system_time_zone_cache`.
+* [#653](https://github.com/BurntSushi/jiff/issues/653):
+Expose `relative` builder option on `Span*` types.
+* [#689](https://github.com/BurntSushi/jiff/issues/689):
+Add `jiff_core::tz::posix::ParseError::is_missing_dst_transition_rule`
+predicate.
+
+
 0.2.42 (2026-11-09)
 ===================
 This release includes a couple of bug fixes where panics could occur when they
