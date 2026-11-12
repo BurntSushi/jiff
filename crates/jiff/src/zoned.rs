@@ -48,7 +48,7 @@ use crate::{
 /// losslessy converted to any other datetime type in this crate:
 /// [`Timestamp`], [`DateTime`], [`Date`] and [`Time`].
 /// * A `ZonedDateTime` value with an IANA time zone can be losslessly
-/// serialized and deserialized, via [serde], by adhering to [RFC 8536]. An
+/// serialized and deserialized, via [serde], by adhering to [RFC 9557]. An
 /// example of a serialized zoned datetime is
 /// `2024-07-04T08:39:00-04:00[America/New_York]`.
 /// * Since a `ZonedDateTime` stores a [`TimeZone`] itself, multiple time zone
@@ -56,7 +56,7 @@ use crate::{
 /// time zone.
 ///
 /// [RFC 5545]: https://datatracker.ietf.org/doc/html/rfc5545
-/// [RFC 8536]: https://datatracker.ietf.org/doc/html/rfc8536
+/// [RFC 9557]: https://www.rfc-editor.org/info/rfc9557/
 /// [serde]: https://serde.rs/
 ///
 /// # Parsing and printing
