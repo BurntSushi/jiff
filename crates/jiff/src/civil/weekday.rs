@@ -233,7 +233,7 @@ impl Weekday {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_monday_zero_offset(self) -> i8 {
+    pub const fn to_monday_zero_offset(self) -> i8 {
         self.to_jcore().to_monday_zero_offset()
     }
 
@@ -252,7 +252,7 @@ impl Weekday {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_monday_one_offset(self) -> i8 {
+    pub const fn to_monday_one_offset(self) -> i8 {
         self.to_jcore().to_monday_one_offset()
     }
 
@@ -271,7 +271,7 @@ impl Weekday {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_sunday_zero_offset(self) -> i8 {
+    pub const fn to_sunday_zero_offset(self) -> i8 {
         self.to_jcore().to_sunday_zero_offset()
     }
 
@@ -290,7 +290,7 @@ impl Weekday {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_sunday_one_offset(self) -> i8 {
+    pub const fn to_sunday_one_offset(self) -> i8 {
         self.to_jcore().to_sunday_one_offset()
     }
 
@@ -351,7 +351,7 @@ impl Weekday {
     /// assert_eq!(Weekday::Sunday.since(Weekday::Monday), 6);
     /// ```
     #[inline]
-    pub fn since(self, other: Weekday) -> i8 {
+    pub const fn since(self, other: Weekday) -> i8 {
         self.to_jcore().since(other.to_jcore())
     }
 
@@ -473,7 +473,7 @@ impl Weekday {
     /// assert_eq!(it.next(), Some(Weekday::Tuesday));
     /// ```
     #[inline]
-    pub fn cycle_forward(self) -> WeekdaysForward {
+    pub const fn cycle_forward(self) -> WeekdaysForward {
         WeekdaysForward { it: self.to_jcore().cycle_forward() }
     }
 
@@ -496,7 +496,7 @@ impl Weekday {
     /// assert_eq!(it.next(), Some(Weekday::Tuesday));
     /// ```
     #[inline]
-    pub fn cycle_reverse(self) -> WeekdaysReverse {
+    pub const fn cycle_reverse(self) -> WeekdaysReverse {
         WeekdaysReverse { it: self.to_jcore().cycle_reverse() }
     }
 }
