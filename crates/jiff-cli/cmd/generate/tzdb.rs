@@ -25,7 +25,7 @@ const USAGE: &'static str = r#"
 Generate Rust source code from a zoneinfo directory.
 
 USAGE:
-    jiff-cli generate jiff-tzdb <zoneinfo-dir> [<jiff-tzdb-dir>]
+    jiff-cli generate jiff-tzdb <zoneinfo-dir> [<jiff-repo-dir>]
 
 This program should be run from the root of the Jiff repository. Namely, it
 assumes that `./crates/jiff-tzdb` exists and corresponds to the `jiff-tzdb`
@@ -200,7 +200,7 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
 #[derive(Debug)]
 struct Config {
     zoneinfo: Option<PathBuf>,
-    jiff_tzdb: Option<PathBuf>,
+    jiff_repo_dir: Option<PathBuf>,
     verbose: bool,
 }
 
@@ -209,16 +209,18 @@ impl Config {
         self.zoneinfo.as_deref().context("missing path to zoneinfo directory")
     }
 
-    fn jiff_tzdb(&self) -> &Path {
-        self.jiff_tzdb
-            .as_deref()
-            .unwrap_or_else(|| Path::new("./crates/jiff-tzdb"))
+    fn jiff_tzdb(&self) -> PathBuf {
+        self.jiff_repo_dir().join("crates/jiff-tzdb")
+    }
+
+    fn jiff_repo_dir(&self) -> &Path {
+        self.jiff_repo_dir.as_deref().unwrap_or_else(|| Path::new("./"))
     }
 }
 
 impl Default for Config {
     fn default() -> Config {
-        Config { zoneinfo: None, jiff_tzdb: None, verbose: false }
+        Config { zoneinfo: None, jiff_repo_dir: None, verbose: false }
     }
 }
 
@@ -236,9 +238,9 @@ impl args::Configurable for Config {
                 if self.zoneinfo.is_none() {
                     let path = PathBuf::from(std::mem::take(value));
                     self.zoneinfo = Some(path);
-                } else if self.jiff_tzdb.is_none() {
+                } else if self.jiff_repo_dir.is_none() {
                     let path = PathBuf::from(std::mem::take(value));
-                    self.jiff_tzdb = Some(path);
+                    self.jiff_repo_dir = Some(path);
                 } else {
                     return Ok(false);
                 }
