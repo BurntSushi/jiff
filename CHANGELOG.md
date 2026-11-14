@@ -1,5 +1,13 @@
 # CHANGELOG
 
+0.2.44 (2026-11-14)
+===================
+Enhancements:
+
+* [#697](https://github.com/BurntSushi/jiff/pull/697):
+Update Jiff's bundled IANA Time Zone Database to `2026f`.
+
+
 0.2.43 (2026-11-11)
 ===================
 This release includes a few new minor API additions.
