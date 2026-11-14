@@ -800,7 +800,7 @@ This release of Jiff includes a new opt-in proc macro for embedding a
 `TimeZone` into your binary. Just enable Jiff's `static` feature, and this will
 print the current time in the `America/New_York` time zone:
 
-```rust
+```rust,ignore
 use jiff::{
     tz::{self, TimeZone},
     Timestamp,
@@ -1456,7 +1456,7 @@ This release introduces some new minor APIs that support formatting
 Previously, using the standard formatting routines that Jiff provides, it was
 only possible to format a `Timestamp` using Zulu time. For example:
 
-```rust
+```rust,ignore
 use jiff::Timestamp;
 
 assert_eq!(
@@ -1472,7 +1472,7 @@ zone identifier), it may be useful in contexts where you just want to
 "hint" at what a user's local time is. To that end, there is a new
 `Timestamp::display_with_offset` method that makes this possible:
 
-```rust
+```rust,ignore
 use jiff::{tz, Timestamp};
 
 assert_eq!(
@@ -1488,7 +1488,7 @@ Moreover, this release also includes new convenience APIs on the Temporal and
 RFC 2822 printer types for returning strings. For example, previously, if you
 were using the RFC 2822 printer to format a `Timestamp`, you had to do this:
 
-```rust
+```rust,ignore
 use jiff::{fmt::rfc2822::DateTimePrinter, Timestamp};
 
 let mut buf = String::new();
@@ -1498,7 +1498,7 @@ assert_eq!(buf, "Thu, 1 Jan 1970 00:00:00 -0000");
 
 But now you can just do this:
 
-```rust
+```rust,ignore
 use jiff::{fmt::rfc2822::DateTimePrinter, Timestamp};
 
 assert_eq!(
@@ -1522,7 +1522,7 @@ sub-module. It provides convenience routines similar to Chrono's
 `jiff::Timestamp` and an integer number of seconds, milliseconds, microseconds
 or nanoseconds. For example:
 
-```rust
+```rust,ignore
 use jiff::Timestamp;
 
 #[derive(serde::Serialize, serde::Deserialize)]

@@ -124,14 +124,15 @@ fn main() -> anyhow::Result<()> {
     // stores the datetime given *as is* and drops any offset information.
     // The only way to re-capture the original local time is to undo the
     // implicit transformation we made originally:
-    let datetime = timestamp.to_zoned(jiff::tz::TimeZone::UTC).datetime();
+    let datetime =
+        timestamp.to_zoned_datetime(jiff::tz::TimeZone::UTC).datetime();
     assert_eq!(datetime.to_string(), "2025-07-20T17:30:00");
     // And if we want to capture the original instant in time, we have to know
     // to convert this civil datetime back to UTC using the original offset:
     let timestamp = datetime
-        .to_zoned(jiff::tz::TimeZone::fixed(jiff::tz::Offset::from_hours(
-            -4,
-        )?))?
+        .to_zoned_datetime(jiff::tz::TimeZone::fixed(
+            jiff::tz::Offset::from_hours(-4)?,
+        ))?
         .timestamp();
     assert_eq!(timestamp.to_string(), "2025-07-20T21:30:00Z");
 

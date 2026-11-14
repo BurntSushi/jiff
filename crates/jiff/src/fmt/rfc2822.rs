@@ -4,8 +4,9 @@ Support for printing and parsing instants using the [RFC 2822] datetime format.
 RFC 2822 is most commonly found when dealing with email messages.
 
 Since RFC 2822 only supports specifying a complete instant in time, the parser
-and printer in this module only use [`Zoned`] and [`Timestamp`]. If you need
-inexact time, you can get it from [`Zoned`] via [`Zoned::datetime`].
+and printer in this module only use [`ZonedDateTime`] and [`Timestamp`]. If you
+need inexact time, you can get it from [`ZonedDateTime`] via
+[`ZonedDateTime::datetime`].
 
 [RFC 2822]: https://datatracker.ietf.org/doc/html/rfc2822
 
@@ -44,12 +45,12 @@ general interchange format for new applications.
 use jcore::bounds::Sign;
 
 use crate::{
+    Error, Timestamp, ZonedDateTime,
     civil::{Date, DateTime, Time, Weekday},
-    error::{fmt::rfc2822::Error as E, ErrorContext},
-    fmt::{buffer::BorrowedBuffer, Parsed, Write},
+    error::{ErrorContext, fmt::rfc2822::Error as E},
+    fmt::{Parsed, Write, buffer::BorrowedBuffer},
     tz::{Offset, TimeZone},
     util::{b, parse},
-    Error, Timestamp, Zoned,
 };
 
 /// The default date time parser that we use throughout Jiff.
@@ -71,7 +72,7 @@ const PRINTER_MAX_BYTES_RFC2822: usize = 31;
 /// The difference comes from always using `GMT` instead of, e.g., `-0400`.
 const PRINTER_MAX_BYTES_RFC9110: usize = 29;
 
-/// Convert a [`Zoned`] to an [RFC 2822] datetime string.
+/// Convert a [`ZonedDateTime`] to an [RFC 2822] datetime string.
 ///
 /// This is a convenience function for using [`DateTimePrinter`]. In
 /// particular, this always creates and allocates a new `String`. For writing
@@ -113,13 +114,13 @@ const PRINTER_MAX_BYTES_RFC9110: usize = 29;
 /// ```
 #[cfg(feature = "alloc")]
 #[inline]
-pub fn to_string(zdt: &Zoned) -> Result<alloc::string::String, Error> {
+pub fn to_string(zdt: &ZonedDateTime) -> Result<alloc::string::String, Error> {
     let mut buf = alloc::string::String::new();
-    DEFAULT_DATETIME_PRINTER.print_zoned(zdt, &mut buf)?;
+    DEFAULT_DATETIME_PRINTER.print_zoned_datetime(zdt, &mut buf)?;
     Ok(buf)
 }
 
-/// Parse an [RFC 2822] datetime string into a [`Zoned`].
+/// Parse an [RFC 2822] datetime string into a [`ZonedDateTime`].
 ///
 /// This is a convenience function for using [`DateTimeParser`]. In particular,
 /// this takes a `&str` while the `DateTimeParser` accepts a `&[u8]`.
@@ -177,8 +178,8 @@ pub fn to_string(zdt: &Zoned) -> Result<alloc::string::String, Error> {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[inline]
-pub fn parse(string: &str) -> Result<Zoned, Error> {
-    DEFAULT_DATETIME_PARSER.parse_zoned(string)
+pub fn parse(string: &str) -> Result<ZonedDateTime, Error> {
+    DEFAULT_DATETIME_PARSER.parse_zoned_datetime(string)
 }
 
 /// A parser for [RFC 2822] datetimes.
@@ -260,12 +261,15 @@ impl DateTimeParser {
     /// static P: rfc2822::DateTimeParser = rfc2822::DateTimeParser::new()
     ///     .relaxed_weekday(true);
     /// assert_eq!(
-    ///     P.parse_zoned(string)?,
+    ///     P.parse_zoned_datetime(string)?,
     ///     date(2024, 7, 13).at(15, 9, 59, 0).in_tz("America/New_York")?,
     /// );
     /// // But note that something that isn't recognized as a valid weekday
     /// // will still result in an error:
-    /// assert!(P.parse_zoned("Wat, 13 Jul 2024 15:09:59 -0400").is_err());
+    /// assert!(
+    ///     P.parse_zoned_datetime("Wat, 13 Jul 2024 15:09:59 -0400")
+    ///         .is_err()
+    /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -274,7 +278,7 @@ impl DateTimeParser {
         DateTimeParser { relaxed_weekday: yes, ..self }
     }
 
-    /// Parse a datetime string into a [`Zoned`] value.
+    /// Parse a datetime string into a [`ZonedDateTime`] value.
     ///
     /// Note that RFC 2822 does not support time zone annotations. The zoned
     /// datetime returned will therefore always have a fixed offset time zone.
@@ -310,19 +314,20 @@ impl DateTimeParser {
     ///
     /// static PARSER: DateTimeParser = DateTimeParser::new();
     ///
-    /// let zdt = PARSER.parse_zoned("Thu, 29 Feb 2024 05:34 -0500")?;
+    /// let zdt =
+    ///     PARSER.parse_zoned_datetime("Thu, 29 Feb 2024 05:34 -0500")?;
     /// assert_eq!(zdt.to_string(), "2024-02-29T05:34:00-05:00[-05:00]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn parse_zoned<I: AsRef<[u8]>>(
+    pub fn parse_zoned_datetime<I: AsRef<[u8]>>(
         &self,
         input: I,
-    ) -> Result<Zoned, Error> {
+    ) -> Result<ZonedDateTime, Error> {
         let input = input.as_ref();
         let zdt = self
-            .parse_zoned_internal(input)
-            .context(E::FailedZoned)?
+            .parse_zoned_datetime_internal(input)
+            .context(E::FailedZonedDateTime)?
             .into_full()?;
         Ok(zdt)
     }
@@ -368,14 +373,14 @@ impl DateTimeParser {
     /// Note that this doesn't check that the input has been completely
     /// consumed.
     #[cfg_attr(feature = "perf-inline", inline(always))]
-    fn parse_zoned_internal<'i>(
+    fn parse_zoned_datetime_internal<'i>(
         &self,
         input: &'i [u8],
-    ) -> Result<Parsed<'i, Zoned>, Error> {
+    ) -> Result<Parsed<'i, ZonedDateTime>, Error> {
         let Parsed { value: (dt, offset), input } =
             self.parse_datetime_offset(input)?;
         let ts = offset.to_timestamp(dt)?;
-        let zdt = ts.to_zoned(TimeZone::fixed(offset));
+        let zdt = ts.to_zoned_datetime(TimeZone::fixed(offset));
         Ok(Parsed { value: zdt, input })
     }
 
@@ -907,8 +912,8 @@ impl DateTimeParser {
 /// A printer for [RFC 2822] datetimes.
 ///
 /// This printer converts an in memory representation of a precise instant in
-/// time to an RFC 2822 formatted string. That is, [`Zoned`] or [`Timestamp`],
-/// since all other datetime types in Jiff are inexact.
+/// time to an RFC 2822 formatted string. That is, [`ZonedDateTime`] or
+/// [`Timestamp`], since all other datetime types in Jiff are inexact.
 ///
 /// [RFC 2822]: https://datatracker.ietf.org/doc/html/rfc2822
 ///
@@ -938,7 +943,7 @@ impl DateTimeParser {
 /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("Australia/Hobart")?;
 ///
 /// let mut buf = String::new();
-/// PRINTER.print_zoned(&zdt, &mut buf)?;
+/// PRINTER.print_zoned_datetime(&zdt, &mut buf)?;
 /// assert_eq!(buf, "Sat, 15 Jun 2024 07:00:00 +1000");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -962,7 +967,9 @@ impl DateTimeParser {
 ///
 /// let path = Path::new("/tmp/output");
 /// let mut file = BufWriter::new(File::create(path)?);
-/// DateTimePrinter::new().print_zoned(&zdt, StdIoWrite(&mut file)).unwrap();
+/// DateTimePrinter::new()
+///     .print_zoned_datetime(&zdt, StdIoWrite(&mut file))
+///     .unwrap();
 /// file.flush()?;
 /// assert_eq!(
 ///     std::fs::read_to_string(path)?,
@@ -984,18 +991,18 @@ impl DateTimePrinter {
         DateTimePrinter { _private: () }
     }
 
-    /// Format a `Zoned` datetime into a string.
+    /// Format a `ZonedDateTime` datetime into a string.
     ///
     /// This never emits `-0000` as the offset in the RFC 2822 format. If you
     /// desire a `-0000` offset, use [`DateTimePrinter::print_timestamp`] via
-    /// [`Zoned::timestamp`].
+    /// [`ZonedDateTime::timestamp`].
     ///
     /// Moreover, since RFC 2822 does not support fractional seconds, this
     /// routine prints the zoned datetime as if truncating any fractional
     /// seconds.
     ///
-    /// This is a convenience routine for [`DateTimePrinter::print_zoned`]
-    /// with a `String`.
+    /// This is a convenience routine for
+    /// [`DateTimePrinter::print_zoned_datetime`] with a `String`.
     ///
     /// # Warning
     ///
@@ -1026,31 +1033,31 @@ impl DateTimePrinter {
     ///
     /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("America/New_York")?;
     /// assert_eq!(
-    ///     PRINTER.zoned_to_string(&zdt)?,
+    ///     PRINTER.zoned_datetime_to_string(&zdt)?,
     ///     "Sat, 15 Jun 2024 07:00:00 -0400",
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[cfg(feature = "alloc")]
-    pub fn zoned_to_string(
+    pub fn zoned_datetime_to_string(
         &self,
-        zdt: &Zoned,
+        zdt: &ZonedDateTime,
     ) -> Result<alloc::string::String, Error> {
         // Writing directly into the unused capacity of a `String` saves about
         // 40% on a micro-benchmark compared to just passing a `&mut String`
-        // to `print_zoned`.
+        // to `print_zoned_datetime`.
         let mut buf =
             alloc::string::String::with_capacity(PRINTER_MAX_BYTES_RFC2822);
-        self.print_zoned(zdt, &mut buf)?;
+        self.print_zoned_datetime(zdt, &mut buf)?;
         Ok(buf)
     }
 
     /// Format a `Timestamp` datetime into a string.
     ///
     /// This always emits `-0000` as the offset in the RFC 2822 format. If you
-    /// desire a `+0000` offset, use [`DateTimePrinter::print_zoned`] with a
-    /// zoned datetime with [`TimeZone::UTC`].
+    /// desire a `+0000` offset, use [`DateTimePrinter::print_zoned_datetime`]
+    /// with a zoned datetime with [`TimeZone::UTC`].
     ///
     /// Moreover, since RFC 2822 does not support fractional seconds, this
     /// routine prints the timestamp as if truncating any fractional seconds.
@@ -1136,11 +1143,11 @@ impl DateTimePrinter {
         Ok(buf)
     }
 
-    /// Print a `Zoned` datetime to the given writer.
+    /// Print a `ZonedDateTime` datetime to the given writer.
     ///
     /// This never emits `-0000` as the offset in the RFC 2822 format. If you
     /// desire a `-0000` offset, use [`DateTimePrinter::print_timestamp`] via
-    /// [`Zoned::timestamp`].
+    /// [`ZonedDateTime::timestamp`].
     ///
     /// Moreover, since RFC 2822 does not support fractional seconds, this
     /// routine prints the zoned datetime as if truncating any fractional
@@ -1180,14 +1187,14 @@ impl DateTimePrinter {
     /// let zdt = date(2024, 6, 15).at(7, 0, 0, 0).in_tz("America/New_York")?;
     ///
     /// let mut buf = String::new();
-    /// PRINTER.print_zoned(&zdt, &mut buf)?;
+    /// PRINTER.print_zoned_datetime(&zdt, &mut buf)?;
     /// assert_eq!(buf, "Sat, 15 Jun 2024 07:00:00 -0400");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn print_zoned<W: Write>(
+    pub fn print_zoned_datetime<W: Write>(
         &self,
-        zdt: &Zoned,
+        zdt: &ZonedDateTime,
         mut wtr: W,
     ) -> Result<(), Error> {
         BorrowedBuffer::with_writer::<PRINTER_MAX_BYTES_RFC2822>(
@@ -1206,8 +1213,8 @@ impl DateTimePrinter {
     /// Print a `Timestamp` datetime to the given writer.
     ///
     /// This always emits `-0000` as the offset in the RFC 2822 format. If you
-    /// desire a `+0000` offset, use [`DateTimePrinter::print_zoned`] with a
-    /// zoned datetime with [`TimeZone::UTC`].
+    /// desire a `+0000` offset, use [`DateTimePrinter::print_zoned_datetime`]
+    /// with a zoned datetime with [`TimeZone::UTC`].
     ///
     /// Moreover, since RFC 2822 does not support fractional seconds, this
     /// routine prints the timestamp as if truncating any fractional seconds.
@@ -1434,7 +1441,8 @@ mod tests {
 
     #[test]
     fn ok_parse_basic() {
-        let p = |input| DateTimeParser::new().parse_zoned(input).unwrap();
+        let p =
+            |input| DateTimeParser::new().parse_zoned_datetime(input).unwrap();
 
         insta::assert_debug_snapshot!(
             p("Wed, 10 Jan 2024 05:34:45 -0500"),
@@ -1474,7 +1482,8 @@ mod tests {
 
     #[test]
     fn ok_parse_obsolete_zone() {
-        let p = |input| DateTimeParser::new().parse_zoned(input).unwrap();
+        let p =
+            |input| DateTimeParser::new().parse_zoned_datetime(input).unwrap();
 
         insta::assert_debug_snapshot!(
             p("Wed, 10 Jan 2024 05:34:45 EST"),
@@ -1542,7 +1551,8 @@ mod tests {
     // whyyyyyyyyyyyyy
     #[test]
     fn ok_parse_comment() {
-        let p = |input| DateTimeParser::new().parse_zoned(input).unwrap();
+        let p =
+            |input| DateTimeParser::new().parse_zoned_datetime(input).unwrap();
 
         insta::assert_debug_snapshot!(
             p("Wed, 10 Jan 2024 05:34:45 -0500 (wat)"),
@@ -1560,7 +1570,8 @@ mod tests {
 
     #[test]
     fn ok_parse_whitespace() {
-        let p = |input| DateTimeParser::new().parse_zoned(input).unwrap();
+        let p =
+            |input| DateTimeParser::new().parse_zoned_datetime(input).unwrap();
 
         insta::assert_debug_snapshot!(
             p("Wed, 10 \t   Jan \n\r\n\n 2024       05:34:45    -0500"),
@@ -1601,7 +1612,10 @@ mod tests {
     #[test]
     fn err_parse_invalid() {
         let p = |input| {
-            DateTimeParser::new().parse_zoned(input).unwrap_err().to_string()
+            DateTimeParser::new()
+                .parse_zoned_datetime(input)
+                .unwrap_err()
+                .to_string()
         };
 
         insta::assert_snapshot!(
@@ -1634,7 +1648,10 @@ mod tests {
     #[test]
     fn err_parse_incomplete() {
         let p = |input| {
-            DateTimeParser::new().parse_zoned(input).unwrap_err().to_string()
+            DateTimeParser::new()
+                .parse_zoned_datetime(input)
+                .unwrap_err()
+                .to_string()
         };
 
         insta::assert_snapshot!(
@@ -1730,7 +1747,10 @@ mod tests {
     #[test]
     fn err_parse_comment() {
         let p = |input| {
-            DateTimeParser::new().parse_zoned(input).unwrap_err().to_string()
+            DateTimeParser::new()
+                .parse_zoned_datetime(input)
+                .unwrap_err()
+                .to_string()
         };
 
         insta::assert_snapshot!(
@@ -1756,14 +1776,16 @@ mod tests {
     }
 
     #[test]
-    fn ok_print_zoned() {
+    fn ok_print_zoned_datetime() {
         if crate::tz::db().is_definitively_empty() {
             return;
         }
 
-        let p = |zdt: &Zoned| -> String {
+        let p = |zdt: &ZonedDateTime| -> String {
             let mut buf = String::new();
-            DateTimePrinter::new().print_zoned(&zdt, &mut buf).unwrap();
+            DateTimePrinter::new()
+                .print_zoned_datetime(&zdt, &mut buf)
+                .unwrap();
             buf
         };
 
@@ -1842,12 +1864,14 @@ mod tests {
     fn ok_minimum_offset_roundtrip() {
         let zdt = date(2025, 12, 25)
             .at(17, 0, 0, 0)
-            .to_zoned(TimeZone::fixed(Offset::MIN))
+            .to_zoned_datetime(TimeZone::fixed(Offset::MIN))
             .unwrap();
-        let string = DateTimePrinter::new().zoned_to_string(&zdt).unwrap();
+        let string =
+            DateTimePrinter::new().zoned_datetime_to_string(&zdt).unwrap();
         assert_eq!(string, "Thu, 25 Dec 2025 17:00:00 -2559");
 
-        let got: Zoned = DateTimeParser::new().parse_zoned(&string).unwrap();
+        let got: ZonedDateTime =
+            DateTimeParser::new().parse_zoned_datetime(&string).unwrap();
         // Since we started with a zoned datetime with a minimal offset
         // (to second precision) and RFC 2822 only supports minute precision
         // in time zone offsets, printing the zoned datetime rounds the offset.
@@ -1856,7 +1880,7 @@ mod tests {
         // value by both Jiff and RFC 2822. That's what we test for here.
         let expected = date(2025, 12, 25)
             .at(17, 0, 0, 0)
-            .to_zoned(TimeZone::fixed(-Offset::hms(25, 59, 0)))
+            .to_zoned_datetime(TimeZone::fixed(-Offset::hms(25, 59, 0)))
             .unwrap();
         assert_eq!(expected, got);
     }
@@ -1865,12 +1889,14 @@ mod tests {
     fn ok_maximum_offset_roundtrip() {
         let zdt = date(2025, 12, 25)
             .at(17, 0, 0, 0)
-            .to_zoned(TimeZone::fixed(Offset::MAX))
+            .to_zoned_datetime(TimeZone::fixed(Offset::MAX))
             .unwrap();
-        let string = DateTimePrinter::new().zoned_to_string(&zdt).unwrap();
+        let string =
+            DateTimePrinter::new().zoned_datetime_to_string(&zdt).unwrap();
         assert_eq!(string, "Thu, 25 Dec 2025 17:00:00 +2559");
 
-        let got: Zoned = DateTimeParser::new().parse_zoned(&string).unwrap();
+        let got: ZonedDateTime =
+            DateTimeParser::new().parse_zoned_datetime(&string).unwrap();
         // Since we started with a zoned datetime with a maximal offset
         // (to second precision) and RFC 2822 only supports minute precision
         // in time zone offsets, printing the zoned datetime rounds the offset.
@@ -1879,7 +1905,7 @@ mod tests {
         // value by both Jiff and RFC 2822. That's what we test for here.
         let expected = date(2025, 12, 25)
             .at(17, 0, 0, 0)
-            .to_zoned(TimeZone::fixed(Offset::hms(25, 59, 0)))
+            .to_zoned_datetime(TimeZone::fixed(Offset::hms(25, 59, 0)))
             .unwrap();
         assert_eq!(expected, got);
     }
@@ -1932,15 +1958,15 @@ mod tests {
     }
 
     #[test]
-    fn err_print_zoned() {
+    fn err_print_zoned_datetime() {
         if crate::tz::db().is_definitively_empty() {
             return;
         }
 
-        let p = |zdt: &Zoned| -> String {
+        let p = |zdt: &ZonedDateTime| -> String {
             let mut buf = String::new();
             DateTimePrinter::new()
-                .print_zoned(&zdt, &mut buf)
+                .print_zoned_datetime(&zdt, &mut buf)
                 .unwrap_err()
                 .to_string()
         };

@@ -1,8 +1,8 @@
 use core::time::Duration as UnsignedDuration;
 
 use crate::{
-    error::{duration::Error as E, ErrorContext},
     Error, SignedDuration, Span,
+    error::{ErrorContext, duration::Error as E},
 };
 
 /// An internal type for abstracting over different duration types.

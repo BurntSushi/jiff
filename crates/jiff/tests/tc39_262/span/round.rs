@@ -1,7 +1,7 @@
 use jiff::{
+    RoundMode, Span, SpanRelativeTo, SpanRound, Timestamp, ToSpan, Unit,
     civil::date,
     tz::{Offset, TimeZone},
-    RoundMode, Span, SpanRelativeTo, SpanRound, Timestamp, ToSpan, Unit,
 };
 
 use crate::tc39_262::Result;
@@ -122,8 +122,8 @@ fn dst_balancing_result() -> Result {
     }
 
     let sp = 1.year().hours(24);
-    let zdt =
-        "1999-10-29T01-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
+    let zdt = "1999-10-29T01-07[America/Los_Angeles]"
+        .parse::<jiff::ZonedDateTime>()?;
     let result =
         sp.round(SpanRound::new().largest(Unit::Year).relative(&zdt))?;
     span_eq!(result, 1.year().hours(24));
@@ -134,23 +134,23 @@ fn dst_balancing_result() -> Result {
     // But with real TZ data, a span of 1 year will pretty much always cover
     // a DST backward transition.
     let sp = 1.month().hours(24);
-    let zdt =
-        "2000-09-29T01-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
+    let zdt = "2000-09-29T01-07[America/Los_Angeles]"
+        .parse::<jiff::ZonedDateTime>()?;
     let result =
         sp.round(SpanRound::new().largest(Unit::Year).relative(&zdt))?;
     span_eq!(result, 1.month().hours(24));
 
     // Try one month earlier, and we balance up to 1 day.
     let sp = 1.month().hours(24);
-    let zdt =
-        "2000-08-29T01-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
+    let zdt = "2000-08-29T01-07[America/Los_Angeles]"
+        .parse::<jiff::ZonedDateTime>()?;
     let result =
         sp.round(SpanRound::new().largest(Unit::Year).relative(&zdt))?;
     span_eq!(result, 1.month().days(1));
 
     let sp = 24.hours().nanoseconds(5);
-    let zdt =
-        "2000-10-29T00-07[America/Los_Angeles]".parse::<jiff::Zoned>()?;
+    let zdt = "2000-10-29T00-07[America/Los_Angeles]"
+        .parse::<jiff::ZonedDateTime>()?;
     let result = sp.round(
         SpanRound::new()
             .largest(Unit::Day)
@@ -173,15 +173,15 @@ fn dst_rounding_result() -> Result {
     }
 
     let sp = 1.month().days(15).hours(11).minutes(30);
-    let zdt =
-        "2000-02-18T02-08[America/Los_Angeles]".parse::<jiff::Zoned>()?;
+    let zdt = "2000-02-18T02-08[America/Los_Angeles]"
+        .parse::<jiff::ZonedDateTime>()?;
     let result =
         sp.round(SpanRound::new().smallest(Unit::Month).relative(&zdt))?;
     span_eq!(result, 2.months());
 
     let sp = 1.month().days(15).minutes(30);
-    let zdt =
-        "2000-03-02T02-08[America/Los_Angeles]".parse::<jiff::Zoned>()?;
+    let zdt = "2000-03-02T02-08[America/Los_Angeles]"
+        .parse::<jiff::ZonedDateTime>()?;
     let result =
         sp.round(SpanRound::new().smallest(Unit::Month).relative(&zdt))?;
     span_eq!(result, 2.months());
@@ -194,8 +194,8 @@ fn dst_rounding_result() -> Result {
     span_eq!(result, 1.month());
 
     let sp = 11.hours().minutes(30);
-    let zdt =
-        "2000-04-02T00:00:00[America/Los_Angeles]".parse::<jiff::Zoned>()?;
+    let zdt = "2000-04-02T00:00:00[America/Los_Angeles]"
+        .parse::<jiff::ZonedDateTime>()?;
     let result =
         sp.round(SpanRound::new().smallest(Unit::Day).relative(&zdt))?;
     span_eq!(result, 1.day());
@@ -289,7 +289,7 @@ fn largestunit_correct_rebalancing() -> Result {
 fn largestunit_smallestunit_combinations_relative() -> Result {
     let sp = mk([5, 5, 5, 5, 5, 5, 5, 5, 5, 5]);
     let d = date(2000, 1, 1);
-    let zdt = date(1972, 1, 1).to_zoned(TimeZone::UTC)?;
+    let zdt = date(1972, 1, 1).to_zoned_datetime(TimeZone::UTC)?;
     let exact: &[(Unit, &[(Unit, Span)])] = &[
         (
             Unit::Year,
@@ -707,7 +707,7 @@ fn largestunit_undefined() -> Result {
 fn out_of_range_when_adjusting_rounded_days() -> Result {
     let sp =
         1.days().seconds(MAX_SPAN_SECONDS - 86_400).nanoseconds(999_999_999);
-    let zdt = Timestamp::UNIX_EPOCH.to_zoned(TimeZone::UTC);
+    let zdt = Timestamp::UNIX_EPOCH.to_zoned_datetime(TimeZone::UTC);
 
     let options =
         SpanRound::new().largest(Unit::Nanosecond).increment(2).relative(&zdt);
@@ -827,9 +827,9 @@ fn relativeto_undefined_throw_on_calendar_units() -> Result {
 
 /// Source: https://github.com/tc39/test262/blob/29c6f7028a683b8259140e7d6352ae0ca6448a85/test/built-ins/Temporal/Duration/prototype/round/relativeto-zoneddatetime-negative-epochnanoseconds.js
 #[test]
-fn relativeto_zoneddatetime_negative_epochnanoseconds() -> Result {
+fn relativeto_zoned_datetime_negative_epochnanoseconds() -> Result {
     let zdt = Timestamp::from_nanosecond(-13849764_999_999_999)?
-        .to_zoned(TimeZone::UTC);
+        .to_zoned_datetime(TimeZone::UTC);
     let sp = 1.day();
     let result =
         sp.round(SpanRound::new().largest(Unit::Day).relative(&zdt))?;
@@ -986,8 +986,10 @@ fn roundingincrement_extreme_week_civil() -> Result {
 
 #[test]
 fn roundingincrement_extreme_week_zoned1() -> Result {
-    let min_zdt = Timestamp::MIN.to_zoned(TimeZone::fixed(Offset::MIN));
-    let max_zdt = Timestamp::MAX.to_zoned(TimeZone::fixed(Offset::MAX));
+    let min_zdt =
+        Timestamp::MIN.to_zoned_datetime(TimeZone::fixed(Offset::MIN));
+    let max_zdt =
+        Timestamp::MAX.to_zoned_datetime(TimeZone::fixed(Offset::MAX));
     let sp = 1.week();
     let max = 1_043_497;
     let options = SpanRound::new()
@@ -1028,7 +1030,8 @@ fn roundingincrement_extreme_week_zoned1() -> Result {
 
 #[test]
 fn roundingincrement_extreme_week_zoned2() -> Result {
-    let min_zdt = Timestamp::MIN.to_zoned(TimeZone::fixed(Offset::MIN));
+    let min_zdt =
+        Timestamp::MIN.to_zoned_datetime(TimeZone::fixed(Offset::MIN));
     let max = 1_043_497;
     let sp = 1_043_496.week().days(1);
     let options = SpanRound::new()
@@ -1048,8 +1051,10 @@ fn roundingincrement_extreme_week_zoned2() -> Result {
 
 #[test]
 fn roundingincrement_extreme_month() -> Result {
-    let min_zdt = Timestamp::MIN.to_zoned(TimeZone::fixed(Offset::MIN));
-    let max_zdt = Timestamp::MAX.to_zoned(TimeZone::fixed(Offset::MAX));
+    let min_zdt =
+        Timestamp::MIN.to_zoned_datetime(TimeZone::fixed(Offset::MIN));
+    let max_zdt =
+        Timestamp::MAX.to_zoned_datetime(TimeZone::fixed(Offset::MAX));
     let sp = 1.month();
     let max = 239_976;
 
@@ -1091,8 +1096,10 @@ fn roundingincrement_extreme_month() -> Result {
 
 #[test]
 fn roundingincrement_extreme_year() -> Result {
-    let min_zdt = Timestamp::MIN.to_zoned(TimeZone::fixed(Offset::MIN));
-    let max_zdt = Timestamp::MAX.to_zoned(TimeZone::fixed(Offset::MAX));
+    let min_zdt =
+        Timestamp::MIN.to_zoned_datetime(TimeZone::fixed(Offset::MIN));
+    let max_zdt =
+        Timestamp::MAX.to_zoned_datetime(TimeZone::fixed(Offset::MAX));
     let sp = 1.year();
     let max = 19_998;
 

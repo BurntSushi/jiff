@@ -74,10 +74,10 @@ $ cargo add jiff
 Third, edit `src/main.rs`. Delete what's there and replace it with this:
 
 ```rust
-use jiff::{Unit, Zoned};
+use jiff::{Unit, ZonedDateTime};
 
 fn main() -> Result<(), jiff::Error> {
-    let now = Zoned::now().round(Unit::Second)?;
+    let now = ZonedDateTime::now().round(Unit::Second)?;
     println!("{now}");
     Ok(())
 }
@@ -134,14 +134,14 @@ had optimization attention paid to them, but many still have not. It is a goal
 to improve where we can, but performance will generally come second to API
 comprehension and correctness.
 
-The submodules in Jiff, especially `jiff::fmt`, often work as an
-escape hatch for more complicated APIs that provide more control. For
-example, using the `std::fmt::Display` implementation of `Zoned` makes
-it difficult to write the data into a reusable buffer. Conversely,
-[`jiff::fmt::temporal::DateTimePrinter::print_zoned`] provides a way to write a
-`Zoned` into an existing `String` or even a `Vec<u8>`.
+The submodules in Jiff, especially `jiff::fmt`, often work as an escape hatch
+for more complicated APIs that provide more control. For example, using the
+`std::fmt::Display` implementation of `ZonedDateTime` makes it difficult to
+write the data into a reusable buffer. Conversely,
+[`jiff::fmt::temporal::DateTimePrinter::print_zoned_datetime`] provides a way to
+write a `ZonedDateTime` into an existing `String` or even a `Vec<u8>`.
 
-[`jiff::fmt::temporal::DateTimePrinter::print_zoned`]: https://docs.rs/jiff/latest/jiff/fmt/temporal/struct.DateTimePrinter.html#method.print_zoned
+[`jiff::fmt::temporal::DateTimePrinter::print_zoned_datetime`]: https://docs.rs/jiff/latest/jiff/fmt/temporal/struct.DateTimePrinter.html#method.print_zoned_datetime
 
 ### Platform support
 
@@ -196,7 +196,7 @@ of `jiff`.
 
 ### Minimum Rust version policy
 
-This crate's minimum supported `rustc` version (MSRV) is `1.70.0`. Jiff
+This crate's minimum supported `rustc` version (MSRV) is `1.85.0`. Jiff
 itself, and any dependencies of Jiff within this repository, will never use a
 Rust version that requires a Rust compiler released in the previous 1 year.
 (Dependents of Jiff in this repository, e.g., `jiff-icu`, may use a newer MSRV,
@@ -217,5 +217,4 @@ its MSRV to be a semver incompatible change. However, Jiff will limit MSRV
 increases to minor version updates. For example, if Jiff `1.0` requires Rust
 `1.20.0`, then Jiff `1.0.z` for all values of `z` will also require Rust
 `1.20.0` or older. However, Jiff `1.y` for `y > 0` may require a newer minimum
-version of Rust. (During Jiff's pre-1.0 releases, MSRV bumps will only occur
-in semver incompatible releases.)
+version of Rust.

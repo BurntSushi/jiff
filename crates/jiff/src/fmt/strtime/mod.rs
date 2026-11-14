@@ -49,9 +49,9 @@ assert_eq!(string, "Monday, July 15, 2024 at 5:30pm AEST");
 Or parse a zoned datetime with an IANA time zone identifier:
 
 ```
-use jiff::{civil::date, Zoned};
+use jiff::{civil::date, ZonedDateTime};
 
-let zdt = Zoned::strptime(
+let zdt = ZonedDateTime::strptime(
     "%A, %B %d, %Y at %-I:%M%P %:Q",
     "Monday, July 15, 2024 at 5:30pm Australia/Hobart",
 )?;
@@ -66,9 +66,9 @@ assert_eq!(
 # Usage
 
 For most cases, you can use the `strptime` and `strftime` methods on the
-corresponding datetime type. For example, [`Zoned::strptime`] and
-[`Zoned::strftime`]. However, the [`BrokenDownTime`] type in this module
-provides a little more control.
+corresponding datetime type. For example, [`ZonedDateTime::strptime`] and
+[`ZonedDateTime::strftime`]. However, the [`BrokenDownTime`] type in this
+module provides a little more control.
 
 For example, assuming `t` is a `civil::Time`, then
 `t.strftime("%Y").to_string()` will actually panic because a `civil::Time` does
@@ -242,7 +242,7 @@ dot, but `%.f` does. Note that all of the options above are still parsed for
 `%f` and `%.f`, but they are all no-ops (except for the padding for `%f`, which
 is instead interpreted as a precision setting). When using a precision setting,
 truncation is used. If you need a different rounding mode, you should use
-higher level APIs like [`Timestamp::round`] or [`Zoned::round`].
+higher level APIs like [`Timestamp::round`] or [`ZonedDateTime::round`].
 
 # Conditionally unsupported
 
@@ -275,16 +275,16 @@ The following things are currently unsupported:
 */
 
 use crate::{
+    Error, Timestamp, ZonedDateTime,
     civil::{Date, DateTime, ISOWeekDate, Time, Weekday},
-    error::{fmt::strtime::Error as E, ErrorContext},
+    error::{ErrorContext, fmt::strtime::Error as E},
     fmt::{
+        Write,
         buffer::{ArrayBuffer, BorrowedWriter},
         strtime::{parse::Parser, printer::Formatter},
-        Write,
     },
     tz::{Offset, OffsetConflict, TimeZone, TimeZoneDatabase},
     util::{self, b, escape},
-    Error, Timestamp, Zoned,
 };
 
 mod parse;
@@ -313,10 +313,14 @@ mod printer;
 /// let zdt = strtime::parse(
 ///     "%a, %d %b %Y %T %z",
 ///     "Mon, 15 Jul 2024 16:24:59 -0400",
-/// )?.to_zoned()?;
+/// )?
+/// .to_zoned_datetime()?;
 ///
 /// let tz = tz::offset(-4).to_time_zone();
-/// assert_eq!(zdt, date(2024, 7, 15).at(16, 24, 59, 0).to_zoned(tz)?);
+/// assert_eq!(
+///     zdt,
+///     date(2024, 7, 15).at(16, 24, 59, 0).to_zoned_datetime(tz)?
+/// );
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -337,7 +341,8 @@ mod printer;
 /// let zdt = strtime::parse(
 ///     "%Y-%m-%dT%H:%M:%S%.f%:z",
 ///     "2024-07-15T16:24:59.123456789-04:00",
-/// )?.to_zoned()?;
+/// )?
+/// .to_zoned_datetime()?;
 /// assert_eq!(
 ///     zdt,
 ///     date(2024, 7, 15).at(16, 24, 59, 123_456_789).in_tz("America/New_York")?,
@@ -362,8 +367,8 @@ pub fn parse(
 /// [`fmt::Write`](super::Write) trait implementation to write to.
 ///
 /// Note that `broken_down_time` can be _anything_ that can be converted into
-/// it. This includes, for example, [`Zoned`], [`Timestamp`], [`DateTime`],
-/// [`Date`] and [`Time`].
+/// it. This includes, for example, [`ZonedDateTime`], [`Timestamp`],
+/// [`DateTime`], [`Date`] and [`Time`].
 ///
 /// # Errors
 ///
@@ -375,8 +380,8 @@ pub fn parse(
 ///
 /// # Example
 ///
-/// This example shows how to format a `Zoned` into something resembling a RFC
-/// 2822 datetime:
+/// This example shows how to format a `ZonedDateTime` into something
+/// resembling a RFC 2822 datetime:
 ///
 /// ```
 /// use jiff::{civil::date, fmt::strtime};
@@ -475,16 +480,18 @@ pub fn format(
 /// [`icu`]: https://docs.rs/icu
 /// [`jiff-icu`]: https://docs.rs/jiff-icu
 #[derive(Clone, Debug)]
-pub struct Config<C> {
-    custom: C,
+pub struct Config<C: ?Sized> {
     lenient: bool,
+    // This must remain the final field so that `Config<C>` can be unsized to
+    // `Config<dyn Custom>`.
+    custom: C,
 }
 
 impl Config<DefaultCustom> {
     /// Create a new default `Config` that uses [`DefaultCustom`].
     #[inline]
     pub const fn new() -> Config<DefaultCustom> {
-        Config { custom: DefaultCustom::new(), lenient: false }
+        Config { lenient: false, custom: DefaultCustom::new() }
     }
 }
 
@@ -493,7 +500,7 @@ impl<C> Config<C> {
     /// that use this configuration.
     #[inline]
     pub fn custom<U: Custom>(self, custom: U) -> Config<U> {
-        Config { custom, lenient: self.lenient }
+        Config { lenient: self.lenient, custom }
     }
 
     /// Enable lenient formatting.
@@ -659,18 +666,38 @@ impl<C> Config<C> {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
+/// # Trait objects
+///
+/// `Custom` is dyn-compatible. A configuration containing a concrete
+/// implementation can be coerced to one containing a `dyn Custom` trait
+/// object without allocating:
+///
+/// ```
+/// use jiff::{civil, fmt::strtime::{BrokenDownTime, PosixCustom, Config, Custom}};
+///
+/// let config = Config::new().custom(PosixCustom::new());
+/// let config: &Config<dyn Custom> = &config;
+/// let tm = BrokenDownTime::from(civil::date(2025, 7, 1).at(17, 30, 0, 0));
+/// assert_eq!(
+///     tm.to_string_with_config(config, "%c")?,
+///     "Tue Jul  1 17:30:00 2025",
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
 /// [`icu`]: https://docs.rs/icu
 /// [`jiff-icu`]: https://docs.rs/jiff-icu
-pub trait Custom: Sized {
+pub trait Custom {
     /// Called when formatting a datetime with the `%c` flag.
     ///
     /// This defaults to the implementation for [`DefaultCustom`].
-    fn format_datetime<W: Write>(
+    fn format_datetime(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         if matches!(ext.flag, Some(Flag::Uppercase)) {
             tm.format_with_config(config, "%Y M%m %-d, %^a %H:%M:%S", wtr)
@@ -682,12 +709,12 @@ pub trait Custom: Sized {
     /// Called when formatting a datetime with the `%x` flag.
     ///
     /// This defaults to the implementation for [`DefaultCustom`].
-    fn format_date<W: Write>(
+    fn format_date(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         _ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         // 2025 M04 27
         tm.format_with_config(config, "%Y M%m %-d", wtr)
@@ -696,12 +723,12 @@ pub trait Custom: Sized {
     /// Called when formatting a datetime with the `%X` flag.
     ///
     /// This defaults to the implementation for [`DefaultCustom`].
-    fn format_time<W: Write>(
+    fn format_time(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         _ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         tm.format_with_config(config, "%H:%M:%S", wtr)
     }
@@ -709,12 +736,12 @@ pub trait Custom: Sized {
     /// Called when formatting a datetime with the `%r` flag.
     ///
     /// This defaults to the implementation for [`DefaultCustom`].
-    fn format_12hour_time<W: Write>(
+    fn format_12hour_time(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         if matches!(ext.flag, Some(Flag::Uppercase)) {
             tm.format_with_config(config, "%-I:%M:%S %^p", wtr)
@@ -796,12 +823,12 @@ impl PosixCustom {
 }
 
 impl Custom for PosixCustom {
-    fn format_datetime<W: Write>(
+    fn format_datetime(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         if matches!(ext.flag, Some(Flag::Uppercase)) {
             tm.format_with_config(config, "%^a %^b %e %H:%M:%S %Y", wtr)
@@ -810,32 +837,32 @@ impl Custom for PosixCustom {
         }
     }
 
-    fn format_date<W: Write>(
+    fn format_date(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         _ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         tm.format_with_config(config, "%m/%d/%y", wtr)
     }
 
-    fn format_time<W: Write>(
+    fn format_time(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         _ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         tm.format_with_config(config, "%H:%M:%S", wtr)
     }
 
-    fn format_12hour_time<W: Write>(
+    fn format_12hour_time(
         &self,
-        config: &Config<Self>,
+        config: &Config<dyn Custom + '_>,
         ext: &Extension,
         tm: &BrokenDownTime,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         if matches!(ext.flag, Some(Flag::Uppercase)) {
             tm.format_with_config(config, "%I:%M:%S %^p", wtr)
@@ -853,16 +880,16 @@ impl Custom for PosixCustom {
 /// other than a `String` via the [`fmt::Write`](super::Write) trait.
 ///
 /// Otherwise, typical use of this module happens indirectly via APIs like
-/// [`Zoned::strptime`] and [`Zoned::strftime`].
+/// [`ZonedDateTime::strptime`] and [`ZonedDateTime::strftime`].
 ///
 /// # Design
 ///
-/// This is the type that parsing writes to and formatting reads from. That
-/// is, parsing proceeds by writing individual parsed fields to this type, and
-/// then converting the fields to datetime types like [`Zoned`] only after
+/// This is the type that parsing writes to and formatting reads from. That is,
+/// parsing proceeds by writing individual parsed fields to this type, and then
+/// converting the fields to datetime types like [`ZonedDateTime`] only after
 /// parsing is complete. Similarly, formatting always begins by converting
-/// datetime types like `Zoned` into a `BrokenDownTime`, and then formatting
-/// the individual fields from there.
+/// datetime types like `ZonedDateTime` into a `BrokenDownTime`, and then
+/// formatting the individual fields from there.
 // Design:
 //
 // This is meant to be very similar to libc's `struct tm` in that it
@@ -913,10 +940,10 @@ pub struct BrokenDownTime {
     // turn 13 o'clock to 1 o'clock.
     meridiem: Option<Meridiem>,
     // A timestamp. Set when converting from
-    // a `Zoned` or `Timestamp`, or when parsing `%s`.
+    // a `ZonedDateTime` or `Timestamp`, or when parsing `%s`.
     timestamp: Option<Timestamp>,
     // The time zone. Currently used only when
-    // formatting a `Zoned`.
+    // formatting a `ZonedDateTime`.
     tz: Option<TimeZone>,
     // The IANA time zone identifier. Set when
     // parsing `%Q` or by the caller.
@@ -925,7 +952,7 @@ pub struct BrokenDownTime {
     iana: Option<alloc::string::String>,
     // When true and `iana` is `None`, the IANA
     // identifier is borrowed from `tz`. This avoids
-    // an allocation on every `Zoned::strftime`.
+    // an allocation on every `ZonedDateTime::strftime`.
     #[cfg(feature = "alloc")]
     iana_from_tz: bool,
 }
@@ -1132,8 +1159,8 @@ impl BrokenDownTime {
     ///
     /// This routine is like [`BrokenDownTime::format`], except that it
     /// permits callers to provide their own configuration instead of using
-    /// the default. This routine also accepts a `&mut W` instead of a `W`,
-    /// which may be more flexible in some situations.
+    /// the default. This routine also accepts a `&mut dyn Write` instead of a
+    /// `W`, which may be more flexible in some situations.
     ///
     /// # Errors
     ///
@@ -1166,12 +1193,12 @@ impl BrokenDownTime {
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    #[inline]
-    pub fn format_with_config<W: Write, L: Custom>(
+    #[inline(never)]
+    pub fn format_with_config(
         &self,
-        config: &Config<L>,
+        config: &Config<dyn Custom + '_>,
         format: impl AsRef<[u8]>,
-        wtr: &mut W,
+        wtr: &mut dyn Write,
     ) -> Result<(), Error> {
         let fmt = format.as_ref();
         let mut buf = ArrayBuffer::<100>::default();
@@ -1271,9 +1298,9 @@ impl BrokenDownTime {
     /// ```
     #[cfg(feature = "alloc")]
     #[inline]
-    pub fn to_string_with_config<L: Custom>(
+    pub fn to_string_with_config(
         &self,
-        config: &Config<L>,
+        config: &Config<dyn Custom + '_>,
         format: impl AsRef<[u8]>,
     ) -> Result<alloc::string::String, Error> {
         let format = format.as_ref();
@@ -1291,7 +1318,7 @@ impl BrokenDownTime {
     ///
     /// If you need to use a custom time zone database for doing IANA time
     /// zone identifier lookups (via the `%Q` directive), then use
-    /// [`BrokenDownTime::to_zoned_with`].
+    /// [`BrokenDownTime::to_zoned_datetime_with`].
     ///
     /// This always prefers an explicitly set timestamp over other components
     /// of this `BrokenDownTime`. An explicit timestamp is set via
@@ -1303,16 +1330,16 @@ impl BrokenDownTime {
     /// # Warning
     ///
     /// The `strtime` module APIs do not require an IANA time zone identifier
-    /// to parse a `Zoned`. If one is not used, then if you format a zoned
-    /// datetime in a time zone like `America/New_York` and then parse it back
-    /// again, the zoned datetime you get back will be a "fixed offset" zoned
-    /// datetime. This in turn means it will not perform daylight saving time
-    /// safe arithmetic.
+    /// to parse a `ZonedDateTime`. If one is not used, then if you format a
+    /// zoned datetime in a time zone like `America/New_York` and then parse it
+    /// back again, the zoned datetime you get back will be a "fixed offset"
+    /// zoned datetime. This in turn means it will not perform daylight saving
+    /// time safe arithmetic.
     ///
     /// However, the `%Q` directive may be used to both format and parse an
     /// IANA time zone identifier. It is strongly recommended to use this
-    /// directive whenever one is formatting or parsing `Zoned` values since
-    /// it permits correctly round-tripping `Zoned` values.
+    /// directive whenever one is formatting or parsing `ZonedDateTime` values
+    /// since it permits correctly round-tripping `ZonedDateTime` values.
     ///
     /// # Errors
     ///
@@ -1336,7 +1363,7 @@ impl BrokenDownTime {
     /// let zdt = strtime::parse(
     ///     "%F %H:%M %:z %:Q",
     ///     "2024-07-14 21:14 -04:00 America/New_York",
-    /// )?.to_zoned()?;
+    /// )?.to_zoned_datetime()?;
     /// assert_eq!(
     ///     zdt.to_string(),
     ///     "2024-07-14T21:14:00-04:00[America/New_York]",
@@ -1357,7 +1384,7 @@ impl BrokenDownTime {
     /// let result = strtime::parse(
     ///     "%F %H:%M %:z %:Q",
     ///     "2024-07-14 21:14 -05:00 America/New_York",
-    /// )?.to_zoned();
+    /// )?.to_zoned_datetime();
     /// assert_eq!(
     ///     result.unwrap_err().to_string(),
     ///     "datetime could not resolve to a timestamp since `reject` \
@@ -1379,14 +1406,14 @@ impl BrokenDownTime {
     /// ```
     /// use jiff::fmt::strtime;
     ///
-    /// let zdt = strtime::parse("%s", "1760813400")?.to_zoned()?;
+    /// let zdt = strtime::parse("%s", "1760813400")?.to_zoned_datetime()?;
     /// assert_eq!(zdt.to_string(), "2025-10-18T18:50:00Z[Etc/Unknown]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_zoned(&self) -> Result<Zoned, Error> {
-        self.to_zoned_with(crate::tz::db())
+    pub fn to_zoned_datetime(&self) -> Result<ZonedDateTime, Error> {
+        self.to_zoned_datetime_with(crate::tz::db())
     }
 
     /// Extracts a zoned datetime from this broken down time and uses the time
@@ -1411,16 +1438,16 @@ impl BrokenDownTime {
     /// # Warning
     ///
     /// The `strtime` module APIs do not require an IANA time zone identifier
-    /// to parse a `Zoned`. If one is not used, then if you format a zoned
-    /// datetime in a time zone like `America/New_York` and then parse it back
-    /// again, the zoned datetime you get back will be a "fixed offset" zoned
-    /// datetime. This in turn means it will not perform daylight saving time
-    /// safe arithmetic.
+    /// to parse a `ZonedDateTime`. If one is not used, then if you format a
+    /// zoned datetime in a time zone like `America/New_York` and then parse it
+    /// back again, the zoned datetime you get back will be a "fixed offset"
+    /// zoned datetime. This in turn means it will not perform daylight saving
+    /// time safe arithmetic.
     ///
     /// However, the `%Q` directive may be used to both format and parse an
     /// IANA time zone identifier. It is strongly recommended to use this
-    /// directive whenever one is formatting or parsing `Zoned` values since
-    /// it permits correctly round-tripping `Zoned` values.
+    /// directive whenever one is formatting or parsing `ZonedDateTime` values
+    /// since it permits correctly round-tripping `ZonedDateTime` values.
     ///
     /// # Errors
     ///
@@ -1444,7 +1471,7 @@ impl BrokenDownTime {
     /// let zdt = strtime::parse(
     ///     "%F %H:%M %:z %:Q",
     ///     "2024-07-14 21:14 -04:00 America/New_York",
-    /// )?.to_zoned_with(jiff::tz::db())?;
+    /// )?.to_zoned_datetime_with(jiff::tz::db())?;
     /// assert_eq!(
     ///     zdt.to_string(),
     ///     "2024-07-14T21:14:00-04:00[America/New_York]",
@@ -1453,16 +1480,16 @@ impl BrokenDownTime {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_zoned_with(
+    pub fn to_zoned_datetime_with(
         &self,
         db: &TimeZoneDatabase,
-    ) -> Result<Zoned, Error> {
+    ) -> Result<ZonedDateTime, Error> {
         match (self.offset, self.iana_time_zone()) {
             (None, None) => {
                 if let Some(ts) = self.timestamp {
-                    return Ok(ts.to_zoned(TimeZone::unknown()));
+                    return Ok(ts.to_zoned_datetime(TimeZone::unknown()));
                 }
-                Err(Error::from(E::ZonedOffsetOrTz))
+                Err(Error::from(E::ZonedDateTimeOffsetOrTz))
             }
             (Some(offset), None) => {
                 let ts = match self.timestamp {
@@ -1470,24 +1497,24 @@ impl BrokenDownTime {
                     None => {
                         let dt = self
                             .to_datetime()
-                            .context(E::RequiredDateTimeForZoned)?;
+                            .context(E::RequiredDateTimeForZonedDateTime)?;
                         let ts = offset
                             .to_timestamp(dt)
                             .context(E::RangeTimestamp)?;
                         ts
                     }
                 };
-                Ok(ts.to_zoned(TimeZone::fixed(offset)))
+                Ok(ts.to_zoned_datetime(TimeZone::fixed(offset)))
             }
             (None, Some(iana)) => {
                 let tz = db.get(iana)?;
                 match self.timestamp {
-                    Some(ts) => Ok(ts.to_zoned(tz)),
+                    Some(ts) => Ok(ts.to_zoned_datetime(tz)),
                     None => {
                         let dt = self
                             .to_datetime()
-                            .context(E::RequiredDateTimeForZoned)?;
-                        Ok(tz.to_zoned(dt)?)
+                            .context(E::RequiredDateTimeForZonedDateTime)?;
+                        Ok(tz.to_zoned_datetime(dt)?)
                     }
                 }
             }
@@ -1495,7 +1522,7 @@ impl BrokenDownTime {
                 let tz = db.get(iana)?;
                 match self.timestamp {
                     Some(ts) => {
-                        let zdt = ts.to_zoned(tz);
+                        let zdt = ts.to_zoned_datetime(tz);
                         if zdt.offset() != offset {
                             return Err(Error::from(E::MismatchOffset {
                                 parsed: offset,
@@ -1507,7 +1534,7 @@ impl BrokenDownTime {
                     None => {
                         let dt = self
                             .to_datetime()
-                            .context(E::RequiredDateTimeForZoned)?;
+                            .context(E::RequiredDateTimeForZonedDateTime)?;
                         let azdt =
                             OffsetConflict::Reject.resolve(dt, offset, tz)?;
                         // Guaranteed that if OffsetConflict::Reject doesn't
@@ -3016,7 +3043,7 @@ impl BrokenDownTime {
     /// // zone. It only works here because we
     /// // explicitly set the time zone after parsing.
     /// assert_eq!(
-    ///     tm.to_zoned()?.to_string(),
+    ///     tm.to_zoned_datetime()?.to_string(),
     ///     "1970-01-01T01:00:00-05:00[America/New_York]",
     /// );
     ///
@@ -3167,7 +3194,7 @@ impl BrokenDownTime {
     ///
     /// An explicitly set timestamp takes precedence when using higher
     /// level convenience accessors such as [`BrokenDownTime::to_timestamp`]
-    /// and [`BrokenDownTime::to_zoned`].
+    /// and [`BrokenDownTime::to_zoned_datetime`].
     ///
     /// # Example
     ///
@@ -3205,8 +3232,8 @@ impl BrokenDownTime {
     }
 }
 
-impl<'a> From<&'a Zoned> for BrokenDownTime {
-    fn from(zdt: &'a Zoned) -> BrokenDownTime {
+impl<'a> From<&'a ZonedDateTime> for BrokenDownTime {
+    fn from(zdt: &'a ZonedDateTime) -> BrokenDownTime {
         // let offset_info = zdt.time_zone().to_offset_info(zdt.timestamp());
         BrokenDownTime {
             offset: Some(zdt.offset()),
@@ -3285,7 +3312,7 @@ impl From<Time> for BrokenDownTime {
 /// A "lazy" implementation of `std::fmt::Display` for `strftime`.
 ///
 /// Values of this type are created by the `strftime` methods on the various
-/// datetime types in this crate. For example, [`Zoned::strftime`].
+/// datetime types in this crate. For example, [`ZonedDateTime::strftime`].
 ///
 /// A `Display` captures the information needed from the datetime and waits to
 /// do the actual formatting when this type's `std::fmt::Display` trait
@@ -3303,7 +3330,7 @@ impl From<Time> for BrokenDownTime {
 /// # Example
 ///
 /// This example shows how to format a zoned datetime using
-/// [`Zoned::strftime`]:
+/// [`ZonedDateTime::strftime`]:
 ///
 /// ```
 /// use jiff::civil::date;
@@ -3334,9 +3361,9 @@ impl From<Time> for BrokenDownTime {
 /// ignored. For example, when using an invalid formatting directive:
 ///
 /// ```
-/// use jiff::Zoned;
+/// use jiff::ZonedDateTime;
 ///
-/// let zdt = Zoned::UNIX_EPOCH;
+/// let zdt = ZonedDateTime::UNIX_EPOCH;
 /// let string = zdt.strftime("%Y %").to_string();
 /// assert_eq!(string, "1970 %");
 /// ```
@@ -3345,9 +3372,9 @@ impl From<Time> for BrokenDownTime {
 /// level API:
 ///
 /// ```
-/// use jiff::Zoned;
+/// use jiff::ZonedDateTime;
 ///
-/// let zdt = Zoned::UNIX_EPOCH;
+/// let zdt = ZonedDateTime::UNIX_EPOCH;
 /// assert_eq!(
 ///     jiff::fmt::strtime::format("%Y %", &zdt).unwrap_err().to_string(),
 ///     "strftime formatting failed: invalid format string, \
@@ -3411,11 +3438,7 @@ impl Meridiem {
 
 impl From<Time> for Meridiem {
     fn from(t: Time) -> Meridiem {
-        if t.hour() < 12 {
-            Meridiem::AM
-        } else {
-            Meridiem::PM
-        }
+        if t.hour() < 12 { Meridiem::AM } else { Meridiem::PM }
     }
 }
 
@@ -3608,7 +3631,8 @@ mod tests {
             @"2024-07-29T20:56:25Z",
         );
         insta::assert_snapshot!(
-            Zoned::strptime("%Y%m%d-%H%M%S%z", "20240730-005625+0400").unwrap(),
+            ZonedDateTime::strptime("%Y%m%d-%H%M%S%z", "20240730-005625+0400")
+                .unwrap(),
             @"2024-07-30T00:56:25+04:00[+04:00]",
         );
     }
@@ -3635,8 +3659,8 @@ mod tests {
         );
     }
 
-    // `BrokenDownTime::from(&Zoned)` borrows the IANA identifier from the
-    // time zone instead of copying it. Clearing it must still stick.
+    // `BrokenDownTime::from(&ZonedDateTime)` borrows the IANA identifier from
+    // the time zone instead of copying it. Clearing it must still stick.
     #[cfg(feature = "alloc")]
     #[test]
     fn iana_time_zone_from_zoned() {

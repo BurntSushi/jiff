@@ -1,4 +1,4 @@
-pub(super) static VERSION: Option<&str> = Some(r"2026f");
+pub(super) static VERSION: &str = "2026f";
 
 pub(super) static TZNAME_TO_OFFSET: &[(&str, core::ops::Range<usize>)] = &[
     (r"Africa/Abidjan", 3982..4112),

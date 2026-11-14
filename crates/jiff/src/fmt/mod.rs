@@ -24,12 +24,17 @@ the [`friendly`] sub-module). The sub-modules provide lower level control
 (such as parsing from `&[u8]`) and more configuration (such as controlling the
 disambiguation strategy used when parsing zoned datetime [RFC-9557] strings).
 
+There is substantial overlap between [RFC-3339], [RFC-9557] and [ISO-8601].
+The table below lists the most precise specification. For example,
+`2025-08-20T17:35:00-05` is valid in all three specifications, but is most
+precisely described by RFC 3339.
+
 | Example | Format | Links |
 | ------- | ------ | ----- |
 | `2025-08-20T17:35:00Z` | [RFC-3339] | [`Timestamp`] |
 | `2025-08-20T17:35:00-05` | [RFC-3339] | [`FromStr`] impl and<br>[`Timestamp::display_with_offset`] |
-| `2025-08-20T17:35:00+02[Poland]` | [RFC-9557] | [`Zoned`] |
-| `2025-08-20T17:35:00+02:00[+02:00]` | [RFC-9557] | [`Zoned`] |
+| `2025-08-20T17:35:00+02[Poland]` | [RFC-9557] | [`ZonedDateTime`] |
+| `2025-08-20T17:35:00+02:00[+02:00]` | [RFC-9557] | [`ZonedDateTime`] |
 | `2025-08-20T17:35:00` | [ISO-8601] | [`civil::DateTime`] |
 | `2025-08-20` | [ISO-8601] | [`civil::Date`] |
 | `17:35:00` | [ISO-8601] | [`civil::Time`] |
@@ -83,8 +88,8 @@ shows the options for printing durations in the format shown.
 
 ## Bespoke datetime formats via `strptime` and `strftime`
 
-Every datetime type has bespoke formatting routines defined on it. For
-example, [`Zoned::strptime`] and [`civil::Date::strftime`]. Additionally, the
+Every datetime type has bespoke formatting routines defined on it. For example,
+[`ZonedDateTime::strptime`] and [`civil::Date::strftime`]. Additionally, the
 [`strtime`] sub-module also provides convenience routines, [`strtime::format`]
 and [`strtime::parse`], where the former is generic over any datetime type in
 Jiff and the latter provides a [`BrokenDownTime`] for granular parsing.
@@ -135,8 +140,8 @@ and features.)
 [`Span`]: crate::Span
 [`Timestamp`]: crate::Timestamp
 [`Timestamp::display_with_offset`]: crate::Timestamp::display_with_offset
-[`Zoned`]: crate::Zoned
-[`Zoned::strptime`]: crate::Zoned::strptime
+[`ZonedDateTime`]: crate::ZonedDateTime
+[`ZonedDateTime::strptime`]: crate::ZonedDateTime::strptime
 
 [`Designator::Verbose`]: crate::fmt::friendly::Designator::Verbose
 [`Designator::Short`]: crate::fmt::friendly::Designator::Short
@@ -166,7 +171,7 @@ and features.)
 */
 
 use crate::{
-    error::{fmt::Error as E, Error},
+    error::{Error, fmt::Error as E},
     util::escape,
 };
 
@@ -398,7 +403,9 @@ impl Write for &mut dyn Write {
 ///
 /// let path = Path::new("/tmp/output");
 /// let mut file = BufWriter::new(File::create(path)?);
-/// DateTimePrinter::new().print_zoned(&zdt, StdIoWrite(&mut file)).unwrap();
+/// DateTimePrinter::new()
+///     .print_zoned_datetime(&zdt, StdIoWrite(&mut file))
+///     .unwrap();
 /// file.flush()?;
 /// assert_eq!(
 ///     std::fs::read_to_string(path)?,

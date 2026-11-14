@@ -1,14 +1,16 @@
 use jcore::tz::{posix, tzif};
 
 use crate::{
+    Timestamp, ZonedDateTime,
     civil::DateTime,
-    error::{tz::timezone::Error as E, Error},
+    error::{Error, tz::timezone::Error as E},
     tz::{
-        ambiguous::{AmbiguousOffset, AmbiguousTimestamp, AmbiguousZoned},
+        ambiguous::{
+            AmbiguousOffset, AmbiguousTimestamp, AmbiguousZonedDateTime,
+        },
         offset::{Dst, Offset},
     },
     util::sync::Arc,
-    Timestamp, Zoned,
 };
 
 use self::repr::Repr;
@@ -83,7 +85,8 @@ use self::repr::Repr;
 /// The system time zone can be retrieved via [`TimeZone::system`]. If it
 /// couldn't be detected or if the `tz-system` crate feature is not enabled,
 /// then [`TimeZone::unknown`] is returned. `TimeZone::system` is what's used
-/// internally for retrieving the current zoned datetime via [`Zoned::now`].
+/// internally for retrieving the current zoned datetime via
+/// [`ZonedDateTime::now`].
 ///
 /// While there is no platform independent way to detect your system's
 /// "default" time zone, Jiff employs best-effort heuristics to determine it.
@@ -132,11 +135,12 @@ use self::repr::Repr;
 /// checksums of their rules are equal.
 /// * In all other cases, time zones are unequal.
 ///
-/// Time zone equality is, for example, used in APIs like [`Zoned::since`]
-/// when asking for spans with calendar units. Namely, since days can be of
-/// different lengths in different time zones, `Zoned::since` will return an
-/// error when the two zoned datetimes are in different time zones and when
-/// the caller requests units greater than hours.
+/// Time zone equality is, for example, used in APIs like
+/// [`ZonedDateTime::since`] when asking for spans with calendar units. Namely,
+/// since days can be of different lengths in different time zones,
+/// `ZonedDateTime::since` will return an error when the two zoned datetimes
+/// are in different time zones and when the caller requests units greater than
+/// hours.
 ///
 /// # Dealing with ambiguity
 ///
@@ -160,18 +164,18 @@ use self::repr::Repr;
 /// [`TimeZone::to_offset`]. The civil time-to-timestamp conversion is done
 /// via one of the following routines:
 ///
-/// * [`TimeZone::to_zoned`] conveniently returns a [`Zoned`] and automatically
-/// uses the
+/// * [`TimeZone::to_zoned_datetime`] conveniently returns a [`ZonedDateTime`]
+/// and automatically uses the
 /// [`Disambiguation::Compatible`](crate::tz::Disambiguation::Compatible)
 /// strategy if the given civil datetime is ambiguous in the time zone.
-/// * [`TimeZone::to_ambiguous_zoned`] returns a potentially ambiguous
-/// zoned datetime, [`AmbiguousZoned`], and provides fine-grained control over
-/// how to resolve ambiguity, if it occurs.
-/// * [`TimeZone::to_timestamp`] is like `TimeZone::to_zoned`, but returns
-/// a [`Timestamp`] instead.
+/// * [`TimeZone::to_ambiguous_zoned_datetime`] returns a potentially
+/// ambiguous zoned datetime, [`AmbiguousZonedDateTime`], and provides
+/// fine-grained control over how to resolve ambiguity, if it occurs.
+/// * [`TimeZone::to_timestamp`] is like `TimeZone::to_zoned_datetime`, but
+/// returns a [`Timestamp`] instead.
 /// * [`TimeZone::to_ambiguous_timestamp`] is like
-/// `TimeZone::to_ambiguous_zoned`, but returns an [`AmbiguousTimestamp`]
-/// instead.
+/// `TimeZone::to_ambiguous_zoned_datetime`, but returns an
+/// [`AmbiguousTimestamp`] instead.
 ///
 /// Here is an example where we explore the different disambiguation strategies
 /// for a fold in time, where in this case, the 1 o'clock hour is repeated:
@@ -182,21 +186,21 @@ use self::repr::Repr;
 /// let tz = TimeZone::get("America/New_York")?;
 /// let dt = date(2024, 11, 3).at(1, 30, 0, 0);
 /// // It's ambiguous, so asking for an unambiguous instant presents an error!
-/// assert!(tz.to_ambiguous_zoned(dt).unambiguous().is_err());
+/// assert!(tz.to_ambiguous_zoned_datetime(dt).unambiguous().is_err());
 /// // Gives you the earlier time in a fold, i.e., before DST ends:
 /// assert_eq!(
-///     tz.to_ambiguous_zoned(dt).earlier()?.to_string(),
+///     tz.to_ambiguous_zoned_datetime(dt).earlier()?.to_string(),
 ///     "2024-11-03T01:30:00-04:00[America/New_York]",
 /// );
 /// // Gives you the later time in a fold, i.e., after DST ends.
 /// // Notice the offset change from the previous example!
 /// assert_eq!(
-///     tz.to_ambiguous_zoned(dt).later()?.to_string(),
+///     tz.to_ambiguous_zoned_datetime(dt).later()?.to_string(),
 ///     "2024-11-03T01:30:00-05:00[America/New_York]",
 /// );
 /// // "Just give me something reasonable"
 /// assert_eq!(
-///     tz.to_ambiguous_zoned(dt).compatible()?.to_string(),
+///     tz.to_ambiguous_zoned_datetime(dt).compatible()?.to_string(),
 ///     "2024-11-03T01:30:00-04:00[America/New_York]",
 /// );
 ///
@@ -277,7 +281,7 @@ impl TimeZone {
     /// as freedesktop.org][freedesktop-org-localtime].
     ///
     /// An unknown time zone _behaves_ like [`TimeZone::UTC`], but will
-    /// print as `Etc/Unknown` when converting a `Zoned` to a string.
+    /// print as `Etc/Unknown` when converting a `ZonedDateTime` to a string.
     ///
     /// If you would like to fall back to UTC instead of
     /// the special "unknown" time zone, then you can do
@@ -562,12 +566,12 @@ impl TimeZone {
     /// through serialization:
     ///
     /// ```
-    /// use jiff::{civil::date, tz::TimeZone, Zoned};
+    /// use jiff::{civil::date, tz::TimeZone, ZonedDateTime};
     ///
     /// let tz = TimeZone::unknown();
-    /// let zdt = date(2025, 2, 1).at(17, 0, 0, 0).to_zoned(tz)?;
+    /// let zdt = date(2025, 2, 1).at(17, 0, 0, 0).to_zoned_datetime(tz)?;
     /// assert_eq!(zdt.to_string(), "2025-02-01T17:00:00Z[Etc/Unknown]");
-    /// let got: Zoned = "2025-02-01T17:00:00Z[Etc/Unknown]".parse()?;
+    /// let got: ZonedDateTime = "2025-02-01T17:00:00Z[Etc/Unknown]".parse()?;
     /// assert_eq!(got, zdt);
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -682,7 +686,7 @@ impl TimeZone {
     /// Returns true if and only if this time zone is unknown.
     ///
     /// This has the special internal identifier of `Etc/Unknown`, and this
-    /// is what will be used when converting a `Zoned` to a string.
+    /// is what will be used when converting a `ZonedDateTime` to a string.
     ///
     /// Note that while `Etc/Unknown` looks like an IANA time zone identifier,
     /// it is specifically and explicitly not one. It is reserved and is
@@ -733,8 +737,8 @@ impl TimeZone {
     /// one civil datetime corresponding to that instant.
     ///
     /// Note that this is considered a lower level routine. Consider working
-    /// with zoned datetimes instead, and use [`Zoned::datetime`] to get its
-    /// civil time if necessary.
+    /// with zoned datetimes instead, and use [`ZonedDateTime::datetime`] to
+    /// get its civil time if necessary.
     ///
     /// # Example
     ///
@@ -750,7 +754,7 @@ impl TimeZone {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
-    /// As mentioned above, consider using `Zoned` instead:
+    /// As mentioned above, consider using `ZonedDateTime` instead:
     ///
     /// ```
     /// use jiff::Timestamp;
@@ -911,7 +915,8 @@ impl TimeZone {
     /// If you just need an offset for a given timestamp, then you can use
     /// [`TimeZone::to_offset`]. Or, if you need an offset for a civil
     /// datetime, then you can use [`TimeZone::to_ambiguous_timestamp`] or
-    /// [`TimeZone::to_ambiguous_zoned`], although the result may be ambiguous.
+    /// [`TimeZone::to_ambiguous_zoned_datetime`], although the result may be
+    /// ambiguous.
     ///
     /// Generally, this routine is useful when you need to know whether the
     /// time zone is fixed, and you want to get the offset without having to
@@ -964,7 +969,7 @@ impl TimeZone {
         }
     }
 
-    /// Converts a civil datetime to a [`Zoned`] in this time zone.
+    /// Converts a civil datetime to a [`ZonedDateTime`] in this time zone.
     ///
     /// The given civil datetime may be ambiguous in this time zone. A civil
     /// datetime is ambiguous when either of the following occurs:
@@ -994,20 +999,23 @@ impl TimeZone {
     /// let tz = TimeZone::get("America/New_York")?;
     ///
     /// // This demonstrates disambiguation behavior for a gap.
-    /// let zdt = tz.to_zoned(date(2024, 3, 10).at(2, 30, 0, 0))?;
+    /// let zdt = tz.to_zoned_datetime(date(2024, 3, 10).at(2, 30, 0, 0))?;
     /// assert_eq!(zdt.to_string(), "2024-03-10T03:30:00-04:00[America/New_York]");
     /// // This demonstrates disambiguation behavior for a fold.
     /// // Notice the offset: the -04 corresponds to the time while
     /// // still in DST. The second repetition of the 1 o'clock hour
     /// // occurs outside of DST, in "standard" time, with the offset -5.
-    /// let zdt = tz.to_zoned(date(2024, 11, 3).at(1, 30, 0, 0))?;
+    /// let zdt = tz.to_zoned_datetime(date(2024, 11, 3).at(1, 30, 0, 0))?;
     /// assert_eq!(zdt.to_string(), "2024-11-03T01:30:00-04:00[America/New_York]");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_zoned(&self, dt: DateTime) -> Result<Zoned, Error> {
-        self.to_ambiguous_zoned(dt).compatible()
+    pub fn to_zoned_datetime(
+        &self,
+        dt: DateTime,
+    ) -> Result<ZonedDateTime, Error> {
+        self.to_ambiguous_zoned_datetime(dt).compatible()
     }
 
     /// Converts a civil datetime to a possibly ambiguous zoned datetime in
@@ -1025,9 +1033,10 @@ impl TimeZone {
     /// clocks in this time zone. This _typically_ manifests as a 1 hour jump
     /// backward out of daylight saving time.
     ///
-    /// Unlike [`TimeZone::to_zoned`], this method does not do any automatic
-    /// disambiguation. Instead, callers are expected to use the methods on
-    /// [`AmbiguousZoned`] to resolve any ambiguity, if it occurs.
+    /// Unlike [`TimeZone::to_zoned_datetime`], this method does not do any
+    /// automatic disambiguation. Instead, callers are expected to use the
+    /// methods on [`AmbiguousZonedDateTime`] to resolve any ambiguity, if it
+    /// occurs.
     ///
     /// # Example
     ///
@@ -1042,33 +1051,37 @@ impl TimeZone {
     /// // This is not ambiguous:
     /// let dt = date(2024, 3, 10).at(1, 0, 0, 0);
     /// assert_eq!(
-    ///     tz.to_ambiguous_zoned(dt).unambiguous()?.to_string(),
+    ///     tz.to_ambiguous_zoned_datetime(dt).unambiguous()?.to_string(),
     ///     "2024-03-10T01:00:00-05:00[America/New_York]",
     /// );
     /// // But this is a gap, and thus ambiguous! So an error is returned.
     /// let dt = date(2024, 3, 10).at(2, 0, 0, 0);
-    /// assert!(tz.to_ambiguous_zoned(dt).unambiguous().is_err());
+    /// assert!(tz.to_ambiguous_zoned_datetime(dt).unambiguous().is_err());
     /// // And so is this, because it's a fold.
     /// let dt = date(2024, 11, 3).at(1, 0, 0, 0);
-    /// assert!(tz.to_ambiguous_zoned(dt).unambiguous().is_err());
+    /// assert!(tz.to_ambiguous_zoned_datetime(dt).unambiguous().is_err());
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn to_ambiguous_zoned(&self, dt: DateTime) -> AmbiguousZoned {
-        self.clone().into_ambiguous_zoned(dt)
+    pub fn to_ambiguous_zoned_datetime(
+        &self,
+        dt: DateTime,
+    ) -> AmbiguousZonedDateTime {
+        self.clone().into_ambiguous_zoned_datetime(dt)
     }
 
     /// Converts a civil datetime to a possibly ambiguous zoned datetime in
     /// this time zone, and does so by assuming ownership of this `TimeZone`.
     ///
-    /// This is identical to [`TimeZone::to_ambiguous_zoned`], but it avoids
-    /// a `TimeZone::clone()` call. (Which are cheap, but not completely free.)
+    /// This is identical to [`TimeZone::to_ambiguous_zoned_datetime`], but it
+    /// avoids a `TimeZone::clone()` call. (Which are cheap, but not completely
+    /// free.)
     ///
     /// # Example
     ///
-    /// This example shows how to create a `Zoned` value from a `TimeZone`
-    /// and a `DateTime` without cloning the `TimeZone`:
+    /// This example shows how to create a `ZonedDateTime` value from a
+    /// `TimeZone` and a `DateTime` without cloning the `TimeZone`:
     ///
     /// ```
     /// use jiff::{civil::date, tz::TimeZone};
@@ -1076,15 +1089,18 @@ impl TimeZone {
     /// let tz = TimeZone::get("America/New_York")?;
     /// let dt = date(2024, 3, 10).at(1, 0, 0, 0);
     /// assert_eq!(
-    ///     tz.into_ambiguous_zoned(dt).unambiguous()?.to_string(),
+    ///     tz.into_ambiguous_zoned_datetime(dt).unambiguous()?.to_string(),
     ///     "2024-03-10T01:00:00-05:00[America/New_York]",
     /// );
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
-    pub fn into_ambiguous_zoned(self, dt: DateTime) -> AmbiguousZoned {
-        self.to_ambiguous_timestamp(dt).into_ambiguous_zoned(self)
+    pub fn into_ambiguous_zoned_datetime(
+        self,
+        dt: DateTime,
+    ) -> AmbiguousZonedDateTime {
+        self.to_ambiguous_timestamp(dt).into_ambiguous_zoned_datetime(self)
     }
 
     /// Converts a civil datetime to a [`Timestamp`] in this time zone.
@@ -1107,12 +1123,13 @@ impl TimeZone {
     /// strategy. That in, the case of a gap, the time after the gap is used.
     /// In the case of a fold, the first repetition of the clock time is used.
     ///
-    /// This routine is identical to [`TimeZone::to_zoned`], except it returns
-    /// a `Timestamp` instead of a zoned datetime. The benefit of this
-    /// method is that it never requires cloning or consuming ownership of a
-    /// `TimeZone`, and it doesn't require construction of `Zoned` which has
-    /// a small but non-zero cost. (This is partially because a `Zoned` value
-    /// contains a `TimeZone`, but of course, a `Timestamp` does not.)
+    /// This routine is identical to [`TimeZone::to_zoned_datetime`], except
+    /// it returns a `Timestamp` instead of a zoned datetime. The benefit of
+    /// this method is that it never requires cloning or consuming ownership of
+    /// a `TimeZone`, and it doesn't require construction of `ZonedDateTime`
+    /// which has a small but non-zero cost. (This is partially because a
+    /// `ZonedDateTime` value contains a `TimeZone`, but of course, a
+    /// `Timestamp` does not.)
     ///
     /// # Example
     ///
@@ -1160,13 +1177,14 @@ impl TimeZone {
     /// methods on [`AmbiguousTimestamp`] to resolve any ambiguity, if it
     /// occurs.
     ///
-    /// This routine is identical to [`TimeZone::to_ambiguous_zoned`], except
-    /// it returns an `AmbiguousTimestamp` instead of a `AmbiguousZoned`. The
-    /// benefit of this method is that it never requires cloning or consuming
-    /// ownership of a `TimeZone`, and it doesn't require construction of
-    /// `Zoned` which has a small but non-zero cost. (This is partially because
-    /// a `Zoned` value contains a `TimeZone`, but of course, a `Timestamp`
-    /// does not.)
+    /// This routine is identical to
+    /// [`TimeZone::to_ambiguous_zoned_datetime`], except it returns an
+    /// `AmbiguousTimestamp` instead of a `AmbiguousZonedDateTime`. The benefit
+    /// of this method is that it never requires cloning or consuming ownership
+    /// of a `TimeZone`, and it doesn't require construction of `ZonedDateTime`
+    /// which has a small but non-zero cost. (This is partially because a
+    /// `ZonedDateTime` value contains a `TimeZone`, but of course, a
+    /// `Timestamp` does not.)
     ///
     /// # Example
     ///
@@ -1245,11 +1263,13 @@ impl TimeZone {
     /// zone transition:
     ///
     /// ```
-    /// use jiff::{Unit, Zoned};
+    /// use jiff::{Unit, ZonedDateTime};
     ///
-    /// let now: Zoned = "2024-12-31 18:25-05[America/New_York]".parse()?;
+    /// let now: ZonedDateTime =
+    ///     "2024-12-31 18:25-05[America/New_York]".parse()?;
     /// let trans = now.time_zone().preceding(now.timestamp()).next().unwrap();
-    /// let prev_at = trans.timestamp().to_zoned(now.time_zone().clone());
+    /// let prev_at =
+    ///     trans.timestamp().to_zoned_datetime(now.time_zone().clone());
     /// let span = now.since((Unit::Year, &prev_at))?;
     /// assert_eq!(format!("{span:#}"), "1mo 27d 17h 25m");
     ///
@@ -1262,18 +1282,21 @@ impl TimeZone {
     /// particular datetime) for a particular time zone:
     ///
     /// ```
-    /// use jiff::{tz::offset, Zoned};
+    /// use jiff::{ZonedDateTime, tz::offset};
     ///
-    /// let now: Zoned = "2024-12-31 18:25-05[America/New_York]".parse()?;
+    /// let now: ZonedDateTime =
+    ///     "2024-12-31 18:25-05[America/New_York]".parse()?;
     /// let transitions = now
     ///     .time_zone()
     ///     .preceding(now.timestamp())
     ///     .take(5)
-    ///     .map(|t| (
-    ///         t.timestamp().to_zoned(now.time_zone().clone()),
-    ///         t.offset(),
-    ///         t.abbreviation().to_string(),
-    ///     ))
+    ///     .map(|t| {
+    ///         (
+    ///             t.timestamp().to_zoned_datetime(now.time_zone().clone()),
+    ///             t.offset(),
+    ///             t.abbreviation().to_string(),
+    ///         )
+    ///     })
     ///     .collect::<Vec<_>>();
     /// assert_eq!(transitions, vec![
     ///     (
@@ -1345,11 +1368,13 @@ impl TimeZone {
     /// transition:
     ///
     /// ```
-    /// use jiff::{Unit, Zoned};
+    /// use jiff::{Unit, ZonedDateTime};
     ///
-    /// let now: Zoned = "2024-12-31 18:25-05[America/New_York]".parse()?;
+    /// let now: ZonedDateTime =
+    ///     "2024-12-31 18:25-05[America/New_York]".parse()?;
     /// let trans = now.time_zone().following(now.timestamp()).next().unwrap();
-    /// let next_at = trans.timestamp().to_zoned(now.time_zone().clone());
+    /// let next_at =
+    ///     trans.timestamp().to_zoned_datetime(now.time_zone().clone());
     /// let span = now.until((Unit::Year, &next_at))?;
     /// assert_eq!(format!("{span:#}"), "2mo 8d 7h 35m");
     ///
@@ -1362,18 +1387,21 @@ impl TimeZone {
     /// particular datetime) for a particular time zone:
     ///
     /// ```
-    /// use jiff::{tz::offset, Zoned};
+    /// use jiff::{ZonedDateTime, tz::offset};
     ///
-    /// let now: Zoned = "2024-12-31 18:25-05[America/New_York]".parse()?;
+    /// let now: ZonedDateTime =
+    ///     "2024-12-31 18:25-05[America/New_York]".parse()?;
     /// let transitions = now
     ///     .time_zone()
     ///     .following(now.timestamp())
     ///     .take(5)
-    ///     .map(|t| (
-    ///         t.timestamp().to_zoned(now.time_zone().clone()),
-    ///         t.offset(),
-    ///         t.abbreviation().to_string(),
-    ///     ))
+    ///     .map(|t| {
+    ///         (
+    ///             t.timestamp().to_zoned_datetime(now.time_zone().clone()),
+    ///             t.offset(),
+    ///             t.abbreviation().to_string(),
+    ///         )
+    ///     })
     ///     .collect::<Vec<_>>();
     /// assert_eq!(transitions, vec![
     ///     (
@@ -1607,11 +1635,13 @@ impl<'a> arbitrary::Arbitrary<'a> for TimeZone {
 /// in a particular time zone:
 ///
 /// ```
-/// use std::collections::BTreeSet;
 /// use jiff::{civil, tz::TimeZone};
+/// use std::collections::BTreeSet;
 ///
 /// let tz = TimeZone::get("America/New_York")?;
-/// let now = civil::date(2024, 12, 31).at(18, 25, 0, 0).to_zoned(tz.clone())?;
+/// let now = civil::date(2024, 12, 31)
+///     .at(18, 25, 0, 0)
+///     .to_zoned_datetime(tz.clone())?;
 /// let mut set = BTreeSet::new();
 /// for trans in tz.preceding(now.timestamp()) {
 ///     let time = tz.to_datetime(trans.timestamp()).time();
@@ -1651,10 +1681,12 @@ impl<'t> TimeZoneTransition<'t> {
     /// let tz = TimeZone::get("America/New_York")?;
     /// // Look for the first time zone transition in `America/New_York`
     /// // following 2023-03-09 00:00:00.
-    /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
+    /// let start = civil::date(2024, 3, 9)
+    ///     .to_zoned_datetime(tz.clone())?
+    ///     .timestamp();
     /// let next = tz.following(start).next().unwrap();
     /// assert_eq!(
-    ///     next.timestamp().to_zoned(tz.clone()).to_string(),
+    ///     next.timestamp().to_zoned_datetime(tz.clone()).to_string(),
     ///     "2024-03-10T03:00:00-04:00[America/New_York]",
     /// );
     ///
@@ -1678,7 +1710,9 @@ impl<'t> TimeZoneTransition<'t> {
     /// let tz = TimeZone::get("America/New_York")?;
     /// // Get the offset of the next transition after
     /// // 2023-03-09 00:00:00.
-    /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
+    /// let start = civil::date(2024, 3, 9)
+    ///     .to_zoned_datetime(tz.clone())?
+    ///     .timestamp();
     /// let next = tz.following(start).next().unwrap();
     /// assert_eq!(next.offset(), offset(-4));
     /// // Or go backwards to find the previous transition.
@@ -1715,7 +1749,9 @@ impl<'t> TimeZoneTransition<'t> {
     /// let tz = TimeZone::get("America/New_York")?;
     /// // Get the abbreviation of the next transition after
     /// // 2023-03-09 00:00:00.
-    /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
+    /// let start = civil::date(2024, 3, 9)
+    ///     .to_zoned_datetime(tz.clone())?
+    ///     .timestamp();
     /// let next = tz.following(start).next().unwrap();
     /// assert_eq!(next.abbreviation(), "EDT");
     /// // Or go backwards to find the previous transition.
@@ -1745,7 +1781,9 @@ impl<'t> TimeZoneTransition<'t> {
     /// let tz = TimeZone::get("America/New_York")?;
     /// // Get the DST status of the next transition after
     /// // 2023-03-09 00:00:00.
-    /// let start = civil::date(2024, 3, 9).to_zoned(tz.clone())?.timestamp();
+    /// let start = civil::date(2024, 3, 9)
+    ///     .to_zoned_datetime(tz.clone())?
+    ///     .timestamp();
     /// let next = tz.following(start).next().unwrap();
     /// assert_eq!(next.dst(), Dst::Yes);
     /// // Or go backwards to find the previous transition.
@@ -1854,11 +1892,15 @@ impl<'t> TimeZoneOffsetInfo<'t> {
     ///
     /// let tz = TimeZone::get("America/New_York")?;
     /// // Get the offset for 2023-03-10 00:00:00.
-    /// let start = civil::date(2024, 3, 10).to_zoned(tz.clone())?.timestamp();
+    /// let start = civil::date(2024, 3, 10)
+    ///     .to_zoned_datetime(tz.clone())?
+    ///     .timestamp();
     /// let info = tz.to_offset_info(start);
     /// assert_eq!(info.offset(), offset(-5));
     /// // Go forward a day and notice the offset changes due to DST!
-    /// let start = civil::date(2024, 3, 11).to_zoned(tz.clone())?.timestamp();
+    /// let start = civil::date(2024, 3, 11)
+    ///     .to_zoned_datetime(tz.clone())?
+    ///     .timestamp();
     /// let info = tz.to_offset_info(start);
     /// assert_eq!(info.offset(), offset(-4));
     ///
@@ -1886,11 +1928,15 @@ impl<'t> TimeZoneOffsetInfo<'t> {
     ///
     /// let tz = TimeZone::get("America/New_York")?;
     /// // Get the time zone abbreviation for 2023-03-10 00:00:00.
-    /// let start = civil::date(2024, 3, 10).to_zoned(tz.clone())?.timestamp();
+    /// let start = civil::date(2024, 3, 10)
+    ///     .to_zoned_datetime(tz.clone())?
+    ///     .timestamp();
     /// let info = tz.to_offset_info(start);
     /// assert_eq!(info.abbreviation(), "EST");
     /// // Go forward a day and notice the abbreviation changes due to DST!
-    /// let start = civil::date(2024, 3, 11).to_zoned(tz.clone())?.timestamp();
+    /// let start = civil::date(2024, 3, 11)
+    ///     .to_zoned_datetime(tz.clone())?
+    ///     .timestamp();
     /// let info = tz.to_offset_info(start);
     /// assert_eq!(info.abbreviation(), "EDT");
     ///
@@ -1916,7 +1962,9 @@ impl<'t> TimeZoneOffsetInfo<'t> {
     ///
     /// let tz = TimeZone::get("America/New_York")?;
     /// // Get the DST status of 2023-03-11 00:00:00.
-    /// let start = civil::date(2024, 3, 11).to_zoned(tz.clone())?.timestamp();
+    /// let start = civil::date(2024, 3, 11)
+    ///     .to_zoned_datetime(tz.clone())?
+    ///     .timestamp();
     /// let info = tz.to_offset_info(start);
     /// assert_eq!(info.dst(), Dst::Yes);
     ///
@@ -1948,15 +1996,15 @@ impl<'t> TimeZoneOffsetInfo<'t> {
 /// particular datetime) for a particular time zone:
 ///
 /// ```
-/// use jiff::{tz::offset, Zoned};
+/// use jiff::{tz::offset, ZonedDateTime};
 ///
-/// let now: Zoned = "2024-12-31 18:25-05[America/New_York]".parse()?;
+/// let now: ZonedDateTime = "2024-12-31 18:25-05[America/New_York]".parse()?;
 /// let transitions = now
 ///     .time_zone()
 ///     .preceding(now.timestamp())
 ///     .take(5)
 ///     .map(|t| (
-///         t.timestamp().to_zoned(now.time_zone().clone()),
+///         t.timestamp().to_zoned_datetime(now.time_zone().clone()),
 ///         t.offset(),
 ///         t.abbreviation().to_string(),
 ///     ))
@@ -2019,15 +2067,15 @@ impl<'t> core::iter::FusedIterator for TimeZonePrecedingTransitions<'t> {}
 /// particular datetime) for a particular time zone:
 ///
 /// ```
-/// use jiff::{tz::offset, Zoned};
+/// use jiff::{tz::offset, ZonedDateTime};
 ///
-/// let now: Zoned = "2024-12-31 18:25-05[America/New_York]".parse()?;
+/// let now: ZonedDateTime = "2024-12-31 18:25-05[America/New_York]".parse()?;
 /// let transitions = now
 ///     .time_zone()
 ///     .following(now.timestamp())
 ///     .take(5)
 ///     .map(|t| (
-///         t.timestamp().to_zoned(now.time_zone().clone()),
+///         t.timestamp().to_zoned_datetime(now.time_zone().clone()),
 ///         t.offset(),
 ///         t.abbreviation().to_string(),
 ///     ))
@@ -2112,12 +2160,8 @@ impl<'a> core::fmt::Display for DiagnosticName<'a> {
 ///
 /// This module exists to _encapsulate_ the representation rigorously and
 /// expose a safe and sound API.
-// To squash warnings on older versions of Rust. Our polyfill below should
-// match what std does on newer versions of Rust, so the confusability should
-// be fine. ---AG
-#[allow(unstable_name_collisions)]
 mod repr {
-    use core::mem::ManuallyDrop;
+    use core::{mem::ManuallyDrop, ptr::without_provenance};
 
     use jcore::tz::{posix, tzif};
 
@@ -2126,10 +2170,6 @@ mod repr {
     use crate::util::sync::Arc;
 
     use super::Offset;
-
-    // On Rust 1.84+, `StrictProvenancePolyfill` isn't actually used.
-    #[allow(unused_imports)]
-    use self::polyfill::{without_provenance, StrictProvenancePolyfill};
 
     /// A macro for "matching" over the time zone representation variants.
     ///
@@ -2637,57 +2677,6 @@ mod repr {
             }
         }
     }
-
-    /// This is a polyfill for a small subset of std's strict provenance APIs.
-    ///
-    /// The strict provenance APIs in `core` were stabilized in Rust 1.84,
-    /// but it will likely be a while before Jiff can use them. (At time of
-    /// writing, 2025-02-24, Jiff's MSRV is Rust 1.70.)
-    mod polyfill {
-        pub(super) const fn without_provenance(addr: usize) -> *const u8 {
-            // SAFETY: Every valid `usize` is also a valid pointer (but not
-            // necessarily legal to dereference).
-            //
-            // MSRV(1.84): We *really* ought to be using
-            // `core::ptr::without_provenance` here, but Jiff's MSRV prevents
-            // us.
-            #[allow(integer_to_ptr_transmutes)]
-            unsafe {
-                core::mem::transmute(addr)
-            }
-        }
-
-        // On Rust 1.84+, `StrictProvenancePolyfill` isn't actually used.
-        #[allow(dead_code)]
-        pub(super) trait StrictProvenancePolyfill:
-            Sized + Clone + Copy
-        {
-            fn addr(&self) -> usize;
-            fn with_addr(&self, addr: usize) -> Self;
-            fn map_addr(&self, map: impl FnOnce(usize) -> usize) -> Self {
-                self.with_addr(map(self.addr()))
-            }
-        }
-
-        impl StrictProvenancePolyfill for *const u8 {
-            fn addr(&self) -> usize {
-                // SAFETY: Pointer-to-integer transmutes are valid (if you are
-                // okay with losing the provenance).
-                //
-                // The implementation in std says that this isn't guaranteed to
-                // be sound outside of std, but I'm not sure how else to do it.
-                // In practice, this seems likely fine?
-                unsafe { core::mem::transmute(self.cast::<()>()) }
-            }
-
-            fn with_addr(&self, address: usize) -> Self {
-                let self_addr = self.addr() as isize;
-                let dest_addr = address as isize;
-                let offset = dest_addr.wrapping_sub(self_addr);
-                self.wrapping_offset(offset)
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -3018,7 +3007,7 @@ mod tests {
             for &(datetime, ambiguous_kind) in datetimes_to_ambiguous {
                 let (year, month, day, hour, min, sec, nano) = datetime;
                 let dt = date(year, month, day).at(hour, min, sec, nano);
-                let got = tz.to_ambiguous_zoned(dt);
+                let got = tz.to_ambiguous_zoned_datetime(dt);
                 assert_eq!(
                     got.offset(),
                     ambiguous_kind,
@@ -3484,7 +3473,7 @@ mod tests {
             for &(datetime, ambiguous_kind) in datetimes_to_ambiguous {
                 let (year, month, day, hour, min, sec, nano) = datetime;
                 let dt = date(year, month, day).at(hour, min, sec, nano);
-                let got = tz.to_ambiguous_zoned(dt);
+                let got = tz.to_ambiguous_zoned_datetime(dt);
                 assert_eq!(
                     got.offset(),
                     ambiguous_kind,
@@ -3629,27 +3618,27 @@ mod tests {
         let tz = offset(-5).to_time_zone();
         let dt = date(1969, 12, 31).at(19, 0, 0, 0);
         assert_eq!(
-            tz.to_zoned(dt).unwrap().timestamp(),
+            tz.to_zoned_datetime(dt).unwrap().timestamp(),
             Timestamp::new(0, 0).unwrap()
         );
 
         let tz = Offset::from_seconds(93_599).unwrap().to_time_zone();
         let dt = date(9999, 12, 31).at(23, 59, 59, 999_999_999);
         assert_eq!(
-            tz.to_zoned(dt).unwrap().timestamp(),
+            tz.to_zoned_datetime(dt).unwrap().timestamp(),
             Timestamp::new(253402207200, 999_999_999).unwrap(),
         );
         let tz = Offset::from_seconds(93_598).unwrap().to_time_zone();
-        assert!(tz.to_zoned(dt).is_err());
+        assert!(tz.to_zoned_datetime(dt).is_err());
 
         let tz = Offset::from_seconds(-93_599).unwrap().to_time_zone();
         let dt = date(-9999, 1, 1).at(0, 0, 0, 0);
         assert_eq!(
-            tz.to_zoned(dt).unwrap().timestamp(),
+            tz.to_zoned_datetime(dt).unwrap().timestamp(),
             Timestamp::new(-377705023201, 0).unwrap(),
         );
         let tz = Offset::from_seconds(-93_598).unwrap().to_time_zone();
-        assert!(tz.to_zoned(dt).is_err());
+        assert!(tz.to_zoned_datetime(dt).is_err());
     }
 
     #[cfg(feature = "alloc")]
@@ -3970,8 +3959,8 @@ mod tests {
 
     /// This tests that the size of a time zone is kept at a single word.
     ///
-    /// This is important because every jiff::Zoned has a TimeZone inside of
-    /// it, and we want to keep its size as small as we can.
+    /// This is important because every jiff::ZonedDateTime has a TimeZone
+    /// inside of it, and we want to keep its size as small as we can.
     #[test]
     fn time_zone_size() {
         #[cfg(feature = "alloc")]

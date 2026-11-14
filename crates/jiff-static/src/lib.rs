@@ -44,7 +44,7 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use quote::quote;
 
-use jcore::tz::{posix, tzif, TimeZoneId};
+use jcore::tz::{TimeZoneId, posix, tzif};
 
 // Public API docs are in Jiff.
 #[proc_macro]

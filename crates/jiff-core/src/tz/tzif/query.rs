@@ -1,10 +1,10 @@
 use crate::{
+    Timestamp,
     civil::DateTime,
     tz::{
-        posix, Abbreviation, AmbiguousOffset, AmbiguousTimestamp, Offset,
-        OffsetInfo, Transition,
+        Abbreviation, AmbiguousOffset, AmbiguousTimestamp, Offset, OffsetInfo,
+        Transition, posix,
     },
-    Timestamp,
 };
 
 use super::{

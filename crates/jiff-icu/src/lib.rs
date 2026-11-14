@@ -8,7 +8,7 @@ traits from the standard library.
 
 # Available conversions
 
-* [`jiff::Zoned`] infallibly converts to
+* [`jiff::ZonedDateTime`] infallibly converts to
 [`icu::time::ZonedDateTime`](icu_time::ZonedDateTime).
 The reverse is unavailable.
 * [`jiff::civil::DateTime`] infallibly converts to
@@ -30,22 +30,25 @@ The reverse is also infallible.
 
 This example shows how one can bridge `jiff` to `icu` in order to
 format a zoned datetime in a particular locale. This makes use of the
-infallible [`ConvertFrom`] trait to convert a [`jiff::Zoned`] into a
+infallible [`ConvertFrom`] trait to convert a [`jiff::ZonedDateTime`] into a
 [`icu::time::ZonedDateTime`](icu_time::ZonedDateTime). In order to get `icu` to
 emit the time zone information, we need to add a zone marker to our fieldset:
 
 ```
 use icu::{
     calendar::Iso,
-    time::{ZonedDateTime, TimeZoneInfo, zone::models::AtTime},
-    datetime::{fieldsets, DateTimeFormatter},
+    datetime::{DateTimeFormatter, fieldsets},
     locale::locale,
+    time::{
+        TimeZoneInfo, ZonedDateTime as IcuZonedDateTime, zone::models::AtTime,
+    },
 };
-use jiff::Zoned;
+use jiff::ZonedDateTime;
 use jiff_icu::{ConvertFrom as _};
 
-let zdt: Zoned = "2024-09-10T23:37:20-04[America/New_York]".parse()?;
-let icu_zdt = ZonedDateTime::<Iso, TimeZoneInfo<AtTime>>::convert_from(&zdt);
+let zdt: ZonedDateTime = "2024-09-10T23:37:20-04[America/New_York]".parse()?;
+let icu_zdt =
+    IcuZonedDateTime::<Iso, TimeZoneInfo<AtTime>>::convert_from(&zdt);
 
 // Format for the en-GB locale:
 let formatter = DateTimeFormatter::try_new(
@@ -93,10 +96,10 @@ use icu::{
     datetime::{fieldsets, DateTimeFormatter},
     locale::locale,
 };
-use jiff::Zoned;
+use jiff::ZonedDateTime;
 use jiff_icu::{ConvertFrom as _};
 
-let zdt: Zoned = "2024-09-10T23:37:20-04[America/New_York]".parse()?;
+let zdt: ZonedDateTime = "2024-09-10T23:37:20-04[America/New_York]".parse()?;
 let icu_datetime = DateTime::convert_from(zdt.datetime());
 
 // Format for the en-GB locale:
@@ -163,31 +166,31 @@ extern crate std;
 extern crate alloc;
 
 use icu_calendar::{
-    types::Weekday as IcuWeekday, AsCalendar as IcuAsCalendar,
-    Date as IcuDate, Iso,
+    AsCalendar as IcuAsCalendar, Date as IcuDate, Iso,
+    types::Weekday as IcuWeekday,
 };
 #[cfg(feature = "zoned")]
 #[allow(deprecated)]
 use icu_time::zone::models::Full;
 #[cfg(feature = "time")]
 use icu_time::{
-    zone::UtcOffset as IcuUtcOffset, DateTime as IcuDateTime, Time as IcuTime,
+    DateTime as IcuDateTime, Time as IcuTime, zone::UtcOffset as IcuUtcOffset,
 };
 #[cfg(feature = "zoned")]
 use icu_time::{
-    zone::{models::AtTime, TimeZoneVariant},
     TimeZone as IcuTimeZone, TimeZoneInfo as IcuTimeZoneInfo,
     ZonedDateTime as IcuZonedDateTime,
+    zone::{TimeZoneVariant, models::AtTime},
 };
 
 use jiff::civil::{Date as JiffDate, Weekday as JiffWeekday};
+#[cfg(feature = "zoned")]
+use jiff::{ZonedDateTime as JiffZonedDateTime, tz::TimeZone as JiffTimeZone};
 #[cfg(feature = "time")]
 use jiff::{
     civil::{DateTime as JiffDateTime, Time as JiffTime},
     tz::Offset as JiffOffset,
 };
-#[cfg(feature = "zoned")]
-use jiff::{tz::TimeZone as JiffTimeZone, Zoned as JiffZoned};
 
 use self::error::err;
 pub use self::{
@@ -667,8 +670,8 @@ impl<'a> ConvertFrom<&'a JiffTimeZone> for IcuTimeZone {
     }
 }
 
-/// Converts from a [`jiff::Zoned`] to a
-/// [`icu_time::ZonedDateTime<Iso, TimeZoneInfo<AtTime>>`](icu_time::ZonedDateTime).
+/// Converts from a [`jiff::ZonedDateTime`] to a [`icu_time::ZonedDateTime<Iso,
+/// TimeZoneInfo<AtTime>>`](icu_time::ZonedDateTime).
 ///
 /// # Examples
 ///
@@ -696,11 +699,11 @@ impl<'a> ConvertFrom<&'a JiffTimeZone> for IcuTimeZone {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[cfg(feature = "zoned")]
-impl<'a> ConvertFrom<&'a JiffZoned>
+impl<'a> ConvertFrom<&'a JiffZonedDateTime>
     for IcuZonedDateTime<Iso, IcuTimeZoneInfo<AtTime>>
 {
     fn convert_from(
-        v: &'a JiffZoned,
+        v: &'a JiffZonedDateTime,
     ) -> IcuZonedDateTime<Iso, IcuTimeZoneInfo<AtTime>> {
         let date = IcuDate::convert_from(v.date());
         let time = IcuTime::convert_from(v.time());
@@ -714,8 +717,8 @@ impl<'a> ConvertFrom<&'a JiffZoned>
     }
 }
 
-/// Converts from a [`jiff::Zoned`] to a
-/// [`icu_time::ZonedDateTime<Iso, TimeZoneInfo<Full>>`](icu_time::ZonedDateTime).
+/// Converts from a [`jiff::ZonedDateTime`] to a [`icu_time::ZonedDateTime<Iso,
+/// TimeZoneInfo<Full>>`](icu_time::ZonedDateTime).
 ///
 /// # Examples
 ///
@@ -744,11 +747,11 @@ impl<'a> ConvertFrom<&'a JiffZoned>
 /// ```
 #[cfg(feature = "zoned")]
 #[allow(deprecated)]
-impl<'a> ConvertFrom<&'a JiffZoned>
+impl<'a> ConvertFrom<&'a JiffZonedDateTime>
     for IcuZonedDateTime<Iso, IcuTimeZoneInfo<Full>>
 {
     fn convert_from(
-        v: &'a JiffZoned,
+        v: &'a JiffZonedDateTime,
     ) -> IcuZonedDateTime<Iso, IcuTimeZoneInfo<Full>> {
         let date = IcuDate::convert_from(v.date());
         let time = IcuTime::convert_from(v.time());

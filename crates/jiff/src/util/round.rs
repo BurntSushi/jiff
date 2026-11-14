@@ -1,11 +1,11 @@
 use crate::{
+    SignedDuration, Unit,
     error::{
+        Error, ErrorContext,
         unit::{MustDivide, UnitConfigError},
         util::RoundingIncrementError,
-        Error, ErrorContext,
     },
     util::b,
-    SignedDuration, Unit,
 };
 
 /// A representation of a rounding increment in a particular unit.
@@ -105,7 +105,7 @@ impl Increment {
     }
 
     /// Return a rounding increment suitable for use when rounding a
-    /// `civil::DateTime` or a `Zoned`.
+    /// `civil::DateTime` or a `ZonedDateTime`.
     pub(crate) fn for_datetime(
         unit: Unit,
         value: i64,
@@ -258,8 +258,8 @@ impl Increment {
 /// The mode for dealing with the remainder when rounding datetimes or spans.
 ///
 /// This is used in APIs like [`Span::round`](crate::Span::round) for rounding
-/// spans, and APIs like [`Zoned::round`](crate::Zoned::round) for rounding
-/// datetimes.
+/// spans, and APIs like [`ZonedDateTime::round`](crate::ZonedDateTime::round)
+/// for rounding datetimes.
 ///
 /// In the documentation for each variant, we refer to concepts like the
 /// "smallest" unit and the "rounding increment." These are best described

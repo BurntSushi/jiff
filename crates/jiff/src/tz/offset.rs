@@ -6,14 +6,15 @@ use core::{
 use jcore::{constants as c, tz::Offset as JOffset};
 
 use crate::{
-    civil,
+    RoundMode, SignedDuration, Unit, civil,
     duration::{Duration, SDuration},
-    error::{tz::offset::Error as E, Error, ErrorContext},
+    error::{Error, ErrorContext, tz::offset::Error as E},
     span::Span,
     timestamp::Timestamp,
-    tz::{AmbiguousOffset, AmbiguousTimestamp, AmbiguousZoned, TimeZone},
+    tz::{
+        AmbiguousOffset, AmbiguousTimestamp, AmbiguousZonedDateTime, TimeZone,
+    },
     util::{b, constant, round::Increment},
-    RoundMode, SignedDuration, Unit,
 };
 
 /// An enum indicating whether a particular datetime is in DST or not.
@@ -66,11 +67,7 @@ impl Dst {
 
 impl From<bool> for Dst {
     fn from(is_dst: bool) -> Dst {
-        if is_dst {
-            Dst::Yes
-        } else {
-            Dst::No
-        }
+        if is_dst { Dst::Yes } else { Dst::No }
     }
 }
 
@@ -116,10 +113,10 @@ impl From<bool> for Dst {
 /// offset:
 ///
 /// ```
-/// use jiff::{civil::date, tz, Zoned};
+/// use jiff::{civil::date, tz, ZonedDateTime};
 ///
 /// let offset = tz::offset(-4).to_time_zone();
-/// let zdt = date(2024, 7, 8).at(15, 20, 0, 0).to_zoned(offset)?;
+/// let zdt = date(2024, 7, 8).at(15, 20, 0, 0).to_zoned_datetime(offset)?;
 /// assert_eq!(zdt.to_string(), "2024-07-08T15:20:00-04:00[-04:00]");
 ///
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -699,6 +696,11 @@ impl Offset {
     /// result saturates on overflow. That is, instead of overflow, either
     /// [`Offset::MIN`] or [`Offset::MAX`] is returned.
     ///
+    /// # Errors
+    ///
+    /// This returns an error if the given `Span` contains any non-zero units
+    /// greater than hours.
+    ///
     /// # Example
     ///
     /// This example shows some cases where saturation will occur.
@@ -706,38 +708,39 @@ impl Offset {
     /// ```
     /// use jiff::{tz::Offset, SignedDuration, ToSpan};
     ///
-    /// // Adding units above 'day' always results in saturation.
-    /// assert_eq!(Offset::UTC.saturating_add(1.weeks()), Offset::MAX);
-    /// assert_eq!(Offset::UTC.saturating_add(1.months()), Offset::MAX);
-    /// assert_eq!(Offset::UTC.saturating_add(1.years()), Offset::MAX);
+    /// // Spans with non-zero calendar units return an error.
+    /// assert!(Offset::UTC.saturating_add(1.weeks()).is_err());
+    /// assert!(Offset::UTC.saturating_add(1.months()).is_err());
+    /// assert!(Offset::UTC.saturating_add(1.years()).is_err());
     ///
     /// // Adding even 1 second to the max, or subtracting 1 from the min,
-    /// // will result in saturationg.
-    /// assert_eq!(Offset::MIN.saturating_add(-1.seconds()), Offset::MIN);
-    /// assert_eq!(Offset::MAX.saturating_add(1.seconds()), Offset::MAX);
+    /// // will result in saturation.
+    /// assert_eq!(Offset::MIN.saturating_add(-1.seconds())?, Offset::MIN);
+    /// assert_eq!(Offset::MAX.saturating_add(1.seconds())?, Offset::MAX);
     ///
     /// // Adding absolute durations also saturates as expected.
-    /// assert_eq!(Offset::UTC.saturating_add(SignedDuration::MAX), Offset::MAX);
-    /// assert_eq!(Offset::UTC.saturating_add(SignedDuration::MIN), Offset::MIN);
-    /// assert_eq!(Offset::UTC.saturating_add(std::time::Duration::MAX), Offset::MAX);
+    /// assert_eq!(Offset::UTC.saturating_add(SignedDuration::MAX)?, Offset::MAX);
+    /// assert_eq!(Offset::UTC.saturating_add(SignedDuration::MIN)?, Offset::MIN);
+    /// assert_eq!(Offset::UTC.saturating_add(std::time::Duration::MAX)?, Offset::MAX);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
     pub fn saturating_add<A: Into<OffsetArithmetic>>(
         self,
         duration: A,
-    ) -> Offset {
+    ) -> Result<Offset, Error> {
         let duration: OffsetArithmetic = duration.into();
-        self.checked_add(duration).unwrap_or_else(|_| {
-            if duration.is_negative() {
-                Offset::MIN
-            } else {
-                Offset::MAX
-            }
-        })
+        duration.saturating_add(self)
     }
 
-    /// This routine is identical to [`Offset::saturating_add`] with the span
-    /// parameter negated.
+    /// This routine is identical to [`Offset::saturating_add`] with the
+    /// duration parameter negated.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the given `Span` contains any non-zero units
+    /// greater than hours.
     ///
     /// # Example
     ///
@@ -746,28 +749,32 @@ impl Offset {
     /// ```
     /// use jiff::{tz::Offset, SignedDuration, ToSpan};
     ///
-    /// // Adding units above 'day' always results in saturation.
-    /// assert_eq!(Offset::UTC.saturating_sub(1.weeks()), Offset::MIN);
-    /// assert_eq!(Offset::UTC.saturating_sub(1.months()), Offset::MIN);
-    /// assert_eq!(Offset::UTC.saturating_sub(1.years()), Offset::MIN);
+    /// // Spans with non-zero calendar units return an error.
+    /// assert!(Offset::UTC.saturating_sub(1.weeks()).is_err());
+    /// assert!(Offset::UTC.saturating_sub(1.months()).is_err());
+    /// assert!(Offset::UTC.saturating_sub(1.years()).is_err());
     ///
-    /// // Adding even 1 second to the max, or subtracting 1 from the min,
-    /// // will result in saturationg.
-    /// assert_eq!(Offset::MIN.saturating_sub(1.seconds()), Offset::MIN);
-    /// assert_eq!(Offset::MAX.saturating_sub(-1.seconds()), Offset::MAX);
+    /// // Subtracting even 1 second from the min, or adding 1 to the max,
+    /// // will result in saturation.
+    /// assert_eq!(Offset::MIN.saturating_sub(1.seconds())?, Offset::MIN);
+    /// assert_eq!(Offset::MAX.saturating_sub(-1.seconds())?, Offset::MAX);
     ///
     /// // Adding absolute durations also saturates as expected.
-    /// assert_eq!(Offset::UTC.saturating_sub(SignedDuration::MAX), Offset::MIN);
-    /// assert_eq!(Offset::UTC.saturating_sub(SignedDuration::MIN), Offset::MAX);
-    /// assert_eq!(Offset::UTC.saturating_sub(std::time::Duration::MAX), Offset::MIN);
+    /// assert_eq!(Offset::UTC.saturating_sub(SignedDuration::MAX)?, Offset::MIN);
+    /// assert_eq!(Offset::UTC.saturating_sub(SignedDuration::MIN)?, Offset::MAX);
+    /// assert_eq!(Offset::UTC.saturating_sub(std::time::Duration::MAX)?, Offset::MIN);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[inline]
     pub fn saturating_sub<A: Into<OffsetArithmetic>>(
         self,
         duration: A,
-    ) -> Offset {
+    ) -> Result<Offset, Error> {
         let duration: OffsetArithmetic = duration.into();
-        let Ok(duration) = duration.checked_neg() else { return Offset::MIN };
+        let Ok(duration) = duration.checked_neg() else {
+            return Ok(Offset::MIN);
+        };
         self.saturating_add(duration)
     }
 
@@ -1429,6 +1436,26 @@ impl OffsetArithmetic {
     }
 
     #[inline]
+    fn saturating_add(self, offset: Offset) -> Result<Offset, Error> {
+        let Ok(signed) = self.duration.to_signed() else {
+            return Ok(Offset::MAX);
+        };
+        let result = match signed {
+            SDuration::Span(span) => {
+                if let Some(err) = span.smallest_non_time_non_zero_unit_error()
+                {
+                    return Err(err);
+                }
+                offset.checked_add_span(span)
+            }
+            SDuration::Absolute(sdur) => offset.checked_add_duration(sdur),
+        };
+        Ok(result.unwrap_or_else(|_| {
+            if self.is_negative() { Offset::MIN } else { Offset::MAX }
+        }))
+    }
+
+    #[inline]
     fn checked_neg(self) -> Result<OffsetArithmetic, Error> {
         let duration = self.duration.checked_neg()?;
         Ok(OffsetArithmetic { duration })
@@ -1678,18 +1705,19 @@ impl From<(Unit, i64)> for OffsetRound {
 ///
 /// For this reason, this crate exposes a few ways of resolving these
 /// conflicts. It is most commonly used as configuration for parsing
-/// [`Zoned`](crate::Zoned) values via
-/// [`fmt::temporal::DateTimeParser::offset_conflict`](crate::fmt::temporal::DateTimeParser::offset_conflict). But this configuration can also be used directly via
+/// [`ZonedDateTime`](crate::ZonedDateTime) values via
+/// [`fmt::temporal::DateTimeParser::offset_conflict`](crate::fmt::temporal::DateTimeParser::offset_conflict).
+/// But this configuration can also be used directly via
 /// [`OffsetConflict::resolve`].
 ///
-/// The default value is `OffsetConflict::Reject`, which results in an
-/// error being returned if the offset and a time zone are not in agreement.
-/// This is the default so that Jiff does not automatically make silent choices
-/// about whether to prefer the time zone or the offset. The
-/// [`fmt::temporal::DateTimeParser::parse_zoned_with`](crate::fmt::temporal::DateTimeParser::parse_zoned_with)
-/// documentation shows an example demonstrating its utility in the face
-/// of changes in the law, such as the abolition of daylight saving time.
-/// By rejecting such things, one can ensure that the original timestamp is
+/// The default value is `OffsetConflict::Reject`, which results in an error
+/// being returned if the offset and a time zone are not in agreement. This is
+/// the default so that Jiff does not automatically make silent choices about
+/// whether to prefer the time zone or the offset. The
+/// [`fmt::temporal::DateTimeParser::parse_zoned_datetime_with`](crate::fmt::temporal::DateTimeParser::parse_zoned_datetime_with)
+/// documentation shows an example demonstrating its utility in the face of
+/// changes in the law, such as the abolition of daylight saving time. By
+/// rejecting such things, one can ensure that the original timestamp is
 /// preserved or else an error occurs.
 ///
 /// This enum is non-exhaustive so that other forms of offset conflicts may be
@@ -1726,8 +1754,9 @@ impl From<(Unit, i64)> for OffsetRound {
 /// # Example: parsing
 ///
 /// This example shows how to set the offset conflict resolution configuration
-/// while parsing a [`Zoned`](crate::Zoned) datetime. In this example, we
-/// always prefer the offset, even if it conflicts with the time zone.
+/// while parsing a [`ZonedDateTime`](crate::ZonedDateTime) datetime. In this
+/// example, we always prefer the offset, even if it conflicts with the time
+/// zone.
 ///
 /// ```
 /// use jiff::{civil::date, fmt::temporal::DateTimeParser, tz};
@@ -1735,7 +1764,8 @@ impl From<(Unit, i64)> for OffsetRound {
 /// static PARSER: DateTimeParser = DateTimeParser::new()
 ///     .offset_conflict(tz::OffsetConflict::AlwaysOffset);
 ///
-/// let zdt = PARSER.parse_zoned("2024-06-14T17:30-05[America/New_York]")?;
+/// let zdt = PARSER
+///     .parse_zoned_datetime("2024-06-14T17:30-05[America/New_York]")?;
 /// // The time *and* offset have been corrected. The offset given was invalid,
 /// // so it cannot be kept, but the timestamp returned is equivalent to
 /// // `2024-06-14T17:30-05`. It is just adjusted automatically to be correct
@@ -1751,7 +1781,7 @@ pub enum OffsetConflict {
     /// When the offset and time zone are in conflict, this will always use
     /// the offset to interpret the date time.
     ///
-    /// When resolving to a [`AmbiguousZoned`], the time zone attached
+    /// When resolving to a [`AmbiguousZonedDateTime`], the time zone attached
     /// to the timestamp will still be the same as the time zone given. The
     /// difference here is that the offset will be adjusted such that it is
     /// correct for the given time zone. However, the timestamp itself will
@@ -1765,11 +1795,11 @@ pub enum OffsetConflict {
     /// When the offset and time zone are in conflict, this will always use
     /// the time zone to interpret the date time.
     ///
-    /// When resolving to an [`AmbiguousZoned`], the offset attached to the
-    /// timestamp will always be determined by only looking at the time zone.
-    /// This in turn implies that the timestamp returned could be ambiguous,
-    /// since this conflict resolution strategy specifically ignores the
-    /// offset. (And, we're only at this point because the offset is not
+    /// When resolving to an [`AmbiguousZonedDateTime`], the offset attached to
+    /// the timestamp will always be determined by only looking at the time
+    /// zone. This in turn implies that the timestamp returned could be
+    /// ambiguous, since this conflict resolution strategy specifically ignores
+    /// the offset. (And, we're only at this point because the offset is not
     /// possible for the given time zone, so it can't be used in concert with
     /// the time zone anyway.) This is unlike the `AlwaysOffset` strategy where
     /// the timestamp returned is guaranteed to be unambiguous.
@@ -1782,7 +1812,8 @@ pub enum OffsetConflict {
     /// use the time zone. When the time zone is used, it's possible for an
     /// ambiguous datetime to be returned.
     ///
-    /// See [`ZonedWith::offset_conflict`](crate::ZonedWith::offset_conflict)
+    /// See
+    /// [`ZonedDateTimeWith::offset_conflict`](crate::ZonedDateTimeWith::offset_conflict)
     /// for an example of when this strategy is useful.
     PreferOffset,
     /// When the offset and time zone are in conflict, this strategy always
@@ -1824,7 +1855,7 @@ impl OffsetConflict {
     ///     .resolve(dt, offset, newyork.clone())?
     ///     .unambiguous()?;
     /// // The datetime (and offset) have been corrected automatically
-    /// // and the resulting Zoned instant corresponds precisely to
+    /// // and the resulting ZonedDateTime instant corresponds precisely to
     /// // `2024-06-14T17:30-05[UTC]`.
     /// assert_eq!(zdt.to_string(), "2024-06-14T18:30:00-04:00[America/New_York]");
     ///
@@ -1833,9 +1864,9 @@ impl OffsetConflict {
     ///     .resolve(dt, offset, newyork.clone())?
     ///     .unambiguous()?;
     /// // The offset has been corrected automatically and the resulting
-    /// // Zoned instant corresponds precisely to `2024-06-14T17:30-04[UTC]`.
-    /// // Notice how the civil time remains the same, but the exact instant
-    /// // has changed!
+    /// // ZonedDateTime instant corresponds precisely to
+    /// // `2024-06-14T17:30-04[UTC]`. Notice how the civil time remains the
+    /// // same, but the exact instant has changed!
     /// assert_eq!(zdt.to_string(), "2024-06-14T17:30:00-04:00[America/New_York]");
     ///
     /// // Here, we prefer the offset, but fall back to the time zone.
@@ -1857,7 +1888,7 @@ impl OffsetConflict {
         dt: civil::DateTime,
         offset: Offset,
         tz: TimeZone,
-    ) -> Result<AmbiguousZoned, Error> {
+    ) -> Result<AmbiguousZonedDateTime, Error> {
         self.resolve_with(dt, offset, tz, |off1, off2| off1 == off2)
     }
 
@@ -1948,9 +1979,10 @@ impl OffsetConflict {
     /// rounding:
     ///
     /// ```
-    /// use jiff::{tz::Offset, Zoned};
+    /// use jiff::{ZonedDateTime, tz::Offset};
     ///
-    /// let zdt: Zoned = "1968-02-01T23:15:00-00:45[Africa/Monrovia]".parse()?;
+    /// let zdt: ZonedDateTime =
+    ///     "1968-02-01T23:15:00-00:45[Africa/Monrovia]".parse()?;
     /// // As above, notice that even though we parsed `-00:45` as the
     /// // offset, the actual offset of our zoned datetime is the correct
     /// // one from the time zone.
@@ -1961,7 +1993,8 @@ impl OffsetConflict {
     ///
     /// // And we also support parsing the actual fractional minute offset
     /// // as well:
-    /// let zdt: Zoned = "1968-02-01T23:15:00-00:44:30[Africa/Monrovia]".parse()?;
+    /// let zdt: ZonedDateTime =
+    ///     "1968-02-01T23:15:00-00:44:30[Africa/Monrovia]".parse()?;
     /// assert_eq!(zdt.offset(), Offset::from_seconds(-(44 * 60 + 30)).unwrap());
     /// assert_eq!(zdt.to_string(), "1968-02-01T23:15:00-00:45[Africa/Monrovia]");
     ///
@@ -1972,9 +2005,10 @@ impl OffsetConflict {
     /// sub-minute precision. In that case, exact equality is used:
     ///
     /// ```
-    /// use jiff::Zoned;
+    /// use jiff::ZonedDateTime;
     ///
-    /// let result = "1970-06-01T00-00:45:00[Africa/Monrovia]".parse::<Zoned>();
+    /// let result =
+    ///     "1970-06-01T00-00:45:00[Africa/Monrovia]".parse::<ZonedDateTime>();
     /// assert_eq!(
     ///     result.unwrap_err().to_string(),
     ///     "datetime could not resolve to a timestamp since `reject` \
@@ -1989,7 +2023,7 @@ impl OffsetConflict {
         offset: Offset,
         tz: TimeZone,
         is_equal: F,
-    ) -> Result<AmbiguousZoned, Error>
+    ) -> Result<AmbiguousZonedDateTime, Error>
     where
         F: FnMut(Offset, Offset) -> bool,
     {
@@ -1998,11 +2032,14 @@ impl OffsetConflict {
             // require that it exists) and always use the provided offset.
             OffsetConflict::AlwaysOffset => {
                 let kind = AmbiguousOffset::Unambiguous { offset };
-                Ok(AmbiguousTimestamp::new(dt, kind).into_ambiguous_zoned(tz))
+                Ok(AmbiguousTimestamp::new(dt, kind)
+                    .into_ambiguous_zoned_datetime(tz))
             }
             // In this case, we ignore any provided offset and always use the
             // time zone annotation.
-            OffsetConflict::AlwaysTimeZone => Ok(tz.into_ambiguous_zoned(dt)),
+            OffsetConflict::AlwaysTimeZone => {
+                Ok(tz.into_ambiguous_zoned_datetime(dt))
+            }
             // In this case, we use the offset if it's correct, but otherwise
             // fall back to the time zone annotation if it's not.
             OffsetConflict::PreferOffset => Ok(
@@ -2030,7 +2067,7 @@ impl OffsetConflict {
         given: Offset,
         tz: TimeZone,
         mut is_equal: impl FnMut(Offset, Offset) -> bool,
-    ) -> AmbiguousZoned {
+    ) -> AmbiguousZonedDateTime {
         use crate::tz::AmbiguousOffset::*;
 
         let amb = tz.to_ambiguous_timestamp(dt);
@@ -2047,7 +2084,7 @@ impl OffsetConflict {
             }
             _ => amb,
         }
-        .into_ambiguous_zoned(tz)
+        .into_ambiguous_zoned_datetime(tz)
     }
 
     /// Given a parsed datetime, a parsed offset and a parsed time zone, this
@@ -2067,7 +2104,7 @@ impl OffsetConflict {
         given: Offset,
         tz: TimeZone,
         mut is_equal: impl FnMut(Offset, Offset) -> bool,
-    ) -> Result<AmbiguousZoned, Error> {
+    ) -> Result<AmbiguousZonedDateTime, Error> {
         use crate::tz::AmbiguousOffset::*;
 
         let amb = tz.to_ambiguous_timestamp(dt);
@@ -2079,7 +2116,7 @@ impl OffsetConflict {
                     tz,
                 }))
             }
-            Unambiguous { .. } => Ok(amb.into_ambiguous_zoned(tz)),
+            Unambiguous { .. } => Ok(amb.into_ambiguous_zoned_datetime(tz)),
             Gap { before, after } => {
                 // In `jiff 0.1`, we reported an error when we found a gap
                 // where neither offset matched what was given. But now we
@@ -2110,7 +2147,8 @@ impl OffsetConflict {
             }
             Fold { .. } => {
                 let kind = Unambiguous { offset: given };
-                Ok(AmbiguousTimestamp::new(dt, kind).into_ambiguous_zoned(tz))
+                Ok(AmbiguousTimestamp::new(dt, kind)
+                    .into_ambiguous_zoned_datetime(tz))
             }
         }
     }

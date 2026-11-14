@@ -5,7 +5,7 @@ Facilities for dealing with inexact dates and times.
 
 The essential types in this module are:
 
-* [`Date`] is a specific day in the Gregorian calendar.
+* [`Date`] is a specific day in the proleptic Gregorian calendar.
 * [`Time`] is a specific wall clock time.
 * [`DateTime`] is a combination of a day and a time.
 
@@ -29,12 +29,12 @@ assert_eq!(
 
 # What is "civil" time?
 
-A civil datetime is a calendar date and a clock time. It also goes by the
-names "naive," "local" or "plain." The most important thing to understand
-about civil time is that it does not correspond to a precise instant in
-time. This is in contrast to types like [`Timestamp`](crate::Timestamp) and
-[`Zoned`](crate::Zoned), which _do_ correspond to a precise instant in time (to
-nanosecond precision).
+A civil datetime is a calendar date and a clock time. It also goes by the names
+"naive," "local" or "plain." The most important thing to understand about civil
+time is that it does not correspond to a precise instant in time. This is in
+contrast to types like [`Timestamp`](crate::Timestamp) and
+[`ZonedDateTime`](crate::ZonedDateTime), which _do_ correspond to a precise
+instant in time (to nanosecond precision).
 
 Because a civil datetime _never_ has a time zone associated with it, and
 because some time zones have transitions that skip or repeat clock times, it
@@ -46,10 +46,10 @@ for daylight saving time. Conversely, `2024-11-03 01:30` occurred twice in
 "moved backward" for daylight saving time. (When time is skipped, it's called a
 "gap." When time is repeated, it's called a "fold.")
 
-In contrast, an instant in time (that is, `Timestamp` or `Zoned`) can _always_
-be converted to a civil datetime. And, when a civil datetime is combined
-with its time zone identifier _and_ its offset, the resulting machine readable
-string is unambiguous 100% of the time:
+In contrast, an instant in time (that is, `Timestamp` or `ZonedDateTime`) can
+_always_ be converted to a civil datetime. And, when a civil datetime is
+combined with its time zone identifier _and_ its offset, the resulting machine
+readable string is unambiguous 100% of the time:
 
 ```
 use jiff::{civil::date, tz::TimeZone};
@@ -57,21 +57,21 @@ use jiff::{civil::date, tz::TimeZone};
 let tz = TimeZone::get("America/New_York")?;
 let dt = date(2024, 11, 3).at(1, 30, 0, 0);
 // It's ambiguous, so asking for an unambiguous instant presents an error!
-assert!(tz.to_ambiguous_zoned(dt).unambiguous().is_err());
+assert!(tz.to_ambiguous_zoned_datetime(dt).unambiguous().is_err());
 // Gives you the earlier time in a fold, i.e., before DST ends:
 assert_eq!(
-    tz.to_ambiguous_zoned(dt).earlier()?.to_string(),
+    tz.to_ambiguous_zoned_datetime(dt).earlier()?.to_string(),
     "2024-11-03T01:30:00-04:00[America/New_York]",
 );
 // Gives you the later time in a fold, i.e., after DST ends.
 // Notice the offset change from the previous example!
 assert_eq!(
-    tz.to_ambiguous_zoned(dt).later()?.to_string(),
+    tz.to_ambiguous_zoned_datetime(dt).later()?.to_string(),
     "2024-11-03T01:30:00-05:00[America/New_York]",
 );
 // "Just give me something reasonable"
 assert_eq!(
-    tz.to_ambiguous_zoned(dt).compatible()?.to_string(),
+    tz.to_ambiguous_zoned_datetime(dt).compatible()?.to_string(),
     "2024-11-03T01:30:00-04:00[America/New_York]",
 );
 
@@ -95,6 +95,23 @@ you're in.
 saving time.
 * When interacting with legacy systems or systems that specifically do not
 support time zones.
+
+# What about dates preceding the introduction of the Gregorian calendar?
+
+Jiff uses what is called the _proleptic_ Gregorian calendar. This means that
+Jiff behaves _as if_ the Gregorian calendar has been used for all of time.
+
+In reality, the Gregorian calendar wasn't introduced until October 1582.
+However, not all places in the world adopted the Gregorian calendar at that
+time. For example, Russia didn't convert from the Julian calendar to the
+Gregorian calendar until 1917.
+
+By using the proleptic calendar---where by we pretend the Gregorian calendar
+has always been in use---we are sacrificing contextually and historically
+accurate dates in favor of a massive simplification in datetime handling. In
+general, the process of determining the correct calendar used by a given locale
+and at a given time is a research task that is outside the scope of what Jiff
+offers.
 */
 
 pub use self::{

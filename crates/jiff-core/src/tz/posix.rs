@@ -48,9 +48,9 @@ other programs do in practice (for example, GNU date).
 A big part of this module works fine in core-only environments. But because
 core-only environments provide means of indirection, and embedding a
 `PosixTimeZone` into a `TimeZone` without indirection would use up a lot of
-space (and thereby make `Zoned` quite chunky), we provide core-only support
-principally through a proc macro. Namely, a `PosixTimeZone` can be parsed by
-the proc macro and then turned into static data.
+space (and thereby make `ZonedDateTime` quite chunky), we provide core-only
+support principally through a proc macro. Namely, a `PosixTimeZone` can be
+parsed by the proc macro and then turned into static data.
 
 POSIX time zone support isn't explicitly provided directly as a public API
 for core-only environments, but is implicitly supported via TZif. (Since TZif
@@ -62,12 +62,12 @@ data contains POSIX time zone strings.)
 */
 
 use crate::{
+    Timestamp,
     civil::{Date, DateTime, Time, TimeSecond, Weekday},
     tz::{
         Abbreviation, AmbiguousOffset, AmbiguousTimestamp, Offset, OffsetInfo,
-        TimeZoneId, Transition, REASONABLE_ABBREVIATION_MAX,
+        REASONABLE_ABBREVIATION_MAX, TimeZoneId, Transition,
     },
-    Timestamp,
 };
 
 /// The result of parsing the POSIX `TZ` environment variable.
@@ -1651,9 +1651,9 @@ impl core::fmt::Display for ParseError {
                 core::fmt::Display::fmt(&TimeZoneId::array_capacity_max(), f)?;
                 f.write_str(" bytes)")
             }
-            TzEnvColonInvalidUtf8 => f.write_str(
-                "IANA time zone identifier is invalid UTF-8",
-            ),
+            TzEnvColonInvalidUtf8 => {
+                f.write_str("IANA time zone identifier is invalid UTF-8")
+            }
             TzEnvInvalidUtf8 => f.write_str(
                 "POSIX transition rule or \
                  IANA time zone identifier is invalid UTF-8",
@@ -3737,8 +3737,10 @@ mod tests {
             TimeZone::parse(b"XXX24:59:59YYY25:59:59,M3.2.0,M11.1.0").is_err()
         );
         // Weird, but actually possible if you omit the DST offset!
-        assert!(TimeZone::parse(b"XXX-24:59:59YYY-25:59:59,M3.2.0,M11.1.0")
-            .is_err());
+        assert!(
+            TimeZone::parse(b"XXX-24:59:59YYY-25:59:59,M3.2.0,M11.1.0")
+                .is_err()
+        );
 
         let p = TimeZone::parse(b"XXX24:59:59YYY,M3.2.0,M11.1.0").unwrap();
         // in std
@@ -3768,12 +3770,16 @@ mod tests {
         //
         // UPDATE: We now provide a way to inspect whether this happens
         // or not via a predicate on the error returned.
-        assert!(TzEnv::parse("EST5EDT")
-            .unwrap_err()
-            .is_missing_dst_transition_rule());
-        assert!(TzEnv::parse("EST5EDT4")
-            .unwrap_err()
-            .is_missing_dst_transition_rule());
+        assert!(
+            TzEnv::parse("EST5EDT")
+                .unwrap_err()
+                .is_missing_dst_transition_rule()
+        );
+        assert!(
+            TzEnv::parse("EST5EDT4")
+                .unwrap_err()
+                .is_missing_dst_transition_rule()
+        );
 
         let tz = TzEnv::parse(":EST5EDT").unwrap();
         assert_eq!(
