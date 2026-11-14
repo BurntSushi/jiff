@@ -113,14 +113,23 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
     // standard for zoneinfo directories, which means `jiff-cli generate
     // jiff-tzdb` can't rely on this being here. But it will notice it when it
     // exists and add it to the crate data.
-    let (src, dst) = (tzdata.join("version"), outdir.join("version"));
-    std::fs::copy(&src, &dst).with_context(|| {
-        format!(
-            "failed to copy {src} to {dst}",
-            src = src.display(),
-            dst = dst.display()
-        )
-    })?;
+    //
+    // We also write backzone and zone.tab, which `jiff-cli generate jiff-tzdb`
+    // then uses to determine which IANA time zone identifiers are primary.
+    let copies = [
+        (tzdata.join("version"), outdir.join("version")),
+        (tzdata.join("backzone"), outdir.join("backzone")),
+        (tzdata.join("zone.tab"), outdir.join("zone.tab")),
+    ];
+    for (src, dst) in copies {
+        std::fs::copy(&src, &dst).with_context(|| {
+            format!(
+                "failed to copy {src} to {dst}",
+                src = src.display(),
+                dst = dst.display()
+            )
+        })?;
+    }
 
     // Generate "rearguard" data. tzdb has this to say about it:
     //
