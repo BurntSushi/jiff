@@ -712,7 +712,7 @@ impl core::ops::Sub<i64> for Timestamp {
 ///
 /// # Panics
 ///
-/// When adding would result in a value outside the boundaries of a
+/// When subtracting would result in a value outside the boundaries of a
 /// `Timestamp`.
 ///
 /// # Example
