@@ -5,6 +5,7 @@ use crate::{
     error::{tz::timezone::Error as E, Error},
     tz::{
         ambiguous::{AmbiguousOffset, AmbiguousTimestamp, AmbiguousZoned},
+        db::{find_primary_iana_name, find_tz_location, TimeZoneLocation},
         offset::{Dst, Offset},
     },
     util::sync::Arc,
@@ -126,11 +127,15 @@ use self::repr::Repr;
 /// The equality semantics are as follows:
 ///
 /// * Two fixed offset time zones are equal when their offsets are equal.
-/// * Two POSIX time zones are equal when their original rule strings are
-/// byte-for-byte identical.
-/// * Two IANA time zones are equal when their identifiers are equal _and_
-/// checksums of their rules are equal.
-/// * In all other cases, time zones are unequal.
+/// * Two POSIX time zones are equal when their rule strings parse to identical
+/// rules in memory.
+/// * Two IANA time zones are equal when their primary identifiers are equal
+/// and their underlying checksums of the TZif data are equivalent. If a
+/// primary identifier is unavailable, then the time zone's IANA identifier
+/// is used instead.
+/// * Two TZif time zones whose `iana_name()` is `None` are equivalent only
+/// when their underlying checksums of the TZif data are equivalent. * In all
+/// other cases, time zones are unequal.
 ///
 /// Time zone equality is, for example, used in APIs like [`Zoned::since`]
 /// when asking for spans with calendar units. Namely, since days can be of
@@ -675,6 +680,123 @@ impl TimeZone {
             FIXED(_offset) => None,
             STATIC_TZIF(tzif) => tzif.name(),
             ARC_TZIF(tzif) => tzif.name(),
+            ARC_POSIX(_posix) => None,
+        }
+    }
+
+    /// When this time zone was loaded from an IANA time zone database entry,
+    /// then this returns the primary name for that time zone.
+    ///
+    /// This follows the same [rules as ECMAScript][rules]. In effect, there is
+    /// at least one primary time zone identifier for each ISO 3166 country
+    /// code.
+    ///
+    /// [rules]: https://tc39.es/ecma402/#sup-availablenamedtimezoneidentifiers
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::tz::TimeZone;
+    /// # if TimeZone::get("Asia/Calcutta").is_err() { return Ok(()) };
+    ///
+    /// let tz = TimeZone::get("Asia/Calcutta")?;
+    /// assert_eq!(tz.primary_iana_name(), Some("Asia/Kolkata"));
+    ///
+    /// let tz = TimeZone::get("Europe/Prague")?;
+    /// assert_eq!(tz.primary_iana_name(), Some("Europe/Prague"));
+    ///
+    /// let tz = TimeZone::get("Asia/Kolkata")?;
+    /// assert_eq!(tz.primary_iana_name(), Some("Asia/Kolkata"));
+    ///
+    /// let tz = TimeZone::get("Atlantic/Jan_Mayen")?;
+    /// assert_eq!(tz.primary_iana_name(), Some("Arctic/Longyearbyen"));
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn primary_iana_name(&self) -> Option<&str> {
+        repr::each! {
+            &self.repr,
+            UTC => Some("UTC"),
+            UNKNOWN => None,
+            FIXED(_offset) => None,
+            STATIC_TZIF(tzif) => tzif.name().and_then(find_primary_iana_name),
+            ARC_TZIF(tzif) => tzif.name().and_then(find_primary_iana_name),
+            ARC_POSIX(_posix) => None,
+        }
+    }
+
+    /// Returns true when this time zone is "primary."
+    ///
+    /// A time zone is primary when it is the preferred identifier according
+    /// to the [ECMAScript rules][rules]. Specifically, a time zone is
+    /// primary precisely when its IANA time zone identifier is equivalent to
+    /// its primary IANA time zone identifier.
+    ///
+    /// [rules]: https://tc39.es/ecma402/#sup-availablenamedtimezoneidentifiers
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::tz::TimeZone;
+    /// # if TimeZone::get("Asia/Calcutta").is_err() { return Ok(()) };
+    ///
+    /// let tz = TimeZone::get("Asia/Calcutta")?;
+    /// assert!(!tz.is_primary());
+    /// let tz = TimeZone::get("Asia/Kolkata")?;
+    /// assert!(tz.is_primary());
+    ///
+    /// let tz = TimeZone::get("Europe/Berlin")?;
+    /// assert!(tz.is_primary());
+    /// let tz = TimeZone::get("Europe/Copenhagen")?;
+    /// assert!(tz.is_primary());
+    ///
+    /// let tz1 = TimeZone::get("Asia/Calcutta")?;
+    /// let tz2 = TimeZone::get("Asia/Kolkata")?;
+    /// assert_eq!(tz1, tz2);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn is_primary(&self) -> bool {
+        self.iana_name()
+            .and_then(|name| Some((name, self.primary_iana_name()?)))
+            .map(|(name, primary)| name == primary)
+            .unwrap_or(false)
+    }
+
+    /// Returns geographical location information corresponding to this
+    /// time zone's primary time zone identifier.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::tz::TimeZone;
+    /// # if TimeZone::get("Asia/Calcutta").is_err() { return Ok(()) };
+    ///
+    /// let tz = TimeZone::get("Europe/Copenhagen")?;
+    /// let loc = tz.location().unwrap();
+    /// assert_eq!(loc.country(), "DK");
+    ///
+    /// let tz = TimeZone::get("EuRoPe/BeRlIn")?;
+    /// let loc = tz.location().unwrap();
+    /// assert_eq!(loc.country(), "DE");
+    ///
+    /// let tz = TimeZone::get("asia/calcutta")?;
+    /// let loc = tz.location().unwrap();
+    /// assert_eq!(loc.country(), "IN");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[inline]
+    pub fn location(&self) -> Option<TimeZoneLocation> {
+        repr::each! {
+            &self.repr,
+            UTC => None,
+            UNKNOWN => None,
+            FIXED(_offset) => None,
+            STATIC_TZIF(tzif) => tzif.name().and_then(find_tz_location),
+            ARC_TZIF(tzif) => tzif.name().and_then(find_tz_location),
             ARC_POSIX(_posix) => None,
         }
     }
@@ -2586,6 +2708,30 @@ mod repr {
 
     impl PartialEq for Repr {
         fn eq(&self, other: &Repr) -> bool {
+            fn is_tzif_eq(
+                tzif1: &tzif::MaybeNamedTimeZone,
+                tzif2: &tzif::MaybeNamedTimeZone,
+            ) -> bool {
+                // We check the underlying TZ itself (which is
+                // just done via a checksum) to catch cases where
+                // two different TimeZone values with the same
+                // name came from different databases. This is
+                // also important for cases when neither time
+                // zone has an IANA name, in which case, we just
+                // rely on the checksum.
+                if tzif1.tz() != tzif2.tz() {
+                    return false;
+                }
+                primary_name_fallback(tzif1) == primary_name_fallback(tzif2)
+            }
+
+            fn primary_name_fallback(
+                tzif: &tzif::MaybeNamedTimeZone,
+            ) -> Option<&str> {
+                super::find_primary_iana_name(tzif.name()?)
+                    .or_else(|| tzif.name())
+            }
+
             if self.tag() != other.tag() {
                 return false;
             }
@@ -2596,12 +2742,18 @@ mod repr {
                 // SAFETY: OK, because we know the tags are equivalent and
                 // `self` has a `FIXED` tag.
                 FIXED(offset) => offset == unsafe { other.get_fixed() },
-                // SAFETY: OK, because we know the tags are equivalent and
-                // `self` has a `STATIC_TZIF` tag.
-                STATIC_TZIF(tzif) => tzif == unsafe { other.get_static_tzif() },
-                // SAFETY: OK, because we know the tags are equivalent and
-                // `self` has an `ARC_TZIF` tag.
-                ARC_TZIF(tzif) => tzif == unsafe { other.get_arc_tzif() },
+                STATIC_TZIF(tzif1) => {
+                    // SAFETY: OK, because we know the tags are equivalent and
+                    // `self` has a `STATIC_TZIF` tag.
+                    let tzif2 = unsafe { other.get_static_tzif() };
+                    is_tzif_eq(tzif1, tzif2)
+                },
+                ARC_TZIF(tzif1) => {
+                    // SAFETY: OK, because we know the tags are equivalent and
+                    // `self` has an `ARC_TZIF` tag.
+                    let tzif2 = unsafe { other.get_arc_tzif() };
+                    is_tzif_eq(tzif1, tzif2)
+                },
                 // SAFETY: OK, because we know the tags are equivalent and
                 // `self` has an `ARC_POSIX` tag.
                 ARC_POSIX(posix) => posix == unsafe { other.get_arc_posix() },

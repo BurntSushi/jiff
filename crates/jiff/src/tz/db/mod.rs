@@ -1,3 +1,5 @@
+use jcore::util::ArrayStr;
+
 use crate::{
     error::{tz::db::Error as E, Error},
     tz::TimeZone,
@@ -6,6 +8,7 @@ use crate::{
 
 mod bundled;
 mod concatenated;
+mod metadata;
 mod zoneinfo;
 
 /// Returns a copy of the global [`TimeZoneDatabase`].
@@ -734,6 +737,117 @@ impl<'d> core::fmt::Display for TimeZoneName<'d> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         f.write_str(self.as_str())
     }
+}
+
+/// The geographical location corresponding to a primary time zone identifier.
+///
+/// This can be retrieved for a time zone via [`TimeZone::location`].
+///
+/// # Example
+///
+/// ```
+/// use jiff::tz::TimeZone;
+/// # if TimeZone::get("Asia/Calcutta").is_err() { return Ok(()) };
+///
+/// let tz = TimeZone::get("Europe/Copenhagen")?;
+/// let loc = tz.location().unwrap();
+/// assert_eq!(loc.country(), "DK");
+///
+/// let tz = TimeZone::get("EuRoPe/BeRlIn")?;
+/// let loc = tz.location().unwrap();
+/// assert_eq!(loc.country(), "DE");
+///
+/// let tz = TimeZone::get("asia/calcutta")?;
+/// let loc = tz.location().unwrap();
+/// assert_eq!(loc.country(), "IN");
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct TimeZoneLocation {
+    /// The ISO 3166 code corresponding to the country for the primary time
+    /// zone identifier.
+    country: ArrayStr<2>,
+    /// The latitude coordinate.
+    latitude: f64,
+    /// The longitude coordinate.
+    longitude: f64,
+}
+
+impl TimeZoneLocation {
+    /// Returns the ISO 3166 country code for the corresponding time zone.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::tz::TimeZone;
+    /// # if TimeZone::get("Asia/Calcutta").is_err() { return Ok(()) };
+    ///
+    /// let tz = TimeZone::get("Asia/Calcutta")?;
+    /// let loc = tz.location().unwrap();
+    /// assert_eq!(loc.country(), "IN");
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub const fn country(&self) -> &str {
+        self.country.as_str()
+    }
+
+    /// Returns the latitude coordinate for the corresponding time zone.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::tz::TimeZone;
+    /// # if TimeZone::get("Asia/Calcutta").is_err() { return Ok(()) };
+    ///
+    /// let tz = TimeZone::get("Asia/Calcutta")?;
+    /// let loc = tz.location().unwrap();
+    /// assert_eq!(loc.latitude(), 22.533333333333335);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub const fn latitude(&self) -> f64 {
+        self.latitude
+    }
+
+    /// Returns the longitude coordinate for the corresponding time zone.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::tz::TimeZone;
+    /// # if TimeZone::get("Asia/Calcutta").is_err() { return Ok(()) };
+    ///
+    /// let tz = TimeZone::get("Asia/Calcutta")?;
+    /// let loc = tz.location().unwrap();
+    /// assert_eq!(loc.longitude(), 88.36666666666666);
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub const fn longitude(&self) -> f64 {
+        self.longitude
+    }
+}
+
+pub(crate) fn find_primary_iana_name(iana_name: &str) -> Option<&'static str> {
+    let index = metadata::TIME_ZONE_PRIMARY_IDENTIFIER
+        .binary_search_by(|&(key, _)| key.cmp(iana_name))
+        .ok()?;
+    let primary = metadata::TIME_ZONE_PRIMARY_IDENTIFIER[index].1;
+    Some(primary)
+}
+
+pub(crate) fn find_tz_location(iana_name: &str) -> Option<TimeZoneLocation> {
+    let index = metadata::TIME_ZONE_PRIMARY_IDENTIFIER
+        .binary_search_by(|&(key, _)| key.cmp(iana_name))
+        .ok()?;
+    let primary = metadata::TIME_ZONE_PRIMARY_IDENTIFIER[index].1;
+    let location = metadata::TIME_ZONE_METADATA
+        .binary_search_by(|&(key, _)| key.cmp(primary))
+        .ok()
+        .map(|index| metadata::TIME_ZONE_METADATA[index].1);
+    location
 }
 
 /// Checks if `name` is a "special" time zone and returns one if so.
