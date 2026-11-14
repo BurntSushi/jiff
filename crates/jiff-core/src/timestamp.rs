@@ -850,6 +850,7 @@ mod tests {
         Offset::from_seconds(second).unwrap()
     }
 
+    // Regression test for: https://github.com/BurntSushi/jiff/pull/695
     #[test]
     fn sub_assign() {
         for (rhs, expected) in [(400, 600), (-400, 1400), (0, 1000)] {
