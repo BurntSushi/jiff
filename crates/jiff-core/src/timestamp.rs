@@ -712,7 +712,7 @@ impl core::ops::Sub<i64> for Timestamp {
 ///
 /// # Panics
 ///
-/// When adding would result in a value outside the boundaries of a
+/// When subtracting would result in a value outside the boundaries of a
 /// `Timestamp`.
 ///
 /// # Example
@@ -740,7 +740,7 @@ impl core::ops::Sub<(i64, i32)> for Timestamp {
 impl core::ops::SubAssign<i64> for Timestamp {
     #[inline]
     fn sub_assign(&mut self, rhs: i64) {
-        *self = *self + rhs;
+        *self = *self - rhs;
     }
 }
 
@@ -753,7 +753,7 @@ impl core::ops::SubAssign<i64> for Timestamp {
 impl core::ops::SubAssign<(i64, i32)> for Timestamp {
     #[inline]
     fn sub_assign(&mut self, rhs: (i64, i32)) {
-        *self = *self + rhs;
+        *self = *self - rhs;
     }
 }
 
@@ -848,6 +848,26 @@ mod tests {
     #[track_caller]
     fn offset(second: i32) -> Offset {
         Offset::from_seconds(second).unwrap()
+    }
+
+    // Regression test for: https://github.com/BurntSushi/jiff/pull/695
+    #[test]
+    fn sub_assign() {
+        for (rhs, expected) in [(400, 600), (-400, 1400), (0, 1000)] {
+            let mut ts = stamp(1000, 0);
+            ts -= rhs;
+            assert_eq!(ts, stamp(expected, 0));
+        }
+
+        for (rhs, expected) in [
+            ((400, 1), stamp(599, 999_999_999)),
+            ((-400, -1), stamp(1400, 1)),
+            ((0, 0), stamp(1000, 0)),
+        ] {
+            let mut ts = stamp(1000, 0);
+            ts -= rhs;
+            assert_eq!(ts, expected);
+        }
     }
 
     #[test]
