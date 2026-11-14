@@ -293,10 +293,7 @@ mod tests {
     fn sizes() {
         use super::*;
 
-        #[cfg(feature = "alloc")]
         assert_eq!(24, core::mem::size_of::<Abbreviation>());
-        #[cfg(not(feature = "alloc"))]
-        assert_eq!(16, core::mem::size_of::<Abbreviation>());
 
         #[cfg(feature = "alloc")]
         assert_eq!(32, core::mem::size_of::<TimeZoneId>());
