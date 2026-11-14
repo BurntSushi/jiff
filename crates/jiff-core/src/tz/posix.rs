@@ -3665,7 +3665,7 @@ mod tests {
 
         #[cfg(not(feature = "alloc"))]
         {
-            let core_only_over_max = "ABCDEFG5abcdefg,M3.2.0,M11.1.0";
+            let core_only_over_max = "ABCDEFGHIJ5abcdefghij,M3.2.0,M11.1.0";
             assert!(TimeZone::parse(core_only_over_max).is_err());
         }
 
