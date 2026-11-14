@@ -4,8 +4,17 @@
 ===================
 Enhancements:
 
-* [#697](https://github.com/BurntSushi/jiff/pull/697):
-Update Jiff's bundled IANA Time Zone Database to `2026f`.
+* [#697](https://github.com/BurntSushi/jiff/issues/697):
+Upgrade Jiff's bundled IANA Time Zone Database to tzdb `2026f`.
+* [#694](https://github.com/BurntSushi/jiff/issues/694):
+Make `jiff::civil::Weekday` methods `const` where possible.
+
+Bug fixes:
+
+* [#695](https://github.com/BurntSushi/jiff/issues/695):
+Timestamp subtraction assignment.
+* [#696](https://github.com/BurntSushi/jiff/issues/696):
+Correct some boundary conditions on `Timestamp`.
 
 
 0.2.43 (2026-11-11)
