@@ -5,6 +5,9 @@ This walks the directory tree given and looks for valid TZif data files. All
 found files are concatenated into a single file, with the offset and the
 corresponding time zone name recorded for the start of each file. In this way,
 we can ship one binary file.
+
+This also generates time zone metadata from the tzdata source files included
+in the zoneinfo directory.
 */
 
 use std::{
@@ -21,6 +24,8 @@ use lexopt::{Arg, Parser};
 
 use crate::args::{self, Usage};
 
+mod metadata;
+
 const USAGE: &'static str = r#"
 Generate Rust source code from a zoneinfo directory.
 
@@ -31,9 +36,13 @@ This program should be run from the root of the Jiff repository. Namely, it
 assumes that `./crates/jiff-tzdb` exists and corresponds to the `jiff-tzdb`
 crate.
 
-While you can run this program using your system's zoneinfo directory, it is
-recommended to generate your own zoneinfo directory via
-`jiff-cli generate zoneinfo`. There are two main reasons for this:
+This also writes time zone metadata to `crates/jiff/src/tz/db/metadata.rs`.
+The input directory must include the `rearguard.zi`, `backzone` and `zone.tab`
+files from the same tzdata release. The `jiff-cli generate zoneinfo` command
+includes these files in its output directory.
+
+It is recommended to generate your own zoneinfo directory via
+`jiff-cli generate zoneinfo` for two additional reasons:
 
 1. Your system zoneinfo directory may be using "fat" TZif files, which will
 make the binary size of `jiff-tzdb` bigger than it needs to be. Jiff works just
@@ -193,6 +202,20 @@ pub fn run(p: &mut Parser) -> anyhow::Result<()> {
             )
         })?;
     super::rustfmt(&tzname_path)?;
+
+    // Generate primary time zone metadata.
+    // This actually gets written into the
+    // jiff crate directly since jiff-tzdb
+    // is an optional dependency and the
+    // data isn't that big.
+    //
+    // Ideally this would be data that was
+    // read as part of tzdb init, but:
+    // 1) it adds more work to tzdb init
+    // 2) more importantly, the necessary
+    //    data is not usually in a zoneinfo
+    //    directory.
+    metadata::generate(zoneinfo, config.jiff_repo_dir())?;
 
     Ok(())
 }

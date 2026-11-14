@@ -2683,6 +2683,45 @@ impl Zoned {
     /// their meaning can change depending on how the span is added. In this
     /// case, adding one month to `2024-03-02` corresponds to 31 days, but
     /// subtracting one month from `2024-05-01` corresponds to 30 days.
+    ///
+    /// # Example: two different time zones results in an error
+    ///
+    /// When calendar units are requested and the time zones are distinct,
+    /// then an error occurs:
+    ///
+    /// ```
+    /// use jiff::{civil::date, Unit, ToSpan};
+    ///
+    /// let zdt1 = date(2024, 3, 2).at(0, 0, 0, 0).in_tz("America/New_York")?;
+    /// let zdt2 = date(2024, 5, 1).at(0, 0, 0, 0).in_tz("America/Los_Angeles")?;
+    ///
+    /// assert_eq!(
+    ///     zdt1.until((Unit::Month, &zdt2)).unwrap_err().to_string(),
+    ///     "computing the span between zoned datetimes, with month units, \
+    ///      requires that the time zones are equivalent, \
+    ///      but the zoned datetimes have distinct time zones",
+    /// );
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// However, even when the time zone identifiers are not precisely
+    /// equivalent, it's still possible for this to succeed. For example,
+    /// [`TimeZone`] equality uses the concept of primary identifiers. So if
+    /// the two time zones have the same primary identifier, then this
+    /// operation still works:
+    ///
+    /// ```
+    /// use jiff::{civil::date, Unit, ToSpan};
+    /// # if jiff::tz::TimeZone::get("Asia/Calcutta").is_err() { return Ok(()) };
+    ///
+    /// let zdt1 = date(2024, 3, 2).at(0, 0, 0, 0).in_tz("Asia/Calcutta")?;
+    /// let zdt2 = date(2024, 5, 1).at(0, 0, 0, 0).in_tz("Asia/Kolkata")?;
+    /// let span = zdt1.until((Unit::Month, &zdt2))?;
+    /// assert_eq!(span, 1.month().days(29).fieldwise());
+    ///
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[inline]
     pub fn until<'a, A: Into<ZonedDifference<'a>>>(
         &self,

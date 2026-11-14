@@ -182,6 +182,25 @@ jobs:
     - run: cargo test -p jiff-core --no-default-features --features alloc
     - run: cargo test -p jiff-core --no-default-features --features std
 
+  # Test `jiff-cli`
+  test-jiff-cli:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - build: nightly
+          os: ubuntu-latest
+          rust: nightly
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+    - run: cargo test -p jiff-cli
+
   # Test a number of different feature combinations.
   #
   # Jiff has too many features to do the full powerset, so this just tries to
