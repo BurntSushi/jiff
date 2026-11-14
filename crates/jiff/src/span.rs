@@ -1497,7 +1497,7 @@ impl Span {
     /// ```
     #[inline]
     pub fn checked_mul(mut self, rhs: i64) -> Result<Span, Error> {
-        if rhs == 0 {
+        if rhs == 0 || self.is_zero() {
             return Ok(Span::default());
         } else if rhs == 1 {
             return Ok(self);
@@ -6747,6 +6747,17 @@ mod tests {
     use crate::{civil::date, RoundMode};
 
     use super::*;
+
+    #[test]
+    fn test_mul_zero_min() {
+        for zero in [Span::new(), 0.seconds()] {
+            assert!(zero.checked_mul(i64::MIN).unwrap().is_zero());
+            assert!((zero * i64::MIN).is_zero());
+            assert!((i64::MIN * zero).is_zero());
+        }
+        assert!(1.nanoseconds().checked_mul(i64::MIN).is_err());
+        assert!(10_000.years().checked_mul(3).is_err());
+    }
 
     #[test]
     fn test_total() {
