@@ -16,9 +16,12 @@ for crate; do
       --sign-tag --tag-name '{{version}}' -p jiff${execute}
     # If we tag jiff, then we must have also released jiff-static, so tag that
     # too.
-    cargo release tag \
-      --no-confirm \
-      --sign-tag --tag-name '{{prefix}}{{version}}' -p jiff-static${execute}
+    #
+    # NB I'm now experimenting with just tagging Jiff releases and leaving the
+    # sub-crate releases untagged.
+    # cargo release tag \
+    #   --no-confirm \
+    #   --sign-tag --tag-name '{{prefix}}{{version}}' -p jiff-static${execute}
   else
     cargo release tag \
       --no-confirm \
