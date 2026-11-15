@@ -45,7 +45,7 @@ impl Metadata {
     /// rules. Renames take effect with the input release; this generator does
     /// not impose the recommended rename waiting period.
     ///
-    /// https://tc39.es/ecma402/#sup-availablenamedtimezoneidentifiers
+    /// <https://tc39.es/ecma402/#sup-availablenamedtimezoneidentifiers>
     fn parse(
         zi: &str,
         backzone: &str,
@@ -304,7 +304,7 @@ fn country<'a>(
         // > Zone Database, "Atlantic/Jan_Mayen" is the only case where this
         // > happens.
         //
-        // Ref: https://tc39.es/ecma402/#sup-availablenamedtimezoneidentifiers
+        // Ref: <https://tc39.es/ecma402/#sup-availablenamedtimezoneidentifiers>
         if current == "Atlantic/Jan_Mayen" {
             return Ok(Some("SJ"));
         }
