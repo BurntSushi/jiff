@@ -27,7 +27,7 @@ Unreleased
   {% else -%}
   [{{ commit.id | truncate(length=7, end="") }}](https://github.com/BurntSushi/jiff/commit/{{ commit.id }})
   {%- endif %}:
-{% if commit.breaking %}[**breaking**] {% endif -%}
+{% if commit.breaking %}**BREAKING**: {% endif -%}
   {{ commit.message
       | replace_regex(from=" [(][^)]*#[0-9]+[)]$", to="")
       | upper_first }}.

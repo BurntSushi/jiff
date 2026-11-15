@@ -1,7 +1,7 @@
 [package]
 publish = false
 name = "jiff-cli"
-version = "0.0.2"  #:version
+version = "1.0.0"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 description = """
 A command line tool for supporting the development of the Jiff datetime
@@ -27,7 +27,7 @@ default = []
 [dependencies]
 anyhow = "1.0.28"
 bstr = "1.9.1"
-jiff = { version = "0.2.46", path = "../jiff", features = ["logging"] }
+jiff = { version = "1.0.0", path = "../jiff", features = ["logging"] }
 lexopt = "0.3.0"
 log = { version = "0.4.17", features = ["std"] }
 regex-lite = "0.1.6"

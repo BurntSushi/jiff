@@ -1,6 +1,6 @@
 [package]
 name = "jiff-tzdb-platform"
-version = "0.1.3"  #:version
+version = "1.0.0"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 license = "Unlicense OR MIT"
 homepage = "https://github.com/BurntSushi/jiff/tree/master/crates/jiff-tzdb-platform"
@@ -22,4 +22,4 @@ bench = false
 path = "lib.rs"
 
 [dependencies]
-jiff-tzdb = { version = "0.1.10", path = "../jiff-tzdb" }
+jiff-tzdb = { version = "1.0.0", path = "../jiff-tzdb" }

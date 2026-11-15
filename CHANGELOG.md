@@ -1,5 +1,58 @@
 # CHANGELOG
 
+1.0.0 (2026-11-15)
+==================
+This marks the Jiff 1.0 release. Barring some unforeseen major problem with the
+API, this release marks an indefinite commitment to 1.x.y. Consumers of this
+library should feel confident about putting Jiff types into their public API.
+New major versions of Jiff will not be made lightly.
+
+The most significant breaking change in this release large but simple: the
+`Zoned` type has been renamed to `ZonedDateTime`. This also impacts APIs like
+`Timestamp::to_zoned`, which are now called `Timestamp::to_zoned_datetime`. The
+remaining breaking changes are pretty minor and shouldn't impact most users.
+
+Enhancements:
+
+* [3211f23](https://github.com/BurntSushi/jiff/commit/3211f23a7f87eceffda70031c2954a2359cb370c):
+Bump MSRV to Rust 1.85.
+* [#262](https://github.com/BurntSushi/jiff/issues/262):
+Use `core::error::Error` in lieu of `std::error::Error`.
+* [#314](https://github.com/BurntSushi/jiff/issues/314):
+**BREAKING**: Make `Zoned::iso_week_date` take `&self` instead of `self`.
+* [#624](https://github.com/BurntSushi/jiff/issues/624):
+Make more methods take `&self`.
+* [#471](https://github.com/BurntSushi/jiff/issues/471):
+Turn `Custom` into a trait object.
+* [#499](https://github.com/BurntSushi/jiff/issues/499):
+**BREAKING**: Make `Offset::saturating_add` fallible.
+* [#629](https://github.com/BurntSushi/jiff/issues/629), [#626](https://github.com/BurntSushi/jiff/issues/626):
+**BREAKING**: Make `impl Sub for Timestamp` return a `SignedDuration`.
+* [#436](https://github.com/BurntSushi/jiff/issues/436):
+**BREAKING**: Seal the `ToSpan` trait.
+* [#463](https://github.com/BurntSushi/jiff/issues/463):
+Provide an accessor for an underlying `std::io::Error`.
+* [#467](https://github.com/BurntSushi/jiff/issues/467):
+**BREAKING**: Make conversions from `Timestamp` to `SystemTime` fallible.
+* [#374](https://github.com/BurntSushi/jiff/issues/374):
+**BREAKING**: Rename `Zoned` to `ZonedDateTime`.
+* [#618](https://github.com/BurntSushi/jiff/issues/618):
+**BREAKING**: Make `jiff_tzdb::VERSION` required.
+* [c03581f](https://github.com/BurntSushi/jiff/commit/c03581f405955ed4bbebfda0ae28e03120c289fa):
+Add `Span::to_friendly` routine as a convenience for `format("{:#}", span)`.
+
+Documentation:
+
+* [#545](https://github.com/BurntSushi/jiff/issues/545):
+Clarify specification labeling in formatting table.
+* [#630](https://github.com/BurntSushi/jiff/issues/630):
+Clarify the use of the propleptic Gregorian calendar.
+
+Performance:
+
+* [4d66e92](https://github.com/BurntSushi/jiff/commit/4d66e92ecdd6a012c952f7a5c0f628d0ecde662d):
+Add `inline(never)` to `strtime` routine.
+
 0.2.46 (2026-11-15)
 ===================
 Bug fixes:
