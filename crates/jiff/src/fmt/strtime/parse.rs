@@ -180,6 +180,9 @@ impl<'f, 'i, 't> Parser<'f, 'i, 't> {
     /// after the `%`. If any extensions are parsed, the parser is bumped
     /// to the next byte. (If no next byte exists, then an error is returned.)
     fn parse_extension(&mut self) -> Result<Extension, Error> {
+        if self.f().is_ascii_alphabetic() {
+            return Ok(Extension { flag: None, width: None, colons: 0 });
+        }
         let (flag, fmt) = Extension::parse_flag(self.fmt)?;
         let (width, fmt) = Extension::parse_width(fmt)?;
         let (colons, fmt) = Extension::parse_colons(fmt)?;
