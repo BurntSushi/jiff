@@ -19,13 +19,15 @@ Unreleased
 {% for entry in commits | commit_groups(groups=commit_parsers_groups) %}
 {{ entry.group | striptags | trim }}:
 {% for commit in entry.commits %}
-* {% for link in commit.links | unique(attribute="href") -%}
+* {% if commit.links -%}
+  {% for link in commit.links | unique(attribute="href") -%}
   [{{ link.text }}]({{ link.href }})
   {%- if not loop.last %}, {% endif -%}
   {% endfor -%}
-  {% if commit.links %}:
-{% endif -%}
-  {% if commit.breaking %}[**breaking**] {% endif -%}
+  {% else -%}
+  [{{ commit.id | truncate(length=7, end="") }}](https://github.com/BurntSushi/jiff/commit/{{ commit.id }})
+  {%- endif %}:
+{% if commit.breaking %}[**breaking**] {% endif -%}
   {{ commit.message
       | replace_regex(from=" [(][^)]*#[0-9]+[)]$", to="")
       | upper_first }}.
