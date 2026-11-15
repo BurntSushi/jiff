@@ -160,15 +160,15 @@ pub struct ISOWeekDate {
 }
 
 impl ISOWeekDate {
-    /// The maximum representable ISO week date.
-    ///
-    /// The maximum corresponds to the ISO week date of the maximum [`Date`]
-    /// value. That is, `-9999-01-01`.
-    pub const MIN: ISOWeekDate = ISOWeekDate { inner: JISOWeekDate::MIN };
-
     /// The minimum representable ISO week date.
     ///
     /// The minimum corresponds to the ISO week date of the minimum [`Date`]
+    /// value. That is, `-9999-01-01`.
+    pub const MIN: ISOWeekDate = ISOWeekDate { inner: JISOWeekDate::MIN };
+
+    /// The maximum representable ISO week date.
+    ///
+    /// The maximum corresponds to the ISO week date of the maximum [`Date`]
     /// value. That is, `9999-12-31`.
     pub const MAX: ISOWeekDate = ISOWeekDate { inner: JISOWeekDate::MAX };
 

@@ -989,14 +989,14 @@ pub struct ISOWeekDate {
 }
 
 impl ISOWeekDate {
-    /// The maximum representable ISO week date.
+    /// The minimum representable ISO week date.
     pub const MIN: ISOWeekDate = ISOWeekDate {
         year: b::ISOYear::MIN,
         week: b::ISOWeek::MIN,
         weekday: Weekday::Monday,
     };
 
-    /// The minimum representable ISO week date.
+    /// The maximum representable ISO week date.
     pub const MAX: ISOWeekDate = ISOWeekDate {
         year: b::ISOYear::MAX,
         // Technical max is 52, but 9999 is not a leap year.

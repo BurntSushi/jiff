@@ -438,10 +438,10 @@ impl TimeNanosecond {
         Ok((TimeNanosecond { nanosecond: rem }, days))
     }
 
-    /// Converts this second representation of a civil time into the
+    /// Converts this nanosecond representation of a civil time into the
     /// components of a civil time.
     ///
-    /// The subsecond component on the `Time` returned is always `0`.
+    /// The subsecond component is preserved in the returned `Time`.
     #[inline]
     pub const fn to_time(&self) -> Time {
         // Nanosecond is enforced as non-negative elsewhere
