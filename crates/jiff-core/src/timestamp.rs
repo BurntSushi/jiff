@@ -563,8 +563,9 @@ impl Timestamp {
     /// If this would result in a timestamp outside of its boundaries, then
     /// this returns an error.
     ///
-    /// The nanosecond component of the timestamp returned is guaranteed to
-    /// match the nanosecond component of `self`.
+    /// The result is normalized so that its non-zero seconds and nanoseconds
+    /// have the same sign. Crossing the Unix epoch may therefore change the
+    /// nanosecond component.
     ///
     /// # Examples
     ///
@@ -583,6 +584,11 @@ impl Timestamp {
     /// assert_eq!(ts.checked_add_seconds(1), Ok(mkts(124, 999_999_999)));
     /// assert_eq!(ts.checked_add_seconds(-1), Ok(mkts(122, 999_999_999)));
     ///
+    /// let ts = mkts(-1, -500_000_000);
+    /// assert_eq!(ts.checked_add_seconds(2), Ok(mkts(0, 500_000_000)));
+    /// let ts = mkts(1, 500_000_000);
+    /// assert_eq!(ts.checked_add_seconds(-2), Ok(mkts(0, -500_000_000)));
+    ///
     /// assert!(ts.checked_add_seconds(i64::MIN).is_err());
     /// assert!(ts.checked_add_seconds(i64::MAX).is_err());
     /// ```
@@ -591,9 +597,7 @@ impl Timestamp {
         self,
         seconds: i64,
     ) -> Result<Timestamp, RangeError> {
-        let second =
-            rtry!(b::UnixEpochSeconds::checked_add(self.as_second(), seconds));
-        Ok(Timestamp { second, ..self })
+        self.checked_add(seconds, 0)
     }
 
     /// Subtracts the given number of seconds from this timestamp.
@@ -986,6 +990,24 @@ mod tests {
         assert_eq!(ts - (-seconds, 1), Timestamp::MAX);
     }
 
+    // Regression tests for #703.
+    #[test]
+    fn checked_seconds_across_epoch() {
+        for (ts, seconds, expected) in [
+            (stamp(-1, -500_000_000), 2, stamp(0, 500_000_000)),
+            (stamp(1, 500_000_000), -2, stamp(0, -500_000_000)),
+            (stamp(-1, -1), 3, stamp(1, 999_999_999)),
+            (stamp(1, 1), -3, stamp(-1, -999_999_999)),
+            (stamp(0, -1), 1, stamp(0, 999_999_999)),
+            (stamp(0, 1), -1, stamp(0, -999_999_999)),
+        ] {
+            assert_eq!(ts.checked_add_seconds(seconds), Ok(expected));
+            assert_eq!(ts.checked_sub_seconds(-seconds), Ok(expected));
+            assert_eq!(ts + seconds, expected);
+            assert_eq!(ts - -seconds, expected);
+        }
+    }
+
     #[test]
     fn checked_arithmetic_boundaries() {
         let min = Timestamp::MIN.as_second();
@@ -1004,6 +1026,7 @@ mod tests {
             Timestamp::MAX,
         ];
         let seconds = [
+            i64::MIN,
             min - max - 1,
             min - max,
             min - 1,
@@ -1017,6 +1040,7 @@ mod tests {
             max + 1,
             max - min,
             max - min + 1,
+            i64::MAX,
         ];
         let nanos = [
             i32::MIN,
@@ -1031,9 +1055,21 @@ mod tests {
         ];
         for ts in timestamps {
             for seconds in seconds {
+                let delta = (seconds as i128) * (c::NANOS_PER_SEC as i128);
+                assert_eq!(
+                    ts.checked_add_seconds(seconds).ok(),
+                    Timestamp::from_nanosecond(ts.as_nanosecond() + delta)
+                        .ok(),
+                    "{ts:?} + {seconds}",
+                );
+                assert_eq!(
+                    ts.checked_sub_seconds(seconds).ok(),
+                    Timestamp::from_nanosecond(ts.as_nanosecond() - delta)
+                        .ok(),
+                    "{ts:?} - {seconds}",
+                );
                 for nanos in nanos {
-                    let delta = (seconds as i128) * (c::NANOS_PER_SEC as i128)
-                        + (nanos as i128);
+                    let delta = delta + (nanos as i128);
                     let sum = ts.as_nanosecond() + delta;
                     let difference = ts.as_nanosecond() - delta;
                     assert_eq!(
