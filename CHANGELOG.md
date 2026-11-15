@@ -1,5 +1,23 @@
 # CHANGELOG
 
+0.2.46 (2026-11-15)
+===================
+Bug fixes:
+
+* [#707](https://github.com/BurntSushi/jiff/issues/707):
+`jiff_core::util::ArrayStr` has an unsound API.
+
+Documentation:
+
+* [#709](https://github.com/BurntSushi/jiff/issues/709):
+Fix documentation inconsistencies.
+
+Performance:
+
+* [#708](https://github.com/BurntSushi/jiff/issues/708):
+Skip extension parsing for plain directives in strptime.
+
+
 0.2.45 (2026-11-14)
 ===================
 Enhancements:
