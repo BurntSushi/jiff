@@ -2319,6 +2319,24 @@ impl Span {
         options.round(self)
     }
 
+    /// Returns this `Span` as a [`friendly`] formatted string.
+    ///
+    /// This is a convenience routine for `format!("{:#}", span)`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use jiff::ToSpan;
+    ///
+    /// let span = 3.months().days(29).hours(15);
+    /// assert_eq!(span.to_friendly(), "3mo 29d 15h");
+    /// ```
+    #[cfg(feature = "alloc")]
+    #[inline]
+    pub fn to_friendly(&self) -> alloc::string::String {
+        friendly::DEFAULT_SPAN_PRINTER.span_to_string(self)
+    }
+
     /// Converts a `Span` to a [`SignedDuration`] relative to the date given.
     ///
     /// In most cases, it is unlikely that you'll need to use this routine to
