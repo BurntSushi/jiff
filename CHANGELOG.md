@@ -1,5 +1,22 @@
 # CHANGELOG
 
+0.2.45 (2026-11-14)
+===================
+Enhancements:
+
+* [#483](https://github.com/BurntSushi/jiff/issues/483):
+Support ECMAScript's "primary" time zone identifiers.
+
+Bug fixes:
+
+* [#701](https://github.com/BurntSushi/jiff/issues/701):
+Handle zero span multiplication.
+* [#702](https://github.com/BurntSushi/jiff/issues/702):
+Constrain ISO week numbers to the year's last week.
+* [#703](https://github.com/BurntSushi/jiff/issues/703):
+`Timestamp::checked_add_seconds` produces incorrect results across the Unix epoch.
+
+
 0.2.44 (2026-11-14)
 ===================
 Enhancements:
