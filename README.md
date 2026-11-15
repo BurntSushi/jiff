@@ -106,22 +106,6 @@ into your binary.
 The "[crate features](https://docs.rs/jiff/#crate-features)" section of the
 documentation lists the full set of supported features.
 
-### Future plans
-
-My original plan was to release Jiff 1.0 in Summer 2025. It is now November
-2026, so that deadline has clearly slipped. I've continued to make progress
-toward Jiff 1.0, but it has been more work than anticipated. I don't currently
-have a timeline for a Jiff 1.0 release.
-
-It's important to get Jiff 1.0 as "right" as possible. Namely, once it's
-released, I plan to commit to its API indefinitely. At which point, users of
-Jiff should feel comfortable using it as a stable base in public APIs.
-
-Once Jiff 1.0 is released, Jiff 0.2 will continue to get critical bug fix
-updates. There won't be any active feature development, but since so many folks
-are already using Jiff 0.2, it makes sense to offer a transition grace period.
-My plan here is to do it for 1 year after Jiff 1.0 is released.
-
 ### Performance
 
 The most important design goal of Jiff is to be a high level datetime library
@@ -216,5 +200,5 @@ As is standard in the Rust ecosystem, Jiff does not consider an increase in
 its MSRV to be a semver incompatible change. However, Jiff will limit MSRV
 increases to minor version updates. For example, if Jiff `1.0` requires Rust
 `1.20.0`, then Jiff `1.0.z` for all values of `z` will also require Rust
-`1.20.0` or older. However, Jiff `1.y` for `y > 0` may require a newer minimum
+`1.20.0` or newer. However, Jiff `1.y` for `y > 0` may require a newer minimum
 version of Rust.
