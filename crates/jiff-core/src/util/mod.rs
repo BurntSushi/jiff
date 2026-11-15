@@ -373,11 +373,12 @@ impl<const N: usize> ArrayStr<N> {
     /// Creates a new fixed capacity string.
     ///
     /// If the given string exceeds `N` bytes, then this returns
-    /// `None`.
+    /// `None`. Similarly, if `N` exceeds `u8::MAX`, then this
+    /// returns `None`.
     #[inline]
     pub const fn new(s: &str) -> Option<ArrayStr<N>> {
         let len = s.len();
-        if len > N {
+        if len > N || N > u8::MAX as usize {
             return None;
         }
         let mut bytes = [0; N];
@@ -386,10 +387,7 @@ impl<const N: usize> ArrayStr<N> {
             bytes[i] = s.as_bytes()[i];
             i += 1;
         }
-        // OK because we don't ever use anything bigger than u8::MAX for `N`.
-        // And we probably shouldn't, because that would be a pretty chunky
-        // array. If such a thing is needed, please file an issue to discuss.
-        debug_assert!(N <= u8::MAX as usize, "size of ArrayStr is too big");
+        // OK because an `ArrayStr<N>` with `N > 255` bails out above.
         Some(ArrayStr { len: len as u8, bytes })
     }
 
@@ -417,10 +415,7 @@ impl<const N: usize> ArrayStr<N> {
             self.bytes[i] = s.as_bytes()[i - len];
             i += 1;
         }
-        // OK because we don't ever use anything bigger than u8::MAX for `N`.
-        // And we probably shouldn't, because that would be a pretty chunky
-        // array. If such a thing is needed, please file an issue to discuss.
-        debug_assert!(N <= u8::MAX as usize, "size of ArrayStr is too big");
+        // OK because an `ArrayStr<N>` with `N > 255` cannot be created.
         self.len = new_len as u8;
         true
     }
