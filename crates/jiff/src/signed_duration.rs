@@ -382,7 +382,7 @@ impl SignedDuration {
     /// to 1 second and the excess that carries over to the number of whole
     /// seconds overflows `i64`.
     ///
-    /// This never panics when `nanos` is less than `1_000_000_000`.
+    /// This never panics when the absolute value of `nanos` is less than `1_000_000_000`.
     ///
     /// # Example
     ///

@@ -240,11 +240,11 @@ impl Timestamp {
     }
 
     /// Returns the fractional second component of this timestamp in units of
-    /// microseconds.
+    /// milliseconds.
     ///
     /// The value returned is negative when the timestamp is negative. It is
     /// guaranteed that the range of the value returned is in the inclusive
-    /// range `-999_999..=999_999`.
+    /// range `-999..=999`.
     #[inline]
     pub const fn subsec_millisecond(&self) -> i32 {
         // OK because NANOS_PER_MILLI!={-1,0}.
@@ -252,11 +252,11 @@ impl Timestamp {
     }
 
     /// Returns the fractional second component of this timestamp in units of
-    /// milliseconds.
+    /// microseconds.
     ///
     /// The value returned is negative when the timestamp is negative. It is
     /// guaranteed that the range of the value returned is in the inclusive
-    /// range `-999..=999`.
+    /// range `-999_999..=999_999`.
     #[inline]
     pub const fn subsec_microsecond(&self) -> i32 {
         // OK because NANOS_PER_MICRO!={-1,0}.

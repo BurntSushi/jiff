@@ -1171,7 +1171,7 @@ impl Time {
     /// # Properties
     ///
     /// As long as no rounding is requested, it is guaranteed that adding the
-    /// span returned to the `other` time will always equal this time.
+    /// span returned to this time will always equal the `other` time.
     ///
     /// # Errors
     ///
