@@ -226,11 +226,13 @@ impl Offset {
             + (dt.time().to_second().second() as i64);
         let mut nanosecond = dt.time().subsec_nanosecond();
         second -= offset.seconds() as i64;
+        // Check before normalizing so a fraction below `Timestamp::MIN`
+        // cannot bring the seconds component back into range.
+        second = rtry!(b::UnixEpochSeconds::checkc(second));
         if second < 0 && nanosecond != 0 {
             second += 1;
             nanosecond -= c::NANOS_PER_SEC_32;
         }
-        let second = rtry!(b::UnixEpochSeconds::checkc(second));
         Ok(Timestamp::new_unchecked(second, nanosecond))
     }
 }

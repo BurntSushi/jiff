@@ -3684,6 +3684,38 @@ mod tests {
         assert!(Timestamp::new(b::UnixEpochSeconds::MIN, 999_999_999).is_ok());
     }
 
+    #[test]
+    fn parse_timestamp_boundaries() {
+        assert!("-009999-01-02T01:59:58.5Z".parse::<Timestamp>().is_err());
+
+        let tests = [
+            ("-009999-01-02T01:59:58+00:00", None),
+            ("-009999-01-02T01:59:58.000000001+00:00", None),
+            ("-009999-01-02T01:59:58.5+00:00", None),
+            ("-009999-01-02T01:59:58.999999999+00:00", None),
+            ("-009999-01-02T01:59:59+00:00", Some(Timestamp::MIN)),
+            (
+                "-009999-01-02T01:59:59.000000001+00:00",
+                Some(mktime(b::UnixEpochSeconds::MIN, 1)),
+            ),
+            ("-009999-01-02T03:59:58.5+02:00", None),
+            ("-009999-01-01T23:59:58.5-02:00", None),
+            ("-009999-01-02T03:59:59+02:00", Some(Timestamp::MIN)),
+            ("-009999-01-01T23:59:59-02:00", Some(Timestamp::MIN)),
+            ("9999-12-30T22:00:00.999999999+00:00", Some(Timestamp::MAX)),
+            ("9999-12-30T22:00:01+00:00", None),
+            ("9999-12-30T22:00:01.000000001+00:00", None),
+        ];
+        for (input, expected) in tests {
+            assert_eq!(input.parse::<Timestamp>().ok(), expected, "{input}");
+            assert_eq!(
+                Timestamp::strptime("%6Y-%m-%dT%T%.f%:z", input).ok(),
+                expected,
+                "{input}",
+            );
+        }
+    }
+
     #[cfg(target_pointer_width = "64")]
     #[test]
     fn timestamp_size() {
