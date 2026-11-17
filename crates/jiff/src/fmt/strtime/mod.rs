@@ -943,7 +943,7 @@ pub struct BrokenDownTime {
     // a `ZonedDateTime` or `Timestamp`, or when parsing `%s`.
     timestamp: Option<Timestamp>,
     // The time zone. Currently used only when
-    // formatting a `ZonedDateTime`.
+    // formatting a `ZonedDateTime` or `Timestamp`.
     tz: Option<TimeZone>,
     // The IANA time zone identifier. Set when
     // parsing `%Q` or by the caller.
@@ -3252,6 +3252,7 @@ impl From<Timestamp> for BrokenDownTime {
         BrokenDownTime {
             offset: Some(Offset::UTC),
             timestamp: Some(ts),
+            tz: Some(TimeZone::UTC),
             ..BrokenDownTime::from(dt)
         }
     }
