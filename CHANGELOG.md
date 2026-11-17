@@ -1,5 +1,15 @@
 # CHANGELOG
 
+1.0.1 (2026-11-17)
+==================
+Bug fixes:
+
+* [#713](https://github.com/BurntSushi/jiff/issues/713):
+`%Z` in `Timestamp::strftime` should format as `UTC`.
+* [#714](https://github.com/BurntSushi/jiff/issues/714):
+Parsing a timestamp could produce an out of bounds value.
+
+
 1.0.0 (2026-11-15)
 ==================
 This marks the Jiff 1.0 release. Barring some unforeseen major problem with the
