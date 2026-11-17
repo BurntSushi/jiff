@@ -258,16 +258,26 @@ mod tests {
     }
 
     #[test]
-    fn to_timestamp_err() {
-        let dt = datetime(-9999, 1, 1, 0, 0, 0, 0);
-        assert_eq!(dt.to_timestamp(Offset::MIN), Ok(Timestamp::MIN));
-        assert!(dt.to_timestamp(offset(Offset::MIN.seconds() + 1)).is_err());
+    fn to_timestamp_boundaries() {
+        // Regression test for #714: fractions before Timestamp::MIN must fail.
+        for nanos in [0, 1, 500_000_000, 999_999_999] {
+            let dt = datetime(-9999, 1, 1, 0, 0, 0, nanos);
+            assert_eq!(
+                dt.to_timestamp(Offset::MIN),
+                Ok(stamp(Timestamp::MIN.as_second(), nanos)),
+            );
+            assert!(
+                dt.to_timestamp(offset(Offset::MIN.seconds() + 1)).is_err()
+            );
 
-        let dt = datetime(9999, 12, 31, 23, 59, 59, 999_999_999);
-        assert_eq!(dt.to_timestamp(Offset::MAX), Ok(Timestamp::MAX));
-        assert!(dt.to_timestamp(offset(Offset::MAX.seconds() - 1)).is_err());
-
-        let dt = datetime(9999, 12, 31, 23, 59, 59, 0);
-        assert!(dt.to_timestamp(offset(Offset::MAX.seconds() - 1)).is_err());
+            let dt = datetime(9999, 12, 31, 23, 59, 59, nanos);
+            assert_eq!(
+                dt.to_timestamp(Offset::MAX),
+                Ok(stamp(Timestamp::MAX.as_second(), nanos)),
+            );
+            assert!(
+                dt.to_timestamp(offset(Offset::MAX.seconds() - 1)).is_err()
+            );
+        }
     }
 }
