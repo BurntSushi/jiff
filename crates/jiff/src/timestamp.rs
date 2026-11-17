@@ -2124,6 +2124,8 @@ impl Timestamp {
     /// a datetime. For details on the specifiers supported, see the
     /// [`fmt::strtime`] module documentation.
     ///
+    /// The `%Z` specifier is always formatted as `UTC`.
+    ///
     /// # Errors and panics
     ///
     /// This will never error or panic. In particular,
@@ -2142,10 +2144,10 @@ impl Timestamp {
     /// in UTC:
     ///
     /// ```
-    /// use jiff::{civil::date, Timestamp};
+    /// use jiff::Timestamp;
     ///
     /// let ts = Timestamp::from_second(86_400)?;
-    /// let string = ts.strftime("%a %b %e %I:%M:%S %p UTC %Y").to_string();
+    /// let string = ts.strftime("%a %b %e %I:%M:%S %p %Z %Y").to_string();
     /// assert_eq!(string, "Fri Jan  2 12:00:00 AM UTC 1970");
     ///
     /// # Ok::<(), Box<dyn std::error::Error>>(())

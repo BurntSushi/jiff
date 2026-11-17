@@ -1095,6 +1095,8 @@ impl Case {
 #[cfg(feature = "alloc")]
 #[cfg(test)]
 mod tests {
+    use alloc::string::ToString;
+
     use crate::{
         Timestamp, ZonedDateTime,
         civil::{Date, DateTime, Time, date, time},
@@ -1347,6 +1349,21 @@ mod tests {
 
         let zdt = zdt.checked_add(crate::Span::new().months(5)).unwrap();
         insta::assert_snapshot!(f("%Z", &zdt), @"EST");
+    }
+
+    #[test]
+    fn ok_format_tzabbrev_timestamp() {
+        let ts: Timestamp = "2024-07-14T22:24:00-04".parse().unwrap();
+        for ts in [Timestamp::MIN, Timestamp::UNIX_EPOCH, Timestamp::MAX, ts] {
+            assert_eq!(ts.strftime("%Z").to_string(), "UTC");
+            assert_eq!(format("%Z", ts).unwrap(), "UTC");
+            assert_eq!(format("%^Z", ts).unwrap(), "UTC");
+            assert_eq!(format("%#Z", ts).unwrap(), "utc");
+        }
+        insta::assert_snapshot!(
+            format("%F %T %Z %z", ts).unwrap(),
+            @"2024-07-15 02:24:00 UTC +0000",
+        );
     }
 
     #[test]
