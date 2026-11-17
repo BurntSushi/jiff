@@ -17,9 +17,9 @@ jobs:
       id: auth
     - run: |
         echo "Publishing jiff-core..." && cargo publish -p jiff-core || true
-        echo "Publishing jiff-static..." && cargo publish -p jiff-static || true
         echo "Publishing jiff-tzdb..." && cargo publish -p jiff-tzdb || true
         echo "Publishing jiff-tzdb-platform..." && cargo publish -p jiff-tzdb-platform || true
+        echo "Publishing jiff-static..." && cargo publish -p jiff-static || true
         echo "Publishing jiff..." && cargo publish -p jiff || true
         echo "Publishing jiff-icu..." && cargo publish -p jiff-icu || true
         echo "Publishing jiff-diesel..." && cargo publish -p jiff-diesel || true
