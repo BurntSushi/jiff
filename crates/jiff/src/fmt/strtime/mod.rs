@@ -1537,11 +1537,10 @@ impl BrokenDownTime {
                             .context(E::RequiredDateTimeForZonedDateTime)?;
                         let azdt =
                             OffsetConflict::Reject.resolve(dt, offset, tz)?;
-                        // Guaranteed that if OffsetConflict::Reject doesn't
-                        // reject, then we get back an unambiguous zoned
-                        // datetime.
-                        let zdt = azdt.unambiguous().unwrap();
-                        Ok(zdt)
+                        // OffsetConflict::Reject guarantees no ambiguity, but
+                        // conversion can still fail if the timestamp is out
+                        // of range.
+                        azdt.unambiguous()
                     }
                 }
             }
@@ -3657,6 +3656,37 @@ mod tests {
         insta::assert_debug_snapshot!(
             DateTime::strptime(fmt, "2022年02月04日，03时58分59秒").unwrap(),
             @"2022-02-04T03:58:59",
+        );
+    }
+
+    // Regression tests for #718.
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn parse_zoned_datetime_out_of_range() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        insta::assert_snapshot!(
+            ZonedDateTime::strptime(
+                "%F %T %z %Q",
+                "9999-12-31 23:59:59 +0900 Asia/Tokyo",
+            ).unwrap_err(),
+            @"error converting datetime to instant in time zone Asia/Tokyo: \
+              converting datetime with time zone offset `+09` to timestamp \
+              overflowed: parameter 'Unix timestamp seconds' is not \
+              in the required range of -377705023201..=253402207200",
+        );
+        insta::assert_snapshot!(
+            ZonedDateTime::strptime(
+                "%F %T %::z %Q",
+                "-9999-01-01 00:00:00 -04:56:02 America/New_York",
+            ).unwrap_err(),
+            @"error converting datetime to instant in time zone \
+              America/New_York: converting datetime with time zone offset \
+              `-04:56:02` to timestamp overflowed: parameter 'Unix timestamp \
+              seconds' is not in the required range of \
+              -377705023201..=253402207200",
         );
     }
 
