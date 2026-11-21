@@ -1899,6 +1899,11 @@ impl OffsetConflict {
     /// first is the offset given to `resolve_with` and the second is the
     /// offset found in the `TimeZone`.
     ///
+    /// With [`OffsetConflict::Reject`] or [`OffsetConflict::PreferOffset`],
+    /// matching the offset to a fold checks the earlier candidate first. The
+    /// timestamp is computed using the matching candidate's actual offset,
+    /// which may differ from the offset given to this routine.
+    ///
     /// # Errors
     ///
     /// This returns an error if this would have returned a timestamp outside
@@ -2057,11 +2062,12 @@ impl OffsetConflict {
     /// attempts to resolve the datetime to a particular instant based on the
     /// 'prefer' strategy.
     ///
-    /// In the 'prefer' strategy, we prefer to use the parsed offset to resolve
-    /// any ambiguity in the parsed datetime and time zone, but only if the
-    /// parsed offset is valid for the parsed datetime and time zone. If the
-    /// parsed offset isn't valid, then it is ignored. In the case where it is
-    /// ignored, it is possible for an ambiguous instant to be returned.
+    /// In a fold, we check the earlier candidate first using `is_equal`. The
+    /// first match resolves the fold using the candidate's actual offset,
+    /// which may differ from the parsed offset.
+    ///
+    /// If neither candidate matches, or if the datetime falls in a gap, then
+    /// the parsed offset is ignored and disambiguation is left to the caller.
     fn resolve_via_prefer(
         dt: civil::DateTime,
         given: Offset,
@@ -2072,14 +2078,17 @@ impl OffsetConflict {
 
         let amb = tz.to_ambiguous_timestamp(dt);
         match amb.offset() {
-            // We only look for folds because we consider all offsets for gaps
-            // to be invalid. Which is consistent with how they're treated as
-            // `OffsetConflict::Reject`. Thus, like any other invalid offset,
-            // we fallback to disambiguation (which is handled by the caller).
-            Fold { before, after }
-                if is_equal(given, before) || is_equal(given, after) =>
-            {
-                let kind = Unambiguous { offset: given };
+            // Only folds can be resolved by matching an offset. Gaps are left
+            // for the caller to disambiguate because all offsets are invalid.
+            Fold { before, after } => {
+                let offset = if is_equal(given, before) {
+                    before
+                } else if is_equal(given, after) {
+                    after
+                } else {
+                    return amb.into_ambiguous_zoned_datetime(tz);
+                };
+                let kind = Unambiguous { offset };
                 AmbiguousTimestamp::new(dt, kind)
             }
             _ => amb,
@@ -2135,18 +2144,20 @@ impl OffsetConflict {
                     tz,
                 }))
             }
-            Fold { before, after }
-                if !is_equal(given, before) && !is_equal(given, after) =>
-            {
-                Err(Error::from(E::ResolveRejectFold {
-                    given,
-                    before,
-                    after,
-                    tz,
-                }))
-            }
-            Fold { .. } => {
-                let kind = Unambiguous { offset: given };
+            Fold { before, after } => {
+                let offset = if is_equal(given, before) {
+                    before
+                } else if is_equal(given, after) {
+                    after
+                } else {
+                    return Err(Error::from(E::ResolveRejectFold {
+                        given,
+                        before,
+                        after,
+                        tz,
+                    }));
+                };
+                let kind = Unambiguous { offset };
                 Ok(AmbiguousTimestamp::new(dt, kind)
                     .into_ambiguous_zoned_datetime(tz))
             }
