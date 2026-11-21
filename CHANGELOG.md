@@ -1,5 +1,15 @@
 # CHANGELOG
 
+1.0.2 (2026-11-21)
+==================
+Bug fixes:
+
+* [#718](https://github.com/BurntSushi/jiff/issues/718):
+`ZonedDateTime::strptime` could panic on inputs near boundaries.
+* [#720](https://github.com/BurntSushi/jiff/issues/720):
+Tweak how we handle folds in offset conflict resolution.
+
+
 1.0.1 (2026-11-17)
 ==================
 Bug fixes:
