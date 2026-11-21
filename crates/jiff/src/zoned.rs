@@ -6698,6 +6698,76 @@ mod tests {
         );
     }
 
+    // Regression test for #720. In a fold, a rounded offset must select the
+    // first matching candidate and use its actual offset.
+    #[test]
+    fn time_zone_offset_rounding_in_fold() {
+        if crate::tz::db().is_definitively_empty() {
+            return;
+        }
+
+        let tests = [
+            (
+                "1952-10-15T23:59:59-11:20[Pacific/Niue]",
+                -543_069_621_000_000_000i128,
+                -(11 * 60 * 60 + 19 * 60 + 40),
+            ),
+            (
+                "1952-10-15T23:59:59-11:19:40[Pacific/Niue]",
+                -543_069_621_000_000_000,
+                -(11 * 60 * 60 + 19 * 60 + 40),
+            ),
+            (
+                "1952-10-15T23:59:59-11:20:00[Pacific/Niue]",
+                -543_069_601_000_000_000,
+                -(11 * 60 * 60 + 20 * 60),
+            ),
+            // Each rounded offset matches only one side of this fold, and
+            // both candidates have non-zero offset seconds.
+            (
+                "1919-02-28T23:59:00-00:43[Africa/Monrovia]",
+                -1_604_359_072_000_000_000,
+                -(43 * 60 + 8),
+            ),
+            (
+                "1919-02-28T23:59:00-00:45[Africa/Monrovia]",
+                -1_604_358_990_000_000_000,
+                -(44 * 60 + 30),
+            ),
+        ];
+        for conflict in [OffsetConflict::Reject, OffsetConflict::PreferOffset]
+        {
+            for disambiguation in [
+                Disambiguation::Compatible,
+                Disambiguation::Earlier,
+                Disambiguation::Later,
+                Disambiguation::Reject,
+            ] {
+                let parser = temporal::DateTimeParser::new()
+                    .offset_conflict(conflict)
+                    .disambiguation(disambiguation);
+                for (input, expected, offset) in tests {
+                    let zdt = parser.parse_zoned_datetime(input).unwrap();
+                    assert_eq!(
+                        zdt.timestamp().as_nanosecond(),
+                        expected,
+                        "{input}"
+                    );
+                    assert_eq!(zdt.offset().seconds(), offset, "{input}");
+                }
+            }
+        }
+
+        let input = "1952-10-15T23:59:59-11:19:50[Pacific/Niue]";
+        assert!(input.parse::<ZonedDateTime>().is_err());
+        let zdt = temporal::DateTimeParser::new()
+            .offset_conflict(OffsetConflict::PreferOffset)
+            .disambiguation(Disambiguation::Later)
+            .parse_zoned_datetime(input)
+            .unwrap();
+        assert_eq!(zdt.timestamp().as_nanosecond(), -543_069_601_000_000_000);
+    }
+
     // These are some interesting tests because the time zones have transitions
     // that are very close to one another (within 14 days!). I picked these up
     // from a bug report to Temporal. Their reference implementation uses
