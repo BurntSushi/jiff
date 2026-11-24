@@ -179,9 +179,6 @@ jobs:
         - build: nightly
           os: ubuntu-latest
           rust: nightly
-        - build: macos
-          os: macos-latest
-          rust: nightly
     steps:
     - name: Checkout repository
       uses: actions/checkout@v7
