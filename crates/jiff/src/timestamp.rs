@@ -3730,6 +3730,37 @@ mod tests {
     }
 
     #[test]
+    fn millisecond_roundtrip_boundaries() {
+        let min = Timestamp::MIN.as_millisecond();
+        let max = Timestamp::MAX.as_millisecond();
+        for millisecond in [min, min + 1, max - 1, max] {
+            let ts = Timestamp::from_millisecond(millisecond).unwrap();
+            assert_eq!(ts.as_millisecond(), millisecond);
+            assert_eq!(
+                ts.as_nanosecond(),
+                i128::from(millisecond) * 1_000_000
+            );
+        }
+        for millisecond in [i64::MIN, min - 1, max + 1, i64::MAX] {
+            assert!(Timestamp::from_millisecond(millisecond).is_err());
+        }
+    }
+
+    #[test]
+    fn microsecond_roundtrip_boundaries() {
+        let min = Timestamp::MIN.as_microsecond();
+        let max = Timestamp::MAX.as_microsecond();
+        for microsecond in [min, min + 1, max - 1, max] {
+            let ts = Timestamp::from_microsecond(microsecond).unwrap();
+            assert_eq!(ts.as_microsecond(), microsecond);
+            assert_eq!(ts.as_nanosecond(), i128::from(microsecond) * 1_000);
+        }
+        for microsecond in [i64::MIN, min - 1, max + 1, i64::MAX] {
+            assert!(Timestamp::from_microsecond(microsecond).is_err());
+        }
+    }
+
+    #[test]
     fn nanosecond_roundtrip_boundaries() {
         let inst = Timestamp::MIN;
         let nanos = inst.as_nanosecond();
@@ -3745,6 +3776,12 @@ mod tests {
         );
         let got = Timestamp::from_nanosecond(nanos).unwrap();
         assert_eq!(inst, got);
+
+        #[cfg(feature = "alloc")]
+        insta::assert_snapshot!(
+            Timestamp::from_nanosecond(i128::MAX).unwrap_err(),
+            @"parameter 'Unix timestamp nanoseconds' is not in the required range of -377705023201000000000..=253402207200999999999",
+        );
     }
 
     #[test]

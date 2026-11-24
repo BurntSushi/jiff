@@ -331,14 +331,14 @@ define_bounds! {
         i64,
         "Unix timestamp milliseconds",
         UnixEpochSeconds::MIN * c::MILLIS_PER_SEC,
-        UnixEpochSeconds::MAX * c::MILLIS_PER_SEC,
+        (UnixEpochSeconds::MAX + 1) * c::MILLIS_PER_SEC - 1,
     ),
     (
         UnixEpochMicroseconds,
         i64,
         "Unix timestamp microseconds",
         UnixEpochMilliseconds::MIN * c::MICROS_PER_MILLI,
-        UnixEpochMilliseconds::MAX * c::MICROS_PER_MILLI,
+        (UnixEpochMilliseconds::MAX + 1) * c::MICROS_PER_MILLI - 1,
     ),
     /// The supported range of seconds for the difference between any two
     /// values of `UnixEpochDays`.
@@ -907,10 +907,8 @@ impl core::fmt::Display for SpecialBoundsError {
                 f,
                 "parameter 'Unix timestamp nanoseconds' \
                  is not in the required range of {min}..={max}",
-                min = UnixEpochMicroseconds::MIN as i128
-                    * (c::NANOS_PER_MICRO as i128),
-                max = UnixEpochMicroseconds::MAX as i128
-                    * (c::NANOS_PER_MICRO as i128),
+                min = crate::Timestamp::MIN.as_nanosecond(),
+                max = crate::Timestamp::MAX.as_nanosecond(),
             ),
         }
     }
