@@ -13,7 +13,6 @@ use crate::{
         },
     },
     tz::Offset,
-    util::utf8,
 };
 
 enum Item {
@@ -263,16 +262,22 @@ impl<'config, 'fmt, 'tm, 'writer, 'buffer, 'data, 'write>
     #[cold]
     #[inline(never)]
     fn utf8_decode_and_bump(&mut self) -> Result<char, FE> {
-        match utf8::decode(self.fmt).expect("non-empty fmt") {
-            Ok(ch) => {
-                self.fmt = &self.fmt[ch.len_utf8()..];
-                return Ok(ch);
+        let chunk = self.fmt[..self.fmt.len().min(4)]
+            .utf8_chunks()
+            .next()
+            .expect("non-empty fmt");
+        if chunk.valid().is_empty() {
+            if self.config.lenient {
+                self.fmt = &self.fmt[chunk.invalid().len()..];
+                Ok(char::REPLACEMENT_CHARACTER)
+            } else {
+                Err(FE::InvalidUtf8)
             }
-            Err(err) if self.config.lenient => {
-                self.fmt = &self.fmt[err.len()..];
-                return Ok(char::REPLACEMENT_CHARACTER);
-            }
-            Err(_) => Err(FE::InvalidUtf8),
+        } else {
+            let ch =
+                chunk.valid().chars().next().expect("non-empty valid string");
+            self.fmt = &self.fmt[ch.len_utf8()..];
+            Ok(ch)
         }
     }
 
