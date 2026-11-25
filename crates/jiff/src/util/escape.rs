@@ -4,8 +4,6 @@ Provides convenience routines for escaping raw bytes.
 This was copied from `regex-automata` with a few light edits.
 */
 
-use super::utf8;
-
 /// Provides a convenient `Debug` implementation for a `u8`.
 ///
 /// The `Debug` impl treats the byte as an ASCII, and emits a human
@@ -56,27 +54,23 @@ pub(crate) struct Bytes<'a>(pub &'a [u8]);
 impl<'a> core::fmt::Display for Bytes<'a> {
     #[inline(never)]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        // This is a sad re-implementation of a similar impl found in bstr.
-        let mut bytes = self.0;
-        while let Some(result) = utf8::decode(bytes) {
-            let ch = match result {
-                Ok(ch) => ch,
-                Err(err) => {
-                    // The decode API guarantees `errant_bytes` is non-empty.
-                    write!(f, r"\x{:02x}", err.as_slice()[0])?;
-                    bytes = &bytes[1..];
-                    continue;
+        for chunk in self.0.utf8_chunks() {
+            for ch in chunk.valid().chars() {
+                match ch {
+                    '\0' => f.write_str(r"\0")?,
+                    '\x01'..='\x7f' => {
+                        core::fmt::Display::fmt(
+                            &(ch as u8).escape_ascii(),
+                            f,
+                        )?;
+                    }
+                    _ => {
+                        core::fmt::Display::fmt(&ch.escape_debug(), f)?;
+                    }
                 }
-            };
-            bytes = &bytes[ch.len_utf8()..];
-            match ch {
-                '\0' => f.write_str(r"\0")?,
-                '\x01'..='\x7f' => {
-                    core::fmt::Display::fmt(&(ch as u8).escape_ascii(), f)?;
-                }
-                _ => {
-                    core::fmt::Display::fmt(&ch.escape_debug(), f)?;
-                }
+            }
+            for &byte in chunk.invalid() {
+                write!(f, r"\x{:02x}", byte)?;
             }
         }
         Ok(())
