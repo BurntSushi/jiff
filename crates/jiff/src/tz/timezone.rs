@@ -137,8 +137,8 @@ use self::repr::Repr;
 /// primary identifier is unavailable, then the time zone's IANA identifier
 /// is used instead.
 /// * Two TZif time zones whose `iana_name()` is `None` are equivalent only
-/// when their underlying checksums of the TZif data are equivalent. * In all
-/// other cases, time zones are unequal.
+/// when their underlying checksums of the TZif data are equivalent.
+/// * In all other cases, time zones are unequal.
 ///
 /// Time zone equality is, for example, used in APIs like
 /// [`ZonedDateTime::since`] when asking for spans with calendar units. Namely,
